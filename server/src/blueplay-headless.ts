@@ -13,6 +13,7 @@ private var currentWorld: World? = null
 internal val simLock = Any()
 private val keysDown = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 private val pendingSounds = java.util.concurrent.ConcurrentLinkedQueue<String>()
+private val pendingErrors = java.util.concurrent.ConcurrentLinkedQueue<String>()
 @Volatile private var clickPending = false
 @Volatile private var clickX = -1
 @Volatile private var clickY = -1
@@ -39,6 +40,7 @@ internal fun setWorldOf(actor: Actor, world: World?) = synchronized(simLock) { i
 internal fun setTextOf(world: World, x: Int, y: Int, text: String) { synchronized(simLock) { val values = worldTexts.getOrPut(world) { linkedMapOf() }; if (text.isEmpty()) values.remove(Pair(x, y)) else values[Pair(x, y)] = text } }
 internal fun textsOf(world: World): List<Triple<Int, Int, String>> = synchronized(simLock) { worldTexts[world]?.map { Triple(it.key.first, it.key.second, it.value) } ?: emptyList() }
 fun soundsOf(): List<String> = buildList { while (true) { val sound = pendingSounds.poll() ?: break; add(sound) } }
+fun errorsOf(): List<String> = buildList { while (true) { val error = pendingErrors.poll() ?: break; add(error) } }
 internal fun repaintWorld() { }
 internal fun showWorld(world: World) { stop(); currentWorld = world }
 internal fun isActorClicked(actor: Actor): Boolean { if (clickPending && currentWorld?.allObjects()?.firstOrNull { it.x == clickX && it.y == clickY } === actor) { clickPending = false; return true }; return false }
@@ -48,5 +50,8 @@ internal fun cachedImage(fileName: String): BufferedImage = imageCache.getOrPut(
 internal fun setKeyState(key: String, pressed: Boolean) { if (pressed) keysDown.add(key.lowercase()) else keysDown.remove(key.lowercase()) }
 internal fun setClickPosition(x: Int, y: Int) { clickX = x; clickY = y; clickPending = true }
 
-private fun stepWorld() { currentWorld?.let { world -> world.act(); world.allObjects().forEach { if (worldOf(it) === world) it.act() } } }
+private fun stepWorld() {
+    try { currentWorld?.let { world -> world.act(); world.allObjects().forEach { if (worldOf(it) === world) it.act() } } }
+    catch (error: Throwable) { running = false; pendingErrors.add(error.cause?.message ?: error.message ?: "BluePlay simulation error") }
+}
 `;

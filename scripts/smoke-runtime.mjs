@@ -39,6 +39,7 @@ try {
     { id: 'actor', fileName: 'Actor.kt', kind: 'class', revision: 1, source: 'open class Actor { var x: Int = 0; var y: Int = 0; var image: Image? = null; open fun act() {}; fun move(distance: Int) { x += distance } }' },
     { id: 'image', fileName: 'Image.kt', kind: 'class', revision: 1, source: 'class Image(val width: Int, val height: Int)' },
     { id: 'walker', fileName: 'Walker.kt', kind: 'class', revision: 1, source: 'class Walker: Actor() { override fun act() { move(1) } }' },
+    { id: 'broken', fileName: 'Broken.kt', kind: 'class', revision: 1, source: 'class Broken: Actor() { override fun act() { error("boom") } }' },
     { id: 'blueplay', fileName: 'BluePlayFunctions.kt', kind: 'functions', revision: 1, source: '// replaced by the headless BluePlay adapter' },
   ];
   const compiled = await post(`/api/session/${session.sessionId}/compile`, { files, revision: 1 });
@@ -98,6 +99,19 @@ try {
   const stoppedX = (await json(`/api/session/${session.sessionId}/stage`)).body.stage.objects.find(value => value.type === 'Walker').x;
   await wait(80);
   assert.equal((await json(`/api/session/${session.sessionId}/stage`)).body.stage.objects.find(value => value.type === 'Walker').x, stoppedX);
+  const broken = (await action({ op: 'create', className: 'Broken', name: 'broken1', args: '[]' })).body;
+  assert.equal((await action({ op: 'invoke', objectId: world.objectId, name: 'addObject', args: JSON.stringify(['broken1', '4', '3']) })).body.kind, 'unit');
+  const brokenStart = await action({ op: 'eval', code: 'start()', mode: 'expression' });
+  assert.equal(brokenStart.body.kind, 'unit');
+  let simulationErrors = (brokenStart.body.stage?.errors || []).join('\n');
+  for (let attempt = 0; attempt < 10 && !simulationErrors.includes('boom'); attempt++) {
+    await wait(40);
+    const brokenStage = await json(`/api/session/${session.sessionId}/stage`);
+    assert.ok(brokenStage.body.stage, JSON.stringify(brokenStage));
+    assert.ok(Array.isArray(brokenStage.body.stage.errors), JSON.stringify(brokenStage));
+    simulationErrors += brokenStage.body.stage.errors.join('\n');
+  }
+  assert.match(simulationErrors, /boom/);
   assert.equal((await action({ op: 'eval', code: 'error("Demo")', mode: 'expression' })).body.kind, 'error');
   assert.equal((await action({ op: 'eval', code: 'square(7)', mode: 'expression' })).body.display, '49');
   const box = (await action({ op: 'create', className: 'Box', name: 'box1', typeArguments: JSON.stringify(['String']), args: JSON.stringify(['"Ada"']) })).body;

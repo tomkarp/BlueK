@@ -188,6 +188,12 @@ private fun stageSnapshot(objects: Map<String, Any>): String? {
             sounds.filterIsInstance<String>().joinToString(",") { "\"${jsonText(it)}\"" }
         } catch (_: Throwable) { "" }
     }
+    fun errorsJson(loader: ClassLoader): String {
+        return try {
+            val errors = Class.forName("BluePlayFunctionsKt", true, loader).getMethod("errorsOf").invoke(null) as? Iterable<*> ?: emptyList<Any>()
+            errors.filterIsInstance<String>().joinToString(",") { jsonString(it) }
+        } catch (_: Throwable) { "" }
+    }
     fun imageJson(owner: Any, fieldName: String): String {
         val imageField = findField(owner.javaClass, fieldName) ?: return ""
         imageField.isAccessible = true
@@ -231,7 +237,7 @@ private fun stageSnapshot(objects: Map<String, Any>): String? {
             "{\"x\":${x.toInt()},\"y\":${y.toInt()},\"text\":\"${jsonText(text)}\"}"
         }.joinToString(",")
     } catch (_: Throwable) { "" }
-    return "{\"width\":$width,\"height\":$height,\"cellSize\":$cellSize${imageJson(world, "background")},\"objects\":[$entries],\"texts\":[$textEntries],\"sounds\":[${soundsJson(world.javaClass.classLoader)}]}"
+    return "{\"width\":$width,\"height\":$height,\"cellSize\":$cellSize${imageJson(world, "background")},\"objects\":[$entries],\"texts\":[$textEntries],\"sounds\":[${soundsJson(world.javaClass.classLoader)}],\"errors\":[${errorsJson(world.javaClass.classLoader)}]}"
 }
 private data class Captured<T>(val value: T, val output: String)
 private fun <T> withUserOutput(block: () -> T): Captured<T> {
