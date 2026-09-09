@@ -34,6 +34,7 @@ try {
     { id: 'base', fileName: 'Base.kt', kind: 'class', revision: 1, source: 'open class Base(var baseValue: String)' },
     { id: 'child', fileName: 'Child.kt', kind: 'class', revision: 1, source: 'class Child(baseValue: String): Base(baseValue) { var ownValue: Int = 7 }' },
     { id: 'tools', fileName: 'Tools.kt', kind: 'class', revision: 1, source: 'object Tools { fun twice(value: Int): Int = value * 2; fun ping() { println("pong") } }' },
+    { id: 'abstract', fileName: 'AbstractThing.kt', kind: 'class', revision: 1, source: 'abstract class AbstractThing { fun ping() {} }' },
   ];
   const compiled = await post(`/api/session/${session.sessionId}/compile`, { files, revision: 1 });
   assert.equal(compiled.body.diagnostics.length, 0);
@@ -43,6 +44,8 @@ try {
   assert.equal(compiled.body.classes.find(value => value.name === 'Helpers').methods.find(value => value.name === 'square').parameters.length, 1);
   assert.equal(compiled.body.classes.find(value => value.name === 'Tools').kind, 'object');
   assert.equal(compiled.body.classes.find(value => value.name === 'Tools').constructors.length, 0);
+  assert.equal(compiled.body.classes.find(value => value.name === 'AbstractThing').kind, 'abstract');
+  assert.equal(compiled.body.classes.find(value => value.name === 'AbstractThing').constructors.length, 0);
   const generationId = compiled.body.generationId;
   const action = body => post(`/api/session/${session.sessionId}/action`, { ...body, generationId });
   const counter = (await action({ op: 'create', className: 'Counter', name: 'counter1', args: JSON.stringify(['3']) })).body;
