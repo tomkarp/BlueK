@@ -8,8 +8,9 @@ import java.util.Arrays
 import java.util.UUID
 import javax.imageio.ImageIO
 
+private object NullBinding
 private class Ctx(private val objects: MutableMap<String, Any>) : RuntimeContext {
-    override fun objectById(id: String): Any? = objects[id]
+    override fun objectById(id: String): Any? = objects[id].takeUnless { it === NullBinding }
 }
 
 private lateinit var controlOut: java.io.PrintStream
@@ -103,7 +104,7 @@ fun main() {
                 line.contains("\"op\":\"eval\"") -> {
                     val code = value(line, "code"); val mode = value(line, "mode")
                     val bindings = names.entries.joinToString("\n") { "${if (mutableBindings.contains(it.key)) "var" else "val"} ${it.key} = ctx.objectById(\"${it.value}\") as ${bindingTypes[it.key] ?: objects[it.value]!!.javaClass.name}" }
-                    val declared = if (mode == "block") Regex("\\b(?:val|var)\\s+([A-Za-z_]\\w*)\\s*=").findAll(code).map { it.groupValues[1] }.distinct().toList() else emptyList()
+                    val declared = if (mode == "block") Regex("\\b(?:val|var)\\s+([A-Za-z_]\\w*)(?:\\s*:\\s*[^=]+)?\\s*=").findAll(code).map { it.groupValues[1] }.distinct().toList() else emptyList()
                     val exported = (declared + mutableBindings.toList()).distinct()
                     val exports = exported.joinToString(",") { "\"__bluek_binding:$it\" to $it" }
                     val expression = if (mode == "expression") "return@run $code" else if (exported.isEmpty()) "$code\nreturn@run Unit" else "$code\nreturn@run mapOf(\"__bluek_value\" to Unit${if (exports.isEmpty()) "" else "," + exports})"
@@ -117,8 +118,8 @@ fun main() {
                     val evaluated = withUserOutput { snippet.javaClass.getMethod("execute", RuntimeContext::class.java).invoke(snippet, ctx) }
                     val raw = evaluated.value
                     if (raw is Map<*, *> && raw.containsKey("__bluek_value")) {
-                        raw.entries.filter { it.key is String && (it.key as String).startsWith("__bluek_binding:") && it.value != null }.forEach { entry ->
-                            val name = (entry.key as String).removePrefix("__bluek_binding:"); val wasMutable = if (declared.contains(name)) Regex("\\bvar\\s+$name\\s*=").containsMatchIn(code) else mutableBindings.contains(name); val id = UUID.randomUUID().toString(); objects[id] = entry.value as Any; names[name] = id; bindingTypes[name] = kotlinType(entry.value!!); if (wasMutable) mutableBindings.add(name) else mutableBindings.remove(name)
+                        raw.entries.filter { it.key is String && (it.key as String).startsWith("__bluek_binding:") }.forEach { entry ->
+                            val name = (entry.key as String).removePrefix("__bluek_binding:"); val wasMutable = if (declared.contains(name)) Regex("\\bvar\\s+$name(?:\\s*:\\s*[^=]+)?\\s*=").containsMatchIn(code) else mutableBindings.contains(name); val id = UUID.randomUUID().toString(); objects[id] = entry.value as? Any ?: NullBinding; names[name] = id; bindingTypes[name] = if (entry.value == null) "Any?" else kotlinType(entry.value as Any); if (wasMutable) mutableBindings.add(name) else mutableBindings.remove(name)
                         }
                         result(raw["__bluek_value"], evaluated.output, stageSnapshot(objects))
                     } else result(raw, evaluated.output, stageSnapshot(objects))

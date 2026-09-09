@@ -24,7 +24,7 @@ Danach `http://localhost:5173` öffnen. `npm start` läuft absichtlich im Vorder
 - Rechtsklick auf eine Klasse öffnet den Kotlin-Konstruktor. Strings werden als Kotlin-Ausdrücke mit Anführungszeichen eingegeben.
 - Rechtsklick auf ein Objekt zeigt überladene und geerbte öffentliche Methoden. Parameter werden einzeln als Kotlin-Ausdrücke eingegeben.
 - Rechtsklick auf eine `«functions»`-Karte zeigt Top-Level-Funktionen; ihre Kotlin-Argumente werden genauso compilergeprüft eingegeben.
-- `Evaluate` wertet einen Ausdruck aus, `Run` einen Block. Bench-Objekte und ihre Mutationen bleiben zwischen Eingaben erhalten; im Codepad deklarierte nicht-null Variablen (z. B. `val p = Person("Ada")`) können in späteren Eingaben wiederverwendet werden.
+- `Evaluate` wertet einen Ausdruck aus, `Run` einen Block. Bench-Objekte und ihre Mutationen bleiben zwischen Eingaben erhalten; im Codepad deklarierte Variablen (z. B. `val p = Person("Ada")`, auch nullable) können in späteren Eingaben wiederverwendet werden.
 - Die Konsole zeigt Rückgabewerte und `stdout` live. Eine eingegebene Zeile wird mit Enter an `readln()` weitergegeben; Prompts erscheinen bereits während der laufenden Eingabeaktion.
 - `Stop` beendet den gesamten Benutzer-Worker. Die Handles werden verworfen und nach einem erneuten Compile neu erzeugt.
 

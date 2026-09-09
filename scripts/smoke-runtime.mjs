@@ -56,6 +56,8 @@ try {
   const updatedCodepadNumber = (await action({ op: 'eval', code: 'codepadNumber = 2', mode: 'block' })).body;
   assert.equal(updatedCodepadNumber.kind, 'unit', updatedCodepadNumber.display);
   assert.equal((await action({ op: 'eval', code: 'codepadNumber', mode: 'expression' })).body.display, '2');
+  assert.equal((await action({ op: 'eval', code: 'var optionalName: String? = null', mode: 'block' })).body.kind, 'unit');
+  assert.equal((await action({ op: 'eval', code: 'optionalName == null', mode: 'expression' })).body.display, 'true');
   const waiting = action({ op: 'eval', code: 'askName()', mode: 'expression' });
   const liveEvents = [];
   for (let attempt = 0; attempt < 30 && !liveEvents.some(event => event.output?.includes('What is your name?')); attempt++) {
