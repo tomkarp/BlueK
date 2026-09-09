@@ -154,6 +154,9 @@ private fun stageSnapshot(objects: Map<String, Any>): String? {
         val awtField = findField(image.javaClass, "awtImage") ?: return ""
         awtField.isAccessible = true
         val awtImage = awtField.get(image) ?: return ""
+        val transparencyField = findField(image.javaClass, "transparency")
+        transparencyField?.isAccessible = true
+        val transparency = (transparencyField?.get(image) as? Number)?.toInt()?.coerceIn(0, 255) ?: 255
         val bufferedImage = awtImage as java.awt.image.BufferedImage
         val pixelHash = Arrays.hashCode(bufferedImage.getRGB(0, 0, bufferedImage.width, bufferedImage.height, null, 0, bufferedImage.width))
         val key = "${System.identityHashCode(awtImage)}:${bufferedImage.width}:${bufferedImage.height}:$pixelHash"
@@ -164,7 +167,7 @@ private fun stageSnapshot(objects: Map<String, Any>): String? {
                 Base64.getEncoder().encodeToString(bytes.toByteArray()).also { stageImageCache[key] = it }
             }
         }
-        return ",\"image\":\"data:image/png;base64,$encoded\",\"imageWidth\":${bufferedImage.width},\"imageHeight\":${bufferedImage.height}"
+        return ",\"image\":\"data:image/png;base64,$encoded\",\"imageWidth\":${bufferedImage.width},\"imageHeight\":${bufferedImage.height},\"imageOpacity\":${transparency / 255.0}"
     }
     val world = objects.values.firstOrNull { findField(it.javaClass, "actors") != null } ?: return null
     val actorsField = findField(world.javaClass, "actors") ?: return null; actorsField.isAccessible = true
