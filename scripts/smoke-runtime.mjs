@@ -27,7 +27,7 @@ try {
   const session = (await post('/api/session', {})).body;
   const files = [
     { id: 'counter', fileName: 'Counter.kt', kind: 'class', revision: 1, source: 'class Counter(var value: Int = 0) { fun increment() { value++ }; fun add(amount: Int) { value += amount }; fun current(): Int = value }' },
-    { id: 'person', fileName: 'Person.kt', kind: 'class', revision: 1, source: 'class Person(var name: String) { fun greet(): String = "Hello, $name!"; fun rename(newName: String) { name = newName }; fun greetInConsole() { println(greet()) } }' },
+    { id: 'person', fileName: 'Person.kt', kind: 'class', revision: 1, source: 'class Person(var name: String) { fun greet(): String = "Hello, $name!"; fun rename(newName: String) { name = newName }; fun greetInConsole() { println(greet()) }; fun friend(): Person = Person("$name Jr") }' },
     { id: 'helpers', fileName: 'Helpers.kt', kind: 'functions', revision: 1, source: 'fun square(x: Int): Int = x * x; fun askName(): String { println("What is your name?"); val name = readln(); println("Hello, $name!"); return name }' },
     { id: 'box', fileName: 'Box.kt', kind: 'class', revision: 1, source: 'class Box<T>(var value: T) { fun replace(next: T) { value = next }; fun get(): T = value }' },
     { id: 'overloaded', fileName: 'Overloaded.kt', kind: 'class', revision: 1, source: 'class Overloaded { val kind: String; constructor(value: Int) { kind = "int" }; constructor(value: String) { kind = "string" } }' },
@@ -56,6 +56,11 @@ try {
   const person = (await action({ op: 'create', className: 'Person', name: 'person1', args: JSON.stringify(['"Ada"']) })).body;
   assert.equal((await action({ op: 'invoke', objectId: person.objectId, name: 'greet', args: '[]' })).body.display, 'Hello, Ada!');
   assert.equal((await action({ op: 'invoke', objectId: person.objectId, name: 'greetInConsole', args: '[]' })).body.output, 'Hello, Ada!\n');
+  const friend = (await action({ op: 'invoke', objectId: person.objectId, name: 'friend', args: '[]' })).body;
+  assert.equal(friend.kind, 'object');
+  assert.ok(friend.objectId);
+  assert.match((await action({ op: 'inspect', objectId: friend.objectId })).body.display, /name="Ada Jr"/);
+  assert.equal((await action({ op: 'invoke', objectId: friend.objectId, name: 'greet', args: '[]' })).body.display, 'Hello, Ada Jr!');
   assert.equal((await action({ op: 'eval', code: 'val codepadPerson = Person("Codepad")', mode: 'block' })).body.kind, 'unit');
   assert.equal((await action({ op: 'eval', code: 'codepadPerson.greet()', mode: 'expression' })).body.display, 'Hello, Codepad!');
   assert.equal((await action({ op: 'eval', code: 'var codepadNumber = 1', mode: 'block' })).body.kind, 'unit');

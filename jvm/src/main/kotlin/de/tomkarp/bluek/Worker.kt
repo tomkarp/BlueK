@@ -22,12 +22,13 @@ private class LiveOutputStream(private val onFlush: (String) -> Unit) : java.io.
     override fun write(values: ByteArray, offset: Int, length: Int) { buffer.write(values, offset, length); if (values.copyOfRange(offset, offset + length).contains('\n'.code.toByte())) flush() }
     override fun flush() { if (buffer.size() == 0) return; val text = buffer.toString(Charsets.UTF_8); buffer.reset(); onFlush(text) }
 }
-private fun emit(kind: String, display: String, id: String? = null, output: String = "", stage: String? = null) {
+private fun emit(kind: String, display: String, id: String? = null, output: String = "", stage: String? = null, name: String? = null) {
     val extra = id?.let { ",\"objectId\":\"$it\"" } ?: ""
+    val objectName = name?.let { ",\"name\":\"${it.replace("\\", "\\\\").replace("\"", "\\\"")}\"" } ?: ""
     val out = if (output.isEmpty()) "" else ",\"output\":\"${output.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}\""
     val request = if (activeRequestId.get().isEmpty()) "" else ",\"requestId\":\"${activeRequestId.get()}\""
     val world = stage?.let { ",\"stage\":$it" } ?: ""
-    controlOut.println("{\"kind\":\"$kind\",\"display\":\"${display.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}\"$extra$out$world$request}")
+    controlOut.println("{\"kind\":\"$kind\",\"display\":\"${display.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}\"$extra$objectName$out$world$request}")
     controlOut.flush()
 }
 
@@ -40,6 +41,17 @@ fun main() {
     val bindingTypes = mutableMapOf<String, String>()
     val mutableBindings = mutableSetOf<String>()
     val ctx = Ctx(objects)
+    fun registerObject(value: Any): Pair<String, String> {
+        val id = UUID.randomUUID().toString()
+        val base = value.javaClass.simpleName.replaceFirstChar { it.lowercase() }.ifEmpty { "object" }
+        var name = base
+        var index = 1
+        while (names.containsKey(name)) name = "$base${index++}"
+        objects[id] = value
+        names[name] = id
+        bindingTypes[name] = kotlinType(value)
+        return id to name
+    }
     val controlIn = System.`in`
     val inputPipe = java.io.PipedInputStream()
     val inputWriter = java.io.PipedOutputStream(inputPipe)
@@ -87,7 +99,7 @@ fun main() {
                     if (compiler.exitValue() != 0) { emit("error", compiler.inputStream.bufferedReader().readText()); return }
                     val child = URLClassLoader(arrayOf(jar.toURI().toURL()), loader); val snippet = child.loadClass("Snippet").getDeclaredConstructor().newInstance()
                     val invoked = withUserOutput { snippet.javaClass.getMethod("execute", RuntimeContext::class.java).invoke(snippet, ctx) }
-                    result(invoked.value, invoked.output, stageSnapshot(objects))
+                    result(invoked.value, invoked.output, stageSnapshot(objects), ::registerObject)
                 }
                 line.contains("\"op\":\"inspect\"") -> {
                     val obj = objects[value(line, "objectId")]!!
@@ -121,8 +133,8 @@ fun main() {
                         raw.entries.filter { it.key is String && (it.key as String).startsWith("__bluek_binding:") }.forEach { entry ->
                             val name = (entry.key as String).removePrefix("__bluek_binding:"); val wasMutable = if (declared.contains(name)) Regex("\\bvar\\s+$name(?:\\s*:\\s*[^=]+)?\\s*=").containsMatchIn(code) else mutableBindings.contains(name); val id = UUID.randomUUID().toString(); objects[id] = entry.value as? Any ?: NullBinding; names[name] = id; bindingTypes[name] = if (entry.value == null) "Any?" else kotlinType(entry.value as Any); if (wasMutable) mutableBindings.add(name) else mutableBindings.remove(name)
                         }
-                        result(raw["__bluek_value"], evaluated.output, stageSnapshot(objects))
-                    } else result(raw, evaluated.output, stageSnapshot(objects))
+                        result(raw["__bluek_value"], evaluated.output, stageSnapshot(objects), ::registerObject)
+                    } else result(raw, evaluated.output, stageSnapshot(objects), ::registerObject)
                 }
                 else -> emit("error", "Unsupported worker operation")
             }
@@ -138,7 +150,17 @@ private fun decodeJsonString(raw: String): String { val result = StringBuilder()
 private fun value(line: String, key: String): String = Regex("\\\"$key\\\":\\\"((?:\\\\.|[^\"])*)\\\"").find(line)?.groupValues?.get(1)?.let(::decodeJsonString) ?: ""
 private fun argumentValues(line: String, key: String = "args"): List<String> { val encoded = value(line, key).trim(); if (!encoded.startsWith("[")) return encoded.split('|').filter(String::isNotEmpty); val body = encoded.removePrefix("[").removeSuffix("]"); val values = mutableListOf<String>(); Regex("\"((?:\\\\.|[^\"\\\\])*)\"").findAll(body).forEach { values.add(decodeJsonString(it.groupValues[1])) }; while (values.lastOrNull() == "") values.removeLast(); return values }
 private fun parse(s: String): Any? = when { s == "null" -> null; s.toIntOrNull() != null -> s.toInt(); s.toLongOrNull() != null -> s.toLong(); s == "true" || s == "false" -> s.toBoolean(); else -> s.removePrefix("\"").removeSuffix("\"") }
-private fun result(v: Any?, output: String = "", stage: String? = null) { when { v == null -> emit("null", "null", output = output, stage = stage); v === Unit -> emit("unit", "Unit", output = output, stage = stage); v is Number || v is String || v is Boolean -> emit("scalar", v.toString(), output = output, stage = stage); else -> emit("object", v.javaClass.simpleName, UUID.randomUUID().toString(), output, stage) } }
+private fun result(v: Any?, output: String = "", stage: String? = null, register: ((Any) -> Pair<String, String>)? = null) {
+    when {
+        v == null -> emit("null", "null", output = output, stage = stage)
+        v === Unit -> emit("unit", "Unit", output = output, stage = stage)
+        v is Number || v is String || v is Boolean -> emit("scalar", v.toString(), output = output, stage = stage)
+        else -> {
+            val registered = register?.invoke(v)
+            emit("object", v.javaClass.simpleName, registered?.first, output, stage, registered?.second)
+        }
+    }
+}
 private fun stageSnapshot(objects: Map<String, Any>): String? {
     fun findField(type: Class<*>, name: String): java.lang.reflect.Field? { var current: Class<*>? = type; while (current != null) { current.declaredFields.firstOrNull { it.name == name }?.let { return it }; current = current.superclass }; return null }
     fun number(world: Any, name: String): Int? = findField(world.javaClass, name)?.let { field -> field.isAccessible = true; (field.get(world) as? Number)?.toInt() }
