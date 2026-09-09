@@ -1,0 +1,6 @@
+node_modules/
+.npm-cache/
+frontend/dist/
+server/dist/
+jvm/worker.jar
+.DS_Store
