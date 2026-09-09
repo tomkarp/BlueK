@@ -16,6 +16,23 @@ private class Ctx(private val objects: MutableMap<String, Any>) : RuntimeContext
 private lateinit var controlOut: java.io.PrintStream
 private val activeRequestId = ThreadLocal.withInitial { "" }
 private val stageImageCache = mutableMapOf<String, String>()
+private fun jsonString(value: String): String = buildString {
+    append('"')
+    value.forEach { char ->
+        when (char) {
+            '\\' -> append("\\\\")
+            '"' -> append("\\\"")
+            '\b' -> append("\\b")
+            '\u000C' -> append("\\f")
+            '\n' -> append("\\n")
+            '\r' -> append("\\r")
+            '\t' -> append("\\t")
+            in '\u0000'..'\u001F' -> append("\\u%04x".format(char.code))
+            else -> append(char)
+        }
+    }
+    append('"')
+}
 private class LiveOutputStream(private val onFlush: (String) -> Unit) : java.io.OutputStream() {
     private val buffer = ByteArrayOutputStream()
     override fun write(value: Int) { buffer.write(value); if (value == '\n'.code) flush() }
@@ -23,12 +40,12 @@ private class LiveOutputStream(private val onFlush: (String) -> Unit) : java.io.
     override fun flush() { if (buffer.size() == 0) return; val text = buffer.toString(Charsets.UTF_8); buffer.reset(); onFlush(text) }
 }
 private fun emit(kind: String, display: String, id: String? = null, output: String = "", stage: String? = null, name: String? = null) {
-    val extra = id?.let { ",\"objectId\":\"$it\"" } ?: ""
-    val objectName = name?.let { ",\"name\":\"${it.replace("\\", "\\\\").replace("\"", "\\\"")}\"" } ?: ""
-    val out = if (output.isEmpty()) "" else ",\"output\":\"${output.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}\""
-    val request = if (activeRequestId.get().isEmpty()) "" else ",\"requestId\":\"${activeRequestId.get()}\""
+    val extra = id?.let { ",\"objectId\":${jsonString(it)}" } ?: ""
+    val objectName = name?.let { ",\"name\":${jsonString(it)}" } ?: ""
+    val out = if (output.isEmpty()) "" else ",\"output\":${jsonString(output)}"
+    val request = if (activeRequestId.get().isEmpty()) "" else ",\"requestId\":${jsonString(activeRequestId.get())}"
     val world = stage?.let { ",\"stage\":$it" } ?: ""
-    controlOut.println("{\"kind\":\"$kind\",\"display\":\"${display.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}\"$extra$objectName$out$world$request}")
+    controlOut.println("{\"kind\":${jsonString(kind)},\"display\":${jsonString(display)}$extra$objectName$out$world$request}")
     controlOut.flush()
 }
 
