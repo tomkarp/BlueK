@@ -15,6 +15,8 @@ node server/dist/server/src/index.js
 
 Open http://localhost:5173. The example files are editable and are compiled together. A class card can be right-clicked after compiling; the first method on a bench object is invoked by clicking it. The code pad and console are intentionally compact in this first cut.
 
+For the local PoC use `npm start` in a terminal and stop it with `Ctrl+C`.
+
 ## First technical slice
 
 The worker has a separate process, a generation load operation, an object registry keyed by opaque UUIDs, reflection-based constructor/method dispatch, field-only inspection, scalar/null/object result variants, and process isolation from the HTTP server. The Kotlin compiler is the source of truth for project syntax and type checking. The JVM module uses package `de.tomkarp.bluek` and Kotlin 2.2.21 on JDK 21.
