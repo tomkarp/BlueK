@@ -36,6 +36,8 @@ try {
   assert.equal(compiled.body.diagnostics.length, 0);
   assert.equal(compiled.body.classes.find(value => value.name === 'Overloaded').constructors.length, 2);
   assert.equal(compiled.body.classes.find(value => value.name === 'Person').methods.find(value => value.name === 'greet').parameters.length, 0);
+  assert.equal(compiled.body.classes.find(value => value.name === 'Helpers').kind, 'functions');
+  assert.equal(compiled.body.classes.find(value => value.name === 'Helpers').methods.find(value => value.name === 'square').parameters.length, 1);
   const generationId = compiled.body.generationId;
   const action = body => post(`/api/session/${session.sessionId}/action`, { ...body, generationId });
   const counter = (await action({ op: 'create', className: 'Counter', name: 'counter1', args: JSON.stringify(['3']) })).body;
