@@ -49,7 +49,12 @@ try {
   assert.equal((await action({ op: 'invoke', objectId: person.objectId, name: 'greet', args: '[]' })).body.display, 'Hello, Ada!');
   assert.equal((await action({ op: 'invoke', objectId: person.objectId, name: 'greetInConsole', args: '[]' })).body.output, 'Hello, Ada!\n');
   const waiting = action({ op: 'eval', code: 'askName()', mode: 'expression' });
-  await wait(700);
+  const liveEvents = [];
+  for (let attempt = 0; attempt < 30 && !liveEvents.some(event => event.output?.includes('What is your name?')); attempt++) {
+    await wait(500);
+    liveEvents.push(...(await json(`/api/session/${session.sessionId}/events`)).body);
+  }
+  assert.match(liveEvents.map(event => event.output || '').join(''), /What is your name\?/);
   assert.equal((await post(`/api/session/${session.sessionId}/input`, { text: 'Kotlin' })).response.status, 202);
   assert.equal((await waiting).body.display, 'Kotlin');
   assert.equal((await action({ op: 'eval', code: 'square(7)', mode: 'expression' })).body.display, '49');

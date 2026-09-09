@@ -15,6 +15,12 @@ private class Ctx(private val objects: MutableMap<String, Any>) : RuntimeContext
 private lateinit var controlOut: java.io.PrintStream
 private val activeRequestId = ThreadLocal.withInitial { "" }
 private val stageImageCache = mutableMapOf<String, String>()
+private class LiveOutputStream(private val onFlush: (String) -> Unit) : java.io.OutputStream() {
+    private val buffer = ByteArrayOutputStream()
+    override fun write(value: Int) { buffer.write(value); if (value == '\n'.code) flush() }
+    override fun write(values: ByteArray, offset: Int, length: Int) { buffer.write(values, offset, length); if (values.copyOfRange(offset, offset + length).contains('\n'.code.toByte())) flush() }
+    override fun flush() { if (buffer.size() == 0) return; val text = buffer.toString(Charsets.UTF_8); buffer.reset(); onFlush(text) }
+}
 private fun emit(kind: String, display: String, id: String? = null, output: String = "", stage: String? = null) {
     val extra = id?.let { ",\"objectId\":\"$it\"" } ?: ""
     val out = if (output.isEmpty()) "" else ",\"output\":\"${output.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}\""
@@ -172,8 +178,9 @@ private fun stageSnapshot(objects: Map<String, Any>): String? {
 private data class Captured<T>(val value: T, val output: String)
 private fun <T> withUserOutput(block: () -> T): Captured<T> {
     val previous = System.out
-    val buffer = java.io.ByteArrayOutputStream()
-    return try { System.setOut(java.io.PrintStream(buffer, true, Charsets.UTF_8)); Captured(block(), buffer.toString(Charsets.UTF_8)) }
+    val output = StringBuilder()
+    val live = LiveOutputStream { text -> output.append(text); emit("output", "", output = text) }
+    return try { System.setOut(java.io.PrintStream(live, true, Charsets.UTF_8)); val value = block(); live.flush(); Captured(value, output.toString()) }
     finally { System.setOut(previous) }
 }
 private object Worker
