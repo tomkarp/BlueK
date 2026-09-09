@@ -50,6 +50,12 @@ try {
   const person = (await action({ op: 'create', className: 'Person', name: 'person1', args: JSON.stringify(['"Ada"']) })).body;
   assert.equal((await action({ op: 'invoke', objectId: person.objectId, name: 'greet', args: '[]' })).body.display, 'Hello, Ada!');
   assert.equal((await action({ op: 'invoke', objectId: person.objectId, name: 'greetInConsole', args: '[]' })).body.output, 'Hello, Ada!\n');
+  assert.equal((await action({ op: 'eval', code: 'val codepadPerson = Person("Codepad")', mode: 'block' })).body.kind, 'unit');
+  assert.equal((await action({ op: 'eval', code: 'codepadPerson.greet()', mode: 'expression' })).body.display, 'Hello, Codepad!');
+  assert.equal((await action({ op: 'eval', code: 'var codepadNumber = 1', mode: 'block' })).body.kind, 'unit');
+  const updatedCodepadNumber = (await action({ op: 'eval', code: 'codepadNumber = 2', mode: 'block' })).body;
+  assert.equal(updatedCodepadNumber.kind, 'unit', updatedCodepadNumber.display);
+  assert.equal((await action({ op: 'eval', code: 'codepadNumber', mode: 'expression' })).body.display, '2');
   const waiting = action({ op: 'eval', code: 'askName()', mode: 'expression' });
   const liveEvents = [];
   for (let attempt = 0; attempt < 30 && !liveEvents.some(event => event.output?.includes('What is your name?')); attempt++) {

@@ -37,6 +37,7 @@ fun main() {
     val objects = mutableMapOf<String, Any>()
     val names = mutableMapOf<String, String>()
     val bindingTypes = mutableMapOf<String, String>()
+    val mutableBindings = mutableSetOf<String>()
     val ctx = Ctx(objects)
     val controlIn = System.`in`
     val inputPipe = java.io.PipedInputStream()
@@ -56,7 +57,7 @@ fun main() {
                 line.contains("\"op\":\"load\"") -> {
                     projectPath = value(line, "path")
                     loader = URLClassLoader(arrayOf(File(projectPath).toURI().toURL()), Worker::class.java.classLoader)
-                    objects.clear(); names.clear(); bindingTypes.clear(); emit("unit", "loaded")
+                    objects.clear(); names.clear(); bindingTypes.clear(); mutableBindings.clear(); emit("unit", "loaded")
                 }
                 line.contains("\"op\":\"create\"") -> {
                     val className = value(line, "className")
@@ -76,7 +77,7 @@ fun main() {
                 }
                 line.contains("\"op\":\"invoke\"") -> {
                     val objectId = value(line, "objectId"); val objectName = names.entries.firstOrNull { it.value == objectId }?.key ?: error("Object is not named on the bench")
-                    val methodName = value(line, "name"); val args = argumentValues(line).joinToString(", "); val bindings = names.entries.joinToString("\n") { "val ${it.key} = ctx.objectById(\"${it.value}\") as ${bindingTypes[it.key] ?: objects[it.value]!!.javaClass.name}" }
+                    val methodName = value(line, "name"); val args = argumentValues(line).joinToString(", "); val bindings = names.entries.joinToString("\n") { "${if (mutableBindings.contains(it.key)) "var" else "val"} ${it.key} = ctx.objectById(\"${it.value}\") as ${bindingTypes[it.key] ?: objects[it.value]!!.javaClass.name}" }
                     val dir = createTempDir(prefix = "bluek-invoke-"); val src = File(dir, "Snippet.kt")
                     src.writeText("import de.tomkarp.bluek.RuntimeContext\nclass Snippet { fun execute(ctx: RuntimeContext): Any? = run { $bindings\nreturn@run $objectName.$methodName($args) } }")
                     val jar = File(dir, "snippet.jar"); val compiler = ProcessBuilder("kotlinc", src.absolutePath, "-classpath", "${projectPath}:${File(Worker::class.java.protectionDomain.codeSource.location.toURI())}", "-d", jar.absolutePath).redirectInput(ProcessBuilder.Redirect.PIPE).redirectErrorStream(true).start()
@@ -95,13 +96,16 @@ fun main() {
                 line.contains("\"op\":\"remove\"") -> {
                     val objectId = value(line, "objectId")
                     objects.remove(objectId)
-                    names.entries.removeIf { it.value == objectId }
+                    names.entries.removeIf { if (it.value == objectId) { mutableBindings.remove(it.key); true } else false }
                     emit("unit", "Removed")
                 }
                 line.contains("\"op\":\"eval\"") -> {
                     val code = value(line, "code"); val mode = value(line, "mode")
-                    val bindings = names.entries.joinToString("\n") { "val ${it.key} = ctx.objectById(\"${it.value}\") as ${objects[it.value]!!.javaClass.name}" }
-                    val expression = if (mode == "expression") "return@run $code" else "$code\nreturn@run Unit"
+                    val bindings = names.entries.joinToString("\n") { "${if (mutableBindings.contains(it.key)) "var" else "val"} ${it.key} = ctx.objectById(\"${it.value}\") as ${bindingTypes[it.key] ?: objects[it.value]!!.javaClass.name}" }
+                    val declared = if (mode == "block") Regex("\\b(?:val|var)\\s+([A-Za-z_]\\w*)\\s*=").findAll(code).map { it.groupValues[1] }.distinct().toList() else emptyList()
+                    val exported = (declared + mutableBindings.toList()).distinct()
+                    val exports = exported.joinToString(",") { "\"__bluek_binding:$it\" to $it" }
+                    val expression = if (mode == "expression") "return@run $code" else if (exported.isEmpty()) "$code\nreturn@run Unit" else "$code\nreturn@run mapOf(\"__bluek_value\" to Unit${if (exports.isEmpty()) "" else "," + exports})"
                     val dir = createTempDir(prefix = "bluek-snippet-"); val src = File(dir, "Snippet.kt")
                     src.writeText("import de.tomkarp.bluek.RuntimeContext\nclass Snippet { fun execute(ctx: RuntimeContext): Any? = run { $bindings\n$expression } }")
                     val jar = File(dir, "snippet.jar"); val compiler = ProcessBuilder("kotlinc", src.absolutePath, "-classpath", "${projectPath}:${File(Worker::class.java.protectionDomain.codeSource.location.toURI())}", "-d", jar.absolutePath).redirectInput(ProcessBuilder.Redirect.PIPE).redirectErrorStream(true).start()
@@ -110,7 +114,13 @@ fun main() {
                     if (compiler.exitValue() != 0) { emit("error", compiler.inputStream.bufferedReader().readText()); return }
                     val child = URLClassLoader(arrayOf(jar.toURI().toURL()), loader); val snippet = child.loadClass("Snippet").getDeclaredConstructor().newInstance()
                     val evaluated = withUserOutput { snippet.javaClass.getMethod("execute", RuntimeContext::class.java).invoke(snippet, ctx) }
-                    result(evaluated.value, evaluated.output, stageSnapshot(objects))
+                    val raw = evaluated.value
+                    if (raw is Map<*, *> && raw.containsKey("__bluek_value")) {
+                        raw.entries.filter { it.key is String && (it.key as String).startsWith("__bluek_binding:") && it.value != null }.forEach { entry ->
+                            val name = (entry.key as String).removePrefix("__bluek_binding:"); val wasMutable = if (declared.contains(name)) Regex("\\bvar\\s+$name\\s*=").containsMatchIn(code) else mutableBindings.contains(name); val id = UUID.randomUUID().toString(); objects[id] = entry.value as Any; names[name] = id; bindingTypes[name] = kotlinType(entry.value!!); if (wasMutable) mutableBindings.add(name) else mutableBindings.remove(name)
+                        }
+                        result(raw["__bluek_value"], evaluated.output, stageSnapshot(objects))
+                    } else result(raw, evaluated.output, stageSnapshot(objects))
                 }
                 else -> emit("error", "Unsupported worker operation")
             }
@@ -182,5 +192,17 @@ private fun <T> withUserOutput(block: () -> T): Captured<T> {
     val live = LiveOutputStream { text -> output.append(text); emit("output", "", output = text) }
     return try { System.setOut(java.io.PrintStream(live, true, Charsets.UTF_8)); val value = block(); live.flush(); Captured(value, output.toString()) }
     finally { System.setOut(previous) }
+}
+private fun kotlinType(value: Any): String = when (value) {
+    is Int -> "Int"
+    is Long -> "Long"
+    is Short -> "Short"
+    is Byte -> "Byte"
+    is Double -> "Double"
+    is Float -> "Float"
+    is Boolean -> "Boolean"
+    is Char -> "Char"
+    is String -> "String"
+    else -> value.javaClass.name
 }
 private object Worker
