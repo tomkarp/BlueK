@@ -9,10 +9,12 @@ private class Ctx(private val objects: MutableMap<String, Any>) : RuntimeContext
 }
 
 private lateinit var controlOut: java.io.PrintStream
+private val activeRequestId = ThreadLocal.withInitial { "" }
 private fun emit(kind: String, display: String, id: String? = null, output: String = "") {
     val extra = id?.let { ",\"objectId\":\"$it\"" } ?: ""
     val out = if (output.isEmpty()) "" else ",\"output\":\"${output.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}\""
-    controlOut.println("{\"kind\":\"$kind\",\"display\":\"${display.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}\"$extra$out}")
+    val request = if (activeRequestId.get().isEmpty()) "" else ",\"requestId\":\"${activeRequestId.get()}\""
+    controlOut.println("{\"kind\":\"$kind\",\"display\":\"${display.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}\"$extra$out$request}")
     controlOut.flush()
 }
 
@@ -29,6 +31,7 @@ fun main() {
     System.setIn(inputPipe)
     val actionLock = Any()
     fun process(line: String) {
+        activeRequestId.set(value(line, "requestId"))
         try {
             when {
                 line.contains("\"op\":\"input\"") -> {
@@ -73,7 +76,7 @@ fun main() {
                 }
                 else -> emit("error", "Unsupported worker operation")
             }
-        } catch (e: Throwable) { emit("error", e.cause?.message ?: e.message ?: "runtime error") }
+        } catch (e: Throwable) { emit("error", e.cause?.message ?: e.message ?: "runtime error") } finally { activeRequestId.remove() }
     }
     controlIn.bufferedReader().forEachLine { line ->
         if (line.contains("\"op\":\"input\"")) process(line)
