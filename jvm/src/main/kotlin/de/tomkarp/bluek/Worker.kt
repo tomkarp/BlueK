@@ -110,6 +110,12 @@ private fun stageSnapshot(objects: Map<String, Any>): String? {
     fun findField(type: Class<*>, name: String): java.lang.reflect.Field? { var current: Class<*>? = type; while (current != null) { current.declaredFields.firstOrNull { it.name == name }?.let { return it }; current = current.superclass }; return null }
     fun number(world: Any, name: String): Int? = findField(world.javaClass, name)?.let { field -> field.isAccessible = true; (field.get(world) as? Number)?.toInt() }
     fun jsonText(value: String): String = value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r")
+    fun soundsJson(loader: ClassLoader): String {
+        return try {
+            val sounds = Class.forName("BluePlayFunctionsKt", true, loader).getMethod("soundsOf").invoke(null) as? Iterable<*> ?: emptyList<Any>()
+            sounds.filterIsInstance<String>().joinToString(",") { "\"${jsonText(it)}\"" }
+        } catch (_: Throwable) { "" }
+    }
     fun imageJson(owner: Any, fieldName: String): String {
         val imageField = findField(owner.javaClass, fieldName) ?: return ""
         imageField.isAccessible = true
@@ -144,7 +150,7 @@ private fun stageSnapshot(objects: Map<String, Any>): String? {
             "{\"x\":${x.toInt()},\"y\":${y.toInt()},\"text\":\"${jsonText(text)}\"}"
         }.joinToString(",")
     } catch (_: Throwable) { "" }
-    return "{\"width\":$width,\"height\":$height,\"cellSize\":$cellSize${imageJson(world, "background")},\"objects\":[$entries],\"texts\":[$textEntries]}"
+    return "{\"width\":$width,\"height\":$height,\"cellSize\":$cellSize${imageJson(world, "background")},\"objects\":[$entries],\"texts\":[$textEntries],\"sounds\":[${soundsJson(world.javaClass.classLoader)}]}"
 }
 private data class Captured<T>(val value: T, val output: String)
 private fun <T> withUserOutput(block: () -> T): Captured<T> {

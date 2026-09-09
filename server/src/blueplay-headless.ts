@@ -10,12 +10,13 @@ private var currentWorld: World? = null
 private var running = false
 internal val simLock = Any()
 private val keysDown = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+private val pendingSounds = java.util.concurrent.ConcurrentLinkedQueue<String>()
 @Volatile private var clickPending = false
 @Volatile private var clickX = -1
 @Volatile private var clickY = -1
 
 fun isKeyDown(key: String): Boolean = keysDown.contains(key.lowercase())
-fun playSound(fileName: String) { }
+fun playSound(fileName: String) { pendingSounds.add(fileName) }
 fun getSpeed(): Int = 50
 fun setSpeed(value: Int) { }
 fun start() { running = true; while (running) { stepWorld(); Thread.sleep(20) } }
@@ -26,6 +27,7 @@ internal fun worldOf(actor: Actor): World? = synchronized(simLock) { actorWorlds
 internal fun setWorldOf(actor: Actor, world: World?) = synchronized(simLock) { if (world == null) actorWorlds.remove(actor) else actorWorlds[actor] = world }
 internal fun setTextOf(world: World, x: Int, y: Int, text: String) { synchronized(simLock) { val values = worldTexts.getOrPut(world) { linkedMapOf() }; if (text.isEmpty()) values.remove(Pair(x, y)) else values[Pair(x, y)] = text } }
 internal fun textsOf(world: World): List<Triple<Int, Int, String>> = synchronized(simLock) { worldTexts[world]?.map { Triple(it.key.first, it.key.second, it.value) } ?: emptyList() }
+fun soundsOf(): List<String> = buildList { while (true) { val sound = pendingSounds.poll() ?: break; add(sound) } }
 internal fun repaintWorld() { }
 internal fun showWorld(world: World) { currentWorld = world }
 internal fun isActorClicked(actor: Actor): Boolean { if (clickPending && currentWorld?.allObjects()?.firstOrNull { it.x == clickX && it.y == clickY } === actor) { clickPending = false; return true }; return false }

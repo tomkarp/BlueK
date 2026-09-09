@@ -29,7 +29,7 @@ Danach `http://localhost:5173` öffnen. `npm start` läuft absichtlich im Vorder
 
 ## BluePlay
 
-Enthält ein Projekt eine `BluePlayFunctions.kt`, kompiliert der lokale Adapter diese interne Steuerdatei headless. Die öffentliche BluePlay-API von `World`, `Actor` und `Image` bleibt verwendbar; `show()` setzt die aktuelle World, `step()` und `start()` führen die Simulation aus. World-/Actor-Zustände werden als begrenzte Snapshots an die Weboberfläche übertragen und dort als Spielfeld dargestellt. Importierte Actor- und Hintergrundbilder werden als PNG-Daten gerendert; fehlende Bilddateien erscheinen als Platzhalter. Eine kontinuierliche Positionserfassung sowie Maus-/Tastaturereignisse sind vorhanden. Soundwiedergabe und Änderungen an selbst gezeichneten Bildern sind noch nicht vollständig portiert.
+Enthält ein Projekt eine `BluePlayFunctions.kt`, kompiliert der lokale Adapter diese interne Steuerdatei headless. Die öffentliche BluePlay-API von `World`, `Actor` und `Image` bleibt verwendbar; `show()` setzt die aktuelle World, `step()` und `start()` führen die Simulation aus. World-/Actor-Zustände werden als begrenzte Snapshots an die Weboberfläche übertragen und dort als Spielfeld dargestellt. Importierte Actor- und Hintergrundbilder werden als PNG-Daten gerendert; fehlende Bilddateien erscheinen als Platzhalter. Eine kontinuierliche Positionserfassung sowie Maus-/Tastaturereignisse sind vorhanden. `playSound(...)` wird als Ereignis übertragen und aus importierten WAV-Dateien im Browser abgespielt; der Browser kann die Wiedergabe bei fehlender vorheriger Benutzerinteraktion blockieren.
 
 ## Architektur
 
@@ -55,4 +55,4 @@ Mit echten `kotlinc`- und Worker-Prozessen geprüft:
 
 ## Bewusste Grenzen
 
-Die Metadatenanzeige ist noch keine vollständige Kotlin-PSI-/`kotlin-reflect`-Analyse; komplexe Sprachkonstrukte können daher im Menü fehlen, bleiben aber über Compile/Codepad dem Kotlin-Compiler überlassen. Persistente Codepad-Deklarationen, Projekt speichern/laden, vollständige BluePlay-Ressourcen und ein öffentlicher Mehrbenutzerbetrieb sind nicht Teil des aktuellen lokalen Adapters.
+Die Metadatenanzeige ist noch keine vollständige Kotlin-PSI-/`kotlin-reflect`-Analyse; komplexe Sprachkonstrukte können daher im Menü fehlen, bleiben aber über Compile/Codepad dem Kotlin-Compiler überlassen. Persistente Codepad-Deklarationen, Projekt speichern/laden, selbst gezeichnete Bildänderungen und ein öffentlicher Mehrbenutzerbetrieb sind nicht Teil des aktuellen lokalen Adapters.
