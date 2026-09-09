@@ -24,6 +24,7 @@ fun main() {
     var projectPath = ""
     val objects = mutableMapOf<String, Any>()
     val names = mutableMapOf<String, String>()
+    val bindingTypes = mutableMapOf<String, String>()
     val ctx = Ctx(objects)
     val controlIn = System.`in`
     val inputPipe = java.io.PipedInputStream()
@@ -40,21 +41,25 @@ fun main() {
                 line.contains("\"op\":\"load\"") -> {
                     projectPath = value(line, "path")
                     loader = URLClassLoader(arrayOf(File(projectPath).toURI().toURL()), Worker::class.java.classLoader)
-                    objects.clear(); names.clear(); emit("unit", "loaded")
+                    objects.clear(); names.clear(); bindingTypes.clear(); emit("unit", "loaded")
                 }
                 line.contains("\"op\":\"create\"") -> {
                     val className = value(line, "className")
                     val args = argumentValues(line).map(::parse)
                     val ctor = Class.forName(className, true, loader).declaredConstructors.first { it.parameterCount == args.size }
                     val created = withUserOutput { ctor.newInstance(*args.toTypedArray()) }; val id = UUID.randomUUID().toString()
-                    objects[id] = created.value; value(line, "name").takeIf { it.isNotEmpty() }?.let { names[it] = id }
+                    objects[id] = created.value; value(line, "name").takeIf { it.isNotEmpty() }?.let { name -> names[name] = id; val typeArgs = argumentValues(line, "typeArguments"); bindingTypes[name] = if (typeArgs.isEmpty()) className else "$className<${typeArgs.joinToString(", ")}>" }
                     emit("object", created.value.javaClass.simpleName, id, created.output)
                 }
                 line.contains("\"op\":\"invoke\"") -> {
-                    val obj = objects[value(line, "objectId")]!!; val name = value(line, "name")
-                    val args = argumentValues(line).map(::parse)
-                    val method = obj.javaClass.methods.filter { it.name == name && it.parameterCount == args.size }.first()
-                    val invoked = withUserOutput { method.invoke(obj, *args.toTypedArray()) }
+                    val objectId = value(line, "objectId"); val objectName = names.entries.firstOrNull { it.value == objectId }?.key ?: error("Object is not named on the bench")
+                    val methodName = value(line, "name"); val args = argumentValues(line).joinToString(", "); val bindings = names.entries.joinToString("\n") { "val ${it.key} = ctx.objectById(\"${it.value}\") as ${bindingTypes[it.key] ?: objects[it.value]!!.javaClass.name}" }
+                    val dir = createTempDir(prefix = "bluek-invoke-"); val src = File(dir, "Snippet.kt")
+                    src.writeText("import de.tomkarp.bluek.RuntimeContext\nclass Snippet { fun execute(ctx: RuntimeContext): Any? = run { $bindings\nreturn@run $objectName.$methodName($args) } }")
+                    val jar = File(dir, "snippet.jar"); val compiler = ProcessBuilder("kotlinc", src.absolutePath, "-classpath", "${projectPath}:${File(Worker::class.java.protectionDomain.codeSource.location.toURI())}", "-d", jar.absolutePath).redirectErrorStream(true).start()
+                    if (compiler.waitFor() != 0) { emit("error", compiler.inputStream.bufferedReader().readText()); return }
+                    val child = URLClassLoader(arrayOf(jar.toURI().toURL()), loader); val snippet = child.loadClass("Snippet").getDeclaredConstructor().newInstance()
+                    val invoked = withUserOutput { snippet.javaClass.getMethod("execute", RuntimeContext::class.java).invoke(snippet, ctx) }
                     result(invoked.value, invoked.output)
                 }
                 line.contains("\"op\":\"inspect\"") -> {
@@ -86,9 +91,9 @@ fun main() {
 
 private fun decodeJsonString(raw: String): String { val result = StringBuilder(); var escaped = false; for (char in raw) { if (escaped) { result.append(when (char) { 'n' -> '\n'; 'r' -> '\r'; 't' -> '\t'; else -> char }); escaped = false } else if (char == '\\') escaped = true else result.append(char) }; if (escaped) result.append('\\'); return result.toString() }
 private fun value(line: String, key: String): String = Regex("\\\"$key\\\":\\\"((?:\\\\.|[^\"])*)\\\"").find(line)?.groupValues?.get(1)?.let(::decodeJsonString) ?: ""
-private fun argumentValues(line: String): List<String> { val encoded = value(line, "args").trim(); if (!encoded.startsWith("[")) return encoded.split('|').filter(String::isNotEmpty); val body = encoded.removePrefix("[").removeSuffix("]"); val values = mutableListOf<String>(); Regex("\"((?:\\\\.|[^\"\\\\])*)\"").findAll(body).forEach { values.add(decodeJsonString(it.groupValues[1])) }; while (values.lastOrNull() == "") values.removeLast(); return values }
+private fun argumentValues(line: String, key: String = "args"): List<String> { val encoded = value(line, key).trim(); if (!encoded.startsWith("[")) return encoded.split('|').filter(String::isNotEmpty); val body = encoded.removePrefix("[").removeSuffix("]"); val values = mutableListOf<String>(); Regex("\"((?:\\\\.|[^\"\\\\])*)\"").findAll(body).forEach { values.add(decodeJsonString(it.groupValues[1])) }; while (values.lastOrNull() == "") values.removeLast(); return values }
 private fun parse(s: String): Any? = when { s == "null" -> null; s.toIntOrNull() != null -> s.toInt(); s.toLongOrNull() != null -> s.toLong(); s == "true" || s == "false" -> s.toBoolean(); else -> s.removePrefix("\"").removeSuffix("\"") }
-private fun result(v: Any?, output: String = "") { when { v == null -> emit("null", "null", output = output); v is Number || v is String || v is Boolean -> emit("scalar", v.toString(), output = output); else -> emit("object", v.javaClass.simpleName, UUID.randomUUID().toString(), output) } }
+private fun result(v: Any?, output: String = "") { when { v == null -> emit("null", "null", output = output); v === Unit -> emit("unit", "Unit", output = output); v is Number || v is String || v is Boolean -> emit("scalar", v.toString(), output = output); else -> emit("object", v.javaClass.simpleName, UUID.randomUUID().toString(), output) } }
 private data class Captured<T>(val value: T, val output: String)
 private fun <T> withUserOutput(block: () -> T): Captured<T> {
     val previous = System.out
