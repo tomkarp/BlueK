@@ -9,8 +9,12 @@ private val imageCache = java.util.concurrent.ConcurrentHashMap<String, Buffered
 private var currentWorld: World? = null
 private var running = false
 internal val simLock = Any()
+private val keysDown = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+@Volatile private var clickPending = false
+@Volatile private var clickX = -1
+@Volatile private var clickY = -1
 
-fun isKeyDown(key: String): Boolean = false
+fun isKeyDown(key: String): Boolean = keysDown.contains(key.lowercase())
 fun playSound(fileName: String) { }
 fun getSpeed(): Int = 50
 fun setSpeed(value: Int) { }
@@ -24,10 +28,12 @@ internal fun setTextOf(world: World, x: Int, y: Int, text: String) { synchronize
 internal fun textsOf(world: World): List<Triple<Int, Int, String>> = synchronized(simLock) { worldTexts[world]?.map { Triple(it.key.first, it.key.second, it.value) } ?: emptyList() }
 internal fun repaintWorld() { }
 internal fun showWorld(world: World) { currentWorld = world }
-internal fun isActorClicked(actor: Actor): Boolean = false
-internal fun isWorldClicked(): Boolean = false
+internal fun isActorClicked(actor: Actor): Boolean { if (clickPending && currentWorld?.allObjects()?.firstOrNull { it.x == clickX && it.y == clickY } === actor) { clickPending = false; return true }; return false }
+internal fun isWorldClicked(): Boolean { if (!clickPending) return false; val hit = currentWorld?.allObjects()?.any { it.x == clickX && it.y == clickY } == true; if (!hit) { clickPending = false; return true }; return false }
 internal fun imageOrPlaceholder(actor: Actor): Image = actor.image ?: Image(1, 1)
 internal fun cachedImage(fileName: String): BufferedImage = imageCache.getOrPut(fileName) { listOf(File(fileName), File("images", fileName)).firstNotNullOfOrNull { file -> if (file.exists()) ImageIO.read(file) else null } ?: BufferedImage(30, 30, BufferedImage.TYPE_INT_ARGB) }
+internal fun setKeyState(key: String, pressed: Boolean) { if (pressed) keysDown.add(key.lowercase()) else keysDown.remove(key.lowercase()) }
+internal fun setClickPosition(x: Int, y: Int) { clickX = x; clickY = y; clickPending = true }
 
 private fun stepWorld() { currentWorld?.let { world -> world.act(); world.allObjects().forEach { if (worldOf(it) === world) it.act() } } }
 `;
