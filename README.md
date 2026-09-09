@@ -23,8 +23,9 @@ Danach `http://localhost:5173` öffnen. `npm start` läuft absichtlich im Vorder
 - Doppelklick auf eine Karte öffnet den Quelltexteditor; Änderungen müssen erneut kompiliert werden.
 - Rechtsklick auf eine Klasse öffnet den Kotlin-Konstruktor. Strings werden als Kotlin-Ausdrücke mit Anführungszeichen eingegeben.
 - Rechtsklick auf ein Objekt zeigt überladene und geerbte öffentliche Methoden. Parameter werden einzeln als Kotlin-Ausdrücke eingegeben.
+- Rechtsklick auf eine `«functions»`-Karte zeigt Top-Level-Funktionen; ihre Kotlin-Argumente werden genauso compilergeprüft eingegeben.
 - `Evaluate` wertet einen Ausdruck aus, `Run` einen Block. Bench-Objekte und ihre Mutationen bleiben zwischen Eingaben erhalten; lokale Variablen nicht.
-- Die Konsole zeigt Rückgabewerte und `stdout`. Eine eingegebene Zeile wird mit Enter an `readln()` weitergegeben.
+- Die Konsole zeigt Rückgabewerte und `stdout` live. Eine eingegebene Zeile wird mit Enter an `readln()` weitergegeben; Prompts erscheinen bereits während der laufenden Eingabeaktion.
 - `Stop` beendet den gesamten Benutzer-Worker. Die Handles werden verworfen und nach einem erneuten Compile neu erzeugt.
 
 ## BluePlay
