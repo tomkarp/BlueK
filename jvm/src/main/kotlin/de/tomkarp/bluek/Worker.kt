@@ -232,10 +232,11 @@ private fun stageSnapshot(objects: Map<String, Any>): String? {
 private data class Captured<T>(val value: T, val output: String)
 private fun <T> withUserOutput(block: () -> T): Captured<T> {
     val previous = System.out
+    val previousError = System.err
     val output = StringBuilder()
     val live = LiveOutputStream { text -> output.append(text); emit("output", "", output = text) }
-    return try { System.setOut(java.io.PrintStream(live, true, Charsets.UTF_8)); val value = block(); live.flush(); Captured(value, output.toString()) }
-    finally { System.setOut(previous) }
+    return try { val stream = java.io.PrintStream(live, true, Charsets.UTF_8); System.setOut(stream); System.setErr(stream); val value = block(); live.flush(); Captured(value, output.toString()) }
+    finally { System.setOut(previous); System.setErr(previousError) }
 }
 private fun kotlinType(value: Any): String = when (value) {
     is Int -> "Int"
