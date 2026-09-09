@@ -33,6 +33,7 @@ try {
     { id: 'overloaded', fileName: 'Overloaded.kt', kind: 'class', revision: 1, source: 'class Overloaded { val kind: String; constructor(value: Int) { kind = "int" }; constructor(value: String) { kind = "string" } }' },
     { id: 'base', fileName: 'Base.kt', kind: 'class', revision: 1, source: 'open class Base(var baseValue: String)' },
     { id: 'child', fileName: 'Child.kt', kind: 'class', revision: 1, source: 'class Child(baseValue: String): Base(baseValue) { var ownValue: Int = 7 }' },
+    { id: 'tools', fileName: 'Tools.kt', kind: 'class', revision: 1, source: 'object Tools { fun twice(value: Int): Int = value * 2; fun ping() { println("pong") } }' },
   ];
   const compiled = await post(`/api/session/${session.sessionId}/compile`, { files, revision: 1 });
   assert.equal(compiled.body.diagnostics.length, 0);
@@ -40,6 +41,8 @@ try {
   assert.equal(compiled.body.classes.find(value => value.name === 'Person').methods.find(value => value.name === 'greet').parameters.length, 0);
   assert.equal(compiled.body.classes.find(value => value.name === 'Helpers').kind, 'functions');
   assert.equal(compiled.body.classes.find(value => value.name === 'Helpers').methods.find(value => value.name === 'square').parameters.length, 1);
+  assert.equal(compiled.body.classes.find(value => value.name === 'Tools').kind, 'object');
+  assert.equal(compiled.body.classes.find(value => value.name === 'Tools').constructors.length, 0);
   const generationId = compiled.body.generationId;
   const action = body => post(`/api/session/${session.sessionId}/action`, { ...body, generationId });
   const counter = (await action({ op: 'create', className: 'Counter', name: 'counter1', args: JSON.stringify(['3']) })).body;
@@ -68,6 +71,7 @@ try {
   assert.equal((await post(`/api/session/${session.sessionId}/input`, { text: 'Kotlin' })).response.status, 202);
   assert.equal((await waiting).body.display, 'Kotlin');
   assert.equal((await action({ op: 'eval', code: 'square(7)', mode: 'expression' })).body.display, '49');
+  assert.equal((await action({ op: 'eval', code: 'Tools.twice(7)', mode: 'expression' })).body.display, '14');
   assert.equal((await action({ op: 'eval', code: 'error("Demo")', mode: 'expression' })).body.kind, 'error');
   assert.equal((await action({ op: 'eval', code: 'square(7)', mode: 'expression' })).body.display, '49');
   const box = (await action({ op: 'create', className: 'Box', name: 'box1', typeArguments: JSON.stringify(['String']), args: JSON.stringify(['"Ada"']) })).body;
