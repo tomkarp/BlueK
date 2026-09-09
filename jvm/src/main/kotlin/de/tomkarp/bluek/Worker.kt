@@ -10,11 +10,12 @@ private class Ctx(private val objects: MutableMap<String, Any>) : RuntimeContext
 
 private lateinit var controlOut: java.io.PrintStream
 private val activeRequestId = ThreadLocal.withInitial { "" }
-private fun emit(kind: String, display: String, id: String? = null, output: String = "") {
+private fun emit(kind: String, display: String, id: String? = null, output: String = "", stage: String? = null) {
     val extra = id?.let { ",\"objectId\":\"$it\"" } ?: ""
     val out = if (output.isEmpty()) "" else ",\"output\":\"${output.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}\""
     val request = if (activeRequestId.get().isEmpty()) "" else ",\"requestId\":\"${activeRequestId.get()}\""
-    controlOut.println("{\"kind\":\"$kind\",\"display\":\"${display.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}\"$extra$out$request}")
+    val world = stage?.let { ",\"stage\":$it" } ?: ""
+    controlOut.println("{\"kind\":\"$kind\",\"display\":\"${display.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}\"$extra$out$world$request}")
     controlOut.flush()
 }
 
@@ -49,7 +50,7 @@ fun main() {
                     val ctor = Class.forName(className, true, loader).declaredConstructors.first { it.parameterCount == args.size }
                     val created = withUserOutput { ctor.newInstance(*args.toTypedArray()) }; val id = UUID.randomUUID().toString()
                     objects[id] = created.value; value(line, "name").takeIf { it.isNotEmpty() }?.let { name -> names[name] = id; val typeArgs = argumentValues(line, "typeArguments"); bindingTypes[name] = if (typeArgs.isEmpty()) className else "$className<${typeArgs.joinToString(", ")}>" }
-                    emit("object", created.value.javaClass.simpleName, id, created.output)
+                    emit("object", created.value.javaClass.simpleName, id, created.output, stageSnapshot(objects))
                 }
                 line.contains("\"op\":\"invoke\"") -> {
                     val objectId = value(line, "objectId"); val objectName = names.entries.firstOrNull { it.value == objectId }?.key ?: error("Object is not named on the bench")
@@ -60,7 +61,7 @@ fun main() {
                     if (compiler.waitFor() != 0) { emit("error", compiler.inputStream.bufferedReader().readText()); return }
                     val child = URLClassLoader(arrayOf(jar.toURI().toURL()), loader); val snippet = child.loadClass("Snippet").getDeclaredConstructor().newInstance()
                     val invoked = withUserOutput { snippet.javaClass.getMethod("execute", RuntimeContext::class.java).invoke(snippet, ctx) }
-                    result(invoked.value, invoked.output)
+                    result(invoked.value, invoked.output, stageSnapshot(objects))
                 }
                 line.contains("\"op\":\"inspect\"") -> {
                     val obj = objects[value(line, "objectId")]!!
@@ -77,7 +78,7 @@ fun main() {
                     if (compiler.waitFor() != 0) { emit("error", compiler.inputStream.bufferedReader().readText()); return }
                     val child = URLClassLoader(arrayOf(jar.toURI().toURL()), loader); val snippet = child.loadClass("Snippet").getDeclaredConstructor().newInstance()
                     val evaluated = withUserOutput { snippet.javaClass.getMethod("execute", RuntimeContext::class.java).invoke(snippet, ctx) }
-                    result(evaluated.value, evaluated.output)
+                    result(evaluated.value, evaluated.output, stageSnapshot(objects))
                 }
                 else -> emit("error", "Unsupported worker operation")
             }
@@ -93,7 +94,20 @@ private fun decodeJsonString(raw: String): String { val result = StringBuilder()
 private fun value(line: String, key: String): String = Regex("\\\"$key\\\":\\\"((?:\\\\.|[^\"])*)\\\"").find(line)?.groupValues?.get(1)?.let(::decodeJsonString) ?: ""
 private fun argumentValues(line: String, key: String = "args"): List<String> { val encoded = value(line, key).trim(); if (!encoded.startsWith("[")) return encoded.split('|').filter(String::isNotEmpty); val body = encoded.removePrefix("[").removeSuffix("]"); val values = mutableListOf<String>(); Regex("\"((?:\\\\.|[^\"\\\\])*)\"").findAll(body).forEach { values.add(decodeJsonString(it.groupValues[1])) }; while (values.lastOrNull() == "") values.removeLast(); return values }
 private fun parse(s: String): Any? = when { s == "null" -> null; s.toIntOrNull() != null -> s.toInt(); s.toLongOrNull() != null -> s.toLong(); s == "true" || s == "false" -> s.toBoolean(); else -> s.removePrefix("\"").removeSuffix("\"") }
-private fun result(v: Any?, output: String = "") { when { v == null -> emit("null", "null", output = output); v === Unit -> emit("unit", "Unit", output = output); v is Number || v is String || v is Boolean -> emit("scalar", v.toString(), output = output); else -> emit("object", v.javaClass.simpleName, UUID.randomUUID().toString(), output) } }
+private fun result(v: Any?, output: String = "", stage: String? = null) { when { v == null -> emit("null", "null", output = output, stage = stage); v === Unit -> emit("unit", "Unit", output = output, stage = stage); v is Number || v is String || v is Boolean -> emit("scalar", v.toString(), output = output, stage = stage); else -> emit("object", v.javaClass.simpleName, UUID.randomUUID().toString(), output, stage) } }
+private fun stageSnapshot(objects: Map<String, Any>): String? {
+    fun findField(type: Class<*>, name: String): java.lang.reflect.Field? { var current: Class<*>? = type; while (current != null) { current.declaredFields.firstOrNull { it.name == name }?.let { return it }; current = current.superclass }; return null }
+    fun number(world: Any, name: String): Int? = findField(world.javaClass, name)?.let { field -> field.isAccessible = true; (field.get(world) as? Number)?.toInt() }
+    val world = objects.values.firstOrNull { findField(it.javaClass, "actors") != null } ?: return null
+    val actorsField = findField(world.javaClass, "actors") ?: return null; actorsField.isAccessible = true
+    val actors = (actorsField.get(world) as? Iterable<*>)?.filterNotNull() ?: return null
+    val entries = actors.mapNotNull { actor ->
+        val x = number(actor, "x") ?: return@mapNotNull null; val y = number(actor, "y") ?: return@mapNotNull null; val rotation = number(actor, "rotation") ?: 0
+        "{\"type\":\"${actor.javaClass.simpleName}\",\"x\":$x,\"y\":$y,\"rotation\":$rotation}"
+    }.joinToString(",")
+    val width = number(world, "width") ?: 0; val height = number(world, "height") ?: 0; val cellSize = number(world, "cellSize") ?: 1
+    return "{\"width\":$width,\"height\":$height,\"cellSize\":$cellSize,\"objects\":[$entries]}"
+}
 private data class Captured<T>(val value: T, val output: String)
 private fun <T> withUserOutput(block: () -> T): Captured<T> {
     val previous = System.out
