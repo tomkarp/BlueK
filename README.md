@@ -1,26 +1,57 @@
 # BlueK
 
-BlueK is a local Kotlin/JVM proof of concept inspired by BlueJ's object bench. The frontend knows only the serializable runtime contract; the server compiles project sources with `kotlinc` and delegates live objects to one long-lived JVM worker per session. Objects are held as opaque handles in the worker, so an action operates on the same instance.
+BlueK ist eine lokale Kotlin/JVM-Lernumgebung nach dem Objektbank-Prinzip von BlueJ. Klassen werden als gelbe Karten dargestellt, echte Instanzen liegen als opake Handles in einem langlebigen JVM-Worker, und Methoden- sowie Codepad-Aufrufe werden durch den offiziellen Kotlin-Compiler geprüft.
 
-## Run
+## Start
 
-Requirements: Node 22, Java 21, Kotlin/JVM 2.2.21. Install dependencies and start the app:
+Voraussetzungen: Node 22, Java 21 und Kotlin/JVM 2.2.21.
 
 ```sh
 npm install
 kotlinc jvm/src/main/kotlin/de/tomkarp/bluek/*.kt -include-runtime -d jvm/worker.jar
 npm run build
-node server/dist/server/src/index.js
+npm start
 ```
 
-Open http://localhost:5173. The example files are editable and are compiled together. A class card can be right-clicked after compiling; the first method on a bench object is invoked by clicking it. The code pad and console are intentionally compact in this first cut.
+Danach `http://localhost:5173` öffnen. `npm start` läuft absichtlich im Vordergrund und kann mit `Ctrl+C` beendet werden.
 
-For the local PoC use `npm start` in a terminal and stop it with `Ctrl+C`.
+## Bedienung
 
-## First technical slice
+- `Compile` kompiliert alle Projektdateien gemeinsam und startet eine neue Runtime-Generation.
+- `New Class` und `New Functions` legen editierbare Kotlin-Dateien an.
+- Doppelklick auf eine Karte öffnet den Quelltexteditor; Änderungen müssen erneut kompiliert werden.
+- Rechtsklick auf eine Klasse öffnet den Kotlin-Konstruktor. Strings werden als Kotlin-Ausdrücke mit Anführungszeichen eingegeben.
+- Rechtsklick auf ein Objekt zeigt überladene und geerbte öffentliche Methoden. Parameter werden einzeln als Kotlin-Ausdrücke eingegeben.
+- `Evaluate` wertet einen Ausdruck aus, `Run` einen Block. Bench-Objekte und ihre Mutationen bleiben zwischen Eingaben erhalten; lokale Variablen nicht.
+- Die Konsole zeigt Rückgabewerte und `stdout`. Eine eingegebene Zeile wird mit Enter an `readln()` weitergegeben.
+- `Stop` beendet den gesamten Benutzer-Worker. Die Handles werden verworfen und nach einem erneuten Compile neu erzeugt.
 
-The worker has a separate process, a generation load operation, an object registry keyed by opaque UUIDs, reflection-based constructor/method dispatch, field-only inspection, scalar/null/object result variants, and process isolation from the HTTP server. The Kotlin compiler is the source of truth for project syntax and type checking. The JVM module uses package `de.tomkarp.bluek` and Kotlin 2.2.21 on JDK 21.
+## BluePlay
 
-The current implementation proves compilation, dynamic construction, identity-preserving worker storage, method dispatch, field inspection and compiler-backed expression/block snippets. The UI and transport are deliberately a PoC: method argument forms, stdin control, stop, richer Kotlin metadata (including generic substitution and inherited-callable grouping), diagnostics positions, WebSocket streaming and full generation invalidation remain the next implementation slice. No browser JVM or interpreter is used.
+Enthält ein Projekt eine `BluePlayFunctions.kt`, kompiliert der lokale Adapter diese interne Steuerdatei headless. Die öffentliche BluePlay-API von `World`, `Actor` und `Image` bleibt verwendbar; `show()` setzt die aktuelle World, `step()` und `start()` führen die Simulation aus. World-/Actor-Zustände werden als begrenzte Snapshots an die Weboberfläche übertragen und dort als Spielfeld dargestellt. Fehlende Bilddateien erscheinen zunächst als Platzhalter. Eine kontinuierliche Positionserfassung ist vorhanden; Bildübertragung, Sound und Maus-/Tastaturereignisse sind noch nicht vollständig portiert.
 
-This is for trusted local code only. A separate process is not a sandbox; public multi-user execution needs OS/container isolation, resource limits and a stronger control protocol.
+## Architektur
+
+- `frontend`: React/TypeScript/Vite, ausschließlich gegen serialisierbare Daten.
+- `runtime-contract`: RuntimeClient- und Werttypen.
+- `server`: Sitzungen, temporäre Projektverzeichnisse, Kotlin-Kompilierung, request-id-basierte Worker-Antwortverteilung und Generationenprüfung.
+- `jvm`: langlebiger Worker mit Objektregistry, Kotlin-Snippet-Kompilierung, stdin-Kontrollpfad, Stop-Semantik und BluePlay-Stage-Snapshot.
+- `examples`: editierbare Startdateien (`Counter.kt`, `Person.kt`, `Helpers.kt`).
+
+Benutzercode läuft nie im HTTP-Prozess. Ein eigener Prozess ist jedoch keine Sandbox; öffentliche oder nicht vertrauenswürdige Ausführung benötigt zusätzliche OS-/Container-Isolation und Ressourcenlimits.
+
+## Nachgewiesene Proben
+
+Mit echten `kotlinc`- und Worker-Prozessen geprüft:
+
+- `Person("Ada")`, `greet()`, `rename("Bea")`, `greetInConsole()` und korrekte `Unit`-/stdout-Darstellung.
+- `Counter()` mit ausgelassenem Default-Argument und unabhängige Objektidentität.
+- Überladungen `choose(Int)`/`choose(String)`.
+- `Box<String>`: `replace(42)` wird vom Kotlin-Compiler abgelehnt, der ursprüngliche String bleibt erhalten.
+- `Animal`/`Dog`: dynamischer Dispatch, geerbte Methode einmalig im Menü, Interface ohne Konstruktoraktion.
+- BluePlay `MyWorld` mit Actor-Snapshot und Mutation per `show(); step()`.
+- stale `generationId` wird per HTTP mit `409` abgewiesen.
+
+## Bewusste Grenzen
+
+Die Metadatenanzeige ist noch keine vollständige Kotlin-PSI-/`kotlin-reflect`-Analyse; komplexe Sprachkonstrukte können daher im Menü fehlen, bleiben aber über Compile/Codepad dem Kotlin-Compiler überlassen. Persistente Codepad-Deklarationen, Projekt speichern/laden, vollständige BluePlay-Ressourcen und ein öffentlicher Mehrbenutzerbetrieb sind nicht Teil des aktuellen lokalen Adapters.
