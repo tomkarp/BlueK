@@ -22,9 +22,18 @@ fun main() {
     val objects = mutableMapOf<String, Any>()
     val names = mutableMapOf<String, String>()
     val ctx = Ctx(objects)
-    System.`in`.bufferedReader().forEachLine { line ->
+    val controlIn = System.`in`
+    val inputPipe = java.io.PipedInputStream()
+    val inputWriter = java.io.PipedOutputStream(inputPipe)
+    System.setIn(inputPipe)
+    val actionLock = Any()
+    fun process(line: String) {
         try {
             when {
+                line.contains("\"op\":\"input\"") -> {
+                    inputWriter.write((value(line, "text") + "\n").toByteArray(Charsets.UTF_8)); inputWriter.flush()
+                    emit("unit", "input sent")
+                }
                 line.contains("\"op\":\"load\"") -> {
                     projectPath = value(line, "path")
                     loader = URLClassLoader(arrayOf(File(projectPath).toURI().toURL()), Worker::class.java.classLoader)
@@ -57,7 +66,7 @@ fun main() {
                     val dir = createTempDir(prefix = "bluek-snippet-"); val src = File(dir, "Snippet.kt")
                     src.writeText("import de.tomkarp.bluek.RuntimeContext\nclass Snippet { fun execute(ctx: RuntimeContext): Any? = run { $bindings\n$expression } }")
                     val jar = File(dir, "snippet.jar"); val compiler = ProcessBuilder("kotlinc", src.absolutePath, "-classpath", "${projectPath}:${File(Worker::class.java.protectionDomain.codeSource.location.toURI())}", "-d", jar.absolutePath).redirectErrorStream(true).start()
-                    if (compiler.waitFor() != 0) { emit("error", compiler.inputStream.bufferedReader().readText()); return@forEachLine }
+                    if (compiler.waitFor() != 0) { emit("error", compiler.inputStream.bufferedReader().readText()); return }
                     val child = URLClassLoader(arrayOf(jar.toURI().toURL()), loader); val snippet = child.loadClass("Snippet").getDeclaredConstructor().newInstance()
                     val userOut = System.out
                     try { System.setOut(System.err); result(snippet.javaClass.getMethod("execute", RuntimeContext::class.java).invoke(snippet, ctx)) }
@@ -66,6 +75,10 @@ fun main() {
                 else -> emit("error", "Unsupported worker operation")
             }
         } catch (e: Throwable) { emit("error", e.cause?.message ?: e.message ?: "runtime error") }
+    }
+    controlIn.bufferedReader().forEachLine { line ->
+        if (line.contains("\"op\":\"input\"")) process(line)
+        else Thread { synchronized(actionLock) { process(line) } }.start()
     }
 }
 
