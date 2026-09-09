@@ -1,8 +1,11 @@
 package de.tomkarp.bluek
 
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.URLClassLoader
+import java.util.Base64
 import java.util.UUID
+import javax.imageio.ImageIO
 
 private class Ctx(private val objects: MutableMap<String, Any>) : RuntimeContext {
     override fun objectById(id: String): Any? = objects[id]
@@ -10,6 +13,7 @@ private class Ctx(private val objects: MutableMap<String, Any>) : RuntimeContext
 
 private lateinit var controlOut: java.io.PrintStream
 private val activeRequestId = ThreadLocal.withInitial { "" }
+private val stageImageCache = mutableMapOf<Int, String>()
 private fun emit(kind: String, display: String, id: String? = null, output: String = "", stage: String? = null) {
     val extra = id?.let { ",\"objectId\":\"$it\"" } ?: ""
     val out = if (output.isEmpty()) "" else ",\"output\":\"${output.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}\""
@@ -105,15 +109,32 @@ private fun result(v: Any?, output: String = "", stage: String? = null) { when {
 private fun stageSnapshot(objects: Map<String, Any>): String? {
     fun findField(type: Class<*>, name: String): java.lang.reflect.Field? { var current: Class<*>? = type; while (current != null) { current.declaredFields.firstOrNull { it.name == name }?.let { return it }; current = current.superclass }; return null }
     fun number(world: Any, name: String): Int? = findField(world.javaClass, name)?.let { field -> field.isAccessible = true; (field.get(world) as? Number)?.toInt() }
+    fun imageJson(owner: Any, fieldName: String): String {
+        val imageField = findField(owner.javaClass, fieldName) ?: return ""
+        imageField.isAccessible = true
+        val image = imageField.get(owner) ?: return ""
+        val awtField = findField(image.javaClass, "awtImage") ?: return ""
+        awtField.isAccessible = true
+        val awtImage = awtField.get(image) ?: return ""
+        val key = System.identityHashCode(awtImage)
+        val encoded = synchronized(stageImageCache) {
+            stageImageCache[key] ?: run {
+                val bytes = ByteArrayOutputStream()
+                if (!ImageIO.write(awtImage as java.awt.image.BufferedImage, "png", bytes)) return ""
+                Base64.getEncoder().encodeToString(bytes.toByteArray()).also { stageImageCache[key] = it }
+            }
+        }
+        return ",\"image\":\"data:image/png;base64,$encoded\",\"imageWidth\":${(awtImage as java.awt.image.BufferedImage).width},\"imageHeight\":${(awtImage as java.awt.image.BufferedImage).height}"
+    }
     val world = objects.values.firstOrNull { findField(it.javaClass, "actors") != null } ?: return null
     val actorsField = findField(world.javaClass, "actors") ?: return null; actorsField.isAccessible = true
     val actors = (actorsField.get(world) as? Iterable<*>)?.filterNotNull() ?: return null
     val entries = actors.mapNotNull { actor ->
         val x = number(actor, "x") ?: return@mapNotNull null; val y = number(actor, "y") ?: return@mapNotNull null; val rotation = number(actor, "rotation") ?: 0
-        "{\"type\":\"${actor.javaClass.simpleName}\",\"x\":$x,\"y\":$y,\"rotation\":$rotation}"
+        "{\"type\":\"${actor.javaClass.simpleName}\",\"x\":$x,\"y\":$y,\"rotation\":$rotation${imageJson(actor, "image")}}"
     }.joinToString(",")
     val width = number(world, "width") ?: 0; val height = number(world, "height") ?: 0; val cellSize = number(world, "cellSize") ?: 1
-    return "{\"width\":$width,\"height\":$height,\"cellSize\":$cellSize,\"objects\":[$entries]}"
+    return "{\"width\":$width,\"height\":$height,\"cellSize\":$cellSize${imageJson(world, "background")},\"objects\":[$entries]}"
 }
 private data class Captured<T>(val value: T, val output: String)
 private fun <T> withUserOutput(block: () -> T): Captured<T> {
