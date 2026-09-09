@@ -7,7 +7,9 @@ private val actorWorlds = java.util.WeakHashMap<Actor, World>()
 private val worldTexts = java.util.WeakHashMap<World, MutableMap<Pair<Int, Int>, String>>()
 private val imageCache = java.util.concurrent.ConcurrentHashMap<String, BufferedImage>()
 private var currentWorld: World? = null
-private var running = false
+@Volatile private var running = false
+@Volatile private var speedValue = 50
+@Volatile private var loopThread: Thread? = null
 internal val simLock = Any()
 private val keysDown = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 private val pendingSounds = java.util.concurrent.ConcurrentLinkedQueue<String>()
@@ -17,11 +19,20 @@ private val pendingSounds = java.util.concurrent.ConcurrentLinkedQueue<String>()
 
 fun isKeyDown(key: String): Boolean = keysDown.contains(key.lowercase())
 fun playSound(fileName: String) { pendingSounds.add(fileName) }
-fun getSpeed(): Int = 50
-fun setSpeed(value: Int) { }
-fun start() { running = true; while (running) { stepWorld(); Thread.sleep(20) } }
-fun stop() { running = false }
-fun step() { stepWorld() }
+fun getSpeed(): Int = speedValue
+fun setSpeed(value: Int) { speedValue = value.coerceIn(1, 1000) }
+fun start() {
+    if (running) return
+    running = true
+    loopThread = Thread {
+        while (running) {
+            stepWorld()
+            try { Thread.sleep((1000L / speedValue).coerceAtLeast(1L)) } catch (_: InterruptedException) { }
+        }
+    }.also { it.isDaemon = true; it.name = "bluek-blueplay"; it.start() }
+}
+fun stop() { running = false; loopThread?.interrupt(); loopThread = null }
+fun step() { if (!running) stepWorld() }
 
 internal fun worldOf(actor: Actor): World? = synchronized(simLock) { actorWorlds[actor] }
 internal fun setWorldOf(actor: Actor, world: World?) = synchronized(simLock) { if (world == null) actorWorlds.remove(actor) else actorWorlds[actor] = world }
@@ -29,7 +40,7 @@ internal fun setTextOf(world: World, x: Int, y: Int, text: String) { synchronize
 internal fun textsOf(world: World): List<Triple<Int, Int, String>> = synchronized(simLock) { worldTexts[world]?.map { Triple(it.key.first, it.key.second, it.value) } ?: emptyList() }
 fun soundsOf(): List<String> = buildList { while (true) { val sound = pendingSounds.poll() ?: break; add(sound) } }
 internal fun repaintWorld() { }
-internal fun showWorld(world: World) { currentWorld = world }
+internal fun showWorld(world: World) { stop(); currentWorld = world }
 internal fun isActorClicked(actor: Actor): Boolean { if (clickPending && currentWorld?.allObjects()?.firstOrNull { it.x == clickX && it.y == clickY } === actor) { clickPending = false; return true }; return false }
 internal fun isWorldClicked(): Boolean { if (!clickPending) return false; val hit = currentWorld?.allObjects()?.any { it.x == clickX && it.y == clickY } == true; if (!hit) { clickPending = false; return true }; return false }
 internal fun imageOrPlaceholder(actor: Actor): Image = actor.image ?: Image(1, 1)
