@@ -212,7 +212,11 @@ private fun stageSnapshot(objects: Map<String, Any>): String? {
     }
     val world = objects.values.firstOrNull { findField(it.javaClass, "actors") != null } ?: return null
     val actorsField = findField(world.javaClass, "actors") ?: return null; actorsField.isAccessible = true
-    val actors = (actorsField.get(world) as? Iterable<*>)?.filterNotNull() ?: return null
+    val actors = try {
+        (world.javaClass.getMethod("allObjects").invoke(world) as? Iterable<*>)?.filterNotNull()
+    } catch (_: Throwable) {
+        (actorsField.get(world) as? Iterable<*>)?.filterNotNull()
+    } ?: return null
     val entries = actors.mapNotNull { actor ->
         val x = number(actor, "x") ?: return@mapNotNull null; val y = number(actor, "y") ?: return@mapNotNull null; val rotation = number(actor, "rotation") ?: 0
         "{\"type\":\"${actor.javaClass.simpleName}\",\"x\":$x,\"y\":$y,\"rotation\":$rotation${imageJson(actor, "image")}}"
