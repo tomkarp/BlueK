@@ -40,6 +40,8 @@ fun main() {
                     inputWriter.write((value(line, "text") + "\n").toByteArray(Charsets.UTF_8)); inputWriter.flush()
                 }
                 line.contains("\"op\":\"stage\"") -> emit("stage", "", stage = stageSnapshot(objects))
+                line.contains("\"op\":\"key\"") -> { loader?.loadClass("BluePlayFunctionsKt")?.getMethod("setKeyState", String::class.java, Boolean::class.javaPrimitiveType)?.invoke(null, value(line, "key"), value(line, "pressed") == "true") }
+                line.contains("\"op\":\"click\"") -> { loader?.loadClass("BluePlayFunctionsKt")?.getMethod("setClickPosition", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)?.invoke(null, value(line, "x").toInt(), value(line, "y").toInt()) }
                 line.contains("\"op\":\"load\"") -> {
                     projectPath = value(line, "path")
                     loader = URLClassLoader(arrayOf(File(projectPath).toURI().toURL()), Worker::class.java.classLoader)
@@ -88,7 +90,7 @@ fun main() {
         } catch (e: Throwable) { emit("error", e.cause?.message ?: e.message ?: "runtime error") } finally { activeRequestId.remove() }
     }
     controlIn.bufferedReader().forEachLine { line ->
-        if (line.contains("\"op\":\"input\"") || line.contains("\"op\":\"stage\"")) process(line)
+        if (line.contains("\"op\":\"input\"") || line.contains("\"op\":\"stage\"") || line.contains("\"op\":\"key\"") || line.contains("\"op\":\"click\"")) process(line)
         else Thread { synchronized(actionLock) { process(line) } }.start()
     }
 }
