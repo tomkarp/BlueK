@@ -34,6 +34,7 @@ try {
     { id: 'base', fileName: 'Base.kt', kind: 'class', revision: 1, source: 'open class Base(var baseValue: String)' },
     { id: 'child', fileName: 'Child.kt', kind: 'class', revision: 1, source: 'class Child(baseValue: String): Base(baseValue) { var ownValue: Int = 7 }' },
     { id: 'tools', fileName: 'Tools.kt', kind: 'class', revision: 1, source: 'object Tools { fun twice(value: Int): Int = value * 2; fun ping() { println("pong") } }' },
+    { id: 'factory', fileName: 'Factory.kt', kind: 'class', revision: 1, source: 'class Factory { companion object { fun make(value: Int): Counter = Counter(value) } }' },
     { id: 'abstract', fileName: 'AbstractThing.kt', kind: 'class', revision: 1, source: 'abstract class AbstractThing { fun ping() {} }' },
     { id: 'world', fileName: 'World.kt', kind: 'class', revision: 1, source: 'open class World(val width: Int, val height: Int, val cellSize: Int) { val actors = mutableListOf<Actor>(); fun addObject(actor: Actor, x: Int, y: Int) { actors.add(actor); actor.x = x; actor.y = y; setWorldOf(actor, this) }; fun allObjects(): List<Actor> = actors.toList(); fun show() { showWorld(this) }; open fun act() {} }' },
     { id: 'actor', fileName: 'Actor.kt', kind: 'class', revision: 1, source: 'open class Actor { var x: Int = 0; var y: Int = 0; var image: Image? = null; open fun act() {}; fun move(distance: Int) { x += distance } }' },
@@ -50,12 +51,15 @@ try {
   assert.equal(compiled.body.classes.find(value => value.name === 'Helpers').methods.find(value => value.name === 'square').parameters.length, 1);
   assert.equal(compiled.body.classes.find(value => value.name === 'Tools').kind, 'object');
   assert.equal(compiled.body.classes.find(value => value.name === 'Tools').constructors.length, 0);
+  assert.equal(compiled.body.classes.find(value => value.name === 'Factory').companionMethods.find(value => value.name === 'make').parameters.length, 1);
   assert.equal(compiled.body.classes.find(value => value.name === 'AbstractThing').kind, 'abstract');
   assert.equal(compiled.body.classes.find(value => value.name === 'AbstractThing').constructors.length, 0);
   const generationId = compiled.body.generationId;
   const action = body => post(`/api/session/${session.sessionId}/action`, { ...body, generationId });
   const counter = (await action({ op: 'create', className: 'Counter', name: 'counter1', args: JSON.stringify(['3']) })).body;
-  assert.equal((await action({ op: 'invoke', objectId: counter.objectId, name: 'increment', args: '[]' })).body.kind, 'unit');
+  assert.ok(counter.objectId, JSON.stringify(counter));
+  const incremented = await action({ op: 'invoke', objectId: counter.objectId, name: 'increment', args: '[]' });
+  assert.equal(incremented.body.kind, 'unit', JSON.stringify(incremented));
   await action({ op: 'invoke', objectId: counter.objectId, name: 'add', args: JSON.stringify(['5']) });
   assert.equal((await action({ op: 'invoke', objectId: counter.objectId, name: 'current', args: '[]' })).body.display, '9');
   assert.match((await action({ op: 'inspect', objectId: counter.objectId })).body.display, /value=9/);
@@ -87,6 +91,9 @@ try {
   assert.equal((await waiting).body.display, 'Kotlin');
   assert.equal((await action({ op: 'eval', code: 'square(7)', mode: 'expression' })).body.display, '49');
   assert.equal((await action({ op: 'eval', code: 'Tools.twice(7)', mode: 'expression' })).body.display, '14');
+  const made = (await action({ op: 'eval', code: 'Factory.make(8)', mode: 'expression' })).body;
+  assert.equal(made.kind, 'object');
+  assert.match((await action({ op: 'inspect', objectId: made.objectId })).body.display, /value=8/);
   const world = (await action({ op: 'create', className: 'World', name: 'world1', args: JSON.stringify(['20', '10', '1']) })).body;
   const walker = (await action({ op: 'create', className: 'Walker', name: 'walker1', args: '[]' })).body;
   assert.equal((await action({ op: 'invoke', objectId: world.objectId, name: 'addObject', args: JSON.stringify(['walker1', '2', '3']) })).body.kind, 'unit');
