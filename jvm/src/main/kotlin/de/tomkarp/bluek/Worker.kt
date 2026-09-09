@@ -9,9 +9,10 @@ private class Ctx(private val objects: MutableMap<String, Any>) : RuntimeContext
 }
 
 private lateinit var controlOut: java.io.PrintStream
-private fun emit(kind: String, display: String, id: String? = null) {
+private fun emit(kind: String, display: String, id: String? = null, output: String = "") {
     val extra = id?.let { ",\"objectId\":\"$it\"" } ?: ""
-    controlOut.println("{\"kind\":\"$kind\",\"display\":\"${display.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}\"$extra}")
+    val out = if (output.isEmpty()) "" else ",\"output\":\"${output.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}\""
+    controlOut.println("{\"kind\":\"$kind\",\"display\":\"${display.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}\"$extra$out}")
     controlOut.flush()
 }
 
@@ -32,7 +33,6 @@ fun main() {
             when {
                 line.contains("\"op\":\"input\"") -> {
                     inputWriter.write((value(line, "text") + "\n").toByteArray(Charsets.UTF_8)); inputWriter.flush()
-                    emit("unit", "input sent")
                 }
                 line.contains("\"op\":\"load\"") -> {
                     projectPath = value(line, "path")
@@ -43,16 +43,16 @@ fun main() {
                     val className = value(line, "className")
                     val args = value(line, "args").split('|').filter { it.isNotEmpty() }.map(::parse)
                     val ctor = Class.forName(className, true, loader).declaredConstructors.first { it.parameterCount == args.size }
-                    val obj = withUserOutput { ctor.newInstance(*args.toTypedArray()) }; val id = UUID.randomUUID().toString()
-                    objects[id] = obj; value(line, "name").takeIf { it.isNotEmpty() }?.let { names[it] = id }
-                    emit("object", obj.javaClass.simpleName, id)
+                    val created = withUserOutput { ctor.newInstance(*args.toTypedArray()) }; val id = UUID.randomUUID().toString()
+                    objects[id] = created.value; value(line, "name").takeIf { it.isNotEmpty() }?.let { names[it] = id }
+                    emit("object", created.value.javaClass.simpleName, id, created.output)
                 }
                 line.contains("\"op\":\"invoke\"") -> {
                     val obj = objects[value(line, "objectId")]!!; val name = value(line, "name")
                     val args = value(line, "args").split('|').filter { it.isNotEmpty() }.map(::parse)
                     val method = obj.javaClass.methods.filter { it.name == name && it.parameterCount == args.size }.first()
-                    val value = withUserOutput { method.invoke(obj, *args.toTypedArray()) }
-                    result(value)
+                    val invoked = withUserOutput { method.invoke(obj, *args.toTypedArray()) }
+                    result(invoked.value, invoked.output)
                 }
                 line.contains("\"op\":\"inspect\"") -> {
                     val obj = objects[value(line, "objectId")]!!
@@ -68,9 +68,8 @@ fun main() {
                     val jar = File(dir, "snippet.jar"); val compiler = ProcessBuilder("kotlinc", src.absolutePath, "-classpath", "${projectPath}:${File(Worker::class.java.protectionDomain.codeSource.location.toURI())}", "-d", jar.absolutePath).redirectErrorStream(true).start()
                     if (compiler.waitFor() != 0) { emit("error", compiler.inputStream.bufferedReader().readText()); return }
                     val child = URLClassLoader(arrayOf(jar.toURI().toURL()), loader); val snippet = child.loadClass("Snippet").getDeclaredConstructor().newInstance()
-                    val userOut = System.out
-                    try { System.setOut(System.err); result(snippet.javaClass.getMethod("execute", RuntimeContext::class.java).invoke(snippet, ctx)) }
-                    finally { System.setOut(userOut) }
+                    val evaluated = withUserOutput { snippet.javaClass.getMethod("execute", RuntimeContext::class.java).invoke(snippet, ctx) }
+                    result(evaluated.value, evaluated.output)
                 }
                 else -> emit("error", "Unsupported worker operation")
             }
@@ -84,6 +83,12 @@ fun main() {
 
 private fun value(line: String, key: String): String = Regex("\\\"$key\\\":\\\"((?:\\\\.|[^\"])*)\\\"").find(line)?.groupValues?.get(1)?.replace("\\\"", "\"") ?: ""
 private fun parse(s: String): Any? = when { s == "null" -> null; s.toIntOrNull() != null -> s.toInt(); s.toLongOrNull() != null -> s.toLong(); s == "true" || s == "false" -> s.toBoolean(); else -> s.removePrefix("\"").removeSuffix("\"") }
-private fun result(v: Any?) { when { v == null -> emit("null", "null"); v is Number || v is String || v is Boolean -> emit("scalar", v.toString()); else -> emit("object", v.javaClass.simpleName, UUID.randomUUID().toString()) } }
-private fun <T> withUserOutput(block: () -> T): T { val previous = System.out; return try { System.setOut(System.err); block() } finally { System.setOut(previous) } }
+private fun result(v: Any?, output: String = "") { when { v == null -> emit("null", "null", output = output); v is Number || v is String || v is Boolean -> emit("scalar", v.toString(), output = output); else -> emit("object", v.javaClass.simpleName, UUID.randomUUID().toString(), output) } }
+private data class Captured<T>(val value: T, val output: String)
+private fun <T> withUserOutput(block: () -> T): Captured<T> {
+    val previous = System.out
+    val buffer = java.io.ByteArrayOutputStream()
+    return try { System.setOut(java.io.PrintStream(buffer, true, Charsets.UTF_8)); Captured(block(), buffer.toString(Charsets.UTF_8)) }
+    finally { System.setOut(previous) }
+}
 private object Worker
