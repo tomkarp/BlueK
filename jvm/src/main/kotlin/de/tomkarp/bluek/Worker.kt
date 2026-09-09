@@ -59,7 +59,8 @@ fun main() {
                     val dir = createTempDir(prefix = "bluek-invoke-"); val src = File(dir, "Snippet.kt")
                     src.writeText("import de.tomkarp.bluek.RuntimeContext\nclass Snippet { fun execute(ctx: RuntimeContext): Any? = run { $bindings\nreturn@run $objectName.$methodName($args) } }")
                     val jar = File(dir, "snippet.jar"); val compiler = ProcessBuilder("kotlinc", src.absolutePath, "-classpath", "${projectPath}:${File(Worker::class.java.protectionDomain.codeSource.location.toURI())}", "-d", jar.absolutePath).redirectErrorStream(true).start()
-                    if (compiler.waitFor() != 0) { emit("error", compiler.inputStream.bufferedReader().readText()); return }
+                    if (!compiler.waitFor(60, java.util.concurrent.TimeUnit.SECONDS)) { compiler.destroyForcibly(); emit("error", "Snippet compilation timed out"); return }
+                    if (compiler.exitValue() != 0) { emit("error", compiler.inputStream.bufferedReader().readText()); return }
                     val child = URLClassLoader(arrayOf(jar.toURI().toURL()), loader); val snippet = child.loadClass("Snippet").getDeclaredConstructor().newInstance()
                     val invoked = withUserOutput { snippet.javaClass.getMethod("execute", RuntimeContext::class.java).invoke(snippet, ctx) }
                     result(invoked.value, invoked.output, stageSnapshot(objects))
@@ -76,7 +77,8 @@ fun main() {
                     val dir = createTempDir(prefix = "bluek-snippet-"); val src = File(dir, "Snippet.kt")
                     src.writeText("import de.tomkarp.bluek.RuntimeContext\nclass Snippet { fun execute(ctx: RuntimeContext): Any? = run { $bindings\n$expression } }")
                     val jar = File(dir, "snippet.jar"); val compiler = ProcessBuilder("kotlinc", src.absolutePath, "-classpath", "${projectPath}:${File(Worker::class.java.protectionDomain.codeSource.location.toURI())}", "-d", jar.absolutePath).redirectErrorStream(true).start()
-                    if (compiler.waitFor() != 0) { emit("error", compiler.inputStream.bufferedReader().readText()); return }
+                    if (!compiler.waitFor(60, java.util.concurrent.TimeUnit.SECONDS)) { compiler.destroyForcibly(); emit("error", "Snippet compilation timed out"); return }
+                    if (compiler.exitValue() != 0) { emit("error", compiler.inputStream.bufferedReader().readText()); return }
                     val child = URLClassLoader(arrayOf(jar.toURI().toURL()), loader); val snippet = child.loadClass("Snippet").getDeclaredConstructor().newInstance()
                     val evaluated = withUserOutput { snippet.javaClass.getMethod("execute", RuntimeContext::class.java).invoke(snippet, ctx) }
                     result(evaluated.value, evaluated.output, stageSnapshot(objects))
