@@ -31,6 +31,8 @@ try {
     { id: 'helpers', fileName: 'Helpers.kt', kind: 'functions', revision: 1, source: 'fun square(x: Int): Int = x * x; fun askName(): String { println("What is your name?"); val name = readln(); println("Hello, $name!"); return name }' },
     { id: 'box', fileName: 'Box.kt', kind: 'class', revision: 1, source: 'class Box<T>(var value: T) { fun replace(next: T) { value = next }; fun get(): T = value }' },
     { id: 'overloaded', fileName: 'Overloaded.kt', kind: 'class', revision: 1, source: 'class Overloaded { val kind: String; constructor(value: Int) { kind = "int" }; constructor(value: String) { kind = "string" } }' },
+    { id: 'base', fileName: 'Base.kt', kind: 'class', revision: 1, source: 'open class Base(var baseValue: String)' },
+    { id: 'child', fileName: 'Child.kt', kind: 'class', revision: 1, source: 'class Child(baseValue: String): Base(baseValue) { var ownValue: Int = 7 }' },
   ];
   const compiled = await post(`/api/session/${session.sessionId}/compile`, { files, revision: 1 });
   assert.equal(compiled.body.diagnostics.length, 0);
@@ -69,6 +71,8 @@ try {
   const overloadedString = (await action({ op: 'create', className: 'Overloaded', name: 'overloadedString', args: JSON.stringify(['"seven"']) })).body;
   assert.match((await action({ op: 'inspect', objectId: overloadedInt.objectId })).body.display, /kind=int/);
   assert.match((await action({ op: 'inspect', objectId: overloadedString.objectId })).body.display, /kind=string/);
+  const child = (await action({ op: 'create', className: 'Child', name: 'child1', args: JSON.stringify(['"Ada"']) })).body;
+  assert.match((await action({ op: 'inspect', objectId: child.objectId })).body.display, /baseValue=Ada/);
   const stale = await post(`/api/session/${session.sessionId}/action`, { op: 'create', className: 'Counter', name: 'stale', args: '[]', generationId: 'old-generation' });
   assert.equal(stale.response.status, 409);
   console.log('BlueK runtime smoke test passed');

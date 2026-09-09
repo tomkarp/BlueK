@@ -89,7 +89,7 @@ fun main() {
                 }
                 line.contains("\"op\":\"inspect\"") -> {
                     val obj = objects[value(line, "objectId")]!!
-                    val fields = obj.javaClass.declaredFields.filter { !it.isSynthetic }.joinToString(", ") { f -> f.isAccessible = true; "${f.name}=${f.get(obj)}" }
+                    val fields = buildList { var type: Class<*>? = obj.javaClass; while (type != null) { addAll(type.declaredFields.filter { !it.isSynthetic && !java.lang.reflect.Modifier.isStatic(it.modifiers) }); type = type.superclass } }.joinToString(", ") { field -> field.isAccessible = true; "${field.name}=${field.get(obj)}" }
                     emit("scalar", fields)
                 }
                 line.contains("\"op\":\"remove\"") -> {
