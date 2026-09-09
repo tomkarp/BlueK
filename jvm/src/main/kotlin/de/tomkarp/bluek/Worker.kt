@@ -90,7 +90,8 @@ fun main() {
                 }
                 line.contains("\"op\":\"inspect\"") -> {
                     val obj = objects[value(line, "objectId")]!!
-                    val fields = buildList { var type: Class<*>? = obj.javaClass; while (type != null) { addAll(type.declaredFields.filter { !it.isSynthetic && !java.lang.reflect.Modifier.isStatic(it.modifiers) }); type = type.superclass } }.joinToString(", ") { field -> field.isAccessible = true; "${field.name}=${field.get(obj)}" }
+                    fun displayField(value: Any?): String = when (value) { null -> "null"; is String -> "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""; is Char -> "'$value'"; else -> value.toString() }
+                    val fields = buildList { var type: Class<*>? = obj.javaClass; while (type != null) { addAll(type.declaredFields.filter { !it.isSynthetic && !java.lang.reflect.Modifier.isStatic(it.modifiers) }); type = type.superclass } }.joinToString(", ") { field -> field.isAccessible = true; "${field.name}=${displayField(field.get(obj))}" }
                     emit("scalar", fields)
                 }
                 line.contains("\"op\":\"remove\"") -> {

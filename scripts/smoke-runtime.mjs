@@ -75,10 +75,10 @@ try {
   assert.equal((await action({ op: 'invoke', objectId: box.objectId, name: 'get', args: '[]' })).body.kind, 'error');
   const overloadedInt = (await action({ op: 'create', className: 'Overloaded', name: 'overloadedInt', args: JSON.stringify(['7']) })).body;
   const overloadedString = (await action({ op: 'create', className: 'Overloaded', name: 'overloadedString', args: JSON.stringify(['"seven"']) })).body;
-  assert.match((await action({ op: 'inspect', objectId: overloadedInt.objectId })).body.display, /kind=int/);
-  assert.match((await action({ op: 'inspect', objectId: overloadedString.objectId })).body.display, /kind=string/);
+  assert.match((await action({ op: 'inspect', objectId: overloadedInt.objectId })).body.display, /kind="int"/);
+  assert.match((await action({ op: 'inspect', objectId: overloadedString.objectId })).body.display, /kind="string"/);
   const child = (await action({ op: 'create', className: 'Child', name: 'child1', args: JSON.stringify(['"Ada"']) })).body;
-  assert.match((await action({ op: 'inspect', objectId: child.objectId })).body.display, /baseValue=Ada/);
+  assert.match((await action({ op: 'inspect', objectId: child.objectId })).body.display, /baseValue="Ada"/);
   const stale = await post(`/api/session/${session.sessionId}/action`, { op: 'create', className: 'Counter', name: 'stale', args: '[]', generationId: 'old-generation' });
   assert.equal(stale.response.status, 409);
   console.log('BlueK runtime smoke test passed');
