@@ -95,6 +95,10 @@ try {
   assert.match((await action({ op: 'inspect', objectId: child.objectId })).body.display, /baseValue="Ada"/);
   const stale = await post(`/api/session/${session.sessionId}/action`, { op: 'create', className: 'Counter', name: 'stale', args: '[]', generationId: 'old-generation' });
   assert.equal(stale.response.status, 409);
+  const crashed = await action({ op: 'eval', code: 'System.exit(3)', mode: 'expression' });
+  assert.equal(crashed.response.status, 500);
+  await wait(100);
+  assert.equal((await json(`/api/session/${session.sessionId}/stage`)).response.status, 409);
   console.log('BlueK runtime smoke test passed');
 } finally {
   server.kill('SIGTERM');
