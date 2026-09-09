@@ -109,6 +109,7 @@ private fun result(v: Any?, output: String = "", stage: String? = null) { when {
 private fun stageSnapshot(objects: Map<String, Any>): String? {
     fun findField(type: Class<*>, name: String): java.lang.reflect.Field? { var current: Class<*>? = type; while (current != null) { current.declaredFields.firstOrNull { it.name == name }?.let { return it }; current = current.superclass }; return null }
     fun number(world: Any, name: String): Int? = findField(world.javaClass, name)?.let { field -> field.isAccessible = true; (field.get(world) as? Number)?.toInt() }
+    fun jsonText(value: String): String = value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r")
     fun imageJson(owner: Any, fieldName: String): String {
         val imageField = findField(owner.javaClass, fieldName) ?: return ""
         imageField.isAccessible = true
@@ -134,7 +135,16 @@ private fun stageSnapshot(objects: Map<String, Any>): String? {
         "{\"type\":\"${actor.javaClass.simpleName}\",\"x\":$x,\"y\":$y,\"rotation\":$rotation${imageJson(actor, "image")}}"
     }.joinToString(",")
     val width = number(world, "width") ?: 0; val height = number(world, "height") ?: 0; val cellSize = number(world, "cellSize") ?: 1
-    return "{\"width\":$width,\"height\":$height,\"cellSize\":$cellSize${imageJson(world, "background")},\"objects\":[$entries]}"
+    val textEntries = try {
+        val projectWorld = Class.forName("World", true, world.javaClass.classLoader)
+        val texts = Class.forName("BluePlayFunctionsKt", true, world.javaClass.classLoader).getMethod("textsOf", projectWorld).invoke(null, world) as? Iterable<*> ?: emptyList<Any>()
+        texts.mapNotNull { item ->
+            val values = item as? Triple<*, *, *> ?: return@mapNotNull null
+            val x = values.first as? Number ?: return@mapNotNull null; val y = values.second as? Number ?: return@mapNotNull null; val text = values.third as? String ?: return@mapNotNull null
+            "{\"x\":${x.toInt()},\"y\":${y.toInt()},\"text\":\"${jsonText(text)}\"}"
+        }.joinToString(",")
+    } catch (_: Throwable) { "" }
+    return "{\"width\":$width,\"height\":$height,\"cellSize\":$cellSize${imageJson(world, "background")},\"objects\":[$entries],\"texts\":[$textEntries]}"
 }
 private data class Captured<T>(val value: T, val output: String)
 private fun <T> withUserOutput(block: () -> T): Captured<T> {
