@@ -166,7 +166,7 @@ private fun stageSnapshot(objects: Map<String, Any>): String? {
             stageImageCache[key] ?: run {
                 val bytes = ByteArrayOutputStream()
                 if (!ImageIO.write(bufferedImage, "png", bytes)) return ""
-                Base64.getEncoder().encodeToString(bytes.toByteArray()).also { stageImageCache[key] = it }
+                Base64.getEncoder().encodeToString(bytes.toByteArray()).also { stageImageCache[key] = it; if (stageImageCache.size > 128) stageImageCache.remove(stageImageCache.keys.first()) }
             }
         }
         return ",\"image\":\"data:image/png;base64,$encoded\",\"imageWidth\":${bufferedImage.width},\"imageHeight\":${bufferedImage.height},\"imageOpacity\":${transparency / 255.0}"
