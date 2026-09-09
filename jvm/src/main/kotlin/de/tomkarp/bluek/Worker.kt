@@ -86,6 +86,12 @@ fun main() {
                     val fields = obj.javaClass.declaredFields.filter { !it.isSynthetic }.joinToString(", ") { f -> f.isAccessible = true; "${f.name}=${f.get(obj)}" }
                     emit("scalar", fields)
                 }
+                line.contains("\"op\":\"remove\"") -> {
+                    val objectId = value(line, "objectId")
+                    objects.remove(objectId)
+                    names.entries.removeIf { it.value == objectId }
+                    emit("unit", "Removed")
+                }
                 line.contains("\"op\":\"eval\"") -> {
                     val code = value(line, "code"); val mode = value(line, "mode")
                     val bindings = names.entries.joinToString("\n") { "val ${it.key} = ctx.objectById(\"${it.value}\") as ${objects[it.value]!!.javaClass.name}" }
