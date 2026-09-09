@@ -4,3 +4,5 @@ frontend/dist/
 server/dist/
 jvm/worker.jar
 .DS_Store
+.bluek-server.pid
+.bluek-server.log
