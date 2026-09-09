@@ -8,7 +8,7 @@ type ObjectModel = { objectId: string; className: string; name: string };
 
 const typeName = (type: any) => type?.displayName || 'Any';
 const signatureParams = (parameters: any[] = []) => parameters.map(parameter => `${parameter.name}: ${typeName(parameter.type)}${parameter.hasDefault ? ' = …' : ''}`).join(', ');
-const methodText = (method: any) => `${method.returnType?.displayName && method.returnType.displayName !== 'Unit' ? `${typeName(method.returnType)} ` : ''}${method.name}(${signatureParams(method.parameters)})`;
+const methodText = (method: any) => `${method.returnType?.displayName && method.returnType.displayName !== 'Unit' ? `${typeName(method.returnType)} ` : ''}${method.name}(${signatureParams(method.parameters)})${method.inheritedFrom ? `  [inherited from ${method.inheritedFrom}]` : ''}`;
 
 function App() {
   const [files, setFiles] = useState<FileModel[]>([]), [classes, setClasses] = useState<ClassModel[]>([]), [sessionId, setSessionId] = useState(''), [selected, setSelected] = useState(0), [bench, setBench] = useState<ObjectModel[]>([]), [code, setCode] = useState(''), [log, setLog] = useState(''), [status, setStatus] = useState('Ready');
