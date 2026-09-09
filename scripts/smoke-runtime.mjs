@@ -30,6 +30,7 @@ try {
     { id: 'person', fileName: 'Person.kt', kind: 'class', revision: 1, source: 'class Person(var name: String) { fun greet(): String = "Hello, $name!"; fun rename(newName: String) { name = newName }; fun greetInConsole() { println(greet()) } }' },
     { id: 'helpers', fileName: 'Helpers.kt', kind: 'functions', revision: 1, source: 'fun square(x: Int): Int = x * x; fun askName(): String { println("What is your name?"); val name = readln(); println("Hello, $name!"); return name }' },
     { id: 'box', fileName: 'Box.kt', kind: 'class', revision: 1, source: 'class Box<T>(var value: T) { fun replace(next: T) { value = next }; fun get(): T = value }' },
+    { id: 'overloaded', fileName: 'Overloaded.kt', kind: 'class', revision: 1, source: 'class Overloaded { val kind: String; constructor(value: Int) { kind = "int" }; constructor(value: String) { kind = "string" } }' },
   ];
   const compiled = await post(`/api/session/${session.sessionId}/compile`, { files, revision: 1 });
   assert.equal(compiled.body.diagnostics.length, 0);
@@ -53,6 +54,10 @@ try {
   const box = (await action({ op: 'create', className: 'Box', name: 'box1', typeArguments: JSON.stringify(['String']), args: JSON.stringify(['"Ada"']) })).body;
   assert.equal((await action({ op: 'invoke', objectId: box.objectId, name: 'replace', args: JSON.stringify(['42']) })).body.kind, 'error');
   assert.equal((await action({ op: 'invoke', objectId: box.objectId, name: 'get', args: '[]' })).body.display, 'Ada');
+  const overloadedInt = (await action({ op: 'create', className: 'Overloaded', name: 'overloadedInt', args: JSON.stringify(['7']) })).body;
+  const overloadedString = (await action({ op: 'create', className: 'Overloaded', name: 'overloadedString', args: JSON.stringify(['"seven"']) })).body;
+  assert.match((await action({ op: 'inspect', objectId: overloadedInt.objectId })).body.display, /kind=int/);
+  assert.match((await action({ op: 'inspect', objectId: overloadedString.objectId })).body.display, /kind=string/);
   const stale = await post(`/api/session/${session.sessionId}/action`, { op: 'create', className: 'Counter', name: 'stale', args: '[]', generationId: 'old-generation' });
   assert.equal(stale.response.status, 409);
   console.log('BlueK runtime smoke test passed');

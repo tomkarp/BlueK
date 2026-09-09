@@ -54,9 +54,17 @@ fun main() {
                 }
                 line.contains("\"op\":\"create\"") -> {
                     val className = value(line, "className")
-                    val args = argumentValues(line).map(::parse)
-                    val ctor = Class.forName(className, true, loader).declaredConstructors.first { it.parameterCount == args.size }
-                    val created = withUserOutput { ctor.newInstance(*args.toTypedArray()) }; val id = UUID.randomUUID().toString()
+                    val args = argumentValues(line).joinToString(", ")
+                    val typeArguments = argumentValues(line, "typeArguments").joinToString(", ")
+                    val typeSuffix = if (typeArguments.isEmpty()) "" else "<$typeArguments>"
+                    val dir = createTempDir(prefix = "bluek-create-"); val src = File(dir, "Factory.kt")
+                    src.writeText("class Factory { fun execute(): Any? = $className$typeSuffix($args) }")
+                    val jar = File(dir, "factory.jar"); val compiler = ProcessBuilder("kotlinc", src.absolutePath, "-classpath", "${projectPath}:${File(Worker::class.java.protectionDomain.codeSource.location.toURI())}", "-d", jar.absolutePath).redirectInput(ProcessBuilder.Redirect.PIPE).redirectErrorStream(true).start()
+                    compiler.outputStream.close()
+                    if (!compiler.waitFor(60, java.util.concurrent.TimeUnit.SECONDS)) { compiler.destroyForcibly(); emit("error", "Constructor compilation timed out"); return }
+                    if (compiler.exitValue() != 0) { emit("error", compiler.inputStream.bufferedReader().readText()); return }
+                    val child = URLClassLoader(arrayOf(jar.toURI().toURL()), loader); val factory = child.loadClass("Factory").getDeclaredConstructor().newInstance()
+                    val created = withUserOutput { factory.javaClass.getMethod("execute").invoke(factory) }; val id = UUID.randomUUID().toString()
                     objects[id] = created.value; value(line, "name").takeIf { it.isNotEmpty() }?.let { name -> names[name] = id; val typeArgs = argumentValues(line, "typeArguments"); bindingTypes[name] = if (typeArgs.isEmpty()) className else "$className<${typeArgs.joinToString(", ")}>" }
                     emit("object", created.value.javaClass.simpleName, id, created.output, stageSnapshot(objects))
                 }
