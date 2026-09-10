@@ -73,4 +73,4 @@ Mit echten `kotlinc`- und Worker-Prozessen geprüft:
 
 ## Bewusste Grenzen
 
-Die Metadatenanzeige ist noch keine vollständige Kotlin-PSI-/`kotlin-reflect`-Analyse; komplexe Sprachkonstrukte können daher im Menü fehlen, bleiben aber über Compile/Codepad dem Kotlin-Compiler überlassen. TypeRefs bewahren bereits verschachtelte Generics, Nullbarkeit und `in`/`out`/`*`-Projektionen. Persistente Codepad-Deklarationen, selbst gezeichnete Bildänderungen und ein öffentlicher Mehrbenutzerbetrieb sind nicht Teil des aktuellen lokalen Adapters.
+Die Metadatenanzeige ist noch keine vollständige Kotlin-PSI-/`kotlin-reflect`-Analyse; komplexe Sprachkonstrukte können daher im Menü fehlen, bleiben aber über Compile/Codepad dem Kotlin-Compiler überlassen. TypeRefs bewahren bereits verschachtelte Generics, Nullbarkeit und `in`/`out`/`*`-Projektionen. Selbst gezeichnete Bildänderungen und ein öffentlicher Mehrbenutzerbetrieb sind nicht Teil des aktuellen lokalen Adapters.
