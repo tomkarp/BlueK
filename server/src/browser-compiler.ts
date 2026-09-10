@@ -165,7 +165,7 @@ export async function compileBrowserProject(root: string, sessionDir: string, fi
     for (const pkg of packages) {
         const prefix = pkg ? `package ${pkg}\n\n` : '';
         const fileName = `BlueKInput${pkg ? `_${kotlinIdentifier(pkg)}` : ''}.kt`;
-        await fs.writeFile(path.join(browserProjectDir, fileName), `${prefix}fun readln(): String = bluekReadln()\nfun readlnOrNull(): String? = bluekReadlnOrNull()\nfun bluekSleep(millis: Long) {}\nobject bluekSystemErr { fun print(value: Any?) = kotlin.io.print(value); fun println(value: Any?) = kotlin.io.println(value); fun flush() {} }\n`);
+        await fs.writeFile(path.join(browserProjectDir, fileName), `${prefix}fun readln(): String = bluekReadln()\nfun readlnOrNull(): String? = bluekReadlnOrNull()\nfun readLine(): String? = bluekReadlnOrNull()\nfun bluekSleep(millis: Long) {}\nobject bluekSystemErr { fun print(value: Any?) = kotlin.io.print(value); fun println(value: Any?) = kotlin.io.println(value); fun flush() {} }\n`);
     }
     const bridge = bridgeSource(files, classes);
     await fs.writeFile(path.join(bridgeDir, 'BlueKBridge.kt'), bridge.source);
