@@ -20,18 +20,26 @@ async function ask(s:S,msg:any){return new Promise<any>((resolve,reject)=>{const
 const exampleDirectory = (name: string) => name === 'basic' ? path.join(root, 'examples') : path.join(root, 'examples', name);
 function packageNameForBrowser(files: ProjectFile[]): string { const main=files.find(file=>file.fileName==='Main.kt')||files.find(file=>/\bfun\s+main\s*\(/.test(file.source)); return main?.source.match(/^\s*package\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)/m)?.[1]||''; }
 const readExample = async (name: string) => {
-    const directory = exampleDirectory(name);
+    const directory = exampleDirectory(name === 'blueplay-stress' ? 'blueplay' : name);
     const names = (await fs.readdir(directory)).filter(fileName => fileName.endsWith('.kt')).sort();
     return Promise.all(names.map(async fileName => ({
         id: fileName,
         fileName,
         kind: fileName === 'Helpers.kt' || fileName === 'Main.kt' || fileName === 'Console.kt' || fileName === 'BluePlayFunctions.kt' ? 'functions' : 'class',
-        source: await fs.readFile(path.join(directory, fileName), 'utf8'),
+        source: name === 'blueplay-stress' && fileName === 'Main.kt' ? `fun main() {
+    val world = MyWorld()
+    repeat(50) { index ->
+        val figure = Figure()
+        world.addObject(figure, (index % 10) * 50 + 20, (index / 10) * 50 + 20)
+    }
+    world.show()
+}
+` : await fs.readFile(path.join(directory, fileName), 'utf8'),
         revision: 1
     })));
 };
 const readExampleResources = async (name: string) => {
-    const directory = exampleDirectory(name);
+    const directory = exampleDirectory(name === 'blueplay-stress' ? 'blueplay' : name);
     const resources: { path: string; data: string }[] = [];
     for (const folder of ['images', 'sounds']) {
         const resourceDirectory = path.join(directory, folder);
@@ -47,7 +55,7 @@ const readExampleResources = async (name: string) => {
 };
 app.get('/api/examples', asyncRoute(async (_: any, r: any) => r.json({ files: await readExample('blueplay'), resources: await readExampleResources('blueplay') })));
 app.get('/api/examples/:name', asyncRoute(async (req: any, r: any) => {
-    if (!['basic', 'blueplay', 'student-smoke'].includes(req.params.name)) return r.sendStatus(404);
+    if (!['basic', 'blueplay', 'blueplay-stress', 'student-smoke'].includes(req.params.name)) return r.sendStatus(404);
     r.json({ files: await readExample(req.params.name), resources: await readExampleResources(req.params.name) });
 }));
 app.use('/api/session/:id',(req,_r,next)=>{const s=sessions.get(req.params.id);if(s)s.lastActivity=Date.now();next()});
