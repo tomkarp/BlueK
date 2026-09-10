@@ -82,7 +82,9 @@ try {
   assert.equal(incremented.body.kind, 'unit', JSON.stringify(incremented));
   await action({ op: 'invoke', objectId: counter.objectId, name: 'add', args: JSON.stringify(['5']) });
   assert.equal((await action({ op: 'invoke', objectId: counter.objectId, name: 'current', args: '[]' })).body.display, '9');
-  assert.match((await action({ op: 'inspect', objectId: counter.objectId })).body.display, /value=9/);
+  const counterInspection = (await action({ op: 'inspect', objectId: counter.objectId })).body;
+  assert.match(counterInspection.display, /value=9/);
+  assert.deepEqual(counterInspection.fields.find(field => field.name === 'value').display, '9');
   const person = (await action({ op: 'create', className: 'Person', name: 'person1', args: JSON.stringify(['"Ada"']) })).body;
   assert.equal((await action({ op: 'invoke', objectId: person.objectId, name: 'greet', args: '[]' })).body.display, 'Hello, Ada!');
   assert.equal((await action({ op: 'invoke', objectId: person.objectId, name: 'greetWith', args: JSON.stringify(['suffix = "!"']) })).body.display, 'Hi Ada!');

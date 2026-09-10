@@ -39,13 +39,14 @@ private class LiveOutputStream(private val onFlush: (String) -> Unit) : java.io.
     override fun write(values: ByteArray, offset: Int, length: Int) { buffer.write(values, offset, length); if (values.copyOfRange(offset, offset + length).contains('\n'.code.toByte())) flush() }
     override fun flush() { if (buffer.size() == 0) return; val text = buffer.toString(Charsets.UTF_8); buffer.reset(); onFlush(text) }
 }
-private fun emit(kind: String, display: String, id: String? = null, output: String = "", stage: String? = null, name: String? = null) {
+private fun emit(kind: String, display: String, id: String? = null, output: String = "", stage: String? = null, name: String? = null, fields: String? = null) {
     val extra = id?.let { ",\"objectId\":${jsonString(it)}" } ?: ""
     val objectName = name?.let { ",\"name\":${jsonString(it)}" } ?: ""
     val out = if (output.isEmpty()) "" else ",\"output\":${jsonString(output)}"
     val request = if (activeRequestId.get().isEmpty()) "" else ",\"requestId\":${jsonString(activeRequestId.get())}"
     val world = stage?.let { ",\"stage\":$it" } ?: ""
-    controlOut.println("{\"kind\":${jsonString(kind)},\"display\":${jsonString(display)}$extra$objectName$out$world$request}")
+    val fieldValues = fields?.let { ",\"fields\":$it" } ?: ""
+    controlOut.println("{\"kind\":${jsonString(kind)},\"display\":${jsonString(display)}$extra$objectName$out$world$request$fieldValues}")
     controlOut.flush()
 }
 
@@ -122,8 +123,10 @@ fun main() {
                 line.contains("\"op\":\"inspect\"") -> {
                     val obj = objects[value(line, "objectId")]!!
                     fun displayField(value: Any?): String = when (value) { null -> "null"; is String -> "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""; is Char -> "'$value'"; else -> value.toString() }
-                    val fields = buildList { var type: Class<*>? = obj.javaClass; while (type != null) { addAll(type.declaredFields.filter { !it.isSynthetic && !java.lang.reflect.Modifier.isStatic(it.modifiers) }); type = type.superclass } }.joinToString(", ") { field -> field.isAccessible = true; "${field.name}=${displayField(field.get(obj))}" }
-                    emit("scalar", fields)
+                    val fieldValues = buildList { var type: Class<*>? = obj.javaClass; while (type != null) { addAll(type.declaredFields.filter { !it.isSynthetic && !java.lang.reflect.Modifier.isStatic(it.modifiers) }); type = type.superclass } }.map { field -> field.isAccessible = true; field.name to displayField(field.get(obj)) }
+                    val display = fieldValues.joinToString(", ") { (name, value) -> "$name=$value" }
+                    val structured = fieldValues.joinToString(",") { (name, value) -> "{\"name\":${jsonString(name)},\"display\":${jsonString(value)}}" }
+                    emit("scalar", display, fields = "[$structured]")
                 }
                 line.contains("\"op\":\"remove\"") -> {
                     val objectId = value(line, "objectId")
