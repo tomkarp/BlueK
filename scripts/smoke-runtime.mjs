@@ -42,6 +42,21 @@ try {
   assert.equal(defaultMain.body.stage.width, 600);
   assert.equal(defaultMain.body.stage.objects[0].type, 'Figure');
   assert.ok(defaultMain.body.stage.objects[0].image?.startsWith('data:image/png;base64,'));
+  const stageAbort = new AbortController();
+  const stageAbortTimer = setTimeout(() => stageAbort.abort(), 3000);
+  const stageStream = await fetch(`${base}/api/session/${defaultSession.sessionId}/stage-stream`, { signal: stageAbort.signal });
+  assert.equal(stageStream.status, 200);
+  const stageReader = stageStream.body?.getReader();
+  assert.ok(stageReader);
+  let stageText = '';
+  while (!stageText.includes('data:')) {
+    const chunk = await stageReader.read();
+    if (chunk.done) break;
+    stageText += new TextDecoder().decode(chunk.value);
+  }
+  clearTimeout(stageAbortTimer);
+  assert.match(stageText, /data:/);
+  await stageReader.cancel();
   await post(`/api/session/${defaultSession.sessionId}/close`, {});
   const session = (await post('/api/session', {})).body;
   const invalidFiles = await post(`/api/session/${session.sessionId}/compile`, { files: [{ fileName: '../escape.kt', source: 'class Escape', kind: 'class' }], revision: 1 });
