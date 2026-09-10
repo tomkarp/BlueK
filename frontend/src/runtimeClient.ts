@@ -291,6 +291,11 @@ export class HybridRuntimeClient implements RuntimeClient {
           this.localValues.set(declaration.name, parseKotlinArgument(declaration.value, this.bindings, this.localValues));
           return { kind: 'unit', display: 'Unit' };
         } catch { /* The normal call parser may handle a constructor declaration. */ }
+        if (/^[A-Za-z_]\w*\.[A-Za-z_]\w*$/.test(declaration.value)) {
+          const evaluated = await this.execute({ op: 'eval', code: declaration.value, mode: 'expression' });
+          this.rememberCodepadBinding(declaration.name, evaluated);
+          return { kind: 'unit', display: 'Unit', output: evaluated.output };
+        }
       }
       const assignment = request.mode === 'block' ? simpleCodepadAssignment(source) : null;
       if (assignment && this.localValues.has(assignment.name)) {
@@ -332,7 +337,10 @@ export class HybridRuntimeClient implements RuntimeClient {
             const scalar = this.localValues.get(parsed.receiver);
             if (typeof scalar === 'string') {
               const transformed = parsed.callable === 'uppercase' ? scalar.toUpperCase() : parsed.callable === 'lowercase' ? scalar.toLowerCase() : parsed.callable === 'trim' ? scalar.trim() : parsed.callable === 'reversed' ? [...scalar].reverse().join('') : undefined;
-              if (transformed !== undefined) return { kind: 'scalar', display: transformed };
+              if (transformed !== undefined) {
+                if (parsed.binding) this.localValues.set(parsed.binding, transformed);
+                return { kind: 'scalar', display: transformed, name: parsed.binding };
+              }
             }
           }
           if (objectId && klass && method && method.typeParameters?.length && parsed.typeArguments.length === 1 && parsed.args.length >= requiredParameters(method.parameters).length) {
@@ -370,6 +378,14 @@ export class HybridRuntimeClient implements RuntimeClient {
             this.rememberCodepadBinding(parsed.binding, result);
             return { ...result.value, output: result.output };
           }
+        }
+      }
+      const chainedStringCall = source.match(/^(.+)\.(uppercase|lowercase|trim|reversed)\(\)$/s);
+      if (chainedStringCall) {
+        const value = displayedSimpleValue(await this.execute({ op: 'eval', code: chainedStringCall[1], mode: 'expression' }));
+        if (typeof value === 'string') {
+          const transformed = chainedStringCall[2] === 'uppercase' ? value.toUpperCase() : chainedStringCall[2] === 'lowercase' ? value.toLowerCase() : chainedStringCall[2] === 'trim' ? value.trim() : [...value].reverse().join('');
+          return { kind: 'scalar', display: transformed };
         }
       }
       if (request.mode === 'expression') {
