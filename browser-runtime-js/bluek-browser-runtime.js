@@ -10,7 +10,7 @@ export function Image(value, height) {
   this.height = typeof value === 'number' ? Math.max(1, height) : 30;
   if (value instanceof Image) { this.fileName = value.fileName; this.width = value.width; this.height = value.height; }
   this.transparency = value instanceof Image ? value.transparency : 255;
-  this._color = 'rgb(0, 0, 0)'; this._operations = [];
+  this._color = value instanceof Image ? value._color : 'rgb(0, 0, 0)'; this._operations = value instanceof Image ? [...value._operations] : [];
 }
 Image.prototype.setColor = function(r, g, b) { this._color = color(r, g, b); };
 Image.prototype.scale = function(width, height) { this.width = Math.max(1, width); this.height = Math.max(1, height); };
