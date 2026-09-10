@@ -89,7 +89,8 @@ const requiredParameters = (parameters: any[] = []) => parameters.filter(paramet
 const browserWorkerSource = `
 let api = null;
 let runtimeApi = null;
-let timer = null;
+let simulationTimer = null;
+let renderTimer = null;
 const objects = new Map();
 const displayValues = new Map();
 let outputBuffer = '';
@@ -119,10 +120,10 @@ self.onmessage = async ({ data }) => {
     if (data.op === 'load') { await import(new URL('kotlin-kotlin-stdlib.js', data.url).href); runtimeApi = await import(new URL('bluek-runtime.js', data.url).href); const moduleValue = await import(data.url); const exported = globalThis['bluek-browser-runtime'] || moduleValue.default || moduleValue; api = data.packageName ? (exported[data.packageName] || data.packageName.split('.').reduce((v, p) => v?.[p], exported)) : exported; if (!api || typeof api !== 'object') api = exported; if (inputBuffer) self.postMessage({ kind: 'input-buffer', buffer: inputBuffer }); self.postMessage({ kind: 'ready' }); return; }
     if (!api) throw new Error('Browser Kotlin runtime is not loaded.');
     if (data.op === 'main') { const start = api.bluekStart || resolve('bluekStart'); if (!start) throw new Error('This project has no parameterless main().'); start(); stage(); flushStudentOutput(); const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' }, output }); return; }
-    if (data.op === 'run') { const run = runtimeApi?.bluekRun || runtimeApi?.start || api.bluekRun || resolve('bluekRun') || resolve('start'); if (typeof run !== 'function') throw new Error('Browser BluePlay runtime is missing its run bridge.'); run(); clearInterval(timer); timer = setInterval(() => { const tick = runtimeApi?.bluekStep || resolve('bluekStep'); if (typeof tick === 'function') tick(); stage(); }, 16); stage(); self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' } }); return; }
+    if (data.op === 'run') { const run = runtimeApi?.bluekRun || runtimeApi?.start || api.bluekRun || resolve('bluekRun') || resolve('start'); if (typeof run !== 'function') throw new Error('Browser BluePlay runtime is missing its run bridge.'); run(); clearTimeout(simulationTimer); clearInterval(renderTimer); const tick = runtimeApi?.bluekStep || resolve('bluekStep'); const simulate = () => { if (typeof tick === 'function') tick(); stage(); simulationTimer = setTimeout(simulate, Math.max(1, 100 - Number(runtimeApi?.getSpeed?.() || resolve('getSpeed')?.() || 50))); }; simulationTimer = setTimeout(simulate, 0); renderTimer = setInterval(stage, 16); stage(); self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' } }); return; }
     if (data.op === 'stage') { stage(); finish(); return; }
     if (data.op === 'act') { const act = runtimeApi?.bluekAct || resolve('bluekAct'); if (typeof act === 'function') act(); stage(); finish(); return; }
-    if (data.op === 'pause') { const pause = runtimeApi?.bluekPause || resolve('bluekPause'); if (typeof pause === 'function') pause(); clearInterval(timer); timer = null; stage(); finish(); return; }
+    if (data.op === 'pause') { const pause = runtimeApi?.bluekPause || resolve('bluekPause'); if (typeof pause === 'function') pause(); clearTimeout(simulationTimer); clearInterval(renderTimer); simulationTimer = null; renderTimer = null; stage(); finish(); return; }
     if (data.op === 'speed') { const speed = runtimeApi?.bluekSetSpeed || resolve('bluekSetSpeed'); if (typeof speed === 'function') speed(data.value); stage(); finish(); return; }
     if (data.op === 'key') { const key = runtimeApi?.bluekKey || resolve('bluekKey'); if (typeof key === 'function') key(data.key, data.pressed); return; }
     if (data.op === 'click') { const click = runtimeApi?.bluekClick || resolve('bluekClick'); if (typeof click === 'function') click(data.x, data.y); return; }
@@ -132,7 +133,7 @@ self.onmessage = async ({ data }) => {
     if (data.op === 'set') { const object = objects.get(data.objectId); if (!object) throw new Error('Object handle is no longer available.'); const classKey = String(data.className || '').replace(/[^A-Za-z0-9_]/g, '_'); const stem = String(data.property).charAt(0).toUpperCase() + String(data.property).slice(1); const setterKey = Object.keys(api).find((key) => key.startsWith('bluekInvoke_' + classKey + '_set' + stem + '_')); const setter = setterKey ? api[setterKey] : null; const value = resolveArguments([data.value])[0]; if (typeof setter === 'function') setter(object, value); else object[data.property] = value; finish(); return; }
     if (data.op === 'inspect') { const object = objects.get(data.objectId); if (!object) throw new Error('Object handle is no longer available.'); const entries = Object.entries(object).filter(([key]) => !key.startsWith('$')); const namesFn = data.className ? (api['bluekInspectNames_' + data.className] || resolve('bluekInspectNames_' + data.className)) : null; let names = []; if (typeof namesFn === 'function') { try { names = JSON.parse(namesFn()); } catch { names = []; } } const classKey = String(data.className || '').replace(/[^A-Za-z0-9_]/g, '_'); const getterValue = (name) => { const stem = name.charAt(0).toUpperCase() + name.slice(1); const getter = api['bluekInvoke_' + classKey + '_get' + stem + '_noargs']; if (typeof getter !== 'function') return undefined; try { return getter(object); } catch { return undefined; } }; const fields = names.length ? names.map((name, index) => { const value = getterValue(name); const entry = entries[index]; return { name, value: valueOf(value === undefined ? entry?.[1] : value).display }; }) : entries.map(([key, value]) => ({ name: key, value: valueOf(value).display })); self.postMessage({ kind: 'value', value: { kind: 'object', objectId: data.objectId, fields } }); return; }
     if (data.op === 'remove') { objects.delete(data.objectId); displayValues.delete(data.objectId); self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' } }); return; }
-    if (data.op === 'stop') { clearInterval(timer); close(); return; }
+    if (data.op === 'stop') { clearTimeout(simulationTimer); clearInterval(renderTimer); close(); return; }
   } catch (error) { self.postMessage({ kind: 'error', message: error instanceof Error ? error.message : String(error) }); }
 };`;
 
