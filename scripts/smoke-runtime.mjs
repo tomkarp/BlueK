@@ -71,6 +71,7 @@ try {
   assert.equal(compiled.body.classes.find(value => value.name === 'Tools').kind, 'object');
   assert.equal(compiled.body.classes.find(value => value.name === 'Tools').constructors.length, 0);
   assert.equal(compiled.body.classes.find(value => value.name === 'Factory').companionMethods.find(value => value.name === 'make').parameters.length, 1);
+  assert.equal(compiled.body.classes.find(value => value.name === 'Factory').methods.some(value => value.name === 'make'), false);
   assert.equal(compiled.body.classes.find(value => value.name === 'AbstractThing').kind, 'abstract');
   assert.equal(compiled.body.classes.find(value => value.name === 'AbstractThing').constructors.length, 0);
   assert.equal(compiled.body.classes.find(value => value.name === 'Color').kind, 'enum');
