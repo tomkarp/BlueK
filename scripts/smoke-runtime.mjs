@@ -320,6 +320,14 @@ try {
   const recoveredAction = body => post(`/api/session/${session.sessionId}/action`, { ...body, generationId: recoveredCompile.body.generationId });
   const recoveredCounter = (await recoveredAction({ op: 'create', className: 'Counter', name: 'recoveredCounter', args: '[]' })).body;
   assert.equal((await recoveredAction({ op: 'invoke', objectId: recoveredCounter.objectId, name: 'current', args: '[]' })).body.display, '0');
+  const isolatedSession = (await post('/api/session', {})).body;
+  const isolatedCompile = await post(`/api/session/${isolatedSession.sessionId}/compile`, { files: files.filter(file => ['Counter.kt', 'Helpers.kt'].includes(file.fileName)), revision: 1 });
+  assert.equal(isolatedCompile.body.diagnostics.length, 0, JSON.stringify(isolatedCompile.body.diagnostics));
+  const isolatedAction = body => post(`/api/session/${isolatedSession.sessionId}/action`, { ...body, generationId: isolatedCompile.body.generationId });
+  const isolatedCounter = (await isolatedAction({ op: 'create', className: 'Counter', name: 'counter1', args: JSON.stringify(['4']) })).body;
+  assert.equal((await isolatedAction({ op: 'invoke', objectId: isolatedCounter.objectId, name: 'current', args: '[]' })).body.display, '4');
+  assert.equal((await recoveredAction({ op: 'invoke', objectId: recoveredCounter.objectId, name: 'current', args: '[]' })).body.display, '0');
+  assert.deepEqual((await json(`/api/session/${isolatedSession.sessionId}/events`)).body, []);
   const timedOut = await recoveredAction({ op: 'eval', code: 'while (true) { Thread.sleep(10) }', mode: 'block' });
   assert.equal(timedOut.response.status, 504, JSON.stringify(timedOut));
   assert.equal((await json(`/api/session/${session.sessionId}/status`)).body.available, false);

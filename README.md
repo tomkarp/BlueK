@@ -63,6 +63,7 @@ Mit echten `kotlinc`- und Worker-Prozessen geprüft:
 - Die realen BluePlay-Referenzdateien (`Actor.kt`, `World.kt`, `Image.kt`, `Figure.kt`, `MyWorld.kt` und `Main.kt`) kompilieren; `MyWorld()` und `show()` liefern einen fehlerfreien 600×400-Stage-Snapshot.
 - BluePlay-Actor- und World-Klicks einschließlich Hitbox und Geschwindigkeitsgrenzen.
 - stale `generationId` wird per HTTP mit `409` abgewiesen.
+- Zwei parallele Sitzungen behalten getrennte Worker, Objekt-Benches und Konsolenereignisse.
 - Browser-Session-Cleanup entfernt Worker und temporäre Verzeichnisse beim Verlassen der Seite; zusätzlich werden inaktive Sessions nach 30 Minuten automatisch aufgeräumt.
 
 ## Bewusste Grenzen
