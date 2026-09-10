@@ -65,6 +65,8 @@ const parseKotlinArgument = (value: string, bindings: Map<string, unknown>): unk
   }
   throw new Error(`This local action only supports simple Kotlin arguments; compile the expression first: ${text}`);
 };
+const splitSimpleArguments = (source: string): string[] => { const result: string[] = []; let start = 0; let depth = 0; let quote = ''; let escaped = false; for (let index = 0; index < source.length; index += 1) { const char = source[index]; if (quote) { if (escaped) escaped = false; else if (char === '\\') escaped = true; else if (char === quote) quote = ''; continue; } if (char === '"' || char === "'") { quote = char; continue; } if (char === '(') depth += 1; else if (char === ')') depth -= 1; else if (char === ',' && depth === 0) { result.push(source.slice(start, index).trim()); start = index + 1; } } if (source.slice(start).trim()) result.push(source.slice(start).trim()); return result; };
+const simpleCodepadCall = (code: string): { binding?: string; receiver?: string; callable: string; args: string[] } | null => { const match = code.trim().replace(/;$/, '').match(/^(?:(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*)?([A-Za-z_]\w*)(?:\.([A-Za-z_]\w*))?\s*\((.*)\)$/s); return match ? { binding: match[1], receiver: match[3] ? match[2] : undefined, callable: match[3] || match[2], args: splitSimpleArguments(match[4]) } : null; };
 
 const browserWorkerSource = `
 let api = null;
@@ -107,6 +109,7 @@ export class HybridRuntimeClient implements RuntimeClient {
   private readonly bindings = new Map<string, unknown>();
   private readonly localObjects = new Map<string, unknown>();
   private browserGeneration: string | null = null;
+  private latestStage: any = null;
 
   constructor(sessionId: string, onFailure?: (message: string) => void) { this.http = new HttpRuntimeClient(sessionId, onFailure); }
   private async local(request: BrowserAction): Promise<any> {
@@ -134,6 +137,33 @@ export class HybridRuntimeClient implements RuntimeClient {
         if (result.objectId) this.localObjects.set(result.objectId, klass.name); if (result.name) this.bindings.set(result.name, result.objectId); return result.value;
       }
     }
+    if (this.worker && this.ready && request.op === 'eval') {
+      const parsed = simpleCodepadCall(String(request.code || ''));
+      if (parsed) {
+        if (parsed.receiver) {
+          const objectId = this.bindings.get(parsed.receiver);
+          const localClassName = objectId ? this.localObjects.get(String(objectId)) : undefined;
+          const klass = this.classes.find(value => value.name === localClassName);
+          const method = klass?.methods.find(value => value.name === parsed.callable);
+          if (objectId && klass && method && !method.parameters.some(parameter => parameter.hasDefault) && !method.typeParameters?.length) {
+            const args = parsed.args.map(value => parseKotlinArgument(value, this.bindings));
+            const methodKey = `${method.name.replace(/[^A-Za-z0-9_]/g, '_')}_${method.parameters.map(parameter => parameter.type.classifier.replace(/[^A-Za-z0-9_]/g, '_')).join('_') || 'noargs'}`;
+            const result = await this.local({ op: 'invoke', functionName: `bluekInvoke_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}_${methodKey}`, objectId: String(objectId), args, className: method.returnType.classifier });
+            return result.value;
+          }
+        } else {
+          const klass = this.classes.find(value => value.name === parsed.callable);
+          const constructor = klass?.constructors[0];
+          if (klass && constructor && !constructor.parameters.some(parameter => parameter.hasDefault)) {
+            const result = await this.local({ op: 'create', functionName: `bluekCreate_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}`, args: parsed.args.map(value => parseKotlinArgument(value, this.bindings)), className: klass.name, name: parsed.binding || klass.name.toLowerCase() });
+            if (result.objectId) this.localObjects.set(result.objectId, klass.name);
+            if (parsed.binding && result.objectId) this.bindings.set(parsed.binding, result.objectId);
+            return result.value;
+          }
+        }
+      }
+      throw new Error('This Codepad expression is not prepared for local Kotlin/JS execution yet.');
+    }
     if (this.worker && this.ready && request.op === 'invoke') {
       const object = this.localObjects.has(String(request.objectId)); const localClassName = this.localObjects.get(String(request.objectId)); const klass = this.classes.find(value => value.name === localClassName);
       const method = klass?.methods.find(value => value.name === request.name); if (object && klass && method && !method.parameters.some(parameter => parameter.hasDefault) && !method.typeParameters?.length) {
@@ -141,10 +171,11 @@ export class HybridRuntimeClient implements RuntimeClient {
         const result = await this.local({ op: 'invoke', functionName, objectId: String(request.objectId), args, className: method.returnType.classifier }); return result.value;
       }
     }
+    if (this.worker && this.ready && ['create', 'invoke', 'eval', 'inspect', 'remove'].includes(request.op)) throw new Error('This Kotlin expression is not prepared for local execution yet. Compile it before running it.');
     return this.http.execute(request);
   }
   async compile(files: ProjectFile[], revision: number, resources: Resource[] = []): Promise<CompileResult> {
-    const result = await this.http.compile(files, revision, resources); this.classes = result.classes; this.localObjects.clear(); this.bindings.clear();
+    const result = await this.http.compile(files, revision, resources); this.classes = result.classes; this.localObjects.clear(); this.bindings.clear(); this.latestStage = null;
     if (result.browserRuntime) {
       this.browserGeneration = result.generationId;
       this.worker?.terminate(); this.worker = new Worker(URL.createObjectURL(new Blob([browserWorkerSource], { type: 'text/javascript' })), { type: 'module' });
@@ -157,13 +188,13 @@ export class HybridRuntimeClient implements RuntimeClient {
   async inspectObject(objectId: string): Promise<unknown> { if (this.worker && this.ready) return (await this.local({ op: 'inspect', objectId })).value; return this.http.inspectObject(objectId); }
   async evaluate(code: string, mode: 'expression' | 'block'): Promise<Value> { if (this.worker && this.ready) throw new Error('This expression is not prepared for local Kotlin/JS execution yet.'); return this.http.evaluate(code, mode); }
   async removeObject(objectId: string): Promise<void> { this.localObjects.delete(objectId); if (this.worker && this.ready) { await this.local({ op: 'remove', objectId }); return; } await this.http.removeObject(objectId); }
-  sendInput(text: string): Promise<void> { return this.http.sendInput(text); }
+  sendInput(text: string): Promise<void> { if (this.worker) return Promise.reject(new Error('Terminal input is not connected to the local Kotlin/JS worker yet.')); return this.http.sendInput(text); }
   async stop(): Promise<void> { const hadBrowserWorker = Boolean(this.worker); this.worker?.terminate(); this.worker = null; this.ready = null; this.browserGeneration = null; if (!hadBrowserWorker) await this.http.stop(); }
   reset(): Promise<void> { return this.stop(); }
   sendKey(key: string, pressed: boolean): Promise<void> { if (this.worker && this.ready) { return this.ready.then(() => { this.worker!.postMessage({ op: 'key', key, pressed }); }); } return this.http.sendKey(key, pressed); }
   sendClick(x: number, y: number): Promise<void> { if (this.worker && this.ready) { return this.ready.then(() => { this.worker!.postMessage({ op: 'click', x, y }); }); } return this.http.sendClick(x, y); }
-  stage(): Promise<any> { return this.http.stage(); }
-  stageStream(onStage: (value: any) => void): () => void { if (!this.worker || !this.ready) return this.http.stageStream(onStage); const worker = this.worker; const listener = (event: MessageEvent) => { if (event.data?.kind === 'stage') onStage({ stage: event.data.stage }); }; worker.addEventListener('message', listener); this.ready.then(() => worker.postMessage({ op: 'stage' })); return () => worker.removeEventListener('message', listener); }
+  stage(): Promise<any> { if (this.worker) { this.worker.postMessage({ op: 'stage' }); return Promise.resolve({ stage: this.latestStage }); } return this.http.stage(); }
+  stageStream(onStage: (value: any) => void): () => void { if (!this.worker || !this.ready) return this.http.stageStream(onStage); const worker = this.worker; const listener = (event: MessageEvent) => { if (event.data?.kind === 'stage') { this.latestStage = event.data.stage; onStage({ stage: event.data.stage }); } }; worker.addEventListener('message', listener); this.ready.then(() => worker.postMessage({ op: 'stage' })); return () => worker.removeEventListener('message', listener); }
   events(): Promise<any[]> { return this.worker ? Promise.resolve([]) : this.http.events(); }
   status(): Promise<RuntimeStatus> { return this.worker ? Promise.resolve({ workerAlive: true, generationId: this.browserGeneration, available: true, error: null }) : this.http.status(); }
 }

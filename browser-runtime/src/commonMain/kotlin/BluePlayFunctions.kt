@@ -7,9 +7,10 @@ private val keysDown = mutableSetOf<String>()
 private var clickX = -1
 private var clickY = -1
 private var clickPending = false
+private val pendingSounds = mutableListOf<String>()
 
 fun isKeyDown(key: String): Boolean = key.lowercase() in keysDown
-fun playSound(fileName: String) { bluekSound(fileName) }
+fun playSound(fileName: String) { pendingSounds.add(fileName) }
 @OptIn(kotlin.js.ExperimentalJsExport::class) @JsExport
 fun getSpeed(): Int = speedValue
 @OptIn(kotlin.js.ExperimentalJsExport::class) @JsExport
@@ -68,8 +69,10 @@ internal fun bluekStageJson(): String {
         "{\"type\":\"Actor\",\"x\":${actor.x},\"y\":${actor.y},\"rotation\":${actor.rotation},\"imageWidth\":${image?.width ?: 30},\"imageHeight\":${image?.height ?: 30}$imagePath}"
     }
     val texts = world.textEntries().joinToString(",") { "{\"x\":${it.first},\"y\":${it.second},\"text\":\"${it.third.replace("\\", "\\\\").replace("\"", "\\\"")}\"}" }
-    return "{\"width\":${world.width},\"height\":${world.height},\"cellSize\":${world.cellSize},\"running\":$running,\"speed\":$speedValue,\"objects\":[$actors],\"texts\":[$texts]}"
+    val background = world.background
+    val backgroundPath = background.fileName?.let { ",\"backgroundPath\":\"${it.replace("\\", "\\\\").replace("\"", "\\\"")}\"" } ?: ""
+    val backgroundColor = background.backgroundColor?.let { ",\"backgroundColor\":\"$it\"" } ?: ""
+    val sounds = pendingSounds.joinToString(",") { "\"${it.replace("\\", "\\\\").replace("\"", "\\\"")}\"" }
+    pendingSounds.clear()
+    return "{\"width\":${world.width},\"height\":${world.height},\"cellSize\":${world.cellSize},\"running\":$running,\"speed\":$speedValue$backgroundPath$backgroundColor,\"objects\":[$actors],\"texts\":[$texts],\"sounds\":[$sounds]}"
 }
-
-@JsExport
-fun bluekSound(fileName: String) { /* Browser worker forwards this event later. */ }
