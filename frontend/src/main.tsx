@@ -9,6 +9,7 @@ type ObjectModel = { objectId: string; className: string; name: string };
 type ResourceModel = { path: string; data: string };
 const svgEscape = (value: string) => value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[character] || character));
 const decodeDrawingText = (value: string) => { try { return decodeURIComponent(value); } catch { return value; } };
+let currentDrawingResources: ResourceModel[] = [];
 
 const backgroundDataUrl = (operations: string[] = [], width: number, height: number, resources: ResourceModel[] = []) => {
   if (!operations.length) return undefined;
@@ -34,11 +35,16 @@ const backgroundDataUrl = (operations: string[] = [], width: number, height: num
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${elements}</svg>`;
   return `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}")`;
 };
-const drawnImageDataUrl = (operations: string[] | null = [], width: number, height: number) => {
+const drawnImageDataUrl = (operations: string[] | null = [], width: number, height: number, resources: ResourceModel[] = currentDrawingResources) => {
   if (operations === null) return undefined;
   if (!operations.length) return emptyImageDataUrl(width, height);
   const elements = operations.map(operation => {
     const [name, ...parts] = operation.split('|');
+    if (name === 'drawImage' && parts.length >= 3) {
+      const [fileName, x, y, imageWidth = '30', imageHeight = '30'] = parts;
+      const resource = resources.find(item => item.path === `images/${fileName}` || item.path.endsWith(`/images/${fileName}`));
+      return resource ? `<image href="${resource.data}" x="${x}" y="${y}" width="${imageWidth}" height="${imageHeight}"/>` : '';
+    }
     const paint = parts.at(-1) || 'rgb(0, 0, 0)';
     const values = parts.slice(0, -1);
     if (name === 'fillRect' && values.length >= 4) return `<rect x="${values[0]}" y="${values[1]}" width="${values[2]}" height="${values[3]}" fill="${paint}"/>`;
@@ -94,6 +100,7 @@ function App() {
   useEffect(() => { if (!sessionId) return; const close = () => { navigator.sendBeacon(`/api/session/${sessionId}/close`, ''); }; window.addEventListener('pagehide', close); return () => window.removeEventListener('pagehide', close); }, [sessionId]);
   const handleRuntimeFailure = (message: string) => { runtimeEpoch.current += 1; if (runtimeFailure.current === message) return; runtimeFailure.current = message; setGeneration(''); setBench([]); setSelectedObjectId(''); setStage(null); setStatus('Runtime stopped'); setLog(previous => `${previous}\n${message}`); };
   const client = useMemo(() => sessionId ? new HybridRuntimeClient(sessionId, handleRuntimeFailure, output => { setTerminalOpen(true); if (output) setLog(previous => `${previous}${output}`); }) : null, [sessionId]);
+  useEffect(() => { currentDrawingResources = resources; }, [resources]);
   useEffect(() => { if (!generation) { setStage(null); setStageWindowOpen(false); setStageMaximized(false); } }, [generation]);
 useEffect(() => { if (!generation || !client) return; const close = client.stageStream(value => { if (!value?.stage) return; runtimeFailure.current = ''; setSpeed(Number(value.stage.speed) || 50); const background = value.stage.backgroundPath ? resources.find(item => item.path === `images/${value.stage.backgroundPath}` || item.path.endsWith(`/images/${value.stage.backgroundPath}`))?.data : backgroundDataUrl(value.stage.backgroundOperations?.length ? value.stage.backgroundOperations : value.stage.backgroundColor ? [`fill|${value.stage.backgroundColor}`] : [], value.stage.width * value.stage.cellSize, value.stage.height * value.stage.cellSize, resources); const localStage = { ...value.stage, image: background || (value.stage.backgroundColor ? `linear-gradient(${value.stage.backgroundColor},${value.stage.backgroundColor})` : undefined), objects: (value.stage.objects || []).map((object: any) => { const resourceImage = object.imagePath ? resources.find(item => item.path === `images/${object.imagePath}` || item.path.endsWith(`/images/${object.imagePath}`))?.data : undefined; const resource = object.imagePath ? resources.find(item => item.path === `images/${object.imagePath}` || item.path.endsWith(`/images/${object.imagePath}`)) : undefined; const size = resource ? resourceSizes[resource.path] : undefined; return { ...object, imageWidth: size?.width || object.imageWidth, imageHeight: size?.height || object.imageHeight, image: resourceImage || drawnImageDataUrl(object.imageOperations, size?.width || object.imageWidth || 30, size?.height || object.imageHeight || 30) }; }) }; setStage(localStage); (value.stage.errors || []).forEach((error: string) => setLog(previous => `${previous}\n${error}`)); (value.stage.sounds || []).forEach((sound: string) => { const resource = resources.find(item => item.path === `sounds/${sound}` || item.path.endsWith(`/sounds/${sound}`)); if (resource) new Audio(resource.data).play().catch(() => undefined); }); }); return close; }, [generation, client, resources, resourceSizes]);
 useEffect(() => { if (!generation || !client) return; let active = true; const timer = window.setInterval(() => { client.events().then(events => { if (active) events.forEach(writeLive); }).catch(() => undefined); }, 150); return () => { active = false; window.clearInterval(timer); }; }, [generation, client]);
