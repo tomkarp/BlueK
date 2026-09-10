@@ -13,7 +13,23 @@ function attachWorker(s:S){const worker=s.worker;const fail=(error:Error)=>{if(s
 function startWorker(s:S){s.worker=spawn('java',['-jar',path.join(root,'jvm','worker.jar')],{cwd:s.dir});s.workerDead=false;s.buffer='';s.workerError='';attachWorker(s)}
 function sendControl(s:S,msg:any):boolean{if(s.workerDead||s.worker.exitCode!==null||!s.worker.stdin?.writable)return false;try{s.worker.stdin.write(JSON.stringify(msg)+'\n',error=>{if(error){} });return true}catch{return false}}
 async function ask(s:S,msg:any){return new Promise<any>((resolve,reject)=>{const requestId=randomUUID();const actionTimeout=Number(process.env.BLUEK_ACTION_TIMEOUT_MS||120000);const timeout=msg.op==='create'||msg.op==='invoke'||msg.op==='eval'?actionTimeout:120000;const timer=setTimeout(()=>{s.pending.delete(requestId);if(msg.op==='create'||msg.op==='invoke'||msg.op==='eval'){s.generation=undefined;s.worker.kill('SIGKILL')}reject(Error('worker timeout'))},timeout);s.pending.set(requestId,{resolve,reject,timer});if(!sendControl(s,{...msg,requestId})){clearTimeout(timer);s.pending.delete(requestId);reject(Error('worker is not available'))}})}
-app.get('/api/examples',async(_,r)=>r.json(await Promise.all((await fs.readdir(path.join(root,'examples'))).map(async n=>({id:n,fileName:n,kind:n==='Helpers.kt'?'functions':'class',source:await fs.readFile(path.join(root,'examples',n),'utf8'),revision:1})))));
+const exampleDirectory = (name: string) => name === 'basic' ? path.join(root, 'examples') : path.join(root, 'examples', name);
+const readExample = async (name: string) => {
+    const directory = exampleDirectory(name);
+    const names = (await fs.readdir(directory)).filter(fileName => fileName.endsWith('.kt')).sort();
+    return Promise.all(names.map(async fileName => ({
+        id: fileName,
+        fileName,
+        kind: fileName === 'Helpers.kt' || fileName === 'Main.kt' || fileName === 'BluePlayFunctions.kt' ? 'functions' : 'class',
+        source: await fs.readFile(path.join(directory, fileName), 'utf8'),
+        revision: 1
+    })));
+};
+app.get('/api/examples', asyncRoute(async (_: any, r: any) => r.json(await readExample('blueplay'))));
+app.get('/api/examples/:name', asyncRoute(async (req: any, r: any) => {
+    if (!['basic', 'blueplay'].includes(req.params.name)) return r.sendStatus(404);
+    r.json(await readExample(req.params.name));
+}));
 app.use('/api/session/:id',(req,_r,next)=>{const s=sessions.get(req.params.id);if(s)s.lastActivity=Date.now();next()});
 app.post('/api/session',asyncRoute(async(_:any,r:any)=>{const d=await fs.mkdtemp(path.join(os.tmpdir(),'bluek-'));const id=randomUUID();const session={dir:d,worker:undefined as unknown as ChildProcess,workerDead:false,files:[],resourcePaths:[],buffer:'',pending:new Map<string,Pending>(),events:[],lastActivity:Date.now(),workerError:''};sessions.set(id,session);startWorker(session);r.json({sessionId:id})}));
 app.use('/api/session/:id/compile',(req:any,_r:any,next:any)=>{const s=sessions.get(req.params.id);if(s&& (s.workerDead||s.worker.exitCode!==null||!s.worker.stdin?.writable))startWorker(s);next()});

@@ -49,7 +49,7 @@ Enthält ein Projekt eine `BluePlayFunctions.kt`, kompiliert der lokale Adapter 
 - `runtime-contract`: RuntimeClient- und Werttypen.
 - `server`: Sitzungen, temporäre Projektverzeichnisse, Kotlin-Kompilierung, request-id-basierte Worker-Antwortverteilung und Generationenprüfung.
 - `jvm`: langlebiger Worker mit Objektregistry, Kotlin-Snippet-Kompilierung, stdin-Kontrollpfad, Stop-Semantik und BluePlay-Stage-Snapshot.
-- `examples`: editierbare Startdateien (`Counter.kt`, `Person.kt`, `Helpers.kt`).
+- `examples`: editierbare Startprojekte. BlueK lädt standardmäßig das kleine BluePlay-Projekt aus `examples/blueplay`; das ursprüngliche Counter/Person-Beispiel bleibt über `/api/examples/basic` verfügbar.
 
 Benutzercode läuft nie im HTTP-Prozess. Ein eigener Prozess ist jedoch keine Sandbox; öffentliche oder nicht vertrauenswürdige Ausführung benötigt zusätzliche OS-/Container-Isolation und Ressourcenlimits.
 
