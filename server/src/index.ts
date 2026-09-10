@@ -44,7 +44,7 @@ const readExample = async (name: string) => {
 ` : name === 'blueplay-input' && fileName === 'Figure.kt' ? `class Figure : Actor() {
     init { image = Image("figure.png") }
     override fun act() {
-        if (isClicked) turn(15)
+        if (isClicked) { turn(15); move(10) }
         if (isKeyDown("right")) move(1)
         if (isKeyDown("left")) move(-1)
     }
