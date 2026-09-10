@@ -34,8 +34,9 @@ const backgroundDataUrl = (operations: string[] = [], width: number, height: num
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${elements}</svg>`;
   return `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}")`;
 };
-const drawnImageDataUrl = (operations: string[] = [], width: number, height: number) => {
-  if (!operations.length) return undefined;
+const drawnImageDataUrl = (operations: string[] | null = [], width: number, height: number) => {
+  if (operations === null) return undefined;
+  if (!operations.length) return emptyImageDataUrl(width, height);
   const elements = operations.map(operation => {
     const [name, ...parts] = operation.split('|');
     const paint = parts.at(-1) || 'rgb(0, 0, 0)';
@@ -51,6 +52,7 @@ const drawnImageDataUrl = (operations: string[] = [], width: number, height: num
   if (!elements) return undefined;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${elements}</svg>`)}`;
 };
+const emptyImageDataUrl = (width: number, height: number) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"/>`)}`;
 
 const typeName = (type: any) => type?.displayName || 'Any';
 const kotlinCallArguments = (parameters: any[] = [], values: string[]) => { const firstMissing = values.findIndex(value => !value.trim()); if (firstMissing < 0 || parameters.slice(firstMissing).some((parameter, index) => !values[firstMissing + index].trim() && !parameter.hasDefault)) return values; return values.map((value, index) => value.trim() ? (index > firstMissing ? `${parameters[index].name} = ${value}` : value) : '').filter(Boolean); };
