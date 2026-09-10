@@ -49,7 +49,7 @@ Enthält ein Projekt eine `BluePlayFunctions.kt`, kompiliert der lokale Adapter 
 - `runtime-contract`: RuntimeClient- und Werttypen.
 - `server`: Sitzungen, temporäre Projektverzeichnisse, Kotlin-Kompilierung, request-id-basierte Worker-Antwortverteilung und Generationenprüfung.
 - `jvm`: Kotlin/JVM-Compileradapter und ausdrücklich markierter Legacy-Regressionsworker; wird im normalen Browserbetrieb nicht zur Ausführung verwendet.
-- `examples`: editierbare Startprojekte. BlueK lädt standardmäßig das kleine BluePlay-Projekt aus `examples/blueplay`; das ursprüngliche Counter/Person-Beispiel bleibt über `/api/examples/basic` verfügbar.
+- `examples`: editierbare Startprojekte. BlueK lädt standardmäßig das kleine BluePlay-Projekt aus `examples/blueplay`; das ursprüngliche Counter/Person-Beispiel bleibt über `/api/examples/basic` verfügbar. Das vollständige KrokoAlarm-Beispiel aus dem BlueJ-Projekt ist über `/api/examples/krokoalarm` als Browser-Testprobe verfügbar.
 
 Benutzercode läuft nie im HTTP-Prozess. Die normale Ausführung läuft im Browser-Worker. Ein Browser-Worker ist jedoch keine Sandbox für untrusted Code; öffentliche oder nicht vertrauenswürdige Ausführung benötigt zusätzliche Browser-/Server-Sicherheitsmaßnahmen und Ressourcenlimits.
 
