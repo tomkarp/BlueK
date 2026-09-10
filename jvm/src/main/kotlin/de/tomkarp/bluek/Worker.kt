@@ -111,7 +111,7 @@ fun main() {
                     val created = withUserOutput { factory.javaClass.getMethod("execute").invoke(factory) }; val id = UUID.randomUUID().toString()
                     objects[id] = created.value; value(line, "name").takeIf { it.isNotEmpty() }?.let { name -> names[name] = id; val typeArgs = argumentValues(line, "typeArguments"); bindingTypes[name] = if (typeArgs.isEmpty()) className else "$className<${typeArgs.joinToString(", ")}>" }
                     val displayType = if (typeArguments.isEmpty()) className else "$className<$typeArguments>"
-                    emit("object", displayType, id, created.output, stageSnapshot(objects)) } finally { dir.deleteRecursively() }
+                    emit("object", displayType, id, created.output, stageSnapshot(objects)); child.close() } finally { dir.deleteRecursively() }
                 }
                 line.contains("\"op\":\"invoke\"") -> {
                     val objectId = value(line, "objectId"); val objectName = names.entries.firstOrNull { it.value == objectId }?.key ?: error("Object is not named on the bench")
@@ -125,7 +125,7 @@ fun main() {
                     if (compiler.exitValue() != 0) { emit("error", compiler.inputStream.bufferedReader().readText()); return }
                     val child = URLClassLoader(arrayOf(jar.toURI().toURL()), loader); val snippet = child.loadClass(helperName).getDeclaredConstructor().newInstance()
                     val invoked = withUserOutput { snippet.javaClass.getMethod("execute", RuntimeContext::class.java).invoke(snippet, ctx) }
-                    result(invoked.value, invoked.output, stageSnapshot(objects), ::registerObject) } finally { dir.deleteRecursively() }
+                    result(invoked.value, invoked.output, stageSnapshot(objects), ::registerObject); child.close() } finally { dir.deleteRecursively() }
                 }
                 line.contains("\"op\":\"inspect\"") -> {
                     val obj = objects[value(line, "objectId")]!!
