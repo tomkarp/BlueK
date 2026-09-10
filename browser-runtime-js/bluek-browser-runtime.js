@@ -100,11 +100,12 @@ export const bluekClick = (x, y) => { state.clicks.push({ x, y }); };
 // Keep hit testing in the same coordinate system as World.addObject(x, y).
 const currentClick = () => state.clicks[0] || null;
 const actorAt = point => state.world?.allObjects().slice().reverse().find(actor => {
-  const image = actor.image;
-  const cellSize = Math.max(1, state.world.cellSize || 1);
-  const radiusX = image ? image.width / (2 * cellSize) : 0.5;
-  const radiusY = image ? image.height / (2 * cellSize) : 0.5;
-  return point && Math.abs(actor.x + 0.5 - point.x) <= radiusX && Math.abs(actor.y + 0.5 - point.y) <= radiusY;
+  const image = actor.image, cellSize = Math.max(1, state.world.cellSize || 1);
+  const halfWidth = (image?.width || 30) / (2 * cellSize), halfHeight = (image?.height || 30) / (2 * cellSize);
+  const radians = (actor.rotation || 0) * Math.PI / 180, cos = Math.cos(radians), sin = Math.sin(radians);
+  const deltaX = (point?.x ?? NaN) - (actor.x + 0.5), deltaY = (point?.y ?? NaN) - (actor.y + 0.5);
+  const localX = cos * deltaX + sin * deltaY, localY = -sin * deltaX + cos * deltaY;
+  return Number.isFinite(localX) && Math.abs(localX) <= halfWidth && Math.abs(localY) <= halfHeight;
 });
 const consumeClick = () => { if (!state.clicks.length) return false; state.clicks.shift(); return true; };
 const oneStep = () => { if (!state.world) return; state.world.act(); state.world.allObjects().slice().forEach(actor => actor.act()); };
