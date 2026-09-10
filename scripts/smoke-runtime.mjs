@@ -93,6 +93,10 @@ try {
   assert.equal(compiled.body.classes.find(value => value.name === 'LambdaBox').constructors[0].parameters.length, 1);
   assert.equal(compiled.body.classes.find(value => value.name === 'LambdaBox').constructors[0].parameters[0].type.displayName, '(Int, Int) -> String');
   assert.deepEqual(compiled.body.classes.find(value => value.name === 'GenericMethods').methods.find(value => value.name === 'echo').typeParameters, ['T : Number']);
+  const counterMethods = compiled.body.classes.find(value => value.name === 'Counter').methods;
+  assert.equal(counterMethods.some(value => value.name === 'toString' && value.inheritedFrom === 'Any'), true);
+  assert.equal(counterMethods.some(value => value.name === 'hashCode' && value.inheritedFrom === 'Any'), true);
+  assert.equal(counterMethods.some(value => value.name === 'equals' && value.inheritedFrom === 'Any'), true);
   assert.equal(compiled.body.classes.find(value => value.name === 'PrivateCtor').constructors.length, 0);
   assert.equal(compiled.body.classes.find(value => value.name === 'Shape').kind, 'interface');
   assert.equal(compiled.body.classes.find(value => value.name === 'Shape').constructors.length, 0);
