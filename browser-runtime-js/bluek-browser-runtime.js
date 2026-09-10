@@ -44,6 +44,10 @@ Actor.prototype.getIntersecting = function() { return this.__world ? this.__worl
 Actor.prototype.getOneIntersecting = function() { return this.getIntersecting()[0] || null; };
 Actor.prototype.isTouching = function() { return this.getIntersecting().length > 0; };
 Actor.prototype.removeTouching = function() { const actor = this.getOneIntersecting(); if (actor) this.world.removeObject(actor); };
+Actor.prototype.bluekGetIntersecting = function() { return this.getIntersecting(); };
+Actor.prototype.bluekGetOneIntersecting = function() { return this.getOneIntersecting(); };
+Actor.prototype.bluekIsTouching = function() { return this.isTouching(); };
+Actor.prototype.bluekRemoveTouching = function() { return this.removeTouching(); };
 Actor.prototype._clamp = function() { if (this.__world) { this.x = clamp(this.x, 0, this.__world.width - 1); this.y = clamp(this.y, 0, this.__world.height - 1); } };
 
 export function World(width, height, cellSize) { this.width = width; this.height = height; this.cellSize = cellSize; this._actors = []; this._background = new Image(width * cellSize, height * cellSize); this._background.setColor(255, 255, 255); this._background.fill(); this._texts = new Map(); }
@@ -55,6 +59,7 @@ World.prototype.addObject = function(actor, x, y) { if (actor.__world && actor._
 World.prototype.removeObject = function(actor) { this._actors = this._actors.filter(item => item !== actor); if (actor.__world === this) actor.__world = null; };
 World.prototype.allObjects = function() { return [...this._actors]; };
 World.prototype.getObjects = function() { return [...this._actors]; };
+World.prototype.bluekAllObjects = function() { return this.allObjects(); };
 World.prototype.getObjectsAt = function(x, y) { return this._actors.filter(actor => actor.x === x && actor.y === y); };
 World.prototype.setBackground = function(value, g, b) { if (typeof value === 'string') { this._background = new Image(value); this._background.scale(this.width * this.cellSize, this.height * this.cellSize); } else { this._background = new Image(this.width * this.cellSize, this.height * this.cellSize); this._background.setColor(value, g, b); this._background.fill(); } };
 World.prototype.showText = function(text, x, y) { const key = `${x}:${y}`; if (text) this._texts.set(key, [x, y, text]); else this._texts.delete(key); };
@@ -80,6 +85,11 @@ export const bluekStage = () => { const background = state.world?.background; co
 export const bluekStageJson = bluekStage;
 export const bluekReadln = () => globalThis.__bluekReadln ? globalThis.__bluekReadln() : '';
 export const bluekReadlnOrNull = () => globalThis.__bluekReadlnOrNull ? globalThis.__bluekReadlnOrNull() : null;
+export const bluekActorGetIntersecting = actor => actor?.getIntersecting?.() || [];
+export const bluekActorGetOneIntersecting = actor => actor?.getOneIntersecting?.() || null;
+export const bluekActorIsTouching = actor => Boolean(actor?.isTouching?.());
+export const bluekActorRemoveTouching = actor => actor?.removeTouching?.();
+export const bluekWorldAllObjects = world => world?.allObjects?.() || [];
 export const bluekStart = () => { if (typeof globalThis.main === 'function') globalThis.main(); };
 globalThis.Actor = Actor; globalThis.World = World; globalThis.Image = Image;
-Object.assign(globalThis, { isKeyDown, playSound, getSpeed, setSpeed, start, stop, step });
+Object.assign(globalThis, { isKeyDown, playSound, getSpeed, setSpeed, start, stop, step, bluekActorGetIntersecting, bluekActorGetOneIntersecting, bluekActorIsTouching, bluekActorRemoveTouching, bluekWorldAllObjects });

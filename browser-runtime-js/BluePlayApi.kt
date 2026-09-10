@@ -13,10 +13,6 @@ external open class Actor {
     fun turnTowards(x: Int, y: Int)
     fun distanceTo(other: Actor): Int
     fun intersects(other: Actor): Boolean
-    fun <T : Actor> getIntersecting(): Array<T>
-    fun <T : Actor> getOneIntersecting(): T?
-    fun <T : Actor> isTouching(): Boolean
-    fun <T : Actor> removeTouching()
 }
 
 external open class World(val width: Int, val height: Int, val cellSize: Int) {
@@ -26,7 +22,6 @@ external open class World(val width: Int, val height: Int, val cellSize: Int) {
     fun addObject(actor: Actor, x: Int, y: Int)
     fun removeObject(actor: Actor)
     fun allObjects(): Array<Actor>
-    fun <T : Actor> getObjects(): Array<T>
     fun getObjectsAt(x: Int, y: Int): Array<Actor>
     val numberOfObjects: Int
     fun setBackground(fileName: String)
@@ -66,3 +61,15 @@ external fun step()
 external fun bluekStageJson(): String
 external fun bluekReadln(): String
 external fun bluekReadlnOrNull(): String?
+
+external fun bluekActorGetIntersecting(actor: Actor): Array<Actor>
+external fun bluekActorGetOneIntersecting(actor: Actor): Actor?
+external fun bluekActorIsTouching(actor: Actor): Boolean
+external fun bluekActorRemoveTouching(actor: Actor)
+external fun bluekWorldAllObjects(world: World): Array<Actor>
+
+inline fun <reified T : Actor> Actor.getIntersecting(): List<T> = bluekActorGetIntersecting(this).filterIsInstance<T>()
+inline fun <reified T : Actor> Actor.getOneIntersecting(): T? = bluekActorGetOneIntersecting(this) as? T
+inline fun <reified T : Actor> Actor.isTouching(): Boolean = bluekActorIsTouching(this)
+inline fun <reified T : Actor> Actor.removeTouching() = bluekActorRemoveTouching(this)
+inline fun <reified T : Actor> World.getObjects(): List<T> = bluekWorldAllObjects(this).filterIsInstance<T>()
