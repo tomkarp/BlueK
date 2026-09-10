@@ -67,6 +67,7 @@ World.prototype.showText = function(text, x, y) { const key = `${x}:${y}`; if (t
 export const isKeyDown = key => state.keys.has(String(key).toLowerCase());
 export const playSound = fileName => state.sounds.push(String(fileName));
 export const getSpeed = () => state.speed;
+export const bluekIsRunning = () => state.running;
 export const setSpeed = value => { state.speed = clamp(Number(value), 1, 100); };
 export const start = () => { state.running = true; };
 export const stop = () => { state.running = false; };
