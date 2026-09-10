@@ -72,7 +72,8 @@ internal fun bluekStageJson(): String {
     val background = world.background
     val backgroundPath = background.fileName?.let { ",\"backgroundPath\":\"${it.replace("\\", "\\\\").replace("\"", "\\\"")}\"" } ?: ""
     val backgroundColor = background.backgroundColor?.let { ",\"backgroundColor\":\"$it\"" } ?: ""
+    val backgroundOperations = background.drawOperations.joinToString(",") { "\"${it.replace("\\", "\\\\").replace("\"", "\\\"")}\"" }
     val sounds = pendingSounds.joinToString(",") { "\"${it.replace("\\", "\\\\").replace("\"", "\\\"")}\"" }
     pendingSounds.clear()
-    return "{\"width\":${world.width},\"height\":${world.height},\"cellSize\":${world.cellSize},\"running\":$running,\"speed\":$speedValue$backgroundPath$backgroundColor,\"objects\":[$actors],\"texts\":[$texts],\"sounds\":[$sounds]}"
+    return "{\"width\":${world.width},\"height\":${world.height},\"cellSize\":${world.cellSize},\"running\":$running,\"speed\":$speedValue$backgroundPath$backgroundColor,\"backgroundOperations\":[$backgroundOperations],\"objects\":[$actors],\"texts\":[$texts],\"sounds\":[$sounds]}"
 }
