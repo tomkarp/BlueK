@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 
-const base = 'http://127.0.0.1:5173';
-const server = spawn('node', ['server/dist/server/src/index.js'], { stdio: ['ignore', 'pipe', 'pipe'] });
+const base = 'http://127.0.0.1:5174';
+const server = spawn('node', ['server/dist/server/src/index.js'], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, BLUEK_PORT: '5174' } });
 let output = '';
 server.stdout.on('data', chunk => { output += chunk.toString(); });
 server.stderr.on('data', chunk => { output += chunk.toString(); });
@@ -23,7 +23,11 @@ const json = async (url, options) => {
 const post = (url, body) => json(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
 try {
-  await wait(500);
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    try { if ((await fetch(`${base}/api/examples`)).ok) break; } catch { /* server is still starting */ }
+    if (attempt === 99) throw new Error(`Smoke server did not become ready.\nServer output:\n${output}`);
+    await wait(100);
+  }
   const session = (await post('/api/session', {})).body;
   const invalidFiles = await post(`/api/session/${session.sessionId}/compile`, { files: [{ fileName: '../escape.kt', source: 'class Escape', kind: 'class' }], revision: 1 });
   assert.equal(invalidFiles.response.status, 400);
