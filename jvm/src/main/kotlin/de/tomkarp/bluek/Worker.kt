@@ -122,13 +122,14 @@ fun main() {
                     val typeSuffix = if (typeArguments.isEmpty()) "" else "<$typeArguments>"
                     val imports = projectPackages.joinToString("\n") { "import $it.*" }
                     val helperName = "BlueKFactory_${UUID.randomUUID().toString().replace("-", "")}"; val dir = Files.createTempDirectory("bluek-create-").toFile(); try { val src = File(dir, "$helperName.kt")
-                    src.writeText("$imports\nclass $helperName { fun execute(): Any? = $className$typeSuffix($args) }")
+                    val bindings = names.entries.joinToString("\n") { "${if (mutableBindings.contains(it.key)) "var" else "val"} ${it.key} = ctx.objectById(\"${it.value}\") as ${bindingTypes[it.key] ?: objects[it.value]!!.javaClass.name}" }
+                    src.writeText("$imports\nimport de.tomkarp.bluek.RuntimeContext\nclass $helperName { fun execute(ctx: RuntimeContext): Any? = run { $bindings\nreturn@run $className$typeSuffix($args) } }")
                     val jar = File(dir, "factory.jar"); val compiler = ProcessBuilder("kotlinc", src.absolutePath, "-classpath", "${projectPath}:${File(Worker::class.java.protectionDomain.codeSource.location.toURI())}", "-d", jar.absolutePath).redirectInput(ProcessBuilder.Redirect.PIPE).redirectErrorStream(true).start()
                     compiler.outputStream.close()
                     if (!compiler.waitFor(60, java.util.concurrent.TimeUnit.SECONDS)) { compiler.destroyForcibly(); emit("error", "Constructor compilation timed out"); return }
                     if (compiler.exitValue() != 0) { emit("error", compiler.inputStream.bufferedReader().readText()); return }
                     val child = URLClassLoader(arrayOf(jar.toURI().toURL()), loader); val factory = child.loadClass(helperName).getDeclaredConstructor().newInstance()
-                    val created = withUserOutput { factory.javaClass.getMethod("execute").invoke(factory) }; val id = UUID.randomUUID().toString()
+                    val created = withUserOutput { factory.javaClass.getMethod("execute", RuntimeContext::class.java).invoke(factory, ctx) }; val id = UUID.randomUUID().toString()
                     objects[id] = created.value; value(line, "name").takeIf { it.isNotEmpty() }?.let { name -> names[name] = id; val typeArgs = argumentValues(line, "typeArguments"); bindingTypes[name] = if (typeArgs.isEmpty()) className else "$className<${typeArgs.joinToString(", ")}>" }
                     val displayType = if (typeArguments.isEmpty()) className else "$className<$typeArguments>"
                     emit("object", displayType, id, created.output, stageSnapshot(objects, projectPackages)); child.close() } finally { dir.deleteRecursively() }

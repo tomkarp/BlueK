@@ -55,6 +55,8 @@ Benutzercode läuft nie im HTTP-Prozess. Ein eigener Prozess ist jedoch keine Sa
 Mit echten `kotlinc`- und Worker-Prozessen geprüft:
 
 - `Person("Ada")`, `greet()`, `rename("Bea")`, `greetInConsole()` und korrekte `Unit`-/stdout-Darstellung.
+- Bench-Objekte können in Konstruktor-Dialogen als Kotlin-Argumente verwendet werden; `CounterUser(counter1)` erhält dieselbe Objektidentität und mutiert den vorhandenen Counter.
+- Eine frei definierte `Rectangle`-Klasse erscheint ohne BlueK-Anpassung, lässt sich erzeugen und liefert `area()` korrekt.
 - `Counter()` mit ausgelassenem Default-Argument und unabhängige Objektidentität.
 - Überladungen `choose(Int)`/`choose(String)`.
 - `Box<String>`: `replace(42)` wird vom Kotlin-Compiler abgelehnt, der ursprüngliche String bleibt erhalten.

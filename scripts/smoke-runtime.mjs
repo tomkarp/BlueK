@@ -46,6 +46,8 @@ try {
   assert.equal((await json(`/api/session/${session.sessionId}/status`)).body.workerAlive, true);
   const files = [
     { id: 'counter', fileName: 'Counter.kt', kind: 'class', revision: 1, source: 'class Counter(var value: Int = 0) { fun increment() { value++ }; fun add(amount: Int) { value += amount }; fun current(): Int = value }' },
+    { id: 'counter-user', fileName: 'CounterUser.kt', kind: 'class', revision: 1, source: 'class CounterUser(private val counter: Counter) { fun addTwo() { counter.add(2) } }' },
+    { id: 'rectangle', fileName: 'Rectangle.kt', kind: 'class', revision: 1, source: 'class Rectangle(val width: Int, val height: Int) { fun area(): Int = width * height }' },
     { id: 'person', fileName: 'Person.kt', kind: 'class', revision: 1, source: 'class Person(var name: String, var isReady: Boolean = false) { fun greet(): String = "Hello, $name!"; fun localValue(): String { fun hidden() = "hidden"\nval local: String = "local"; return local }; fun rename(newName: String) { name = newName }; fun greetInConsole() { Thread.sleep(200); println(greet() + "\\t✓"); Thread.sleep(1500); System.err.println("warning"); System.err.flush() }; fun greetWith(prefix: String = "Hi", suffix: String): String = "$prefix $name$suffix"; fun friend(): Person = Person("$name Jr") }' },
     { id: 'helpers', fileName: 'Helpers.kt', kind: 'functions', revision: 1, source: 'fun square(x: Int): Int = x * x; fun askName(): String { println("What is your name?"); val name = readln(); println("Hello, $name!"); return name }; fun noisyInput(): String { System.err.println("warning"); System.err.flush(); return readln() }' },
     { id: 'box', fileName: 'Box.kt', kind: 'class', revision: 1, source: 'class Box<T>(var value: T) { fun replace(next: T) { value = next }; fun get(): T = value }' },
@@ -145,9 +147,15 @@ try {
   assert.equal(incremented.body.kind, 'unit', JSON.stringify(incremented));
   await action({ op: 'invoke', objectId: counter.objectId, name: 'add', args: JSON.stringify(['5']) });
   assert.equal((await action({ op: 'invoke', objectId: counter.objectId, name: 'current', args: '[]' })).body.display, '9');
+  const counterUser = (await action({ op: 'create', className: 'CounterUser', name: 'counterUser1', args: JSON.stringify(['counter1']) })).body;
+  assert.ok(counterUser.objectId, JSON.stringify(counterUser));
+  assert.equal((await action({ op: 'invoke', objectId: counterUser.objectId, name: 'addTwo', args: '[]' })).body.kind, 'unit');
+  assert.equal((await action({ op: 'invoke', objectId: counter.objectId, name: 'current', args: '[]' })).body.display, '11');
+  const rectangle = (await action({ op: 'create', className: 'Rectangle', name: 'rectangle1', args: JSON.stringify(['4', '5']) })).body;
+  assert.equal((await action({ op: 'invoke', objectId: rectangle.objectId, name: 'area', args: '[]' })).body.display, '20');
   const counterInspection = (await action({ op: 'inspect', objectId: counter.objectId })).body;
-  assert.match(counterInspection.display, /value=9/);
-  assert.deepEqual(counterInspection.fields.find(field => field.name === 'value').display, '9');
+  assert.match(counterInspection.display, /value=11/);
+  assert.deepEqual(counterInspection.fields.find(field => field.name === 'value').display, '11');
   const person = (await action({ op: 'create', className: 'Person', name: 'person1', args: JSON.stringify(['"Ada"']) })).body;
   assert.equal((await action({ op: 'invoke', objectId: person.objectId, name: 'greet', args: '[]' })).body.display, 'Hello, Ada!');
   assert.equal((await action({ op: 'eval', code: 'person1.name', mode: 'expression' })).body.display, 'Ada');
