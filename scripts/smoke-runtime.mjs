@@ -298,7 +298,9 @@ try {
   const crashed = await action({ op: 'eval', code: 'System.exit(3)', mode: 'expression' });
   assert.equal(crashed.response.status, 500);
   await wait(100);
-  assert.equal((await json(`/api/session/${session.sessionId}/status`)).body.available, false);
+  const crashedStatus = (await json(`/api/session/${session.sessionId}/status`)).body;
+  assert.equal(crashedStatus.available, false);
+  assert.match(crashedStatus.error, /worker exited/);
   assert.equal((await json(`/api/session/${session.sessionId}/stage`)).response.status, 409);
   const recoveredCompile = await post(`/api/session/${session.sessionId}/compile`, { files, revision: 2 });
   assert.equal(recoveredCompile.response.status, 200, JSON.stringify(recoveredCompile));
