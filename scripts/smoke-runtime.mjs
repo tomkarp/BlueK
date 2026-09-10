@@ -46,6 +46,7 @@ try {
     { id: 'typed', fileName: 'Typed.kt', kind: 'class', revision: 1, source: 'class Typed(val value: Map<String, List<Int>?>, val sink: MutableList<in Number>)' },
     { id: 'nested', fileName: 'Nested.kt', kind: 'class', revision: 1, source: 'class Nested(val values: List<Map<String, Int>> = emptyList())' },
     { id: 'lambda', fileName: 'LambdaBox.kt', kind: 'class', revision: 1, source: 'class LambdaBox(val transform: (Int, Int) -> String = { a, b -> "$a,$b" })' },
+    { id: 'private-ctor', fileName: 'PrivateCtor.kt', kind: 'class', revision: 1, source: 'class PrivateCtor private constructor(val value: Int)' },
     { id: 'callbacks', fileName: 'Callbacks.kt', kind: 'class', revision: 1, source: 'class Callbacks { fun transform(block: (Int) -> String): String = block(3) }' },
     { id: 'overloaded', fileName: 'Overloaded.kt', kind: 'class', revision: 1, source: 'class Overloaded { val kind: String; constructor(value: Int) { kind = "int" }; constructor(value: String) { kind = "string" } }' },
     { id: 'base', fileName: 'Base.kt', kind: 'class', revision: 1, source: 'open class Base(var baseValue: String)' },
@@ -72,6 +73,7 @@ try {
   assert.equal(compiled.body.classes.find(value => value.name === 'Nested').constructors[0].parameters[0].hasDefault, true);
   assert.equal(compiled.body.classes.find(value => value.name === 'LambdaBox').constructors[0].parameters.length, 1);
   assert.equal(compiled.body.classes.find(value => value.name === 'LambdaBox').constructors[0].parameters[0].type.displayName, '(Int, Int) -> String');
+  assert.equal(compiled.body.classes.find(value => value.name === 'PrivateCtor').constructors.length, 0);
   assert.equal(compiled.body.classes.find(value => value.name === 'Tools').kind, 'object');
   assert.equal(compiled.body.classes.find(value => value.name === 'Tools').constructors.length, 0);
   assert.equal(compiled.body.classes.find(value => value.name === 'Factory').companionMethods.find(value => value.name === 'make').parameters.length, 1);
