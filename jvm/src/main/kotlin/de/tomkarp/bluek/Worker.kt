@@ -6,6 +6,7 @@ import java.net.URLClassLoader
 import java.util.Base64
 import java.util.Arrays
 import java.util.UUID
+import java.nio.file.Files
 import javax.imageio.ImageIO
 
 private object NullBinding
@@ -101,7 +102,7 @@ fun main() {
                     val typeArguments = argumentValues(line, "typeArguments").joinToString(", ")
                     val typeSuffix = if (typeArguments.isEmpty()) "" else "<$typeArguments>"
                     val imports = projectPackages.joinToString("\n") { "import $it.*" }
-                    val helperName = "BlueKFactory_${UUID.randomUUID().toString().replace("-", "")}"; val dir = createTempDir(prefix = "bluek-create-"); try { val src = File(dir, "$helperName.kt")
+                    val helperName = "BlueKFactory_${UUID.randomUUID().toString().replace("-", "")}"; val dir = Files.createTempDirectory("bluek-create-").toFile(); try { val src = File(dir, "$helperName.kt")
                     src.writeText("$imports\nclass $helperName { fun execute(): Any? = $className$typeSuffix($args) }")
                     val jar = File(dir, "factory.jar"); val compiler = ProcessBuilder("kotlinc", src.absolutePath, "-classpath", "${projectPath}:${File(Worker::class.java.protectionDomain.codeSource.location.toURI())}", "-d", jar.absolutePath).redirectInput(ProcessBuilder.Redirect.PIPE).redirectErrorStream(true).start()
                     compiler.outputStream.close()
@@ -117,7 +118,7 @@ fun main() {
                     val objectId = value(line, "objectId"); val objectName = names.entries.firstOrNull { it.value == objectId }?.key ?: error("Object is not named on the bench")
                     val methodName = value(line, "name"); val args = argumentValues(line).joinToString(", "); val bindings = names.entries.joinToString("\n") { "${if (mutableBindings.contains(it.key)) "var" else "val"} ${it.key} = ctx.objectById(\"${it.value}\") as ${bindingTypes[it.key] ?: objects[it.value]!!.javaClass.name}" }
                     val imports = projectPackages.joinToString("\n") { "import $it.*" }
-                    val helperName = "BlueKInvoke_${UUID.randomUUID().toString().replace("-", "")}"; val dir = createTempDir(prefix = "bluek-invoke-"); try { val src = File(dir, "$helperName.kt")
+                    val helperName = "BlueKInvoke_${UUID.randomUUID().toString().replace("-", "")}"; val dir = Files.createTempDirectory("bluek-invoke-").toFile(); try { val src = File(dir, "$helperName.kt")
                     src.writeText("$imports\nimport de.tomkarp.bluek.RuntimeContext\nclass $helperName { fun execute(ctx: RuntimeContext): Any? = run { $bindings\nreturn@run $objectName.$methodName($args) } }")
                     val jar = File(dir, "snippet.jar"); val compiler = ProcessBuilder("kotlinc", src.absolutePath, "-classpath", "${projectPath}:${File(Worker::class.java.protectionDomain.codeSource.location.toURI())}", "-d", jar.absolutePath).redirectInput(ProcessBuilder.Redirect.PIPE).redirectErrorStream(true).start()
                     compiler.outputStream.close()
@@ -149,7 +150,7 @@ fun main() {
                     val exports = exported.joinToString(",") { "\"__bluek_binding:$it\" to $it" }
                     val expression = if (mode == "expression") "return@run $code" else if (exported.isEmpty()) "$code\nreturn@run Unit" else "$code\nreturn@run mapOf(\"__bluek_value\" to Unit${if (exports.isEmpty()) "" else "," + exports})"
                     val imports = projectPackages.joinToString("\n") { "import $it.*" }
-                    val helperName = "BlueKEval_${UUID.randomUUID().toString().replace("-", "")}"; val dir = createTempDir(prefix = "bluek-snippet-"); try { val src = File(dir, "$helperName.kt")
+                    val helperName = "BlueKEval_${UUID.randomUUID().toString().replace("-", "")}"; val dir = Files.createTempDirectory("bluek-snippet-").toFile(); try { val src = File(dir, "$helperName.kt")
                     src.writeText("$imports\nimport de.tomkarp.bluek.RuntimeContext\nclass $helperName { fun execute(ctx: RuntimeContext): Any? = run { $bindings\n$expression } }")
                     val jar = File(dir, "snippet.jar"); val compiler = ProcessBuilder("kotlinc", src.absolutePath, "-classpath", "${projectPath}:${File(Worker::class.java.protectionDomain.codeSource.location.toURI())}", "-d", jar.absolutePath).redirectInput(ProcessBuilder.Redirect.PIPE).redirectErrorStream(true).start()
                     compiler.outputStream.close()
