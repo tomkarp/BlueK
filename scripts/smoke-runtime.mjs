@@ -46,7 +46,7 @@ try {
   assert.equal((await json(`/api/session/${session.sessionId}/status`)).body.workerAlive, true);
   const files = [
     { id: 'counter', fileName: 'Counter.kt', kind: 'class', revision: 1, source: 'class Counter(var value: Int = 0) { fun increment() { value++ }; fun add(amount: Int) { value += amount }; fun current(): Int = value }' },
-    { id: 'person', fileName: 'Person.kt', kind: 'class', revision: 1, source: 'class Person(var name: String) { fun greet(): String = "Hello, $name!"; fun localValue(): String { val local: String = "local"; return local }; fun rename(newName: String) { name = newName }; fun greetInConsole() { Thread.sleep(200); println(greet() + "\\t✓"); Thread.sleep(1500); System.err.println("warning"); System.err.flush() }; fun greetWith(prefix: String = "Hi", suffix: String): String = "$prefix $name$suffix"; fun friend(): Person = Person("$name Jr") }' },
+    { id: 'person', fileName: 'Person.kt', kind: 'class', revision: 1, source: 'class Person(var name: String) { fun greet(): String = "Hello, $name!"; fun localValue(): String { fun hidden() = "hidden"\nval local: String = "local"; return local }; fun rename(newName: String) { name = newName }; fun greetInConsole() { Thread.sleep(200); println(greet() + "\\t✓"); Thread.sleep(1500); System.err.println("warning"); System.err.flush() }; fun greetWith(prefix: String = "Hi", suffix: String): String = "$prefix $name$suffix"; fun friend(): Person = Person("$name Jr") }' },
     { id: 'helpers', fileName: 'Helpers.kt', kind: 'functions', revision: 1, source: 'fun square(x: Int): Int = x * x; fun askName(): String { println("What is your name?"); val name = readln(); println("Hello, $name!"); return name }; fun noisyInput(): String { System.err.println("warning"); System.err.flush(); return readln() }' },
     { id: 'box', fileName: 'Box.kt', kind: 'class', revision: 1, source: 'class Box<T>(var value: T) { fun replace(next: T) { value = next }; fun get(): T = value }' },
     { id: 'bounded', fileName: 'Bounded.kt', kind: 'class', revision: 1, source: 'class Bounded<T : Number>(val value: T) { fun get(): T = value }' },
@@ -76,6 +76,7 @@ try {
   assert.equal(compiled.body.diagnostics.length, 0, JSON.stringify(compiled.body.diagnostics));
   assert.equal(compiled.body.classes.find(value => value.name === 'Overloaded').constructors.length, 2);
   assert.equal(compiled.body.classes.find(value => value.name === 'Person').methods.find(value => value.name === 'greet').parameters.length, 0);
+  assert.equal(compiled.body.classes.find(value => value.name === 'Person').methods.some(value => value.name === 'hidden'), false);
   assert.equal(compiled.body.classes.find(value => value.name === 'Helpers').kind, 'functions');
   assert.equal(compiled.body.classes.find(value => value.name === 'Helpers').methods.find(value => value.name === 'square').parameters.length, 1);
   assert.equal(compiled.body.classes.find(value => value.name === 'Nested').constructors[0].parameters[0].type.displayName, 'List<Map<String, Int>>');
