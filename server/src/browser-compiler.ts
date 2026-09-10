@@ -146,10 +146,10 @@ export async function compileBrowserProject(root: string, sessionDir: string, fi
     const bridgeDir = path.join(buildDir, 'bridge');
     // Keep Gradle's build directory between generations. Kotlin/JS compilation is
     // expensive; the generated bridge and filtered project are the only inputs
-    // that must be replaced for a session compile.
+    // that must be replaced for a session compile. Gradle will invalidate the
+    // affected tasks from their file inputs without throwing away the toolchain.
     await fs.rm(path.join(buildDir, 'bridge'), { recursive: true, force: true });
     await fs.rm(path.join(buildDir, 'project'), { recursive: true, force: true });
-    await fs.rm(path.join(buildDir, 'build'), { recursive: true, force: true });
     await fs.cp(path.join(root, 'browser-runtime'), buildDir, { recursive: true });
     // The framework implementation is a fixed JavaScript module. Keep only
     // the Gradle project files here; the old Kotlin runtime must not enter the
