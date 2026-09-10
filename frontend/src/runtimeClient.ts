@@ -50,10 +50,10 @@ export class HttpRuntimeClient implements RuntimeClient {
   async status(): Promise<RuntimeStatus> { return (await this.request('/status')).json(); }
 }
 
-type BrowserAction = { op: 'load'; url: string; packageName: string } | { op: 'main' } | { op: 'run' } | { op: 'act' } | { op: 'pause' } | { op: 'stage' } | { op: 'speed'; value: number } | { op: 'key'; key: string; pressed: boolean } | { op: 'click'; x: number; y: number } | { op: 'create'; functionName: string; args: unknown[]; className: string; name: string } | { op: 'invoke'; functionName: string; objectId: string; args: unknown[]; className: string } | { op: 'inspect'; objectId: string; className?: string } | { op: 'remove'; objectId: string } | { op: 'stop' };
+type BrowserAction = { op: 'load'; url: string; packageName: string } | { op: 'main' } | { op: 'run' } | { op: 'act' } | { op: 'pause' } | { op: 'stage' } | { op: 'speed'; value: number } | { op: 'key'; key: string; pressed: boolean } | { op: 'click'; x: number; y: number } | { op: 'create'; functionName: string; args: unknown[]; className: string; name: string } | { op: 'invoke'; functionName: string; objectId: string; args: unknown[]; className: string } | { op: 'get'; objectId: string; property: string } | { op: 'inspect'; objectId: string; className?: string } | { op: 'remove'; objectId: string } | { op: 'stop' };
 
 const parseKotlinArgument = (value: string, bindings: Map<string, unknown>): unknown => {
-  const text = value.trim();
+  const text = value.trim().replace(/^[A-Za-z_]\w*\s*=\s*/, '');
   if (bindings.has(text)) return { __bluekObjectId: bindings.get(text) };
   if (text === 'true') return true;
   if (text === 'false') return false;
@@ -67,6 +67,8 @@ const parseKotlinArgument = (value: string, bindings: Map<string, unknown>): unk
 };
 const splitSimpleArguments = (source: string): string[] => { const result: string[] = []; let start = 0; let depth = 0; let quote = ''; let escaped = false; for (let index = 0; index < source.length; index += 1) { const char = source[index]; if (quote) { if (escaped) escaped = false; else if (char === '\\') escaped = true; else if (char === quote) quote = ''; continue; } if (char === '"' || char === "'") { quote = char; continue; } if (char === '(') depth += 1; else if (char === ')') depth -= 1; else if (char === ',' && depth === 0) { result.push(source.slice(start, index).trim()); start = index + 1; } } if (source.slice(start).trim()) result.push(source.slice(start).trim()); return result; };
 const simpleCodepadCall = (code: string): { binding?: string; receiver?: string; callable: string; args: string[] } | null => { const match = code.trim().replace(/;$/, '').match(/^(?:(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*)?([A-Za-z_]\w*)(?:\.([A-Za-z_]\w*))?\s*\((.*)\)$/s); return match ? { binding: match[1], receiver: match[3] ? match[2] : undefined, callable: match[3] || match[2], args: splitSimpleArguments(match[4]) } : null; };
+const simpleCodepadProperty = (code: string): { receiver: string; property: string } | null => { const match = code.trim().replace(/;$/, '').match(/^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/); return match ? { receiver: match[1], property: match[2] } : null; };
+const requiredParameters = (parameters: any[] = []) => parameters.filter(parameter => !parameter.hasDefault);
 
 const browserWorkerSource = `
 let api = null;
@@ -107,6 +109,7 @@ self.onmessage = async ({ data }) => {
     if (data.op === 'click') { const click = api.bluekClick || resolve('bluekClick'); if (typeof click === 'function') click(data.x, data.y); return; }
     if (data.op === 'create') { const fn = api[data.functionName] || resolve(data.functionName); if (typeof fn !== 'function') throw new Error('Generated constructor bridge is missing: ' + data.functionName); const object = fn(...resolveArguments(data.args)); const objectId = crypto.randomUUID(); objects.set(objectId, object); displayValues.set(objectId, data.className + '()'); const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value: { kind: 'object', display: data.className + '()', objectId }, objectId, name: data.name, output }); return; }
     if (data.op === 'invoke') { const receiver = data.objectId ? objects.get(data.objectId) : null; if (data.objectId && !receiver) throw new Error('Object handle is no longer available.'); const fn = api[data.functionName] || resolve(data.functionName); if (typeof fn !== 'function') throw new Error('Generated method bridge is missing: ' + data.functionName); const value = valueOf(receiver ? fn(receiver, ...resolveArguments(data.args)) : fn(...resolveArguments(data.args)), data.className); const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value, output }); return; }
+    if (data.op === 'get') { const object = objects.get(data.objectId); if (!object) throw new Error('Object handle is no longer available.'); const value = valueOf(object[data.property]); const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value, output }); return; }
     if (data.op === 'inspect') { const object = objects.get(data.objectId); if (!object) throw new Error('Object handle is no longer available.'); const entries = Object.entries(object).filter(([key]) => !key.startsWith('$')); const namesFn = data.className ? (api['bluekInspectNames_' + data.className] || resolve('bluekInspectNames_' + data.className)) : null; let names = []; if (typeof namesFn === 'function') { try { names = JSON.parse(namesFn()); } catch { names = []; } } const fields = entries.map(([key, value], index) => ({ name: names[index] || key, value: valueOf(value).display })); self.postMessage({ kind: 'value', value: { kind: 'object', objectId: data.objectId, fields } }); return; }
     if (data.op === 'remove') { objects.delete(data.objectId); displayValues.delete(data.objectId); self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' } }); return; }
     if (data.op === 'stop') { clearInterval(timer); close(); return; }
@@ -144,13 +147,18 @@ export class HybridRuntimeClient implements RuntimeClient {
     }
     if (this.worker && this.ready && request.op === 'create') {
       const klass = this.classes.find(value => value.name === request.className); const constructor = klass?.constructors.find(value => value.id === request.constructorId) || klass?.constructors[0];
-      if (klass && constructor && !(constructor.parameters || []).some(parameter => parameter.hasDefault)) {
+      if (klass && constructor) {
         const args = JSON.parse(String(request.args || '[]')).map((value: string) => parseKotlinArgument(value, this.bindings)); const functionName = `bluekCreate_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}`;
         const result = await this.local({ op: 'create', functionName, args, className: klass.name, name: String(request.name || klass.name.toLowerCase()) });
         if (result.objectId) this.localObjects.set(result.objectId, klass.name); if (result.name) this.bindings.set(result.name, result.objectId); return { ...result.value, output: result.output };
       }
     }
     if (this.worker && this.ready && request.op === 'eval') {
+      const property = simpleCodepadProperty(String(request.code || ''));
+      if (property) {
+        const objectId = this.bindings.get(property.receiver);
+        if (objectId && this.localObjects.has(String(objectId))) return (await this.local({ op: 'get', objectId: String(objectId), property: property.property })).value;
+      }
       const parsed = simpleCodepadCall(String(request.code || ''));
       if (parsed) {
         if (parsed.receiver) {
@@ -158,9 +166,9 @@ export class HybridRuntimeClient implements RuntimeClient {
           const localClassName = objectId ? this.localObjects.get(String(objectId)) : undefined;
           const klass = this.classes.find(value => value.name === localClassName);
           const method = klass?.methods.find(value => value.name === parsed.callable);
-          if (objectId && klass && method && !method.parameters.some(parameter => parameter.hasDefault) && !method.typeParameters?.length) {
+          if (objectId && klass && method && !method.typeParameters?.length && parsed.args.length >= requiredParameters(method.parameters).length) {
             const args = parsed.args.map(value => parseKotlinArgument(value, this.bindings));
-            const methodKey = `${method.name.replace(/[^A-Za-z0-9_]/g, '_')}_${method.parameters.map(parameter => parameter.type.classifier.replace(/[^A-Za-z0-9_]/g, '_')).join('_') || 'noargs'}`;
+            const methodKey = `${method.name.replace(/[^A-Za-z0-9_]/g, '_')}_${requiredParameters(method.parameters).map(parameter => parameter.type.classifier.replace(/[^A-Za-z0-9_]/g, '_')).join('_') || 'noargs'}`;
             const result = await this.local({ op: 'invoke', functionName: `bluekInvoke_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}_${methodKey}`, objectId: String(objectId), args, className: method.returnType.classifier });
             return parsed.binding ? { ...result.value, name: parsed.binding, output: result.output } : { ...result.value, output: result.output };
           }
@@ -175,9 +183,9 @@ export class HybridRuntimeClient implements RuntimeClient {
           }
           const owner = this.classes.find(value => value.kind === 'functions' && value.methods.some(method => method.name === parsed.callable));
           const method = owner?.methods.find(value => value.name === parsed.callable);
-          if (owner && method && !method.parameters.some(parameter => parameter.hasDefault) && !method.typeParameters?.length) {
+          if (owner && method && !method.typeParameters?.length && parsed.args.length >= requiredParameters(method.parameters).length) {
             const args = parsed.args.map(value => parseKotlinArgument(value, this.bindings));
-            const methodKey = `${method.name.replace(/[^A-Za-z0-9_]/g, '_')}_${method.parameters.map(parameter => parameter.type.classifier.replace(/[^A-Za-z0-9_]/g, '_')).join('_') || 'noargs'}`;
+            const methodKey = `${method.name.replace(/[^A-Za-z0-9_]/g, '_')}_${requiredParameters(method.parameters).map(parameter => parameter.type.classifier.replace(/[^A-Za-z0-9_]/g, '_')).join('_') || 'noargs'}`;
             const result = await this.local({ op: 'invoke', functionName: `bluekCall_${owner.name.replace(/[^A-Za-z0-9_]/g, '_')}_${methodKey}`, objectId: '', args, className: method.returnType.classifier });
             return { ...result.value, output: result.output };
           }
@@ -187,8 +195,8 @@ export class HybridRuntimeClient implements RuntimeClient {
     }
     if (this.worker && this.ready && request.op === 'invoke') {
       const object = this.localObjects.has(String(request.objectId)); const localClassName = this.localObjects.get(String(request.objectId)); const klass = this.classes.find(value => value.name === localClassName);
-      const method = klass?.methods.find(value => value.name === request.name); if (object && klass && method && !method.parameters.some(parameter => parameter.hasDefault) && !method.typeParameters?.length) {
-        const args = JSON.parse(String(request.args || '[]')).map((value: string) => parseKotlinArgument(value, this.bindings)); const methodKey = `${method.name.replace(/[^A-Za-z0-9_]/g, '_')}_${method.parameters.map(parameter => parameter.type.classifier.replace(/[^A-Za-z0-9_]/g, '_')).join('_') || 'noargs'}`; const functionName = `bluekInvoke_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}_${methodKey}`;
+      const method = klass?.methods.find(value => value.name === request.name); if (object && klass && method && !method.typeParameters?.length) {
+        const args = JSON.parse(String(request.args || '[]')).map((value: string) => parseKotlinArgument(value, this.bindings)); const methodKey = `${method.name.replace(/[^A-Za-z0-9_]/g, '_')}_${requiredParameters(method.parameters).map(parameter => parameter.type.classifier.replace(/[^A-Za-z0-9_]/g, '_')).join('_') || 'noargs'}`; const functionName = `bluekInvoke_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}_${methodKey}`;
         const result = await this.local({ op: 'invoke', functionName, objectId: String(request.objectId), args, className: method.returnType.classifier }); return { ...result.value, output: result.output };
       }
     }
