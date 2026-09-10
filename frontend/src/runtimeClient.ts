@@ -27,8 +27,8 @@ export class HttpRuntimeClient implements RuntimeClient {
     return response.json();
   }
 
-  async compileCodepad(source: string, generationId: string): Promise<{ entry: string }> {
-    const response = await this.request('/codepad', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ source, generationId }) });
+  async compileCodepad(source: string, generationId: string, bindings: string[] = []): Promise<{ entry: string }> {
+    const response = await this.request('/codepad', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ source, generationId, bindings }) });
     return response.json();
   }
 
@@ -55,7 +55,7 @@ export class HttpRuntimeClient implements RuntimeClient {
   async status(): Promise<RuntimeStatus> { return (await this.request('/status')).json(); }
 }
 
-type BrowserAction = { op: 'load'; url: string; packageName: string } | { op: 'codepad'; url: string } | { op: 'main' } | { op: 'run' } | { op: 'act' } | { op: 'pause' } | { op: 'stage' } | { op: 'speed'; value: number } | { op: 'key'; key: string; pressed: boolean } | { op: 'click'; x: number; y: number } | { op: 'write'; text: string; newline: boolean } | { op: 'create'; functionName: string; args: unknown[]; className: string; name: string } | { op: 'invoke'; functionName: string; objectId: string; args: unknown[]; className: string; methodName?: string; typeName?: string } | { op: 'get'; objectId: string; property: string; className: string } | { op: 'set'; objectId: string; property: string; className: string; value: unknown } | { op: 'inspect'; objectId: string; className?: string } | { op: 'remove'; objectId: string } | { op: 'stop' };
+type BrowserAction = { op: 'load'; url: string; packageName: string } | { op: 'codepad'; url: string; bindings?: Record<string, unknown> } | { op: 'main' } | { op: 'run' } | { op: 'act' } | { op: 'pause' } | { op: 'stage' } | { op: 'speed'; value: number } | { op: 'key'; key: string; pressed: boolean } | { op: 'click'; x: number; y: number } | { op: 'write'; text: string; newline: boolean } | { op: 'create'; functionName: string; args: unknown[]; className: string; name: string } | { op: 'invoke'; functionName: string; objectId: string; args: unknown[]; className: string; methodName?: string; typeName?: string } | { op: 'get'; objectId: string; property: string; className: string } | { op: 'set'; objectId: string; property: string; className: string; value: unknown } | { op: 'inspect'; objectId: string; className?: string } | { op: 'remove'; objectId: string } | { op: 'stop' };
 
 const parseKotlinArgument = (value: string, bindings: Map<string, unknown>, values: Map<string, unknown> = new Map()): unknown => {
   const text = value.trim().replace(/^[A-Za-z_]\w*\s*=\s*/, '');
@@ -165,6 +165,7 @@ const valueOf = (value, className = '') => {
 const resolve = (path) => path.split('.').filter(Boolean).reduce((current, part) => current?.[part], api);
 const flushStudentOutput = () => { const flush = api?.bluekFlushOutput || resolve('bluekFlushOutput'); if (typeof flush !== 'function') return; flushingOutput = true; try { flush(); } finally { flushingOutput = false; } };
 const resolveArguments = (args) => args.map((arg) => arg && typeof arg === 'object' && arg.__bluekObjectId ? objects.get(arg.__bluekObjectId) : arg);
+const bindingValue = (descriptor) => { if (!descriptor || !descriptor.objectId) return descriptor?.value; const target = objects.get(descriptor.objectId); if (!target) throw new Error('Codepad object binding is no longer available.'); const methods = new Map((descriptor.methods || []).map((method) => [method.name, method])); const properties = new Map((descriptor.properties || []).map((property) => [property.name, property])); return new Proxy(target, { get(object, property) { if (typeof property !== 'string') return object[property]; const method = methods.get(property); if (method) return (...args) => api[method.bridge](object, ...args.map((arg) => arg && arg.__bluekObjectId ? objects.get(arg.__bluekObjectId) : arg)); const field = properties.get(property); if (field?.getter && typeof api[field.getter] === 'function') return api[field.getter](object); return object[property]; }, set(object, property, value) { const field = properties.get(property); if (field?.setter && typeof api[field.setter] === 'function') { api[field.setter](object, value && value.__bluekObjectId ? objects.get(value.__bluekObjectId) : value); return true; } object[property] = value; return true; } }); };
 const finish = () => { flushStudentOutput(); const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' }, output }); };
 const stage = () => { const value = runtimeApi?.bluekStage || globalThis.bluekStage; if (typeof value === 'function') self.postMessage({ kind: 'stage', stage: JSON.parse(value()) }); };
 self.addEventListener('message', ({ data }) => { if (data?.op === 'resources') { globalThis.__bluekPendingResourceSizes = data.sizes || {}; runtimeApi?.bluekSetResourceSizes?.(globalThis.__bluekPendingResourceSizes); } });
@@ -174,7 +175,7 @@ self.onmessage = async ({ data }) => {
     if (data.op === 'load') { await import(new URL('kotlin-kotlin-stdlib.js', data.url).href); runtimeApi = await import(new URL('bluek-runtime.js', data.url).href); const moduleValue = await import(data.url); const exported = globalThis['bluek-browser-runtime'] || moduleValue.default || moduleValue; api = data.packageName ? (exported[data.packageName] || data.packageName.split('.').reduce((v, p) => v?.[p], exported)) : exported; if (!api || typeof api !== 'object') api = exported; if (inputBuffer) self.postMessage({ kind: 'input-buffer', buffer: inputBuffer }); self.postMessage({ kind: 'ready' }); return; }
     if (!api) throw new Error('Browser Kotlin runtime is not loaded.');
     if (data.op === 'main') { const start = api.bluekStart || resolve('bluekStart'); if (!start) throw new Error('This project has no parameterless main().'); start(); stage(); flushStudentOutput(); const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' }, output }); return; }
-    if (data.op === 'codepad') { const moduleValue = await import(data.url); const exported = globalThis['bluek-browser-runtime'] || moduleValue.default || moduleValue; const evaluate = moduleValue.bluekEval || exported?.bluekEval; if (typeof evaluate !== 'function') throw new Error('Codepad compiler bridge is missing.'); const value = valueOf(evaluate()); flushStudentOutput(); const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value, output }); return; }
+    if (data.op === 'codepad') { const previous = new Map(); Object.entries(data.bindings || {}).forEach(([name, descriptor]) => { previous.set(name, Object.prototype.hasOwnProperty.call(globalThis, name) ? globalThis[name] : undefined); globalThis[name] = bindingValue(descriptor); }); try { const moduleValue = await import(data.url); const exported = globalThis['bluek-browser-runtime'] || moduleValue.default || moduleValue; const evaluate = moduleValue.bluekEval || exported?.bluekEval; if (typeof evaluate !== 'function') throw new Error('Codepad compiler bridge is missing.'); const value = valueOf(evaluate()); flushStudentOutput(); const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value, output }); } finally { Object.entries(data.bindings || {}).forEach(([name]) => { const old = previous.get(name); if (old === undefined) delete globalThis[name]; else globalThis[name] = old; }); } return; }
     if (data.op === 'run') { const run = runtimeApi?.bluekRun || runtimeApi?.start || api.bluekRun || resolve('bluekRun') || resolve('start'); if (typeof run !== 'function') throw new Error('Browser BluePlay runtime is missing its run bridge.'); run(); clearTimeout(simulationTimer); clearInterval(renderTimer); const tick = runtimeApi?.bluekStep || resolve('bluekStep'); const isRunning = runtimeApi?.bluekIsRunning || resolve('bluekIsRunning'); const stopTimers = () => { clearTimeout(simulationTimer); clearInterval(renderTimer); simulationTimer = null; renderTimer = null; }; const simulate = () => { if (typeof tick === 'function') tick(); if (typeof isRunning === 'function' && !isRunning()) { stopTimers(); stage(); return; } simulationTimer = setTimeout(simulate, Math.max(1, 100 - Number(runtimeApi?.getSpeed?.() || resolve('getSpeed')?.() || 50))); }; simulationTimer = setTimeout(simulate, 0); renderTimer = setInterval(stage, 16); stage(); self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' } }); return; }
     if (data.op === 'stage') { stage(); finish(); return; }
     if (data.op === 'write') { outputBuffer += String(data.text) + (data.newline ? '\\n' : ''); finish(); return; }
@@ -278,6 +279,30 @@ export class HybridRuntimeClient implements RuntimeClient {
     }
     const scalar = displayedSimpleValue(value);
     if (scalar !== undefined) this.localValues.set(name, scalar);
+  }
+  private codepadBindings(): { names: string[]; values: Record<string, unknown> } {
+    const values: Record<string, unknown> = {};
+    const names: string[] = [];
+    for (const [name, objectId] of this.bindings) {
+      const className = this.localObjects.get(String(objectId));
+      const klass = className ? this.classes.find(value => value.name === className) : undefined;
+      if (!className || !klass) continue;
+      const methods = (klass.methods || []).filter(method => !method.typeParameters?.length).map(method => {
+        const methodKey = `${method.name.replace(/[^A-Za-z0-9_]/g, '_')}_${requiredParameters(method.parameters || []).map(parameter => parameter.type.classifier.replace(/[^A-Za-z0-9_]/g, '_')).join('_') || 'noargs'}`;
+        return { name: method.name, bridge: `bluekInvoke_${className.replace(/[^A-Za-z0-9_]/g, '_')}_${methodKey}` };
+      });
+      const properties = (klass.properties || []).map(property => {
+        const stem = property.name.charAt(0).toUpperCase() + property.name.slice(1);
+        const getter = (klass.methods || []).find(method => method.name === `get${stem}` || method.name === property.name || method.name === `is${stem}`);
+        const setter = property.mutable ? (klass.methods || []).find(method => method.name === `set${stem}`) : undefined;
+        const bridge = (method: any) => method && `bluekInvoke_${className.replace(/[^A-Za-z0-9_]/g, '_')}_${method.name.replace(/[^A-Za-z0-9_]/g, '_')}_${requiredParameters(method.parameters || []).map((parameter: any) => parameter.type.classifier.replace(/[^A-Za-z0-9_]/g, '_')).join('_') || 'noargs'}`;
+        return { name: property.name, getter: bridge(getter), setter: bridge(setter) };
+      });
+      names.push(name);
+      values[name] = { objectId: String(objectId), className, methods, properties };
+    }
+    for (const [name, value] of this.localValues) { if (!names.includes(name)) { names.push(name); values[name] = { value }; } }
+    return { names, values };
   }
   private standaloneExpression(source: string): unknown {
     const value = simpleBuiltin(source, this.bindings, this.localValues);
@@ -541,11 +566,12 @@ export class HybridRuntimeClient implements RuntimeClient {
         const cacheKey = `${this.browserGeneration}:${request.mode}:${snippetSource}`;
         let moduleUrl = this.codepadModules.get(cacheKey);
         if (!moduleUrl) {
-          const compiled = await this.http.compileCodepad(snippetSource, String(this.browserGeneration || ''));
+          const codepadBindings = this.codepadBindings();
+          const compiled = await this.http.compileCodepad(snippetSource, String(this.browserGeneration || ''), codepadBindings.names);
           moduleUrl = new URL(`/api/session/${this.http.sessionId}/browser/${compiled.entry}`, window.location.origin).href;
           this.codepadModules.set(cacheKey, moduleUrl);
         }
-        const result = await this.local({ op: 'codepad', url: moduleUrl });
+        const result = await this.local({ op: 'codepad', url: moduleUrl, bindings: this.codepadBindings().values });
         return { ...result.value, output: result.output };
       }
       throw new Error('This Codepad expression is not prepared for local Kotlin/JS execution yet.');

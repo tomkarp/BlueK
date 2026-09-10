@@ -200,7 +200,7 @@ export async function compileBrowserProject(root: string, sessionDir: string, fi
     return { ok: true, diagnostics: '', directory: buildDir };
 }
 
-export async function compileBrowserSnippet(root: string, sessionDir: string, source: string, snippetId: string): Promise<{ ok: boolean; diagnostics: string; entry?: string }> {
+export async function compileBrowserSnippet(root: string, sessionDir: string, source: string, snippetId: string, bindings: string[] = []): Promise<{ ok: boolean; diagnostics: string; entry?: string }> {
     if (/^\s*package\b/m.test(source)) return { ok: false, diagnostics: 'Codepad expressions may not declare a package.' };
     const buildDir = path.join(sessionDir, 'browser', 'codepad', snippetId);
     const projectDir = path.join(buildDir, 'project');
@@ -211,9 +211,12 @@ export async function compileBrowserSnippet(root: string, sessionDir: string, so
     await fs.mkdir(projectDir, { recursive: true });
     await fs.mkdir(bridgeDir, { recursive: true });
     await fs.writeFile(path.join(projectDir, 'BlueKInput.kt'), 'external fun __bluekReadln(): String\nexternal fun __bluekReadlnOrNull(): String?\nexternal fun __bluekPrint(value: Any?, newline: Boolean)\nfun readln(): String = __bluekReadln()\nfun readlnOrNull(): String? = __bluekReadlnOrNull()\nfun readLine(): String? = __bluekReadlnOrNull()\nfun print(value: Any?) = __bluekPrint(value, false)\nfun println(value: Any?) = __bluekPrint(value, true)\n');
+    const declaredBindings = bindings.filter(name => /^[A-Za-z_]\w*$/.test(name) && !new RegExp(`\\b(?:val|var|fun|class|object)\\s+${name}\\b`).test(source));
+    const bindingDeclarations = declaredBindings.map(name => `external val ${name}: dynamic`).join('\n');
     const bridge = [
         'import kotlin.js.ExperimentalJsExport',
         'import kotlin.js.JsExport',
+        bindingDeclarations,
         '',
         '@OptIn(ExperimentalJsExport::class)',
         '@JsExport',
