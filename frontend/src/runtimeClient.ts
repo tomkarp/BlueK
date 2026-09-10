@@ -27,6 +27,11 @@ export class HttpRuntimeClient implements RuntimeClient {
     return response.json();
   }
 
+  async compileCodepad(source: string, generationId: string): Promise<{ entry: string }> {
+    const response = await this.request('/codepad', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ source, generationId }) });
+    return response.json();
+  }
+
   async createObject(classId: string, constructorId: string, typeArguments: TypeRef[], args: string[], name: string): Promise<Value> {
     return this.execute({ op: 'create', className: classId, constructorId, typeArguments: JSON.stringify(typeArguments), args: JSON.stringify(args), name });
   }
@@ -50,7 +55,7 @@ export class HttpRuntimeClient implements RuntimeClient {
   async status(): Promise<RuntimeStatus> { return (await this.request('/status')).json(); }
 }
 
-type BrowserAction = { op: 'load'; url: string; packageName: string } | { op: 'main' } | { op: 'run' } | { op: 'act' } | { op: 'pause' } | { op: 'stage' } | { op: 'speed'; value: number } | { op: 'key'; key: string; pressed: boolean } | { op: 'click'; x: number; y: number } | { op: 'write'; text: string; newline: boolean } | { op: 'create'; functionName: string; args: unknown[]; className: string; name: string } | { op: 'invoke'; functionName: string; objectId: string; args: unknown[]; className: string; methodName?: string; typeName?: string } | { op: 'get'; objectId: string; property: string; className: string } | { op: 'set'; objectId: string; property: string; className: string; value: unknown } | { op: 'inspect'; objectId: string; className?: string } | { op: 'remove'; objectId: string } | { op: 'stop' };
+type BrowserAction = { op: 'load'; url: string; packageName: string } | { op: 'codepad'; url: string } | { op: 'main' } | { op: 'run' } | { op: 'act' } | { op: 'pause' } | { op: 'stage' } | { op: 'speed'; value: number } | { op: 'key'; key: string; pressed: boolean } | { op: 'click'; x: number; y: number } | { op: 'write'; text: string; newline: boolean } | { op: 'create'; functionName: string; args: unknown[]; className: string; name: string } | { op: 'invoke'; functionName: string; objectId: string; args: unknown[]; className: string; methodName?: string; typeName?: string } | { op: 'get'; objectId: string; property: string; className: string } | { op: 'set'; objectId: string; property: string; className: string; value: unknown } | { op: 'inspect'; objectId: string; className?: string } | { op: 'remove'; objectId: string } | { op: 'stop' };
 
 const parseKotlinArgument = (value: string, bindings: Map<string, unknown>, values: Map<string, unknown> = new Map()): unknown => {
   const text = value.trim().replace(/^[A-Za-z_]\w*\s*=\s*/, '');
@@ -147,6 +152,7 @@ const inputBytes = inputBuffer ? new Uint8Array(inputBuffer, 4) : null;
 const readInput = (nullable) => { if (!inputBuffer || !inputState || !inputBytes) throw new Error('Terminal input requires a cross-origin-isolated browser context.'); flushStudentOutput(); const pendingOutput = outputBuffer; outputBuffer = ''; Atomics.store(inputState, 0, 0); self.postMessage({ kind: 'input-request', output: pendingOutput }); Atomics.wait(inputState, 0, 0); const length = Atomics.load(inputState, 0); if (nullable && length < 0) return null; return new TextDecoder().decode(inputBytes.slice(0, Math.max(0, length))); };
 globalThis.__bluekReadln = () => readInput(false);
 globalThis.__bluekReadlnOrNull = () => readInput(true);
+globalThis.__bluekPrint = (value, newline) => { outputBuffer += String(value ?? 'null') + (newline ? '\\n' : ''); };
 const appendOutput = (value) => { const text = value.map(item => typeof item === 'string' ? item : String(item)).join(' '); outputBuffer += text + (flushingOutput ? '' : '\\n'); };
 const originalConsoleLog = console.log;
 console.log = (...args) => { appendOutput(args); originalConsoleLog(...args); };
@@ -168,6 +174,7 @@ self.onmessage = async ({ data }) => {
     if (data.op === 'load') { await import(new URL('kotlin-kotlin-stdlib.js', data.url).href); runtimeApi = await import(new URL('bluek-runtime.js', data.url).href); const moduleValue = await import(data.url); const exported = globalThis['bluek-browser-runtime'] || moduleValue.default || moduleValue; api = data.packageName ? (exported[data.packageName] || data.packageName.split('.').reduce((v, p) => v?.[p], exported)) : exported; if (!api || typeof api !== 'object') api = exported; if (inputBuffer) self.postMessage({ kind: 'input-buffer', buffer: inputBuffer }); self.postMessage({ kind: 'ready' }); return; }
     if (!api) throw new Error('Browser Kotlin runtime is not loaded.');
     if (data.op === 'main') { const start = api.bluekStart || resolve('bluekStart'); if (!start) throw new Error('This project has no parameterless main().'); start(); stage(); flushStudentOutput(); const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' }, output }); return; }
+    if (data.op === 'codepad') { const moduleValue = await import(data.url); const exported = globalThis['bluek-browser-runtime'] || moduleValue.default || moduleValue; const evaluate = moduleValue.bluekEval || exported?.bluekEval; if (typeof evaluate !== 'function') throw new Error('Codepad compiler bridge is missing.'); const value = valueOf(evaluate()); flushStudentOutput(); const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value, output }); return; }
     if (data.op === 'run') { const run = runtimeApi?.bluekRun || runtimeApi?.start || api.bluekRun || resolve('bluekRun') || resolve('start'); if (typeof run !== 'function') throw new Error('Browser BluePlay runtime is missing its run bridge.'); run(); clearTimeout(simulationTimer); clearInterval(renderTimer); const tick = runtimeApi?.bluekStep || resolve('bluekStep'); const isRunning = runtimeApi?.bluekIsRunning || resolve('bluekIsRunning'); const stopTimers = () => { clearTimeout(simulationTimer); clearInterval(renderTimer); simulationTimer = null; renderTimer = null; }; const simulate = () => { if (typeof tick === 'function') tick(); if (typeof isRunning === 'function' && !isRunning()) { stopTimers(); stage(); return; } simulationTimer = setTimeout(simulate, Math.max(1, 100 - Number(runtimeApi?.getSpeed?.() || resolve('getSpeed')?.() || 50))); }; simulationTimer = setTimeout(simulate, 0); renderTimer = setInterval(stage, 16); stage(); self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' } }); return; }
     if (data.op === 'stage') { stage(); finish(); return; }
     if (data.op === 'write') { outputBuffer += String(data.text) + (data.newline ? '\\n' : ''); finish(); return; }
@@ -205,6 +212,7 @@ export class HybridRuntimeClient implements RuntimeClient {
   private readonly stageCallbacks = new Map<(value: any) => void, (event: MessageEvent) => void>();
   private inputBuffer: SharedArrayBuffer | null = null;
   private readonly onInputRequest: (output?: string) => void;
+  private readonly codepadModules = new Map<string, string>();
 
   private readonly onFailure: (message: string) => void;
   constructor(sessionId: string, onFailure?: (message: string) => void, onInputRequest: (output?: string) => void = () => undefined) { this.http = new HttpRuntimeClient(sessionId, onFailure); this.onFailure = onFailure || (() => undefined); this.onInputRequest = onInputRequest; }
@@ -528,6 +536,18 @@ export class HybridRuntimeClient implements RuntimeClient {
           if (result !== undefined) return { kind: 'scalar', display: String(result) };
         }
       }
+      const snippetSource = String(request.code || '').trim().replace(/;$/, '');
+      if (snippetSource) {
+        const cacheKey = `${this.browserGeneration}:${request.mode}:${snippetSource}`;
+        let moduleUrl = this.codepadModules.get(cacheKey);
+        if (!moduleUrl) {
+          const compiled = await this.http.compileCodepad(snippetSource, String(this.browserGeneration || ''));
+          moduleUrl = new URL(`/api/session/${this.http.sessionId}/browser/${compiled.entry}`, window.location.origin).href;
+          this.codepadModules.set(cacheKey, moduleUrl);
+        }
+        const result = await this.local({ op: 'codepad', url: moduleUrl });
+        return { ...result.value, output: result.output };
+      }
       throw new Error('This Codepad expression is not prepared for local Kotlin/JS execution yet.');
     }
     if (this.worker && this.ready && request.op === 'invoke') {
@@ -551,7 +571,7 @@ export class HybridRuntimeClient implements RuntimeClient {
     return this.http.execute(request);
   }
   async compile(files: ProjectFile[], revision: number, resources: Resource[] = [], resourceSizes: Record<string, { width: number; height: number }> = {}, resourceAlphaMasks: Record<string, number[]> = {}): Promise<CompileResult> {
-    const result = await this.http.compile(files, revision, resources); this.classes = result.classes; this.localObjects.clear(); this.localValues.clear(); this.bindings.clear(); this.latestStage = null;
+    const result = await this.http.compile(files, revision, resources); this.classes = result.classes; this.localObjects.clear(); this.localValues.clear(); this.bindings.clear(); this.codepadModules.clear(); this.latestStage = null;
     this.browserResourceSizes = Object.fromEntries(Object.entries(resourceSizes).map(([key, size]) => [key, { ...size, alpha: resourceAlphaMasks[key] }]));
     if (result.browserRuntime) {
       this.browserGeneration = result.generationId;
@@ -568,8 +588,8 @@ export class HybridRuntimeClient implements RuntimeClient {
   async evaluate(code: string, mode: 'expression' | 'block'): Promise<Value> { if (this.worker && this.ready) throw new Error('This expression is not prepared for local Kotlin/JS execution yet.'); return this.http.evaluate(code, mode); }
   async removeObject(objectId: string): Promise<void> { this.localObjects.delete(objectId); if (this.worker && this.ready) { await this.local({ op: 'remove', objectId }); return; } await this.http.removeObject(objectId); }
   sendInput(text: string): Promise<void> { if (!this.worker) return this.http.sendInput(text); if (!this.inputBuffer) return Promise.reject(new Error('Terminal input requires a cross-origin-isolated browser context.')); const bytes = new TextEncoder().encode(text); const state = new Int32Array(this.inputBuffer, 0, 1); const buffer = new Uint8Array(this.inputBuffer, 4); buffer.fill(0); buffer.set(bytes.subarray(0, buffer.length)); Atomics.store(state, 0, Math.min(bytes.length, buffer.length)); Atomics.notify(state, 0); return Promise.resolve(); }
-  async stop(): Promise<void> { const hadBrowserWorker = Boolean(this.worker); this.worker?.terminate(); this.worker = null; this.ready = null; this.browserReady = false; this.browserWorkerDead = true; this.inputBarrier = Promise.resolve(); this.browserGeneration = null; this.browserModuleUrl = null; this.browserPackageName = ''; this.localObjects.clear(); this.localValues.clear(); this.bindings.clear(); if (!hadBrowserWorker) await this.http.stop(); }
-  async reset(): Promise<void> { if (!this.browserModuleUrl) { await this.stop(); return; } this.worker?.terminate(); this.worker = null; this.ready = null; this.localObjects.clear(); this.localValues.clear(); this.bindings.clear(); this.latestStage = null; this.startBrowserWorker(); await this.ready; }
+  async stop(): Promise<void> { const hadBrowserWorker = Boolean(this.worker); this.worker?.terminate(); this.worker = null; this.ready = null; this.browserReady = false; this.browserWorkerDead = true; this.inputBarrier = Promise.resolve(); this.browserGeneration = null; this.browserModuleUrl = null; this.browserPackageName = ''; this.codepadModules.clear(); this.localObjects.clear(); this.localValues.clear(); this.bindings.clear(); if (!hadBrowserWorker) await this.http.stop(); }
+  async reset(): Promise<void> { if (!this.browserModuleUrl) { await this.stop(); return; } this.worker?.terminate(); this.worker = null; this.ready = null; this.codepadModules.clear(); this.localObjects.clear(); this.localValues.clear(); this.bindings.clear(); this.latestStage = null; this.startBrowserWorker(); await this.ready; }
   private postBrowserInput(message: { op: 'key'; key: string; pressed: boolean } | { op: 'click'; x: number; y: number }): Promise<void> {
     if (!this.worker || !this.ready) return Promise.reject(new Error('Browser runtime is not available.'));
     const worker = this.worker;

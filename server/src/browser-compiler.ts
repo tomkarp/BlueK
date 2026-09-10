@@ -199,3 +199,36 @@ export async function compileBrowserProject(root: string, sessionDir: string, fi
     ].join('\n'));
     return { ok: true, diagnostics: '', directory: buildDir };
 }
+
+export async function compileBrowserSnippet(root: string, sessionDir: string, source: string, snippetId: string): Promise<{ ok: boolean; diagnostics: string; entry?: string }> {
+    if (/^\s*package\b/m.test(source)) return { ok: false, diagnostics: 'Codepad expressions may not declare a package.' };
+    const buildDir = path.join(sessionDir, 'browser', 'codepad', snippetId);
+    const projectDir = path.join(buildDir, 'project');
+    const bridgeDir = path.join(buildDir, 'bridge');
+    await fs.rm(buildDir, { recursive: true, force: true });
+    await fs.cp(path.join(root, 'browser-runtime'), buildDir, { recursive: true });
+    await fs.rm(path.join(buildDir, 'src'), { recursive: true, force: true });
+    await fs.mkdir(projectDir, { recursive: true });
+    await fs.mkdir(bridgeDir, { recursive: true });
+    await fs.writeFile(path.join(projectDir, 'BlueKInput.kt'), 'external fun __bluekReadln(): String\nexternal fun __bluekReadlnOrNull(): String?\nexternal fun __bluekPrint(value: Any?, newline: Boolean)\nfun readln(): String = __bluekReadln()\nfun readlnOrNull(): String? = __bluekReadlnOrNull()\nfun readLine(): String? = __bluekReadlnOrNull()\nfun print(value: Any?) = __bluekPrint(value, false)\nfun println(value: Any?) = __bluekPrint(value, true)\n');
+    const bridge = [
+        'import kotlin.js.ExperimentalJsExport',
+        'import kotlin.js.JsExport',
+        '',
+        '@OptIn(ExperimentalJsExport::class)',
+        '@JsExport',
+        `fun bluekEval(): Any? = run {\n${source}\n}`,
+        '',
+    ].join('\n');
+    await fs.writeFile(path.join(bridgeDir, 'BlueKSnippet.kt'), bridge);
+    const result = await run(path.join(root, 'jvm', 'gradlew'), ['jsBrowserProductionLibraryDistribution', '--no-daemon', `-PbluekProjectDir=${projectDir}`, `-PbluekBridgeDir=${bridgeDir}`], buildDir);
+    if (result.code) return { ok: false, diagnostics: `${result.out}\n${result.err}`.trim() };
+    const output = path.join(buildDir, 'build', 'dist', 'js', 'productionLibrary');
+    const target = path.join(sessionDir, 'browser', 'dist');
+    await fs.mkdir(target, { recursive: true });
+    const files = await fs.readdir(output);
+    for (const file of files) if (file !== 'bluek-browser-runtime.js') await fs.copyFile(path.join(output, file), path.join(target, file));
+    const entry = `codepad-${snippetId}.js`;
+    await fs.copyFile(path.join(output, 'bluek-browser-runtime.js'), path.join(target, entry));
+    return { ok: true, diagnostics: '', entry };
+}
