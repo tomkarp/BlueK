@@ -52,9 +52,10 @@ export class HttpRuntimeClient implements RuntimeClient {
 
 type BrowserAction = { op: 'load'; url: string; packageName: string } | { op: 'main' } | { op: 'run' } | { op: 'act' } | { op: 'pause' } | { op: 'stage' } | { op: 'speed'; value: number } | { op: 'key'; key: string; pressed: boolean } | { op: 'click'; x: number; y: number } | { op: 'create'; functionName: string; args: unknown[]; className: string; name: string } | { op: 'invoke'; functionName: string; objectId: string; args: unknown[]; className: string; methodName?: string } | { op: 'get'; objectId: string; property: string; className: string } | { op: 'set'; objectId: string; property: string; className: string; value: unknown } | { op: 'inspect'; objectId: string; className?: string } | { op: 'remove'; objectId: string } | { op: 'stop' };
 
-const parseKotlinArgument = (value: string, bindings: Map<string, unknown>): unknown => {
+const parseKotlinArgument = (value: string, bindings: Map<string, unknown>, values: Map<string, unknown> = new Map()): unknown => {
   const text = value.trim().replace(/^[A-Za-z_]\w*\s*=\s*/, '');
   if (bindings.has(text)) return { __bluekObjectId: bindings.get(text) };
+  if (values.has(text)) return values.get(text);
   if (text === 'true') return true;
   if (text === 'false') return false;
   if (text === 'null') return null;
@@ -158,7 +159,7 @@ export class HybridRuntimeClient implements RuntimeClient {
     if (this.worker && this.ready && request.op === 'create') {
       const klass = this.classes.find(value => value.name === request.className); const constructor = klass?.constructors.find(value => value.id === request.constructorId) || klass?.constructors[0];
       if (klass && constructor) {
-        const args = JSON.parse(String(request.args || '[]')).map((value: string) => parseKotlinArgument(value, this.bindings)); const functionName = `bluekCreate_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}`;
+        const args = JSON.parse(String(request.args || '[]')).map((value: string) => parseKotlinArgument(value, this.bindings, this.localValues)); const functionName = `bluekCreate_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}`;
         const result = await this.local({ op: 'create', functionName, args, className: klass.name, name: String(request.name || klass.name.toLowerCase()) });
         if (result.objectId) this.localObjects.set(result.objectId, klass.name); if (result.name) this.bindings.set(result.name, result.objectId); return { ...result.value, output: result.output };
       }
@@ -169,7 +170,7 @@ export class HybridRuntimeClient implements RuntimeClient {
       if (propertyAssignment) {
         const objectId = this.bindings.get(propertyAssignment.receiver);
         if (objectId && this.localObjects.has(String(objectId))) {
-          const value = parseKotlinArgument(propertyAssignment.value, this.bindings);
+          const value = parseKotlinArgument(propertyAssignment.value, this.bindings, this.localValues);
           return (await this.local({ op: 'set', objectId: String(objectId), property: propertyAssignment.property, className: String(this.localObjects.get(String(objectId))), value })).value;
         }
       }
@@ -182,13 +183,13 @@ export class HybridRuntimeClient implements RuntimeClient {
           return { kind: 'unit', display: 'Unit' };
         }
         try {
-          this.localValues.set(declaration.name, parseKotlinArgument(declaration.value, this.bindings));
+          this.localValues.set(declaration.name, parseKotlinArgument(declaration.value, this.bindings, this.localValues));
           return { kind: 'unit', display: 'Unit' };
         } catch { /* The normal call parser may handle a constructor declaration. */ }
       }
       const assignment = request.mode === 'block' ? simpleCodepadAssignment(source) : null;
       if (assignment && this.localValues.has(assignment.name)) {
-        this.localValues.set(assignment.name, parseKotlinArgument(assignment.value, this.bindings));
+        this.localValues.set(assignment.name, parseKotlinArgument(assignment.value, this.bindings, this.localValues));
         return { kind: 'unit', display: 'Unit' };
       }
       const identifier = request.mode === 'expression' ? simpleCodepadIdentifier(source) : null;
@@ -206,7 +207,7 @@ export class HybridRuntimeClient implements RuntimeClient {
           const klass = this.classes.find(value => value.name === localClassName);
           const method = klass?.methods.find(value => value.name === parsed.callable);
           if (objectId && klass && method && !method.typeParameters?.length && parsed.args.length >= requiredParameters(method.parameters).length) {
-            const args = parsed.args.map(value => parseKotlinArgument(value, this.bindings));
+            const args = parsed.args.map(value => parseKotlinArgument(value, this.bindings, this.localValues));
             const methodKey = `${method.name.replace(/[^A-Za-z0-9_]/g, '_')}_${requiredParameters(method.parameters).map(parameter => parameter.type.classifier.replace(/[^A-Za-z0-9_]/g, '_')).join('_') || 'noargs'}`;
             const result = await this.local({ op: 'invoke', functionName: `bluekInvoke_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}_${methodKey}`, methodName: method.name, objectId: String(objectId), args, className: method.returnType.classifier });
             return parsed.binding ? { ...result.value, name: parsed.binding, output: result.output } : { ...result.value, output: result.output };
@@ -215,7 +216,7 @@ export class HybridRuntimeClient implements RuntimeClient {
           const klass = this.classes.find(value => value.name === parsed.callable);
           const constructor = klass?.constructors[0];
           if (klass && constructor && !constructor.parameters.some(parameter => parameter.hasDefault)) {
-            const result = await this.local({ op: 'create', functionName: `bluekCreate_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}`, args: parsed.args.map(value => parseKotlinArgument(value, this.bindings)), className: klass.name, name: parsed.binding || klass.name.toLowerCase() });
+            const result = await this.local({ op: 'create', functionName: `bluekCreate_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}`, args: parsed.args.map(value => parseKotlinArgument(value, this.bindings, this.localValues)), className: klass.name, name: parsed.binding || klass.name.toLowerCase() });
             if (result.objectId) this.localObjects.set(result.objectId, klass.name);
             if (parsed.binding && result.objectId) this.bindings.set(parsed.binding, result.objectId);
             return { ...result.value, name: parsed.binding, output: result.output };
@@ -223,7 +224,7 @@ export class HybridRuntimeClient implements RuntimeClient {
           const owner = this.classes.find(value => value.kind === 'functions' && value.methods.some(method => method.name === parsed.callable));
           const method = owner?.methods.find(value => value.name === parsed.callable);
           if (owner && method && !method.typeParameters?.length && parsed.args.length >= requiredParameters(method.parameters).length) {
-            const args = parsed.args.map(value => parseKotlinArgument(value, this.bindings));
+            const args = parsed.args.map(value => parseKotlinArgument(value, this.bindings, this.localValues));
             const methodKey = `${method.name.replace(/[^A-Za-z0-9_]/g, '_')}_${requiredParameters(method.parameters).map(parameter => parameter.type.classifier.replace(/[^A-Za-z0-9_]/g, '_')).join('_') || 'noargs'}`;
             const result = await this.local({ op: 'invoke', functionName: `bluekCall_${owner.name.replace(/[^A-Za-z0-9_]/g, '_')}_${methodKey}`, objectId: '', args, className: method.returnType.classifier });
             return { ...result.value, output: result.output };
@@ -235,7 +236,7 @@ export class HybridRuntimeClient implements RuntimeClient {
     if (this.worker && this.ready && request.op === 'invoke') {
       const object = this.localObjects.has(String(request.objectId)); const localClassName = this.localObjects.get(String(request.objectId)); const klass = this.classes.find(value => value.name === localClassName);
       const method = klass?.methods.find(value => value.name === request.name); if (object && klass && method && !method.typeParameters?.length) {
-        const args = JSON.parse(String(request.args || '[]')).map((value: string) => parseKotlinArgument(value, this.bindings)); const methodKey = `${method.name.replace(/[^A-Za-z0-9_]/g, '_')}_${requiredParameters(method.parameters).map(parameter => parameter.type.classifier.replace(/[^A-Za-z0-9_]/g, '_')).join('_') || 'noargs'}`; const functionName = `bluekInvoke_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}_${methodKey}`;
+        const args = JSON.parse(String(request.args || '[]')).map((value: string) => parseKotlinArgument(value, this.bindings, this.localValues)); const methodKey = `${method.name.replace(/[^A-Za-z0-9_]/g, '_')}_${requiredParameters(method.parameters).map(parameter => parameter.type.classifier.replace(/[^A-Za-z0-9_]/g, '_')).join('_') || 'noargs'}`; const functionName = `bluekInvoke_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}_${methodKey}`;
         const result = await this.local({ op: 'invoke', functionName, methodName: String(request.name || '').replace(/<.*>$/, ''), objectId: String(request.objectId), args, className: method.returnType.classifier }); return { ...result.value, output: result.output };
       }
     }
