@@ -45,6 +45,7 @@ export class HttpRuntimeClient implements RuntimeClient {
   async sendKey(key: string, pressed: boolean): Promise<void> { await this.request('/key', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key, pressed }) }); }
   async sendClick(x: number, y: number): Promise<void> { await this.request('/click', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ x, y }) }); }
   async stage(): Promise<any> { return (await this.request('/stage')).json(); }
+  stageStream(onStage: (value: any) => void): () => void { const stream = new EventSource(`/api/session/${this.sessionId}/stage-stream`); stream.onmessage = event => { try { const value = JSON.parse(event.data); if (value?.stage) onStage(value); } catch { /* ignore malformed stream events */ } }; return () => stream.close(); }
   async events(): Promise<any[]> { return (await this.request('/events')).json(); }
   async status(): Promise<RuntimeStatus> { return (await this.request('/status')).json(); }
 }
