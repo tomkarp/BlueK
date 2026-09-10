@@ -229,6 +229,11 @@ export async function compileBrowserSnippet(root: string, sessionDir: string, so
     const files = await fs.readdir(output);
     for (const file of files) if (file !== 'bluek-browser-runtime.js') await fs.copyFile(path.join(output, file), path.join(target, file));
     const entry = `codepad-${snippetId}.js`;
-    await fs.copyFile(path.join(output, 'bluek-browser-runtime.js'), path.join(target, entry));
+    const rawEntry = `${entry}.umd.js`;
+    await fs.copyFile(path.join(output, 'bluek-browser-runtime.js'), path.join(target, rawEntry));
+    // Kotlin/JS library output is UMD and publishes its @JsExport functions
+    // on the shared global object. Wrap each snippet in a real ES module so
+    // cached A -> B -> A evaluations keep their own function reference.
+    await fs.writeFile(path.join(target, entry), `import './${rawEntry}';\nconst bluekEval = globalThis['bluek-browser-runtime']?.bluekEval;\nexport { bluekEval };\n`);
     return { ok: true, diagnostics: '', entry };
 }
