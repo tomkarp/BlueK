@@ -59,6 +59,8 @@ try {
     { id: 'overloaded', fileName: 'Overloaded.kt', kind: 'class', revision: 1, source: 'class Overloaded { val kind: String; constructor(value: Int) { kind = "int" }; constructor(value: String) { kind = "string" } }' },
     { id: 'base', fileName: 'Base.kt', kind: 'class', revision: 1, source: 'open class Base(var baseValue: String)' },
     { id: 'child', fileName: 'Child.kt', kind: 'class', revision: 1, source: 'class Child(baseValue: String): Base(baseValue) { var ownValue: Int = 7 }' },
+    { id: 'shape', fileName: 'Shape.kt', kind: 'class', revision: 1, source: 'interface Shape { fun label(): String }' },
+    { id: 'shape-impl', fileName: 'ShapeImpl.kt', kind: 'class', revision: 1, source: 'class ShapeImpl: Shape { override fun label(): String = "shape" }' },
     { id: 'tools', fileName: 'Tools.kt', kind: 'class', revision: 1, source: 'object Tools { fun twice(value: Int): Int = value * 2; fun ping() { println("pong") } }' },
     { id: 'factory', fileName: 'Factory.kt', kind: 'class', revision: 1, source: 'class Factory { companion object { fun make(value: Int): Counter = Counter(value) } }' },
     { id: 'abstract', fileName: 'AbstractThing.kt', kind: 'class', revision: 1, source: 'abstract class AbstractThing { fun ping() {} }' },
@@ -89,6 +91,9 @@ try {
   assert.equal(compiled.body.classes.find(value => value.name === 'LambdaBox').constructors[0].parameters[0].type.displayName, '(Int, Int) -> String');
   assert.deepEqual(compiled.body.classes.find(value => value.name === 'GenericMethods').methods.find(value => value.name === 'echo').typeParameters, ['T : Number']);
   assert.equal(compiled.body.classes.find(value => value.name === 'PrivateCtor').constructors.length, 0);
+  assert.equal(compiled.body.classes.find(value => value.name === 'Shape').kind, 'interface');
+  assert.equal(compiled.body.classes.find(value => value.name === 'Shape').constructors.length, 0);
+  assert.equal(compiled.body.classes.find(value => value.name === 'ShapeImpl').methods.filter(value => value.name === 'label').length, 1);
   assert.equal(compiled.body.classes.find(value => value.name === 'Tools').kind, 'object');
   assert.equal(compiled.body.classes.find(value => value.name === 'Tools').constructors.length, 0);
   assert.equal(compiled.body.classes.find(value => value.name === 'Factory').companionMethods.find(value => value.name === 'make').parameters.length, 1);
@@ -271,6 +276,9 @@ try {
   assert.equal((await action({ op: 'eval', code: 'square(7)', mode: 'expression' })).body.display, '49');
   const genericMethods = (await action({ op: 'create', className: 'GenericMethods', name: 'genericMethods1', args: '[]' })).body;
   assert.equal((await action({ op: 'invoke', objectId: genericMethods.objectId, name: 'echo<Int>', args: JSON.stringify(['7']) })).body.display, '7');
+  assert.equal((await action({ op: 'create', className: 'Shape', name: 'shape1', args: '[]' })).body.kind, 'error');
+  const shapeImpl = (await action({ op: 'create', className: 'ShapeImpl', name: 'shapeImpl1', args: '[]' })).body;
+  assert.equal((await action({ op: 'invoke', objectId: shapeImpl.objectId, name: 'label', args: '[]' })).body.display, 'shape');
   const box = (await action({ op: 'create', className: 'Box', name: 'box1', typeArguments: JSON.stringify(['String']), args: JSON.stringify(['"Ada"']) })).body;
   assert.equal(box.display, 'Box<String>');
   const bounded = (await action({ op: 'create', className: 'Bounded', name: 'bounded1', typeArguments: JSON.stringify(['Int']), args: JSON.stringify(['7']) })).body;

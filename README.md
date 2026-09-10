@@ -60,6 +60,7 @@ Mit echten `kotlinc`- und Worker-Prozessen geprüft:
 - `Box<String>`: `replace(42)` wird vom Kotlin-Compiler abgelehnt, der ursprüngliche String bleibt erhalten.
 - Generische Methoden bewahren ihre Typparameter; Aufrufe wie `getObjects<Ball>()` und `getOneIntersecting<Muenze>()` können über den Dialog mit expliziten Kotlin-Typen ausgeführt werden.
 - `Animal`/`Dog`: dynamischer Dispatch, geerbte Methode einmalig im Menü, Interface ohne Konstruktoraktion.
+- Interfaces bleiben nicht instanziierbar; eine konkrete Implementierung wird kompiliert, erzeugt und über ihre echte Implementierung aufgerufen.
 - BluePlay `MyWorld` mit Actor-Snapshot und Mutation per `show(); step()`.
 - Die realen BluePlay-Referenzdateien (`Actor.kt`, `World.kt`, `Image.kt`, `Figure.kt`, `MyWorld.kt` und `Main.kt`) kompilieren; `MyWorld()` und `show()` liefern einen fehlerfreien 600×400-Stage-Snapshot.
 - BluePlay-Actor- und World-Klicks einschließlich Hitbox und Geschwindigkeitsgrenzen.
