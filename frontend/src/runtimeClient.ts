@@ -352,7 +352,9 @@ export class HybridRuntimeClient implements RuntimeClient {
         try {
           const evaluated = await this.execute({ op: 'eval', code: declaration.value, mode: 'expression' });
           this.rememberCodepadBinding(declaration.name, evaluated);
-          return { kind: 'unit', display: 'Unit', output: evaluated.output };
+          return evaluated?.objectId
+            ? { kind: 'unit', display: 'Unit', createdObjects: [{ ...evaluated, name: declaration.name }], output: evaluated.output }
+            : { kind: 'unit', display: 'Unit', output: evaluated.output };
         } catch { /* The normal call parser may handle an unsupported expression. */ }
       }
       const assignment = request.mode === 'block' ? simpleCodepadAssignment(source) : null;
