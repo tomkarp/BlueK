@@ -86,6 +86,24 @@ const simpleCodepadDeclaration = (code: string): { mutable: boolean; name: strin
 const simpleCodepadAssignment = (code: string): { name: string; value: string } | null => { const match = code.trim().replace(/;$/, '').match(/^([A-Za-z_]\w*)\s*=\s*(.+)$/s); return match ? { name: match[1], value: match[2].trim() } : null; };
 const simpleCodepadIdentifier = (code: string) => code.trim().replace(/;$/, '').match(/^[A-Za-z_]\w*$/)?.[0] || null;
 const requiredParameters = (parameters: any[] = []) => parameters.filter(parameter => !parameter.hasDefault);
+const stripExpressionParentheses = (source: string) => { let value = source.trim(); while (value.startsWith('(') && value.endsWith(')')) { let depth = 0, quote = '', escaped = false, closesAt = -1; for (let index = 0; index < value.length; index += 1) { const char = value[index]; if (quote) { if (escaped) escaped = false; else if (char === '\\') escaped = true; else if (char === quote) quote = ''; continue; } if (char === '"' || char === "'") { quote = char; continue; } if (char === '(') depth += 1; else if (char === ')' && --depth === 0) { closesAt = index; break; } } if (closesAt !== value.length - 1) break; value = value.slice(1, -1).trim(); } return value; };
+const topLevelBinary = (source: string): { left: string; operator: string; right: string } | null => {
+  const operators = ['||', '&&', '==', '!=', '<=', '>=', '<', '>', '+', '-', '*', '/', '%'];
+  const value = stripExpressionParentheses(source); let quote = '', escaped = false, round = 0, curly = 0, square = 0;
+  for (const operator of operators) {
+    let found = -1;
+    for (let index = value.length - operator.length; index >= 0; index -= 1) {
+      const char = value[index];
+      if (char === '"' || char === "'") { let before = index - 1, slashCount = 0; while (before >= 0 && value[before--] === '\\') slashCount += 1; if (slashCount % 2 === 0) quote = quote ? '' : char; continue; }
+      if (quote) continue;
+      if (char === ')') round += 1; else if (char === '(') round -= 1; else if (char === '}') curly += 1; else if (char === '{') curly -= 1; else if (char === ']') square += 1; else if (char === '[') square -= 1;
+      if (!round && !curly && !square && value.slice(index, index + operator.length) === operator && (operator !== '-' || index > 0 && !'+-*/%(<>=!&|'.includes(value[index - 1]))) { found = index; break; }
+    }
+    if (found > 0 && found < value.length - operator.length) return { left: value.slice(0, found).trim(), operator, right: value.slice(found + operator.length).trim() };
+  }
+  return null;
+};
+const displayedSimpleValue = (value: any): unknown => { if (!value || value.kind === 'unit') return undefined; if (value.kind === 'null') return null; if (value.kind === 'scalar') { if (value.display === 'true') return true; if (value.display === 'false') return false; if (/^-?\d+(?:\.\d+)?$/.test(value.display)) return Number(value.display); return value.display; } return value.display; };
 
 const browserWorkerSource = `
 let api = null;
@@ -262,6 +280,13 @@ export class HybridRuntimeClient implements RuntimeClient {
       }
       const identifier = request.mode === 'expression' ? simpleCodepadIdentifier(source) : null;
       if (identifier && this.localValues.has(identifier)) return { kind: 'scalar', display: String(this.localValues.get(identifier)) };
+      if (request.mode === 'expression') {
+        try {
+          const literal = parseKotlinArgument(source, this.bindings, this.localValues);
+          if (literal === null) return { kind: 'null', display: 'null' };
+          if (typeof literal === 'string' || typeof literal === 'number' || typeof literal === 'boolean') return { kind: 'scalar', display: String(literal) };
+        } catch { /* The expression may be a property, call, or binary expression. */ }
+      }
       const property = simpleCodepadProperty(String(request.code || ''));
       if (property) {
         const objectId = this.bindings.get(property.receiver);
@@ -306,6 +331,31 @@ export class HybridRuntimeClient implements RuntimeClient {
             const result = await this.local({ op: 'invoke', functionName: `bluekCall_${owner.name.replace(/[^A-Za-z0-9_]/g, '_')}_${methodKey}`, objectId: '', args, className: method.returnType.classifier });
             return { ...result.value, output: result.output };
           }
+        }
+      }
+      if (request.mode === 'expression') {
+        const binary = topLevelBinary(source);
+        if (binary) {
+          const left = displayedSimpleValue(await this.execute({ op: 'eval', code: binary.left, mode: 'expression' }));
+          const right = displayedSimpleValue(await this.execute({ op: 'eval', code: binary.right, mode: 'expression' }));
+          let result: unknown;
+          switch (binary.operator) {
+            case '||': result = Boolean(left) || Boolean(right); break;
+            case '&&': result = Boolean(left) && Boolean(right); break;
+            case '==': result = left === right; break;
+            case '!=': result = left !== right; break;
+            case '<': result = (left as any) < (right as any); break;
+            case '<=': result = (left as any) <= (right as any); break;
+            case '>': result = (left as any) > (right as any); break;
+            case '>=': result = (left as any) >= (right as any); break;
+            case '+': result = typeof left === 'number' && typeof right === 'number' ? left + right : `${left ?? 'null'}${right ?? 'null'}`; break;
+            case '-': result = Number(left) - Number(right); break;
+            case '*': result = Number(left) * Number(right); break;
+            case '/': result = Number(left) / Number(right); break;
+            case '%': result = Number(left) % Number(right); break;
+            default: result = undefined;
+          }
+          if (result !== undefined) return { kind: 'scalar', display: String(result) };
         }
       }
       throw new Error('This Codepad expression is not prepared for local Kotlin/JS execution yet.');
