@@ -35,7 +35,7 @@ Der Server verwendet standardmäßig Port `5173`; für parallele lokale Instanze
 - Rechtsklick auf eine `«functions»`-Karte zeigt Top-Level-Funktionen; ihre Kotlin-Argumente werden genauso compilergeprüft eingegeben. Ein parameterloses `main()` wird dort wie in BlueJ aufgerufen. Mehrere Funktionsdateien mit `main()` werden nicht stillschweigend ausgewählt; `Reset` startet gezielt `Main.kt`.
 - Abstrakte Klassen öffnen keinen Konstruktor-Dialog; Kotlin-`object`-Singletons zeigen stattdessen ihre Methoden für Aufrufe wie `Tools.twice(7)`.
 - `Evaluate` wertet einen Ausdruck aus, `Run` einen Block. Bench-Objekte und ihre Mutationen bleiben zwischen Eingaben erhalten; im Codepad deklarierte Variablen (z. B. `val p = Person("Ada")`, auch nullable) können in späteren Eingaben wiederverwendet werden.
-- Die Konsole zeigt Rückgabewerte und `stdout` live. Eine eingegebene Zeile wird mit Enter an `readln()` weitergegeben; Prompts erscheinen bereits während der laufenden Eingabeaktion.
+- Die Konsole zeigt Rückgabewerte und `stdout` live. Eine eingegebene Zeile wird mit Enter an `readln()`, `readlnOrNull()` oder das kompatible `readLine()` weitergegeben; Prompts erscheinen bereits während der laufenden Eingabeaktion.
 - `Stop` beendet den gesamten Browser-Worker. Die Handles werden verworfen und nach einem erneuten Compile neu erzeugt.
 - Nicht ausführbare Aktionen sind bis zur erfolgreichen Kompilierung deaktiviert. Fällt der Worker aus, werden Runtime, Stage und Bench verworfen und der Fehler im Status/Log angezeigt.
 
