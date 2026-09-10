@@ -170,7 +170,7 @@ fun main() {
         } catch (e: Throwable) { emit("error", e.cause?.message ?: e.message ?: "runtime error") } finally { activeRequestId.remove() }
     }
     controlIn.bufferedReader().forEachLine { line ->
-        if (line.contains("\"op\":\"input\"") || line.contains("\"op\":\"stage\"") || line.contains("\"op\":\"key\"") || line.contains("\"op\":\"click\"")) process(line)
+        if (line.contains("\"op\":\"input\"") || line.contains("\"op\":\"key\"") || line.contains("\"op\":\"click\"")) process(line)
         else Thread { synchronized(actionLock) { process(line) } }.start()
     }
 }
@@ -191,6 +191,10 @@ private fun result(v: Any?, output: String = "", stage: String? = null, register
     }
 }
 private fun stageSnapshot(objects: Map<String, Any>): String? {
+    val world = objects.values.firstOrNull { current -> var type: Class<*>? = current.javaClass; var found = false; while (type != null) { if (type.declaredFields.any { it.name == "actors" }) { found = true; break }; type = type.superclass }; found } ?: return null
+    return synchronized(world) { stageSnapshotUnlocked(objects) }
+}
+private fun stageSnapshotUnlocked(objects: Map<String, Any>): String? {
     fun findField(type: Class<*>, name: String): java.lang.reflect.Field? { var current: Class<*>? = type; while (current != null) { current.declaredFields.firstOrNull { it.name == name }?.let { return it }; current = current.superclass }; return null }
     fun number(world: Any, name: String): Int? = findField(world.javaClass, name)?.let { field -> field.isAccessible = true; (field.get(world) as? Number)?.toInt() }
     fun jsonText(value: String): String = value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r")
