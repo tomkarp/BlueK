@@ -75,6 +75,7 @@ try {
   assert.equal(compiled.body.classes.find(value => value.name === 'Tag').kind, 'annotation');
   assert.equal(compiled.body.classes.find(value => value.name === 'Tag').constructors.length, 0);
   assert.deepEqual(compiled.body.classes.find(value => value.name === 'Bounded').typeParameters, ['T : Number']);
+  assert.equal(compiled.body.classes.find(value => value.name === 'Bounded').constructors[0].parameters[0].type.displayName, 'T');
   const typedConstructor = compiled.body.classes.find(value => value.name === 'Typed').constructors[0];
   assert.deepEqual(typedConstructor.parameters[0].type.arguments.map(value => value.displayName), ['String', 'List<Int>?']);
   assert.equal(typedConstructor.parameters[0].type.arguments[1].arguments[0].displayName, 'Int');
