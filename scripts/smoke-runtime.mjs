@@ -34,6 +34,9 @@ try {
   assert.equal(invalidFiles.response.status, 400);
   const duplicateFiles = await post(`/api/session/${session.sessionId}/compile`, { files: [{ fileName: 'Same.kt', source: 'class Same', kind: 'class' }, { fileName: 'Same.kt', source: 'class Same', kind: 'class' }], revision: 1 });
   assert.equal(duplicateFiles.response.status, 400);
+  const mixedFile = await post(`/api/session/${session.sessionId}/compile`, { files: [{ fileName: 'Mixed.kt', source: 'class Mixed\nfun helper() = 1', kind: 'class' }], revision: 1 });
+  assert.equal(mixedFile.response.status, 200);
+  assert.match(mixedFile.body.diagnostics[0].message, /BlueK class files/);
   const syntaxError = await post(`/api/session/${session.sessionId}/compile`, { files: [{ fileName: 'Broken.kt', source: 'class Broken(', kind: 'class' }], revision: 1 });
   assert.equal(syntaxError.response.status, 200);
   assert.ok(syntaxError.body.diagnostics.some(diagnostic => diagnostic.fileName === 'Broken.kt' && diagnostic.line >= 1 && diagnostic.column >= 1));
@@ -258,7 +261,9 @@ try {
   const packageFiles = [
     { id: 'package-person', fileName: 'PackagePerson.kt', kind: 'class', revision: 1, source: 'package demo\nclass PackagePerson(val name: String) { fun greet(): String = "Hi $name" }' },
     { id: 'package-helpers', fileName: 'PackageHelpers.kt', kind: 'functions', revision: 1, source: 'package demo\nfun twice(value: Int): Int = value * 2' },
-    { id: 'package-world', fileName: 'World.kt', kind: 'class', revision: 1, source: 'package demo\nimport java.awt.image.BufferedImage\nclass Image(val width: Int, val height: Int) { val awtImage = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB); internal var transparency: Int = 255 }\nopen class Actor { var x: Int = 0; var y: Int = 0; var rotation: Int = 0; var image: Image? = null; open fun act() {} }\nclass World(val width: Int, val height: Int, val cellSize: Int) { val actors = emptyList<Actor>(); val background = Image(width * cellSize, height * cellSize); open fun act() {}; fun allObjects(): List<Actor> = actors; fun show() { showWorld(this) }; fun showText(text: String, x: Int, y: Int) { setTextOf(this, x, y, text) } }' },
+    { id: 'package-image', fileName: 'Image.kt', kind: 'class', revision: 1, source: 'package demo\nimport java.awt.image.BufferedImage\nclass Image(val width: Int, val height: Int) { val awtImage = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB); internal var transparency: Int = 255 }' },
+    { id: 'package-actor', fileName: 'Actor.kt', kind: 'class', revision: 1, source: 'package demo\nopen class Actor { var x: Int = 0; var y: Int = 0; var rotation: Int = 0; var image: Image? = null; open fun act() {} }' },
+    { id: 'package-world', fileName: 'World.kt', kind: 'class', revision: 1, source: 'package demo\nclass World(val width: Int, val height: Int, val cellSize: Int) { val actors = emptyList<Actor>(); val background = Image(width * cellSize, height * cellSize); open fun act() {}; fun allObjects(): List<Actor> = actors; fun show() { showWorld(this) }; fun showText(text: String, x: Int, y: Int) { setTextOf(this, x, y, text) } }' },
     { id: 'package-blueplay', fileName: 'BluePlayFunctions.kt', kind: 'functions', revision: 1, source: 'package demo\n// replaced by the headless BluePlay adapter' },
   ];
   const packageCompiled = await post(`/api/session/${packageSession.sessionId}/compile`, { files: packageFiles, revision: 1 });
