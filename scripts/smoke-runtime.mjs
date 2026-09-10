@@ -84,6 +84,9 @@ try {
   const action = body => post(`/api/session/${session.sessionId}/action`, { ...body, generationId });
   const counter = (await action({ op: 'create', className: 'Counter', name: 'counter1', args: JSON.stringify(['3']) })).body;
   assert.ok(counter.objectId, JSON.stringify(counter));
+  const duplicateCounter = await action({ op: 'create', className: 'Counter', name: 'counter1', args: '[]' });
+  assert.equal(duplicateCounter.body.kind, 'error');
+  assert.equal((await action({ op: 'invoke', objectId: counter.objectId, name: 'current', args: '[]' })).body.display, '3');
   const incremented = await action({ op: 'invoke', objectId: counter.objectId, name: 'increment', args: '[]' });
   assert.equal(incremented.body.kind, 'unit', JSON.stringify(incremented));
   await action({ op: 'invoke', objectId: counter.objectId, name: 'add', args: JSON.stringify(['5']) });

@@ -92,6 +92,8 @@ fun main() {
                 }
                 line.contains("\"op\":\"create\"") -> {
                     val className = value(line, "className")
+                    val requestedName = value(line, "name")
+                    if (requestedName.isNotEmpty() && names.containsKey(requestedName)) { emit("error", "An object named $requestedName already exists"); return }
                     val args = argumentValues(line).joinToString(", ")
                     val typeArguments = argumentValues(line, "typeArguments").joinToString(", ")
                     val typeSuffix = if (typeArguments.isEmpty()) "" else "<$typeArguments>"
