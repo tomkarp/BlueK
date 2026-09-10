@@ -66,6 +66,17 @@ const parseKotlinArgument = (value: string, bindings: Map<string, unknown>, valu
   }
   throw new Error(`This local action only supports simple Kotlin arguments; compile the expression first: ${text}`);
 };
+const simpleArgumentMatches = (value: unknown, type: TypeRef): boolean => {
+  if (value && typeof value === 'object' && '__bluekObjectId' in value) return true;
+  if (value === null) return type.nullable;
+  const classifier = type.classifier.split('.').pop() || type.classifier;
+  if (classifier === 'String' || classifier === 'Char') return typeof value === 'string';
+  if (classifier === 'Boolean') return typeof value === 'boolean';
+  if (['Byte', 'Short', 'Int', 'Long'].includes(classifier)) return typeof value === 'number' && Number.isInteger(value);
+  if (['Float', 'Double'].includes(classifier)) return typeof value === 'number';
+  return true;
+};
+const simpleArgumentsMatch = (args: unknown[], parameters: { type: TypeRef }[]) => args.every((value, index) => !parameters[index] || simpleArgumentMatches(value, parameters[index].type));
 const splitSimpleArguments = (source: string): string[] => { const result: string[] = []; let start = 0; let depth = 0; let quote = ''; let escaped = false; for (let index = 0; index < source.length; index += 1) { const char = source[index]; if (quote) { if (escaped) escaped = false; else if (char === '\\') escaped = true; else if (char === quote) quote = ''; continue; } if (char === '"' || char === "'") { quote = char; continue; } if (char === '(') depth += 1; else if (char === ')') depth -= 1; else if (char === ',' && depth === 0) { result.push(source.slice(start, index).trim()); start = index + 1; } } if (source.slice(start).trim()) result.push(source.slice(start).trim()); return result; };
 const simpleCodepadCall = (code: string): { binding?: string; receiver?: string; callable: string; args: string[] } | null => { const match = code.trim().replace(/;$/, '').match(/^(?:(?:val|var)\s+([A-Za-z_]\w*)(?:\s*:\s*[^=]+)?\s*=\s*)?([A-Za-z_]\w*)(?:\.([A-Za-z_]\w*))?\s*\((.*)\)$/s); return match ? { binding: match[1], receiver: match[3] ? match[2] : undefined, callable: match[3] || match[2], args: splitSimpleArguments(match[4]) } : null; };
 const simpleCodepadProperty = (code: string): { receiver: string; property: string } | null => { const match = code.trim().replace(/;$/, '').match(/^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/); return match ? { receiver: match[1], property: match[2] } : null; };
@@ -159,7 +170,7 @@ export class HybridRuntimeClient implements RuntimeClient {
     if (this.worker && this.ready && request.op === 'create') {
       const klass = this.classes.find(value => value.name === request.className); const constructor = klass?.constructors.find(value => value.id === request.constructorId) || klass?.constructors[0];
       if (klass && constructor) {
-        const args = JSON.parse(String(request.args || '[]')).map((value: string) => parseKotlinArgument(value, this.bindings, this.localValues)); const functionName = `bluekCreate_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}`;
+        const args = JSON.parse(String(request.args || '[]')).map((value: string) => parseKotlinArgument(value, this.bindings, this.localValues)); if (!simpleArgumentsMatch(args, constructor.parameters)) throw new Error('The local arguments do not match the Kotlin constructor types; compile the expression first.'); const functionName = `bluekCreate_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}`;
         const result = await this.local({ op: 'create', functionName, args, className: klass.name, name: String(request.name || klass.name.toLowerCase()) });
         if (result.objectId) this.localObjects.set(result.objectId, klass.name); if (result.name) this.bindings.set(result.name, result.objectId); return { ...result.value, output: result.output };
       }
@@ -208,6 +219,7 @@ export class HybridRuntimeClient implements RuntimeClient {
           const method = klass?.methods.find(value => value.name === parsed.callable);
           if (objectId && klass && method && !method.typeParameters?.length && parsed.args.length >= requiredParameters(method.parameters).length) {
             const args = parsed.args.map(value => parseKotlinArgument(value, this.bindings, this.localValues));
+            if (!simpleArgumentsMatch(args, requiredParameters(method.parameters))) throw new Error('The local arguments do not match the Kotlin method types; compile the expression first.');
             const methodKey = `${method.name.replace(/[^A-Za-z0-9_]/g, '_')}_${requiredParameters(method.parameters).map(parameter => parameter.type.classifier.replace(/[^A-Za-z0-9_]/g, '_')).join('_') || 'noargs'}`;
             const result = await this.local({ op: 'invoke', functionName: `bluekInvoke_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}_${methodKey}`, methodName: method.name, objectId: String(objectId), args, className: method.returnType.classifier });
             return parsed.binding ? { ...result.value, name: parsed.binding, output: result.output } : { ...result.value, output: result.output };
@@ -216,7 +228,8 @@ export class HybridRuntimeClient implements RuntimeClient {
           const klass = this.classes.find(value => value.name === parsed.callable);
           const constructor = klass?.constructors[0];
           if (klass && constructor && !constructor.parameters.some(parameter => parameter.hasDefault)) {
-            const result = await this.local({ op: 'create', functionName: `bluekCreate_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}`, args: parsed.args.map(value => parseKotlinArgument(value, this.bindings, this.localValues)), className: klass.name, name: parsed.binding || klass.name.toLowerCase() });
+            const args = parsed.args.map(value => parseKotlinArgument(value, this.bindings, this.localValues)); if (!simpleArgumentsMatch(args, constructor.parameters)) throw new Error('The local arguments do not match the Kotlin constructor types; compile the expression first.');
+            const result = await this.local({ op: 'create', functionName: `bluekCreate_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}`, args, className: klass.name, name: parsed.binding || klass.name.toLowerCase() });
             if (result.objectId) this.localObjects.set(result.objectId, klass.name);
             if (parsed.binding && result.objectId) this.bindings.set(parsed.binding, result.objectId);
             return { ...result.value, name: parsed.binding, output: result.output };
@@ -225,6 +238,7 @@ export class HybridRuntimeClient implements RuntimeClient {
           const method = owner?.methods.find(value => value.name === parsed.callable);
           if (owner && method && !method.typeParameters?.length && parsed.args.length >= requiredParameters(method.parameters).length) {
             const args = parsed.args.map(value => parseKotlinArgument(value, this.bindings, this.localValues));
+            if (!simpleArgumentsMatch(args, requiredParameters(method.parameters))) throw new Error('The local arguments do not match the Kotlin function types; compile the expression first.');
             const methodKey = `${method.name.replace(/[^A-Za-z0-9_]/g, '_')}_${requiredParameters(method.parameters).map(parameter => parameter.type.classifier.replace(/[^A-Za-z0-9_]/g, '_')).join('_') || 'noargs'}`;
             const result = await this.local({ op: 'invoke', functionName: `bluekCall_${owner.name.replace(/[^A-Za-z0-9_]/g, '_')}_${methodKey}`, objectId: '', args, className: method.returnType.classifier });
             return { ...result.value, output: result.output };
@@ -236,7 +250,7 @@ export class HybridRuntimeClient implements RuntimeClient {
     if (this.worker && this.ready && request.op === 'invoke') {
       const object = this.localObjects.has(String(request.objectId)); const localClassName = this.localObjects.get(String(request.objectId)); const klass = this.classes.find(value => value.name === localClassName);
       const method = klass?.methods.find(value => value.name === request.name); if (object && klass && method && !method.typeParameters?.length) {
-        const args = JSON.parse(String(request.args || '[]')).map((value: string) => parseKotlinArgument(value, this.bindings, this.localValues)); const methodKey = `${method.name.replace(/[^A-Za-z0-9_]/g, '_')}_${requiredParameters(method.parameters).map(parameter => parameter.type.classifier.replace(/[^A-Za-z0-9_]/g, '_')).join('_') || 'noargs'}`; const functionName = `bluekInvoke_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}_${methodKey}`;
+        const args = JSON.parse(String(request.args || '[]')).map((value: string) => parseKotlinArgument(value, this.bindings, this.localValues)); if (!simpleArgumentsMatch(args, requiredParameters(method.parameters))) throw new Error('The local arguments do not match the Kotlin method types; compile the expression first.'); const methodKey = `${method.name.replace(/[^A-Za-z0-9_]/g, '_')}_${requiredParameters(method.parameters).map(parameter => parameter.type.classifier.replace(/[^A-Za-z0-9_]/g, '_')).join('_') || 'noargs'}`; const functionName = `bluekInvoke_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}_${methodKey}`;
         const result = await this.local({ op: 'invoke', functionName, methodName: String(request.name || '').replace(/<.*>$/, ''), objectId: String(request.objectId), args, className: method.returnType.classifier }); return { ...result.value, output: result.output };
       }
     }
