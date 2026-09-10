@@ -249,7 +249,7 @@ private fun stageSnapshotUnlocked(objects: Map<String, Any>, selectedWorld: Any,
     }.joinToString(",")
     val width = number(world, "width") ?: 0; val height = number(world, "height") ?: 0; val cellSize = number(world, "cellSize") ?: 1
     val textEntries = try {
-        val projectWorld = Class.forName("World", true, world.javaClass.classLoader)
+        val projectWorld = bluePlayClass(world.javaClass.classLoader, packages, "World") ?: error("World class not found")
         val texts = bluePlayClass(world.javaClass.classLoader, packages, "BluePlayFunctionsKt")?.getMethod("textsOf", projectWorld)?.invoke(null, world) as? Iterable<*> ?: emptyList<Any>()
         texts.mapNotNull { item ->
             val values = item as? Triple<*, *, *> ?: return@mapNotNull null
