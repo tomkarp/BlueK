@@ -29,6 +29,9 @@ try {
   assert.equal(invalidFiles.response.status, 400);
   const duplicateFiles = await post(`/api/session/${session.sessionId}/compile`, { files: [{ fileName: 'Same.kt', source: 'class Same', kind: 'class' }, { fileName: 'Same.kt', source: 'class Same', kind: 'class' }], revision: 1 });
   assert.equal(duplicateFiles.response.status, 400);
+  const syntaxError = await post(`/api/session/${session.sessionId}/compile`, { files: [{ fileName: 'Broken.kt', source: 'class Broken(', kind: 'class' }], revision: 1 });
+  assert.equal(syntaxError.response.status, 200);
+  assert.ok(syntaxError.body.diagnostics.some(diagnostic => diagnostic.fileName === 'Broken.kt' && diagnostic.line >= 1 && diagnostic.column >= 1));
   assert.equal((await json(`/api/session/${session.sessionId}/status`)).body.workerAlive, true);
   const files = [
     { id: 'counter', fileName: 'Counter.kt', kind: 'class', revision: 1, source: 'class Counter(var value: Int = 0) { fun increment() { value++ }; fun add(amount: Int) { value += amount }; fun current(): Int = value }' },
