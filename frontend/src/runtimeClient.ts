@@ -1,4 +1,4 @@
-import type { ClassMeta, CompileResult, ProjectFile, RuntimeClient, TypeRef, Value } from '../../runtime-contract/src/index.js';
+import type { ClassMeta, CompileResult, ProjectFile, RuntimeClient, RuntimeStatus, TypeRef, Value } from '../../runtime-contract/src/index.js';
 
 type Resource = { path: string; data: string };
 type Action = { op: string; [key: string]: unknown };
@@ -46,7 +46,7 @@ export class HttpRuntimeClient implements RuntimeClient {
   async sendClick(x: number, y: number): Promise<void> { await this.request('/click', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ x, y }) }); }
   async stage(): Promise<any> { return (await this.request('/stage')).json(); }
   async events(): Promise<any[]> { return (await this.request('/events')).json(); }
-  async status(): Promise<{ workerAlive: boolean; available: boolean }> { return (await this.request('/status')).json(); }
+  async status(): Promise<RuntimeStatus> { return (await this.request('/status')).json(); }
 }
 
 export type { ClassMeta };
