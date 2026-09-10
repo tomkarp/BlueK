@@ -50,7 +50,7 @@ export class HttpRuntimeClient implements RuntimeClient {
   async status(): Promise<RuntimeStatus> { return (await this.request('/status')).json(); }
 }
 
-type BrowserAction = { op: 'load'; url: string; packageName: string } | { op: 'main' } | { op: 'run' } | { op: 'act' } | { op: 'pause' } | { op: 'stage' } | { op: 'speed'; value: number } | { op: 'key'; key: string; pressed: boolean } | { op: 'click'; x: number; y: number } | { op: 'create'; functionName: string; args: unknown[]; className: string; name: string } | { op: 'invoke'; functionName: string; objectId: string; args: unknown[]; className: string } | { op: 'get'; objectId: string; property: string; className: string } | { op: 'inspect'; objectId: string; className?: string } | { op: 'remove'; objectId: string } | { op: 'stop' };
+type BrowserAction = { op: 'load'; url: string; packageName: string } | { op: 'main' } | { op: 'run' } | { op: 'act' } | { op: 'pause' } | { op: 'stage' } | { op: 'speed'; value: number } | { op: 'key'; key: string; pressed: boolean } | { op: 'click'; x: number; y: number } | { op: 'create'; functionName: string; args: unknown[]; className: string; name: string } | { op: 'invoke'; functionName: string; objectId: string; args: unknown[]; className: string } | { op: 'get'; objectId: string; property: string; className: string } | { op: 'set'; objectId: string; property: string; className: string; value: unknown } | { op: 'inspect'; objectId: string; className?: string } | { op: 'remove'; objectId: string } | { op: 'stop' };
 
 const parseKotlinArgument = (value: string, bindings: Map<string, unknown>): unknown => {
   const text = value.trim().replace(/^[A-Za-z_]\w*\s*=\s*/, '');
@@ -66,8 +66,12 @@ const parseKotlinArgument = (value: string, bindings: Map<string, unknown>): unk
   throw new Error(`This local action only supports simple Kotlin arguments; compile the expression first: ${text}`);
 };
 const splitSimpleArguments = (source: string): string[] => { const result: string[] = []; let start = 0; let depth = 0; let quote = ''; let escaped = false; for (let index = 0; index < source.length; index += 1) { const char = source[index]; if (quote) { if (escaped) escaped = false; else if (char === '\\') escaped = true; else if (char === quote) quote = ''; continue; } if (char === '"' || char === "'") { quote = char; continue; } if (char === '(') depth += 1; else if (char === ')') depth -= 1; else if (char === ',' && depth === 0) { result.push(source.slice(start, index).trim()); start = index + 1; } } if (source.slice(start).trim()) result.push(source.slice(start).trim()); return result; };
-const simpleCodepadCall = (code: string): { binding?: string; receiver?: string; callable: string; args: string[] } | null => { const match = code.trim().replace(/;$/, '').match(/^(?:(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*)?([A-Za-z_]\w*)(?:\.([A-Za-z_]\w*))?\s*\((.*)\)$/s); return match ? { binding: match[1], receiver: match[3] ? match[2] : undefined, callable: match[3] || match[2], args: splitSimpleArguments(match[4]) } : null; };
+const simpleCodepadCall = (code: string): { binding?: string; receiver?: string; callable: string; args: string[] } | null => { const match = code.trim().replace(/;$/, '').match(/^(?:(?:val|var)\s+([A-Za-z_]\w*)(?:\s*:\s*[^=]+)?\s*=\s*)?([A-Za-z_]\w*)(?:\.([A-Za-z_]\w*))?\s*\((.*)\)$/s); return match ? { binding: match[1], receiver: match[3] ? match[2] : undefined, callable: match[3] || match[2], args: splitSimpleArguments(match[4]) } : null; };
 const simpleCodepadProperty = (code: string): { receiver: string; property: string } | null => { const match = code.trim().replace(/;$/, '').match(/^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/); return match ? { receiver: match[1], property: match[2] } : null; };
+const simpleCodepadPropertyAssignment = (code: string): { receiver: string; property: string; value: string } | null => { const match = code.trim().replace(/;$/, '').match(/^([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s*=\s*(.+)$/s); return match ? { receiver: match[1], property: match[2], value: match[3].trim() } : null; };
+const simpleCodepadDeclaration = (code: string): { mutable: boolean; name: string; value: string } | null => { const match = code.trim().replace(/;$/, '').match(/^(val|var)\s+([A-Za-z_]\w*)(?:\s*:\s*[^=]+)?\s*=\s*(.+)$/s); return match ? { mutable: match[1] === 'var', name: match[2], value: match[3].trim() } : null; };
+const simpleCodepadAssignment = (code: string): { name: string; value: string } | null => { const match = code.trim().replace(/;$/, '').match(/^([A-Za-z_]\w*)\s*=\s*(.+)$/s); return match ? { name: match[1], value: match[2].trim() } : null; };
+const simpleCodepadIdentifier = (code: string) => code.trim().replace(/;$/, '').match(/^[A-Za-z_]\w*$/)?.[0] || null;
 const requiredParameters = (parameters: any[] = []) => parameters.filter(parameter => !parameter.hasDefault);
 
 const browserWorkerSource = `
@@ -113,6 +117,7 @@ self.onmessage = async ({ data }) => {
     if (data.op === 'create') { const fn = api[data.functionName] || resolve(data.functionName); if (typeof fn !== 'function') throw new Error('Generated constructor bridge is missing: ' + data.functionName); const object = fn(...resolveArguments(data.args)); const objectId = crypto.randomUUID(); objects.set(objectId, object); displayValues.set(objectId, data.className + '()'); flushStudentOutput(); const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value: { kind: 'object', display: data.className + '()', objectId }, objectId, name: data.name, output }); return; }
     if (data.op === 'invoke') { const receiver = data.objectId ? objects.get(data.objectId) : null; if (data.objectId && !receiver) throw new Error('Object handle is no longer available.'); const fn = api[data.functionName] || resolve(data.functionName); if (typeof fn !== 'function') throw new Error('Generated method bridge is missing: ' + data.functionName); const value = valueOf(receiver ? fn(receiver, ...resolveArguments(data.args)) : fn(...resolveArguments(data.args)), data.className); flushStudentOutput(); const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value, output }); return; }
     if (data.op === 'get') { const object = objects.get(data.objectId); if (!object) throw new Error('Object handle is no longer available.'); const classKey = String(data.className || '').replace(/[^A-Za-z0-9_]/g, '_'); const stem = String(data.property).charAt(0).toUpperCase() + String(data.property).slice(1); const getter = api['bluekInvoke_' + classKey + '_get' + stem + '_noargs']; const value = typeof getter === 'function' ? getter(object) : object[data.property]; const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value: valueOf(value), output }); return; }
+    if (data.op === 'set') { const object = objects.get(data.objectId); if (!object) throw new Error('Object handle is no longer available.'); const classKey = String(data.className || '').replace(/[^A-Za-z0-9_]/g, '_'); const stem = String(data.property).charAt(0).toUpperCase() + String(data.property).slice(1); const setterKey = Object.keys(api).find((key) => key.startsWith('bluekInvoke_' + classKey + '_set' + stem + '_')); const setter = setterKey ? api[setterKey] : null; const value = resolveArguments([data.value])[0]; if (typeof setter === 'function') setter(object, value); else object[data.property] = value; finish(); return; }
     if (data.op === 'inspect') { const object = objects.get(data.objectId); if (!object) throw new Error('Object handle is no longer available.'); const entries = Object.entries(object).filter(([key]) => !key.startsWith('$')); const namesFn = data.className ? (api['bluekInspectNames_' + data.className] || resolve('bluekInspectNames_' + data.className)) : null; let names = []; if (typeof namesFn === 'function') { try { names = JSON.parse(namesFn()); } catch { names = []; } } const classKey = String(data.className || '').replace(/[^A-Za-z0-9_]/g, '_'); const getterValue = (name) => { const stem = name.charAt(0).toUpperCase() + name.slice(1); const getter = api['bluekInvoke_' + classKey + '_get' + stem + '_noargs']; if (typeof getter !== 'function') return undefined; try { return getter(object); } catch { return undefined; } }; const fields = names.length ? names.map((name, index) => { const value = getterValue(name); const entry = entries[index]; return { name, value: valueOf(value === undefined ? entry?.[1] : value).display }; }) : entries.map(([key, value]) => ({ name: key, value: valueOf(value).display })); self.postMessage({ kind: 'value', value: { kind: 'object', objectId: data.objectId, fields } }); return; }
     if (data.op === 'remove') { objects.delete(data.objectId); displayValues.delete(data.objectId); self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' } }); return; }
     if (data.op === 'stop') { clearInterval(timer); close(); return; }
@@ -125,6 +130,7 @@ export class HybridRuntimeClient implements RuntimeClient {
   private ready: Promise<void> | null = null;
   private classes: ClassMeta[] = [];
   private readonly bindings = new Map<string, unknown>();
+  private readonly localValues = new Map<string, unknown>();
   private readonly localObjects = new Map<string, unknown>();
   private browserGeneration: string | null = null;
   private latestStage: any = null;
@@ -158,6 +164,35 @@ export class HybridRuntimeClient implements RuntimeClient {
       }
     }
     if (this.worker && this.ready && request.op === 'eval') {
+      const source = String(request.code || '').trim().replace(/;$/, '');
+      const propertyAssignment = request.mode === 'block' ? simpleCodepadPropertyAssignment(source) : null;
+      if (propertyAssignment) {
+        const objectId = this.bindings.get(propertyAssignment.receiver);
+        if (objectId && this.localObjects.has(String(objectId))) {
+          const value = parseKotlinArgument(propertyAssignment.value, this.bindings);
+          return (await this.local({ op: 'set', objectId: String(objectId), property: propertyAssignment.property, className: String(this.localObjects.get(String(objectId))), value })).value;
+        }
+      }
+      const declaration = request.mode === 'block' ? simpleCodepadDeclaration(source) : null;
+      if (declaration) {
+        if (this.bindings.has(declaration.value)) {
+          const objectId = this.bindings.get(declaration.value);
+          this.bindings.set(declaration.name, objectId);
+          this.localValues.delete(declaration.name);
+          return { kind: 'unit', display: 'Unit' };
+        }
+        try {
+          this.localValues.set(declaration.name, parseKotlinArgument(declaration.value, this.bindings));
+          return { kind: 'unit', display: 'Unit' };
+        } catch { /* The normal call parser may handle a constructor declaration. */ }
+      }
+      const assignment = request.mode === 'block' ? simpleCodepadAssignment(source) : null;
+      if (assignment && this.localValues.has(assignment.name)) {
+        this.localValues.set(assignment.name, parseKotlinArgument(assignment.value, this.bindings));
+        return { kind: 'unit', display: 'Unit' };
+      }
+      const identifier = request.mode === 'expression' ? simpleCodepadIdentifier(source) : null;
+      if (identifier && this.localValues.has(identifier)) return { kind: 'scalar', display: String(this.localValues.get(identifier)) };
       const property = simpleCodepadProperty(String(request.code || ''));
       if (property) {
         const objectId = this.bindings.get(property.receiver);
@@ -215,7 +250,7 @@ export class HybridRuntimeClient implements RuntimeClient {
     return this.http.execute(request);
   }
   async compile(files: ProjectFile[], revision: number, resources: Resource[] = []): Promise<CompileResult> {
-    const result = await this.http.compile(files, revision, resources); this.classes = result.classes; this.localObjects.clear(); this.bindings.clear(); this.latestStage = null;
+    const result = await this.http.compile(files, revision, resources); this.classes = result.classes; this.localObjects.clear(); this.localValues.clear(); this.bindings.clear(); this.latestStage = null;
     if (result.browserRuntime) {
       this.browserGeneration = result.generationId;
       this.worker?.terminate(); this.worker = new Worker(URL.createObjectURL(new Blob([browserWorkerSource], { type: 'text/javascript' })), { type: 'module' });
@@ -230,7 +265,7 @@ export class HybridRuntimeClient implements RuntimeClient {
   async evaluate(code: string, mode: 'expression' | 'block'): Promise<Value> { if (this.worker && this.ready) throw new Error('This expression is not prepared for local Kotlin/JS execution yet.'); return this.http.evaluate(code, mode); }
   async removeObject(objectId: string): Promise<void> { this.localObjects.delete(objectId); if (this.worker && this.ready) { await this.local({ op: 'remove', objectId }); return; } await this.http.removeObject(objectId); }
   sendInput(text: string): Promise<void> { if (!this.worker) return this.http.sendInput(text); if (!this.inputBuffer) return Promise.reject(new Error('Terminal input requires a cross-origin-isolated browser context.')); const bytes = new TextEncoder().encode(text); const state = new Int32Array(this.inputBuffer, 0, 1); const buffer = new Uint8Array(this.inputBuffer, 4); buffer.fill(0); buffer.set(bytes.subarray(0, buffer.length)); Atomics.store(state, 0, Math.min(bytes.length, buffer.length)); Atomics.notify(state, 0); return Promise.resolve(); }
-  async stop(): Promise<void> { const hadBrowserWorker = Boolean(this.worker); this.worker?.terminate(); this.worker = null; this.ready = null; this.browserGeneration = null; if (!hadBrowserWorker) await this.http.stop(); }
+  async stop(): Promise<void> { const hadBrowserWorker = Boolean(this.worker); this.worker?.terminate(); this.worker = null; this.ready = null; this.browserGeneration = null; this.localObjects.clear(); this.localValues.clear(); this.bindings.clear(); if (!hadBrowserWorker) await this.http.stop(); }
   reset(): Promise<void> { return this.stop(); }
   sendKey(key: string, pressed: boolean): Promise<void> { if (this.worker && this.ready) { return this.ready.then(() => { this.worker!.postMessage({ op: 'key', key, pressed }); }); } return this.http.sendKey(key, pressed); }
   sendClick(x: number, y: number): Promise<void> { if (this.worker && this.ready) { return this.ready.then(() => { this.worker!.postMessage({ op: 'click', x, y }); }); } return this.http.sendClick(x, y); }
