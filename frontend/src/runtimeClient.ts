@@ -265,7 +265,12 @@ export class HybridRuntimeClient implements RuntimeClient {
       const outputCall = source.match(/^(print|println)\((.*)\)$/s);
       if (outputCall) {
         const argument = outputCall[2].trim();
-        const parsed = parseKotlinArgument(argument, this.bindings, this.localValues);
+        let parsed: unknown;
+        try {
+          parsed = parseKotlinArgument(argument, this.bindings, this.localValues);
+        } catch {
+          parsed = displayedSimpleValue(await this.execute({ op: 'eval', code: argument, mode: 'expression' }));
+        }
         const objectId = parsed && typeof parsed === 'object' && '__bluekObjectId' in parsed
           ? String((parsed as { __bluekObjectId: unknown }).__bluekObjectId)
           : '';
