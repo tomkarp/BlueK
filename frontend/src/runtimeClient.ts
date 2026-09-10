@@ -386,7 +386,7 @@ export class HybridRuntimeClient implements RuntimeClient {
           return { kind: 'unit', display: 'Unit' };
         }
         try {
-          this.localValues.set(declaration.name, parseKotlinArgument(declaration.value, this.bindings, this.localValues));
+          this.localValues.set(declaration.name, simpleCodepadValue(declaration.value, this.bindings, this.localValues));
           return { kind: 'unit', display: 'Unit' };
         } catch { /* The normal call parser may handle a constructor declaration. */ }
         try {
@@ -428,9 +428,10 @@ export class HybridRuntimeClient implements RuntimeClient {
       }
       {
         const scalarProperty = source.match(/^(.+)\.(length|size|isEmpty)$/s);
-      if (scalarProperty) {
+        if (scalarProperty) {
           const builtinValue = simpleBuiltin(scalarProperty[1], this.bindings, this.localValues);
-          const value = builtinValue !== undefined ? builtinValue : displayedSimpleValue(await this.execute({ op: 'eval', code: scalarProperty[1], mode: 'expression' }));
+          const storedValue = this.localValues.get(scalarProperty[1].trim());
+          const value = builtinValue !== undefined ? builtinValue : storedValue !== undefined ? storedValue : displayedSimpleValue(await this.execute({ op: 'eval', code: scalarProperty[1], mode: 'expression' }));
           if (typeof value === 'string' || Array.isArray(value)) return { kind: 'scalar', display: String(scalarProperty[2] === 'length' || scalarProperty[2] === 'size' ? value.length : value.length === 0) };
         }
       }
