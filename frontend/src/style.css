@@ -10,6 +10,24 @@
 
 /* Keep the project canvas usable at laptop and narrow browser widths. */
 .canvas{overflow:auto}
+
+/* BlueJ-style resizable split between the class diagram and the bench. */
+.workspace{display:flex;flex-direction:column;min-height:0}
+.panels{flex:1;min-height:0;display:flex;flex-direction:column}
+.canvas{flex:0 1 var(--pane-split,66%);min-height:140px}
+.pane-splitter{height:9px;flex:0 0 9px;margin:0 2px;cursor:row-resize;background:#c8c8c8;border-top:2px solid transparent;border-bottom:2px solid transparent}
+.pane-splitter:hover{background:#999}
+.lower{position:relative;flex:1 1 auto;min-height:145px;display:grid;grid-template-columns:minmax(0,1fr) 18px minmax(280px,.8fr);gap:0;padding-top:12px}
+.lower .bench{grid-column:1}
+.lower .codepad{grid-column:3}
+.codepad-toggle{grid-column:2;align-self:center;justify-self:center;width:18px;height:46px;border:0;border-radius:0 5px 5px 0;background:#bbb;color:#fff;font-size:25px;line-height:40px;cursor:pointer;padding:0}
+.codepad-toggle:hover{background:#999}
+.lower.codepad-collapsed{grid-template-columns:minmax(0,1fr) 18px}
+.lower.codepad-collapsed .bench{grid-column:1 / -1}
+.lower.codepad-collapsed .codepad-toggle{grid-column:2;position:absolute;right:0;top:50%;z-index:2}
+footer{flex:0 0 108px}
+.panels{flex:0 1 var(--pane-split,66%)}
+.panels .canvas{flex:1 1 auto}
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:24px;margin:56px 10px 0}
 .classcard{width:auto;min-width:0;height:124px}
 .classcard strong{font-size:24px}
