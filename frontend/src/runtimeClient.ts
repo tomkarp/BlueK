@@ -50,7 +50,7 @@ export class HttpRuntimeClient implements RuntimeClient {
   async status(): Promise<RuntimeStatus> { return (await this.request('/status')).json(); }
 }
 
-type BrowserAction = { op: 'load'; url: string; packageName: string } | { op: 'main' } | { op: 'run' } | { op: 'act' } | { op: 'pause' } | { op: 'stage' } | { op: 'speed'; value: number } | { op: 'key'; key: string; pressed: boolean } | { op: 'click'; x: number; y: number } | { op: 'create'; functionName: string; args: unknown[]; className: string; name: string } | { op: 'invoke'; functionName: string; objectId: string; args: unknown[]; className: string; methodName?: string; typeName?: string } | { op: 'get'; objectId: string; property: string; className: string } | { op: 'set'; objectId: string; property: string; className: string; value: unknown } | { op: 'inspect'; objectId: string; className?: string } | { op: 'remove'; objectId: string } | { op: 'stop' };
+type BrowserAction = { op: 'load'; url: string; packageName: string } | { op: 'main' } | { op: 'run' } | { op: 'act' } | { op: 'pause' } | { op: 'stage' } | { op: 'speed'; value: number } | { op: 'key'; key: string; pressed: boolean } | { op: 'click'; x: number; y: number } | { op: 'write'; text: string; newline: boolean } | { op: 'create'; functionName: string; args: unknown[]; className: string; name: string } | { op: 'invoke'; functionName: string; objectId: string; args: unknown[]; className: string; methodName?: string; typeName?: string } | { op: 'get'; objectId: string; property: string; className: string } | { op: 'set'; objectId: string; property: string; className: string; value: unknown } | { op: 'inspect'; objectId: string; className?: string } | { op: 'remove'; objectId: string } | { op: 'stop' };
 
 const parseKotlinArgument = (value: string, bindings: Map<string, unknown>, values: Map<string, unknown> = new Map()): unknown => {
   const text = value.trim().replace(/^[A-Za-z_]\w*\s*=\s*/, '');
@@ -105,7 +105,7 @@ const topLevelBinary = (source: string): { left: string; operator: string; right
 };
 const displayedSimpleValue = (value: any): unknown => { if (!value || value.kind === 'unit') return undefined; if (value.kind === 'null') return null; if (value.kind === 'scalar') { if (value.display === 'true') return true; if (value.display === 'false') return false; if (/^-?\d+(?:\.\d+)?$/.test(value.display)) return Number(value.display); return value.display; } return value.display; };
 
-const browserWorkerSource = `
+export const browserWorkerSource = `
 let api = null;
 let runtimeApi = null;
 let simulationTimer = null;
@@ -143,6 +143,7 @@ self.onmessage = async ({ data }) => {
     if (data.op === 'main') { const start = api.bluekStart || resolve('bluekStart'); if (!start) throw new Error('This project has no parameterless main().'); start(); stage(); flushStudentOutput(); const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' }, output }); return; }
     if (data.op === 'run') { const run = runtimeApi?.bluekRun || runtimeApi?.start || api.bluekRun || resolve('bluekRun') || resolve('start'); if (typeof run !== 'function') throw new Error('Browser BluePlay runtime is missing its run bridge.'); run(); clearTimeout(simulationTimer); clearInterval(renderTimer); const tick = runtimeApi?.bluekStep || resolve('bluekStep'); const isRunning = runtimeApi?.bluekIsRunning || resolve('bluekIsRunning'); const stopTimers = () => { clearTimeout(simulationTimer); clearInterval(renderTimer); simulationTimer = null; renderTimer = null; }; const simulate = () => { if (typeof tick === 'function') tick(); stage(); if (typeof isRunning === 'function' && !isRunning()) { stopTimers(); return; } simulationTimer = setTimeout(simulate, Math.max(1, 100 - Number(runtimeApi?.getSpeed?.() || resolve('getSpeed')?.() || 50))); }; simulationTimer = setTimeout(simulate, 0); renderTimer = setInterval(stage, 16); stage(); self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' } }); return; }
     if (data.op === 'stage') { stage(); finish(); return; }
+    if (data.op === 'write') { outputBuffer += String(data.text) + (data.newline ? '\\n' : ''); finish(); return; }
     if (data.op === 'act') { const act = runtimeApi?.bluekAct || resolve('bluekAct'); if (typeof act === 'function') act(); stage(); finish(); return; }
     if (data.op === 'pause') { const pause = runtimeApi?.bluekPause || resolve('bluekPause'); if (typeof pause === 'function') pause(); clearTimeout(simulationTimer); clearInterval(renderTimer); simulationTimer = null; renderTimer = null; stage(); finish(); return; }
     if (data.op === 'speed') { const speed = runtimeApi?.bluekSetSpeed || resolve('bluekSetSpeed'); if (typeof speed === 'function') speed(data.value); stage(); finish(); return; }
@@ -193,14 +194,16 @@ export class HybridRuntimeClient implements RuntimeClient {
     this.browserWorkerDead = false;
     this.browserReady = false;
     this.inputBarrier = Promise.resolve();
-    const worker = new Worker(URL.createObjectURL(new Blob([browserWorkerSource], { type: 'text/javascript' })), { type: 'module' });
+    const worker = new Worker(new URL('./browserWorker.ts', import.meta.url), { type: 'module' });
     this.worker = worker;
     this.attachStageCallbacks(worker);
     this.inputBuffer = null;
     const runtimeError = (event: ErrorEvent) => {
       if (this.worker !== worker) return;
       this.browserWorkerDead = true;
-      this.onFailure(`Browser Kotlin/JS worker stopped: ${event.message || 'unknown worker error'}`);
+      const detail = event.error?.stack || event.error?.message || event.message || 'unknown worker error';
+      const location = event.filename ? ` (${event.filename}:${event.lineno || 0}:${event.colno || 0})` : '';
+      this.onFailure(`Browser Kotlin/JS worker stopped: ${detail}${location}`);
     };
     worker.addEventListener('error', runtimeError);
     this.ready = new Promise((resolve, reject) => {
@@ -209,7 +212,7 @@ export class HybridRuntimeClient implements RuntimeClient {
         if (event.data?.kind === 'ready') { this.browserReady = true; worker.postMessage({ op: 'resources', sizes: this.browserResourceSizes }); worker.removeEventListener('message', listener); worker.removeEventListener('error', errorListener); resolve(); }
         if (event.data?.kind === 'error') { worker.removeEventListener('message', listener); worker.removeEventListener('error', errorListener); reject(new Error(event.data.message)); }
       };
-      const errorListener = () => { worker.removeEventListener('message', listener); reject(new Error('Browser Kotlin/JS worker failed to load.')); };
+      const errorListener = (event: ErrorEvent) => { worker.removeEventListener('message', listener); const detail = event.error?.stack || event.error?.message || event.message || 'unknown worker error'; reject(new Error(`Browser Kotlin/JS worker failed to load: ${detail}`)); };
       worker.addEventListener('message', listener);
       worker.addEventListener('error', errorListener);
       worker.postMessage({ op: 'resources', sizes: this.browserResourceSizes });
@@ -259,6 +262,17 @@ export class HybridRuntimeClient implements RuntimeClient {
     }
     if (this.worker && this.ready && request.op === 'eval') {
       const source = String(request.code || '').trim().replace(/;$/, '');
+      const outputCall = source.match(/^(print|println)\((.*)\)$/s);
+      if (outputCall) {
+        const argument = outputCall[2].trim();
+        const parsed = parseKotlinArgument(argument, this.bindings, this.localValues);
+        const objectId = parsed && typeof parsed === 'object' && '__bluekObjectId' in parsed
+          ? String((parsed as { __bluekObjectId: unknown }).__bluekObjectId)
+          : '';
+        const display = objectId ? String(this.localObjects.get(objectId) || objectId) : String(parsed ?? 'null');
+        const result = await this.local({ op: 'write', text: display, newline: outputCall[1] === 'println' });
+        return { ...result.value, output: result.output };
+      }
       if (request.mode === 'block') {
         const statements = splitCodepadStatements(source);
         if (statements.length > 1) {
@@ -448,6 +462,7 @@ export class HybridRuntimeClient implements RuntimeClient {
       this.browserModuleUrl = new URL(`/api/session/${this.http.sessionId}/browser/${result.browserRuntime.entry}`, window.location.origin).href;
       this.browserPackageName = result.browserRuntime.packageName;
       this.startBrowserWorker();
+      await this.ready;
     } else { this.browserGeneration = null; this.browserModuleUrl = null; this.browserPackageName = ''; this.worker?.terminate(); this.worker = null; this.ready = null; this.browserWorkerDead = false; }
     return result;
   }

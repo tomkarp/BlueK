@@ -20,7 +20,7 @@ async function ask(s:S,msg:any){return new Promise<any>((resolve,reject)=>{const
 const exampleDirectory = (name: string) => name === 'basic' ? path.join(root, 'examples') : path.join(root, 'examples', name);
 function packageNameForBrowser(files: ProjectFile[]): string { const main=files.find(file=>file.fileName==='Main.kt')||files.find(file=>/\bfun\s+main\s*\(/.test(file.source)); return main?.source.match(/^\s*package\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)/m)?.[1]||files.map(file=>file.source.match(/^\s*package\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)/m)?.[1]).find(Boolean)||''; }
 const readExample = async (name: string) => {
-    const directory = exampleDirectory(name === 'blueplay-stress' ? 'blueplay' : name);
+    const directory = exampleDirectory(['blueplay-stress', 'blueplay-input'].includes(name) ? 'blueplay' : name);
     const names = (await fs.readdir(directory)).filter(fileName => fileName.endsWith('.kt')).sort();
     return Promise.all(names.map(async fileName => ({
         id: fileName,
@@ -34,12 +34,20 @@ const readExample = async (name: string) => {
     }
     world.show()
 }
+` : name === 'blueplay-input' && fileName === 'Figure.kt' ? `class Figure : Actor() {
+    init { image = Image("figure.png") }
+    override fun act() {
+        if (isClicked) turn(15)
+        if (isKeyDown("right")) move(1)
+        if (isKeyDown("left")) move(-1)
+    }
+}
 ` : await fs.readFile(path.join(directory, fileName), 'utf8'),
         revision: 1
     })));
 };
 const readExampleResources = async (name: string) => {
-    const directory = exampleDirectory(name === 'blueplay-stress' ? 'blueplay' : name);
+    const directory = exampleDirectory(['blueplay-stress', 'blueplay-input'].includes(name) ? 'blueplay' : name);
     const resources: { path: string; data: string }[] = [];
     for (const folder of ['images', 'sounds']) {
         const resourceDirectory = path.join(directory, folder);
@@ -55,7 +63,7 @@ const readExampleResources = async (name: string) => {
 };
 app.get('/api/examples', asyncRoute(async (_: any, r: any) => r.json({ files: await readExample('blueplay'), resources: await readExampleResources('blueplay') })));
 app.get('/api/examples/:name', asyncRoute(async (req: any, r: any) => {
-    if (!['basic', 'blueplay', 'blueplay-stress', 'krokoalarm', 'student-smoke'].includes(req.params.name)) return r.sendStatus(404);
+    if (!['basic', 'blueplay', 'blueplay-stress', 'blueplay-input', 'krokoalarm', 'student-smoke'].includes(req.params.name)) return r.sendStatus(404);
     r.json({ files: await readExample(req.params.name), resources: await readExampleResources(req.params.name) });
 }));
 app.use('/api/session/:id',(req,_r,next)=>{const s=sessions.get(req.params.id);if(s)s.lastActivity=Date.now();next()});
@@ -94,7 +102,7 @@ app.post('/api/session/:id/compile',asyncRoute(async(req:any,r:any)=>{
     if(!diagnostics.some((diagnostic:any)=>diagnostic.severity!=='warning')){s.files=files;s.generation=gid;const packages=[...new Set(files.map(file=>file.source.match(/^\s*package\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)/m)?.[1]).filter((value):value is string=>Boolean(value)))];if(legacyRuntime)await ask(s,{op:'load',path:path.join(s.dir,'project/classes'),packages:JSON.stringify(packages)});}
     r.json({generationId:gid,sourceRevision:req.body.revision||1,classes,diagnostics,browserRuntime,browserRuntimeError:browserDiagnostics||undefined});
 }));
-app.get('/api/session/:id/status',asyncRoute(async(req:any,r:any)=>{const s=sessions.get(req.params.id);if(!s)return r.sendStatus(404);const workerAlive=Boolean(s.worker&&!s.workerDead&&s.worker.exitCode===null);r.json({workerAlive,generationId:s.generation||null,available:Boolean(s.generation)&&workerAlive,error:s.workerError.trim()||null})}));
+app.get('/api/session/:id/status',asyncRoute(async(req:any,r:any)=>{const s=sessions.get(req.params.id);if(!s)return r.sendStatus(404);const workerAlive=legacyRuntime?Boolean(s.worker&&!s.workerDead&&s.worker.exitCode===null):true;r.json({workerAlive,generationId:s.generation||null,available:Boolean(s.generation)&&workerAlive,error:legacyRuntime?s.workerError.trim()||null:null})}));
 app.post('/api/session/:id/close',asyncRoute(async(req:any,r:any)=>{const s=sessions.get(req.params.id);if(!s)return r.sendStatus(404);await closeSession(req.params.id,s);r.sendStatus(204)}));
 app.post('/api/session/:id/input',async(req,r)=>{const s=sessions.get(req.params.id);if(!s?.generation)return r.status(409).json({message:'Compile the project first'});if(!sendControl(s,{op:'input',text:String(req.body.text??'')}))return r.status(503).json({message:'Worker is not available'});r.sendStatus(202)});
 app.get('/api/session/:id/events',async(req,r)=>{const s=sessions.get(req.params.id);if(!s)return r.sendStatus(404);const events=s.events.splice(0);r.json(events)});
