@@ -70,7 +70,7 @@ try {
     { id: 'walker', fileName: 'Walker.kt', kind: 'class', revision: 1, source: 'class Walker: Actor() { init { image = Image(20, 20) }; override fun act() { move(1) } }' },
     { id: 'textured', fileName: 'Textured.kt', kind: 'class', revision: 1, source: 'class Textured: Actor() { init { image = Image("hero.png") } }' },
     { id: 'broken', fileName: 'Broken.kt', kind: 'class', revision: 1, source: 'class Broken: Actor() { override fun act() { error("boom") } }' },
-    { id: 'blueplay', fileName: 'BluePlayFunctions.kt', kind: 'functions', revision: 1, source: '// replaced by the headless BluePlay adapter' },
+    { id: 'blueplay', fileName: 'BluePlayFunctions.kt', kind: 'functions', revision: 1, source: 'private val internalUi = object { val enabled = true }\nfun isKeyDown(key: String): Boolean = false' },
   ];
   const compiled = await post(`/api/session/${session.sessionId}/compile`, { files, resources: [{ path: 'images/hero.png', data: `data:image/png;base64,${onePixelPng}` }], revision: 1 });
   assert.equal(compiled.body.diagnostics.length, 0, JSON.stringify(compiled.body.diagnostics));
