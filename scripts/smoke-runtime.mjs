@@ -98,6 +98,8 @@ try {
   const walker = (await action({ op: 'create', className: 'Walker', name: 'walker1', args: '[]' })).body;
   assert.equal((await action({ op: 'invoke', objectId: world.objectId, name: 'addObject', args: JSON.stringify(['walker1', '2', '3']) })).body.kind, 'unit');
   assert.equal((await action({ op: 'invoke', objectId: world.objectId, name: 'show', args: '[]' })).body.kind, 'unit');
+  assert.equal((await action({ op: 'eval', code: 'setSpeed(80)', mode: 'expression' })).body.kind, 'unit');
+  assert.equal((await action({ op: 'eval', code: 'getSpeed()', mode: 'expression' })).body.display, '80');
   assert.equal((await post(`/api/session/${session.sessionId}/click`, { x: 3, y: 3 })).response.status, 202);
   assert.equal((await action({ op: 'invoke', objectId: walker.objectId, name: 'clicked', args: '[]' })).body.display, 'true');
   assert.equal((await post(`/api/session/${session.sessionId}/click`, { x: 18, y: 8 })).response.status, 202);
