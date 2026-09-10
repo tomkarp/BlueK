@@ -134,7 +134,7 @@ const flushStudentOutput = () => { const flush = api?.bluekFlushOutput || resolv
 const resolveArguments = (args) => args.map((arg) => arg && typeof arg === 'object' && arg.__bluekObjectId ? objects.get(arg.__bluekObjectId) : arg);
 const finish = () => { flushStudentOutput(); const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' }, output }); };
 const stage = () => { const value = runtimeApi?.bluekStage || globalThis.bluekStage; if (typeof value === 'function') self.postMessage({ kind: 'stage', stage: JSON.parse(value()) }); };
-self.addEventListener('message', ({ data }) => { if (data?.op === 'resources') runtimeApi?.bluekSetResourceSizes?.(data.sizes || {}); });
+self.addEventListener('message', ({ data }) => { if (data?.op === 'resources') { globalThis.__bluekPendingResourceSizes = data.sizes || {}; runtimeApi?.bluekSetResourceSizes?.(globalThis.__bluekPendingResourceSizes); } });
 self.onmessage = async ({ data }) => {
   try {
     if (data.op === 'load') { await import(new URL('kotlin-kotlin-stdlib.js', data.url).href); runtimeApi = await import(new URL('bluek-runtime.js', data.url).href); const moduleValue = await import(data.url); const exported = globalThis['bluek-browser-runtime'] || moduleValue.default || moduleValue; api = data.packageName ? (exported[data.packageName] || data.packageName.split('.').reduce((v, p) => v?.[p], exported)) : exported; if (!api || typeof api !== 'object') api = exported; if (inputBuffer) self.postMessage({ kind: 'input-buffer', buffer: inputBuffer }); self.postMessage({ kind: 'ready' }); return; }
@@ -211,6 +211,7 @@ export class HybridRuntimeClient implements RuntimeClient {
       const errorListener = () => { worker.removeEventListener('message', listener); reject(new Error('Browser Kotlin/JS worker failed to load.')); };
       worker.addEventListener('message', listener);
       worker.addEventListener('error', errorListener);
+      worker.postMessage({ op: 'resources', sizes: this.browserResourceSizes });
       worker.postMessage({ op: 'load', url: this.browserModuleUrl, packageName: this.browserPackageName });
     });
   }

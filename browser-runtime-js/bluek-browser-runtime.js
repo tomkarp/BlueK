@@ -2,6 +2,8 @@
 // Kotlin/JS ES5 output calls base constructors with Base.call(this, ...).
 const state = { world: null, running: false, speed: 50, keys: new Set(), clicks: [], sounds: [] };
 const resourceSizes = new Map();
+const applyResourceSizes = values => { resourceSizes.clear(); Object.entries(values || {}).forEach(([key, value]) => { if (value && Number(value.width) > 0 && Number(value.height) > 0) { const size = { width: Number(value.width), height: Number(value.height), alpha: Array.isArray(value.alpha) ? value.alpha : null }; resourceSizes.set(key, size); resourceSizes.set(key.replace(/^images\//, ''), size); } }); };
+if (globalThis.__bluekPendingResourceSizes) applyResourceSizes(globalThis.__bluekPendingResourceSizes);
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 const color = (r, g, b) => `rgb(${clamp(r, 0, 255)}, ${clamp(g, 0, 255)}, ${clamp(b, 0, 255)})`;
 
@@ -137,7 +139,7 @@ export const bluekStage = () => { const background = state.world?.background; co
 export const bluekStageJson = bluekStage;
 export const bluekReadln = () => globalThis.__bluekReadln ? globalThis.__bluekReadln() : '';
 export const bluekReadlnOrNull = () => globalThis.__bluekReadlnOrNull ? globalThis.__bluekReadlnOrNull() : null;
-export const bluekSetResourceSizes = values => { resourceSizes.clear(); Object.entries(values || {}).forEach(([key, value]) => { if (value && Number(value.width) > 0 && Number(value.height) > 0) { const size = { width: Number(value.width), height: Number(value.height), alpha: Array.isArray(value.alpha) ? value.alpha : null }; resourceSizes.set(key, size); resourceSizes.set(key.replace(/^images\//, ''), size); } }); };
+export const bluekSetResourceSizes = applyResourceSizes;
 const matchesType = (actor, typeName) => !typeName || actor?.constructor?.name === String(typeName).split('.').pop();
 export const bluekActorGetIntersecting = (actor, typeName) => (actor?.getIntersecting?.() || []).filter(value => matchesType(value, typeName));
 export const bluekActorGetOneIntersecting = (actor, typeName) => bluekActorGetIntersecting(actor, typeName)[0] || null;
