@@ -36,11 +36,26 @@ private fun jsonString(value: String): String = buildString {
     }
     append('"')
 }
-private class LiveOutputStream(private val onFlush: (String) -> Unit) : java.io.OutputStream() {
+private class CaptureState {
+    val output = StringBuilder()
+    var truncated = false
+    @Synchronized fun append(text: String, stream: String) {
+        if (output.length >= MAX_USER_OUTPUT_CHARS) {
+            if (!truncated) { truncated = true; val marker = "[output truncated after $MAX_USER_OUTPUT_CHARS characters]\n"; output.append(marker); emit("output", "", output = marker, stream = stream) }
+            return
+        }
+        val chunk = text.take(MAX_USER_OUTPUT_CHARS - output.length)
+        output.append(chunk)
+        emit("output", "", output = chunk, stream = stream)
+        if (chunk.length < text.length && !truncated) { truncated = true; val marker = "[output truncated after $MAX_USER_OUTPUT_CHARS characters]\n"; output.append(marker); emit("output", "", output = marker, stream = stream) }
+    }
+}
+private val captureState = ThreadLocal<CaptureState?>()
+private class RoutedOutputStream(private val stream: String) : java.io.OutputStream() {
     private val buffer = ByteArrayOutputStream()
     override fun write(value: Int) { buffer.write(value); if (value == '\n'.code) flush() }
     override fun write(values: ByteArray, offset: Int, length: Int) { buffer.write(values, offset, length); if (values.copyOfRange(offset, offset + length).contains('\n'.code.toByte())) flush() }
-    override fun flush() { if (buffer.size() == 0) return; val text = buffer.toString(Charsets.UTF_8); buffer.reset(); onFlush(text) }
+    override fun flush() { if (buffer.size() == 0) return; val text = buffer.toString(Charsets.UTF_8); buffer.reset(); val capture = captureState.get(); if (capture != null) capture.append(text, stream) else emit("output", "", output = text, stream = stream) }
 }
 private fun emit(kind: String, display: String, id: String? = null, output: String = "", stage: String? = null, name: String? = null, fields: String? = null, stream: String? = null) {
     val extra = id?.let { ",\"objectId\":${jsonString(it)}" } ?: ""
@@ -56,6 +71,8 @@ private fun emit(kind: String, display: String, id: String? = null, output: Stri
 
 fun main() {
     controlOut = System.out
+    System.setOut(java.io.PrintStream(RoutedOutputStream("stdout"), true, Charsets.UTF_8))
+    System.setErr(java.io.PrintStream(RoutedOutputStream("stderr"), true, Charsets.UTF_8))
     var loader: URLClassLoader? = null
     var projectPath = ""
     var projectPackages = emptyList<String>()
@@ -283,24 +300,11 @@ private fun stageSnapshotUnlocked(objects: Map<String, Any>, selectedWorld: Any,
 }
 private data class Captured<T>(val value: T, val output: String)
 private fun <T> withUserOutput(block: () -> T): Captured<T> {
-    val previous = System.out
-    val previousError = System.err
-    val output = StringBuilder()
-    var truncated = false
-    fun capture(text: String, stream: String) {
-        if (output.length >= MAX_USER_OUTPUT_CHARS) {
-            if (!truncated) { truncated = true; val marker = "[output truncated after $MAX_USER_OUTPUT_CHARS characters]\n"; output.append(marker); emit("output", "", output = marker, stream = stream) }
-            return
-        }
-        val chunk = text.take(MAX_USER_OUTPUT_CHARS - output.length)
-        output.append(chunk)
-        emit("output", "", output = chunk, stream = stream)
-        if (chunk.length < text.length && !truncated) { truncated = true; val marker = "[output truncated after $MAX_USER_OUTPUT_CHARS characters]\n"; output.append(marker); emit("output", "", output = marker, stream = stream) }
-    }
-    val stdout = LiveOutputStream { text -> capture(text, "stdout") }
-    val stderr = LiveOutputStream { text -> capture(text, "stderr") }
-    return try { val outStream = java.io.PrintStream(stdout, true, Charsets.UTF_8); val errorStream = java.io.PrintStream(stderr, true, Charsets.UTF_8); System.setOut(outStream); System.setErr(errorStream); val value = block(); stdout.flush(); stderr.flush(); Captured(value, output.toString()) }
-    finally { System.setOut(previous); System.setErr(previousError) }
+    val state = CaptureState()
+    val previous = captureState.get()
+    captureState.set(state)
+    return try { val value = block(); System.out.flush(); System.err.flush(); Captured(value, state.output.toString()) }
+    finally { captureState.set(previous) }
 }
 private fun kotlinType(value: Any): String = when (value) {
     is Int -> "Int"

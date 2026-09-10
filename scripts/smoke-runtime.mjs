@@ -73,7 +73,7 @@ try {
     { id: 'world', fileName: 'World.kt', kind: 'class', revision: 1, source: 'open class World(val width: Int, val height: Int, val cellSize: Int) { private val actors = mutableListOf<Actor>(); var background: Image = Image(width * cellSize, height * cellSize); val isClicked: Boolean get() = isWorldClicked(); fun addObject(actor: Actor, x: Int, y: Int) { actors.add(actor); actor.x = x; actor.y = y; setWorldOf(actor, this) }; fun allObjects(): List<Actor> = actors.toList(); fun show() { showWorld(this) }; fun showText(text: String, x: Int, y: Int) { setTextOf(this, x, y, text) }; fun clicked(): Boolean = isClicked; open fun act() {} }' },
     { id: 'actor', fileName: 'Actor.kt', kind: 'class', revision: 1, source: 'open class Actor { var x: Int = 0; var y: Int = 0; var rotation: Int = 0; var image: Image? = null; val isClicked: Boolean get() = isActorClicked(this); open fun act() {}; fun move(distance: Int) { x += distance }; fun clicked(): Boolean = isClicked }' },
     { id: 'image', fileName: 'Image.kt', kind: 'class', revision: 1, source: 'import java.awt.Color\nimport java.awt.image.BufferedImage\nclass Image { var awtImage: BufferedImage; var color: Color = Color.BLACK; @get:JvmSynthetic @set:JvmSynthetic internal var transparency: Int = 255; constructor(width: Int, height: Int) { awtImage = BufferedImage(maxOf(1, width), maxOf(1, height), BufferedImage.TYPE_INT_ARGB) }; constructor(fileName: String) { awtImage = cachedImage(fileName) }; val width: Int get() = awtImage.width; val height: Int get() = awtImage.height; fun setColor(r: Int, g: Int, b: Int) { color = Color(r, g, b) }; fun fill() { val g = awtImage.createGraphics(); g.color = color; g.fillRect(0, 0, width, height); g.dispose() }; fun scale(nextWidth: Int, nextHeight: Int) { awtImage = BufferedImage(maxOf(1, nextWidth), maxOf(1, nextHeight), BufferedImage.TYPE_INT_ARGB) }; fun setTransparency(value: Int) { transparency = value.coerceIn(0, 255) } }' },
-    { id: 'walker', fileName: 'Walker.kt', kind: 'class', revision: 1, source: 'class Walker: Actor() { init { image = Image(20, 20) }; override fun act() { move(1) } }' },
+    { id: 'walker', fileName: 'Walker.kt', kind: 'class', revision: 1, source: 'class Walker: Actor() { init { image = Image(20, 20) }; override fun act() { move(1); println("tick") } }' },
     { id: 'textured', fileName: 'Textured.kt', kind: 'class', revision: 1, source: 'class Textured: Actor() { init { image = Image("hero.png") } }' },
     { id: 'broken', fileName: 'Broken.kt', kind: 'class', revision: 1, source: 'class Broken: Actor() { override fun act() { error("boom") } }' },
     { id: 'blueplay', fileName: 'BluePlayFunctions.kt', kind: 'functions', revision: 1, source: 'private val internalUi = object { val enabled = true }\nfun isKeyDown(key: String): Boolean = false' },
@@ -261,6 +261,8 @@ try {
   assert.equal((await action({ op: 'invoke', objectId: world.objectId, name: 'clicked', args: '[]' })).body.display, 'true');
   assert.equal((await action({ op: 'eval', code: 'start()', mode: 'expression' })).body.kind, 'unit');
   await wait(120);
+  const gameEvents = (await json(`/api/session/${session.sessionId}/events`)).body;
+  assert.ok(gameEvents.some(event => event.stream === 'stdout' && event.output.includes('tick')), JSON.stringify(gameEvents));
   const movingStage = (await json(`/api/session/${session.sessionId}/stage`)).body.stage;
   assert.equal(movingStage.running, true);
   assert.ok(movingStage.objects.find(value => value.type === 'Walker').x > 2);
