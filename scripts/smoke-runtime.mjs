@@ -61,6 +61,7 @@ try {
     { id: 'child', fileName: 'Child.kt', kind: 'class', revision: 1, source: 'class Child(baseValue: String): Base(baseValue) { var ownValue: Int = 7 }' },
     { id: 'shape', fileName: 'Shape.kt', kind: 'class', revision: 1, source: 'interface Shape { fun label(): String }' },
     { id: 'shape-impl', fileName: 'ShapeImpl.kt', kind: 'class', revision: 1, source: 'class ShapeImpl: Shape { override fun label(): String = "shape" }' },
+    { id: 'computed', fileName: 'Computed.kt', kind: 'class', revision: 1, source: 'class Computed { var getterCalls: Int = 0; val computed: Int get() { getterCalls += 1; return getterCalls } }' },
     { id: 'tools', fileName: 'Tools.kt', kind: 'class', revision: 1, source: 'object Tools { fun twice(value: Int): Int = value * 2; fun ping() { println("pong") } }' },
     { id: 'factory', fileName: 'Factory.kt', kind: 'class', revision: 1, source: 'class Factory { companion object { fun make(value: Int): Counter = Counter(value) } }' },
     { id: 'abstract', fileName: 'AbstractThing.kt', kind: 'class', revision: 1, source: 'abstract class AbstractThing { fun ping() {} }' },
@@ -279,6 +280,12 @@ try {
   assert.equal((await action({ op: 'create', className: 'Shape', name: 'shape1', args: '[]' })).body.kind, 'error');
   const shapeImpl = (await action({ op: 'create', className: 'ShapeImpl', name: 'shapeImpl1', args: '[]' })).body;
   assert.equal((await action({ op: 'invoke', objectId: shapeImpl.objectId, name: 'label', args: '[]' })).body.display, 'shape');
+  const computed = (await action({ op: 'create', className: 'Computed', name: 'computed1', args: '[]' })).body;
+  const computedInspection = await action({ op: 'inspect', objectId: computed.objectId });
+  assert.match(computedInspection.body.display, /getterCalls=0/);
+  assert.doesNotMatch(computedInspection.body.display, /computed=/);
+  assert.equal((await action({ op: 'eval', code: 'computed1.computed', mode: 'expression' })).body.display, '1');
+  assert.match((await action({ op: 'inspect', objectId: computed.objectId })).body.display, /getterCalls=1/);
   const box = (await action({ op: 'create', className: 'Box', name: 'box1', typeArguments: JSON.stringify(['String']), args: JSON.stringify(['"Ada"']) })).body;
   assert.equal(box.display, 'Box<String>');
   const bounded = (await action({ op: 'create', className: 'Bounded', name: 'bounded1', typeArguments: JSON.stringify(['Int']), args: JSON.stringify(['7']) })).body;
