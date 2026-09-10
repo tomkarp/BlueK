@@ -54,7 +54,7 @@ Mit echten `kotlinc`- und Worker-Prozessen geprüft:
 - BluePlay `MyWorld` mit Actor-Snapshot und Mutation per `show(); step()`.
 - BluePlay-Actor- und World-Klicks einschließlich Hitbox und Geschwindigkeitsgrenzen.
 - stale `generationId` wird per HTTP mit `409` abgewiesen.
-- Browser-Session-Cleanup entfernt Worker und temporäre Verzeichnisse beim Verlassen der Seite.
+- Browser-Session-Cleanup entfernt Worker und temporäre Verzeichnisse beim Verlassen der Seite; zusätzlich werden inaktive Sessions nach 30 Minuten automatisch aufgeräumt.
 
 ## Bewusste Grenzen
 
