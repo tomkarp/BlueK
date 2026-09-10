@@ -69,7 +69,7 @@ useEffect(() => { if (!generation || !client) return; let active = true; const t
   const moveCard = (event: React.PointerEvent<HTMLElement>) => { const drag = cardDrag.current; if (!drag) return; const canvas = event.currentTarget.closest('.canvas'); if (!canvas) return; const bounds = canvas.getBoundingClientRect(); setCardPositions(previous => ({ ...previous, [drag.id]: { x: Math.min(Math.max(0, event.clientX - bounds.left - drag.dx), Math.max(0, bounds.width - 250)), y: Math.min(Math.max(0, event.clientY - bounds.top - drag.dy), Math.max(0, bounds.height - 134)) } })); };
   const endCardDrag = () => { cardDrag.current = null; };
   const stageRunning = Boolean(stage?.running);
-  const mainEntry = (preferredName?: string) => { const owner = classes.find(value => value.kind === 'functions' && (!preferredName || value.name === preferredName) && (value.methods || []).some(method => method.name === 'main' && mainInvocation(method))); const method = owner?.methods?.find((value: any) => value.name === 'main' && mainInvocation(value)); return owner && method ? { owner: owner.name, method } : null; };
+  const mainEntry = (preferredName?: string) => { const candidates = classes.filter(value => value.kind === 'functions' && (!preferredName || value.name === preferredName)).flatMap(owner => { const method = (owner.methods || []).find((value: any) => value.name === 'main' && mainInvocation(value)); return method ? [{ owner: owner.name, method }] : []; }); return preferredName ? candidates[0] || null : candidates.length === 1 ? candidates[0] : null; };
   const mainEntryPoint = mainEntry();
   const resetEntryPoint = mainEntry('Main');
   const hasMain = Boolean(mainEntryPoint);
