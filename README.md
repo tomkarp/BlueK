@@ -17,6 +17,7 @@ npm start
 
 - `Compile` kompiliert alle Projektdateien gemeinsam und startet eine neue Runtime-Generation.
 - `New Class` und `New Functions` legen editierbare Kotlin-Dateien an.
+- `Import Kotlin Files` übernimmt vorhandene `.kt`-Dateien, sodass auch ein bestehendes BluePlay-Projekt (z. B. mit `Actor.kt`, `World.kt`, `Image.kt` und `Main.kt`) kompiliert werden kann.
 - `Add Media` importiert Bilder und WAV-Dateien in die BluePlay-Pfade `images/` beziehungsweise `sounds/`.
 - Doppelklick auf eine Karte öffnet den Quelltexteditor; Änderungen müssen erneut kompiliert werden.
 - Rechtsklick auf eine Klasse öffnet den Kotlin-Konstruktor. Strings werden als Kotlin-Ausdrücke mit Anführungszeichen eingegeben.
