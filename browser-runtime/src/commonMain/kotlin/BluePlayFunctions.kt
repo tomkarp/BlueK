@@ -17,6 +17,9 @@ fun getSpeed(): Int = speedValue
 fun setSpeed(value: Int) { speedValue = value.coerceIn(1, 100) }
 @OptIn(kotlin.js.ExperimentalJsExport::class) @JsExport
 fun start() { running = true }
+/** Explicit bridge entry point used by the browser controls. */
+@OptIn(kotlin.js.ExperimentalJsExport::class) @JsExport
+fun bluekRun() { start() }
 @OptIn(kotlin.js.ExperimentalJsExport::class) @JsExport
 fun stop() { running = false }
 @OptIn(kotlin.js.ExperimentalJsExport::class) @JsExport
