@@ -144,6 +144,17 @@ try {
   assert.match(liveEvents.map(event => event.output || '').join(''), /What is your name\?/);
   assert.equal((await post(`/api/session/${session.sessionId}/input`, { text: '' })).response.status, 202);
   assert.equal((await waiting).body.display, '');
+  const namedInput = action({ op: 'eval', code: 'askName()', mode: 'expression' });
+  let namedEvents = [];
+  for (let attempt = 0; attempt < 30 && !namedEvents.some(event => event.output?.includes('What is your name?')); attempt++) {
+    await wait(500);
+    namedEvents.push(...(await json(`/api/session/${session.sessionId}/events`)).body);
+  }
+  assert.match(namedEvents.map(event => event.output || '').join(''), /What is your name\?/);
+  assert.equal((await post(`/api/session/${session.sessionId}/input`, { text: 'Ada' })).response.status, 202);
+  const namedResult = await namedInput;
+  assert.equal(namedResult.body.display, 'Ada');
+  assert.match(namedResult.body.output, /Hello, Ada!/);
   assert.equal((await action({ op: 'eval', code: 'square(7)', mode: 'expression' })).body.display, '49');
   assert.equal((await action({ op: 'eval', code: 'Tools.twice(7)', mode: 'expression' })).body.display, '14');
   const made = (await action({ op: 'eval', code: 'Factory.make(8)', mode: 'expression' })).body;
