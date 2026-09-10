@@ -120,6 +120,10 @@ try {
   const action = body => post(`/api/session/${session.sessionId}/action`, { ...body, generationId });
   assert.equal((await action({ op: 'eval', code: 'main()', mode: 'expression' })).body.kind, 'unit');
   assert.equal((await json(`/api/session/${session.sessionId}/stage`)).body.stage.width, 6);
+  assert.equal((await action({ op: 'reset' })).body.kind, 'unit');
+  assert.equal((await json(`/api/session/${session.sessionId}/stage`)).body.stage, undefined);
+  assert.equal((await action({ op: 'eval', code: 'main()', mode: 'expression' })).body.kind, 'unit');
+  assert.equal((await json(`/api/session/${session.sessionId}/stage`)).body.stage.width, 6);
   const counter = (await action({ op: 'create', className: 'Counter', name: 'counter1', args: JSON.stringify(['3']) })).body;
   assert.ok(counter.objectId, JSON.stringify(counter));
   const duplicateCounter = await action({ op: 'create', className: 'Counter', name: 'counter1', args: '[]' });

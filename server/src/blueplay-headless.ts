@@ -35,6 +35,17 @@ fun start() {
 }
 fun stop() { running = false; loopThread?.interrupt(); loopThread = null }
 fun step() { if (!running) stepWorld() }
+internal fun resetState() {
+    stop()
+    synchronized(simLock) { actorWorlds.clear(); worldTexts.clear() }
+    currentWorld = null
+    keysDown.clear()
+    clickPending = false
+    clickX = -1
+    clickY = -1
+    while (pendingSounds.poll() != null) { }
+    while (pendingErrors.poll() != null) { }
+}
 
 internal fun worldOf(actor: Actor): World? = synchronized(simLock) { actorWorlds[actor] }
 internal fun setWorldOf(actor: Actor, world: World?) = synchronized(simLock) { if (world == null) actorWorlds.remove(actor) else actorWorlds[actor] = world }

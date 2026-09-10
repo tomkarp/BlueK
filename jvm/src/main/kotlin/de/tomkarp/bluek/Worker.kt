@@ -96,6 +96,11 @@ fun main() {
                     loader = URLClassLoader(arrayOf(File(projectPath).toURI().toURL()), Worker::class.java.classLoader).also { activeProjectLoader = it }
                     objects.clear(); names.clear(); bindingTypes.clear(); mutableBindings.clear(); emit("unit", "loaded")
                 }
+                line.contains("\"op\":\"reset\"") -> {
+                    objects.clear(); names.clear(); bindingTypes.clear(); mutableBindings.clear()
+                    loader?.let { bluePlayClass(it, projectPackages, "BluePlayFunctionsKt")?.getMethod("resetState")?.invoke(null) }
+                    emit("unit", "Runtime reset")
+                }
                 line.contains("\"op\":\"create\"") -> {
                     val className = value(line, "className")
                     val requestedName = value(line, "name")
