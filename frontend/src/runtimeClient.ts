@@ -300,6 +300,13 @@ export class HybridRuntimeClient implements RuntimeClient {
         const objectId = this.bindings.get(property.receiver);
         if (objectId && this.localObjects.has(String(objectId))) return (await this.local({ op: 'get', objectId: String(objectId), property: property.property, className: String(this.localObjects.get(String(objectId))) })).value;
       }
+      {
+        const scalarProperty = source.match(/^(.+)\.(length|isEmpty)$/s);
+        if (scalarProperty) {
+          const value = displayedSimpleValue(await this.execute({ op: 'eval', code: scalarProperty[1], mode: 'expression' }));
+          if (typeof value === 'string' || Array.isArray(value)) return { kind: 'scalar', display: String(scalarProperty[2] === 'length' ? value.length : value.length === 0) };
+        }
+      }
       const parsed = simpleCodepadCall(String(request.code || ''));
       if (parsed) {
         if (parsed.receiver) {
@@ -307,6 +314,13 @@ export class HybridRuntimeClient implements RuntimeClient {
           const localClassName = objectId ? this.localObjects.get(String(objectId)) : undefined;
           const klass = this.classes.find(value => value.name === localClassName);
           const method = klass?.methods.find(value => value.name === parsed.callable);
+          if (!objectId && this.localValues.has(parsed.receiver) && parsed.args.length === 0) {
+            const scalar = this.localValues.get(parsed.receiver);
+            if (typeof scalar === 'string') {
+              const transformed = parsed.callable === 'uppercase' ? scalar.toUpperCase() : parsed.callable === 'lowercase' ? scalar.toLowerCase() : parsed.callable === 'trim' ? scalar.trim() : parsed.callable === 'reversed' ? [...scalar].reverse().join('') : undefined;
+              if (transformed !== undefined) return { kind: 'scalar', display: transformed };
+            }
+          }
           if (objectId && klass && method && method.typeParameters?.length && parsed.typeArguments.length === 1 && parsed.args.length >= requiredParameters(method.parameters).length) {
             const args = parsed.args.map(value => parseKotlinArgument(value, this.bindings, this.localValues));
             if (!simpleArgumentsMatch(args, requiredParameters(method.parameters))) throw new Error('The local arguments do not match the Kotlin method types; compile the expression first.');
