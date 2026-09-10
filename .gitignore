@@ -5,6 +5,11 @@ server/dist/
 jvm/worker.jar
 jvm/.gradle/
 jvm/build/
+kotlin-js-spike/.gradle/
+kotlin-js-spike/build/
+kotlin-js-spike/kotlin-js-store/
+browser-runtime/.gradle/
+browser-runtime/build/
 .DS_Store
 .bluek-server.pid
 .bluek-server.log
