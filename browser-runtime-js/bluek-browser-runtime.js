@@ -52,7 +52,8 @@ export class World {
   constructor(width, height, cellSize) { this.width = width; this.height = height; this.cellSize = cellSize; this._actors = []; this._background = new Image(width * cellSize, height * cellSize); this._background.setColor(255, 255, 255); this._background.fill(); this._texts = new Map(); }
   act() {}
   show() { state.world = this; }
-  get background() { return this._background; }
+  _findBackground() { return Object.values(this).find(value => value instanceof Image && value !== this._background) || this._background; }
+  get background() { return this._findBackground(); }
   set background(value) { this._background = value; }
   addObject(actor, x, y) { if (actor.__world && actor.__world !== this) actor.__world.removeObject(actor); actor.__world = this; if (!this._actors.includes(actor)) this._actors.push(actor); actor.x = x; actor.y = y; actor._clamp(); }
   removeObject(actor) { this._actors = this._actors.filter(item => item !== actor); if (actor.__world === this) actor.__world = null; }
