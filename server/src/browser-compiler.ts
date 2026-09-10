@@ -57,6 +57,10 @@ function bridgeSource(files: ProjectFile[], classes: ClassMeta[]): { source: str
         '',
         '@OptIn(ExperimentalJsExport::class)',
         '@JsExport',
+        'fun bluekFlushOutput() { println("") }',
+        '',
+        '@OptIn(ExperimentalJsExport::class)',
+        '@JsExport',
         'fun bluekStage(): String = bluekStageJson()',
     ];
     if (mainPackage) lines.push(`import ${mainPackage}.main`);

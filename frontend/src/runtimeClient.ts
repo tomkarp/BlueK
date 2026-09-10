@@ -77,13 +77,14 @@ let timer = null;
 const objects = new Map();
 const displayValues = new Map();
 let outputBuffer = '';
+let flushingOutput = false;
 const inputBuffer = typeof SharedArrayBuffer === 'function' ? new SharedArrayBuffer(65540) : null;
 const inputState = inputBuffer ? new Int32Array(inputBuffer, 0, 1) : null;
 const inputBytes = inputBuffer ? new Uint8Array(inputBuffer, 4) : null;
-const readInput = (nullable) => { if (!inputBuffer || !inputState || !inputBytes) throw new Error('Terminal input requires a cross-origin-isolated browser context.'); Atomics.store(inputState, 0, 0); self.postMessage({ kind: 'input-request' }); Atomics.wait(inputState, 0, 0); const length = Atomics.load(inputState, 0); if (nullable && length < 0) return null; return new TextDecoder().decode(inputBytes.slice(0, Math.max(0, length))); };
+const readInput = (nullable) => { if (!inputBuffer || !inputState || !inputBytes) throw new Error('Terminal input requires a cross-origin-isolated browser context.'); flushStudentOutput(); const pendingOutput = outputBuffer; outputBuffer = ''; Atomics.store(inputState, 0, 0); self.postMessage({ kind: 'input-request', output: pendingOutput }); Atomics.wait(inputState, 0, 0); const length = Atomics.load(inputState, 0); if (nullable && length < 0) return null; return new TextDecoder().decode(inputBytes.slice(0, Math.max(0, length))); };
 globalThis.__bluekReadln = () => readInput(false);
 globalThis.__bluekReadlnOrNull = () => readInput(true);
-const appendOutput = (value) => { const text = value.map(item => typeof item === 'string' ? item : String(item)).join(' '); outputBuffer += text + '\\n'; };
+const appendOutput = (value) => { const text = value.map(item => typeof item === 'string' ? item : String(item)).join(' '); outputBuffer += text + (flushingOutput ? '' : '\\n'); };
 const originalConsoleLog = console.log;
 console.log = (...args) => { appendOutput(args); originalConsoleLog(...args); };
 console.error = (...args) => { appendOutput(args); };
@@ -93,14 +94,15 @@ const valueOf = (value, className = '') => {
   const objectId = crypto.randomUUID(); objects.set(objectId, value); const display = className || value.constructor?.name || 'Object'; displayValues.set(objectId, display); return { kind: 'object', display, objectId };
 };
 const resolve = (path) => path.split('.').filter(Boolean).reduce((current, part) => current?.[part], api);
+const flushStudentOutput = () => { const flush = api?.bluekFlushOutput || resolve('bluekFlushOutput'); if (typeof flush !== 'function') return; flushingOutput = true; try { flush(); } finally { flushingOutput = false; } };
 const resolveArguments = (args) => args.map((arg) => arg && typeof arg === 'object' && arg.__bluekObjectId ? objects.get(arg.__bluekObjectId) : arg);
-const finish = () => { const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' }, output }); };
+const finish = () => { flushStudentOutput(); const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' }, output }); };
 const stage = () => { const value = runtimeApi?.bluekStage || globalThis.bluekStage; if (typeof value === 'function') self.postMessage({ kind: 'stage', stage: JSON.parse(value()) }); };
 self.onmessage = async ({ data }) => {
   try {
     if (data.op === 'load') { await import(new URL('kotlin-kotlin-stdlib.js', data.url).href); runtimeApi = await import(new URL('bluek-runtime.js', data.url).href); const moduleValue = await import(data.url); const exported = globalThis['bluek-browser-runtime'] || moduleValue.default || moduleValue; api = data.packageName ? (exported[data.packageName] || data.packageName.split('.').reduce((v, p) => v?.[p], exported)) : exported; if (!api || typeof api !== 'object') api = exported; if (inputBuffer) self.postMessage({ kind: 'input-buffer', buffer: inputBuffer }); self.postMessage({ kind: 'ready' }); return; }
     if (!api) throw new Error('Browser Kotlin runtime is not loaded.');
-    if (data.op === 'main') { const start = api.bluekStart || resolve('bluekStart'); if (!start) throw new Error('This project has no parameterless main().'); start(); stage(); const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' }, output }); return; }
+    if (data.op === 'main') { const start = api.bluekStart || resolve('bluekStart'); if (!start) throw new Error('This project has no parameterless main().'); start(); stage(); flushStudentOutput(); const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' }, output }); return; }
     if (data.op === 'run') { const run = runtimeApi?.bluekRun || runtimeApi?.start || api.bluekRun || resolve('bluekRun') || resolve('start'); if (typeof run !== 'function') throw new Error('Browser BluePlay runtime is missing its run bridge.'); run(); clearInterval(timer); timer = setInterval(() => { const tick = runtimeApi?.bluekStep || resolve('bluekStep'); if (typeof tick === 'function') tick(); stage(); }, 16); stage(); self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' } }); return; }
     if (data.op === 'stage') { stage(); finish(); return; }
     if (data.op === 'act') { const act = runtimeApi?.bluekAct || resolve('bluekAct'); if (typeof act === 'function') act(); stage(); finish(); return; }
@@ -108,8 +110,8 @@ self.onmessage = async ({ data }) => {
     if (data.op === 'speed') { const speed = runtimeApi?.bluekSetSpeed || resolve('bluekSetSpeed'); if (typeof speed === 'function') speed(data.value); stage(); finish(); return; }
     if (data.op === 'key') { const key = runtimeApi?.bluekKey || resolve('bluekKey'); if (typeof key === 'function') key(data.key, data.pressed); return; }
     if (data.op === 'click') { const click = runtimeApi?.bluekClick || resolve('bluekClick'); if (typeof click === 'function') click(data.x, data.y); return; }
-    if (data.op === 'create') { const fn = api[data.functionName] || resolve(data.functionName); if (typeof fn !== 'function') throw new Error('Generated constructor bridge is missing: ' + data.functionName); const object = fn(...resolveArguments(data.args)); const objectId = crypto.randomUUID(); objects.set(objectId, object); displayValues.set(objectId, data.className + '()'); const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value: { kind: 'object', display: data.className + '()', objectId }, objectId, name: data.name, output }); return; }
-    if (data.op === 'invoke') { const receiver = data.objectId ? objects.get(data.objectId) : null; if (data.objectId && !receiver) throw new Error('Object handle is no longer available.'); const fn = api[data.functionName] || resolve(data.functionName); if (typeof fn !== 'function') throw new Error('Generated method bridge is missing: ' + data.functionName); const value = valueOf(receiver ? fn(receiver, ...resolveArguments(data.args)) : fn(...resolveArguments(data.args)), data.className); const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value, output }); return; }
+    if (data.op === 'create') { const fn = api[data.functionName] || resolve(data.functionName); if (typeof fn !== 'function') throw new Error('Generated constructor bridge is missing: ' + data.functionName); const object = fn(...resolveArguments(data.args)); const objectId = crypto.randomUUID(); objects.set(objectId, object); displayValues.set(objectId, data.className + '()'); flushStudentOutput(); const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value: { kind: 'object', display: data.className + '()', objectId }, objectId, name: data.name, output }); return; }
+    if (data.op === 'invoke') { const receiver = data.objectId ? objects.get(data.objectId) : null; if (data.objectId && !receiver) throw new Error('Object handle is no longer available.'); const fn = api[data.functionName] || resolve(data.functionName); if (typeof fn !== 'function') throw new Error('Generated method bridge is missing: ' + data.functionName); const value = valueOf(receiver ? fn(receiver, ...resolveArguments(data.args)) : fn(...resolveArguments(data.args)), data.className); flushStudentOutput(); const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value, output }); return; }
     if (data.op === 'get') { const object = objects.get(data.objectId); if (!object) throw new Error('Object handle is no longer available.'); const classKey = String(data.className || '').replace(/[^A-Za-z0-9_]/g, '_'); const stem = String(data.property).charAt(0).toUpperCase() + String(data.property).slice(1); const getter = api['bluekInvoke_' + classKey + '_get' + stem + '_noargs']; const value = typeof getter === 'function' ? getter(object) : object[data.property]; const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value: valueOf(value), output }); return; }
     if (data.op === 'inspect') { const object = objects.get(data.objectId); if (!object) throw new Error('Object handle is no longer available.'); const entries = Object.entries(object).filter(([key]) => !key.startsWith('$')); const namesFn = data.className ? (api['bluekInspectNames_' + data.className] || resolve('bluekInspectNames_' + data.className)) : null; let names = []; if (typeof namesFn === 'function') { try { names = JSON.parse(namesFn()); } catch { names = []; } } const classKey = String(data.className || '').replace(/[^A-Za-z0-9_]/g, '_'); const getterValue = (name) => { const stem = name.charAt(0).toUpperCase() + name.slice(1); const getter = api['bluekInvoke_' + classKey + '_get' + stem + '_noargs']; if (typeof getter !== 'function') return undefined; try { return getter(object); } catch { return undefined; } }; const fields = names.length ? names.map((name, index) => { const value = getterValue(name); const entry = entries[index]; return { name, value: valueOf(value === undefined ? entry?.[1] : value).display }; }) : entries.map(([key, value]) => ({ name: key, value: valueOf(value).display })); self.postMessage({ kind: 'value', value: { kind: 'object', objectId: data.objectId, fields } }); return; }
     if (data.op === 'remove') { objects.delete(data.objectId); displayValues.delete(data.objectId); self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' } }); return; }
@@ -127,14 +129,15 @@ export class HybridRuntimeClient implements RuntimeClient {
   private browserGeneration: string | null = null;
   private latestStage: any = null;
   private inputBuffer: SharedArrayBuffer | null = null;
+  private readonly onInputRequest: (output?: string) => void;
 
-  constructor(sessionId: string, onFailure?: (message: string) => void) { this.http = new HttpRuntimeClient(sessionId, onFailure); }
+  constructor(sessionId: string, onFailure?: (message: string) => void, onInputRequest: (output?: string) => void = () => undefined) { this.http = new HttpRuntimeClient(sessionId, onFailure); this.onInputRequest = onInputRequest; }
   private async local(request: BrowserAction): Promise<any> {
     if (!this.worker || !this.ready) throw new Error('Browser runtime is not available.');
     await this.ready;
     return new Promise((resolve, reject) => {
       const worker = this.worker!;
-      const onMessage = (event: MessageEvent) => { if (event.data?.kind === 'value' || event.data?.kind === 'ready') { worker.removeEventListener('message', onMessage); resolve(event.data); } else if (event.data?.kind === 'error') { worker.removeEventListener('message', onMessage); reject(new Error(event.data.message)); } };
+      const onMessage = (event: MessageEvent) => { if (event.data?.kind === 'input-request') { this.onInputRequest(event.data.output); return; } if (event.data?.kind === 'value' || event.data?.kind === 'ready') { worker.removeEventListener('message', onMessage); resolve(event.data); } else if (event.data?.kind === 'error') { worker.removeEventListener('message', onMessage); reject(new Error(event.data.message)); } };
       worker.addEventListener('message', onMessage);
       worker.postMessage(request);
     });
