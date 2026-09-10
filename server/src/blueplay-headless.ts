@@ -59,7 +59,7 @@ private fun actorAt(cellX: Int, cellY: Int): Actor? {
 internal fun isActorClicked(actor: Actor): Boolean { if (!clickPending || actorAt(clickX, clickY) !== actor) return false; clickPending = false; return true }
 internal fun isWorldClicked(): Boolean { if (!clickPending || actorAt(clickX, clickY) != null) return false; clickPending = false; return true }
 internal fun imageOrPlaceholder(actor: Actor): Image = actor.image ?: Image(30, 30)
-internal fun cachedImage(fileName: String): BufferedImage = imageCache.getOrPut(fileName) { listOf(File(fileName), File("images", fileName)).firstNotNullOfOrNull { file -> if (file.exists()) ImageIO.read(file) else null } ?: BufferedImage(30, 30, BufferedImage.TYPE_INT_ARGB) }
+internal fun cachedImage(fileName: String): BufferedImage = imageCache.getOrPut(fileName) { listOf(File(fileName), File("images", fileName), File("project", fileName), File(File("project", "images"), fileName)).firstNotNullOfOrNull { file -> if (file.exists()) ImageIO.read(file) else null } ?: BufferedImage(30, 30, BufferedImage.TYPE_INT_ARGB) }
 internal fun setKeyState(key: String, pressed: Boolean) { if (pressed) keysDown.add(key.lowercase()) else keysDown.remove(key.lowercase()) }
 internal fun setClickPosition(x: Int, y: Int) { clickX = x; clickY = y; clickPending = true }
 

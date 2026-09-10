@@ -7,6 +7,7 @@ let output = '';
 server.stdout.on('data', chunk => { output += chunk.toString(); });
 server.stderr.on('data', chunk => { output += chunk.toString(); });
 const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+const onePixelPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 const json = async (url, options) => {
   try {
     const response = await fetch(`${base}${url}`, options);
@@ -58,12 +59,13 @@ try {
     { id: 'tag', fileName: 'Tag.kt', kind: 'class', revision: 1, source: 'annotation class Tag(val value: String)' },
     { id: 'world', fileName: 'World.kt', kind: 'class', revision: 1, source: 'open class World(val width: Int, val height: Int, val cellSize: Int) { private val actors = mutableListOf<Actor>(); var background: Image = Image(width * cellSize, height * cellSize); val isClicked: Boolean get() = isWorldClicked(); fun addObject(actor: Actor, x: Int, y: Int) { actors.add(actor); actor.x = x; actor.y = y; setWorldOf(actor, this) }; fun allObjects(): List<Actor> = actors.toList(); fun show() { showWorld(this) }; fun showText(text: String, x: Int, y: Int) { setTextOf(this, x, y, text) }; fun clicked(): Boolean = isClicked; open fun act() {} }' },
     { id: 'actor', fileName: 'Actor.kt', kind: 'class', revision: 1, source: 'open class Actor { var x: Int = 0; var y: Int = 0; var rotation: Int = 0; var image: Image? = null; val isClicked: Boolean get() = isActorClicked(this); open fun act() {}; fun move(distance: Int) { x += distance }; fun clicked(): Boolean = isClicked }' },
-    { id: 'image', fileName: 'Image.kt', kind: 'class', revision: 1, source: 'import java.awt.image.BufferedImage\nclass Image(val width: Int, val height: Int) { val awtImage = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB); var transparency: Int = 255 }' },
+    { id: 'image', fileName: 'Image.kt', kind: 'class', revision: 1, source: 'import java.awt.Color\nimport java.awt.image.BufferedImage\nclass Image { var awtImage: BufferedImage; var color: Color = Color.BLACK; @get:JvmSynthetic @set:JvmSynthetic internal var transparency: Int = 255; constructor(width: Int, height: Int) { awtImage = BufferedImage(maxOf(1, width), maxOf(1, height), BufferedImage.TYPE_INT_ARGB) }; constructor(fileName: String) { awtImage = cachedImage(fileName) }; val width: Int get() = awtImage.width; val height: Int get() = awtImage.height; fun setColor(r: Int, g: Int, b: Int) { color = Color(r, g, b) }; fun fill() { val g = awtImage.createGraphics(); g.color = color; g.fillRect(0, 0, width, height); g.dispose() }; fun scale(nextWidth: Int, nextHeight: Int) { awtImage = BufferedImage(maxOf(1, nextWidth), maxOf(1, nextHeight), BufferedImage.TYPE_INT_ARGB) }; fun setTransparency(value: Int) { transparency = value.coerceIn(0, 255) } }' },
     { id: 'walker', fileName: 'Walker.kt', kind: 'class', revision: 1, source: 'class Walker: Actor() { init { image = Image(20, 20) }; override fun act() { move(1) } }' },
+    { id: 'textured', fileName: 'Textured.kt', kind: 'class', revision: 1, source: 'class Textured: Actor() { init { image = Image("hero.png") } }' },
     { id: 'broken', fileName: 'Broken.kt', kind: 'class', revision: 1, source: 'class Broken: Actor() { override fun act() { error("boom") } }' },
     { id: 'blueplay', fileName: 'BluePlayFunctions.kt', kind: 'functions', revision: 1, source: '// replaced by the headless BluePlay adapter' },
   ];
-  const compiled = await post(`/api/session/${session.sessionId}/compile`, { files, revision: 1 });
+  const compiled = await post(`/api/session/${session.sessionId}/compile`, { files, resources: [{ path: 'images/hero.png', data: `data:image/png;base64,${onePixelPng}` }], revision: 1 });
   assert.equal(compiled.body.diagnostics.length, 0, JSON.stringify(compiled.body.diagnostics));
   assert.equal(compiled.body.classes.find(value => value.name === 'Overloaded').constructors.length, 2);
   assert.equal(compiled.body.classes.find(value => value.name === 'Person').methods.find(value => value.name === 'greet').parameters.length, 0);
@@ -184,7 +186,9 @@ try {
   assert.equal((await json(`/api/session/${session.sessionId}/stage`)).body.stage.width, 4);
   assert.equal((await action({ op: 'invoke', objectId: world.objectId, name: 'show', args: '[]' })).body.kind, 'unit');
   const walker = (await action({ op: 'create', className: 'Walker', name: 'walker1', args: '[]' })).body;
+  const textured = (await action({ op: 'create', className: 'Textured', name: 'textured1', args: '[]' })).body;
   assert.equal((await action({ op: 'invoke', objectId: world.objectId, name: 'addObject', args: JSON.stringify(['walker1', '2', '3']) })).body.kind, 'unit');
+  assert.equal((await action({ op: 'invoke', objectId: world.objectId, name: 'addObject', args: JSON.stringify(['textured1', '5', '4']) })).body.kind, 'unit');
   assert.equal((await action({ op: 'invoke', objectId: world.objectId, name: 'show', args: '[]' })).body.kind, 'unit');
   assert.equal((await action({ op: 'eval', code: 'setSpeed(80)', mode: 'expression' })).body.kind, 'unit');
   assert.equal((await action({ op: 'eval', code: 'getSpeed()', mode: 'expression' })).body.display, '80');
@@ -205,6 +209,7 @@ try {
   assert.ok(movingStage.objects.find(value => value.type === 'Walker').x > 2);
   assert.equal(movingStage.objects.find(value => value.type === 'Walker').imageWidth, 20);
   assert.equal(movingStage.objects.find(value => value.type === 'Walker').imageHeight, 20);
+  assert.equal(movingStage.objects.find(value => value.type === 'Textured').imageWidth, 1);
   assert.equal((await action({ op: 'eval', code: 'stop()', mode: 'expression' })).body.kind, 'unit');
   const stoppedX = (await json(`/api/session/${session.sessionId}/stage`)).body.stage.objects.find(value => value.type === 'Walker').x;
   assert.equal((await json(`/api/session/${session.sessionId}/stage`)).body.stage.running, false);
