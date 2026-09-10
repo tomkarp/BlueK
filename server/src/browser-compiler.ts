@@ -66,13 +66,17 @@ const bridgeCallArguments = (method: { parameters: { name: string; hasDefault?: 
 function bridgeSource(files: ProjectFile[], classes: ClassMeta[]): { source: string; packageName: string } {
     const mainFile = files.find(file => file.fileName === 'Main.kt') || files.find(file => /\bfun\s+main\s*\(/.test(file.source));
     const mainPackage = mainFile ? packageOf(mainFile.source) : '';
+    const projectPackage = files.map(file => packageOf(file.source)).find(Boolean) || '';
     const imports = new Set<string>();
     const knownTypes = new Set([...classes.map(value => value.name), ...frameworkNames]);
     for (const file of files) {
         const pkg = packageOf(file.source);
-        if (pkg && pkg !== mainPackage) for (const klass of classes) if (klass.name && file.source.includes(`class ${klass.name}`)) imports.add(`${pkg}.${klass.name}`);
+        if (pkg && pkg !== (mainPackage || projectPackage)) {
+            for (const klass of classes) if (klass.name && file.source.includes(`class ${klass.name}`)) imports.add(`${pkg}.${klass.name}`);
+            if (file.kind === 'functions') for (const method of classes.find(value => value.name === file.fileName.replace(/\.kt$/, ''))?.methods || []) imports.add(`${pkg}.${method.name}`);
+        }
     }
-    const bridgePackage = mainPackage;
+    const bridgePackage = mainPackage || projectPackage;
     const lines = [
         ...(bridgePackage ? [`package ${bridgePackage}`] : []),
         'import kotlin.js.ExperimentalJsExport',
@@ -160,8 +164,12 @@ export async function compileBrowserProject(root: string, sessionDir: string, fi
     await fs.mkdir(browserProjectDir, { recursive: true });
     const frameworkFiles = new Set(['Actor.kt', 'World.kt', 'Image.kt', 'BluePlayFunctions.kt']);
     for (const file of files) if (!frameworkFiles.has(file.fileName)) await fs.writeFile(path.join(browserProjectDir, file.fileName), browserCompatibleSource(file.source));
-    await fs.copyFile(path.join(root, 'browser-runtime-js', 'BluePlayApi.kt'), path.join(browserProjectDir, 'BluePlayApi.kt'));
     const packages = new Set(files.map(file => packageOf(file.source)));
+    const apiSource = await fs.readFile(path.join(root, 'browser-runtime-js', 'BluePlayApi.kt'), 'utf8');
+    for (const pkg of packages) {
+        const prefix = pkg ? `package ${pkg}\n\n` : '';
+        await fs.writeFile(path.join(browserProjectDir, `BlueKApi${pkg ? `_${kotlinIdentifier(pkg)}` : ''}.kt`), `${prefix}${apiSource}`);
+    }
     for (const pkg of packages) {
         const prefix = pkg ? `package ${pkg}\n\n` : '';
         const fileName = `BlueKInput${pkg ? `_${kotlinIdentifier(pkg)}` : ''}.kt`;
