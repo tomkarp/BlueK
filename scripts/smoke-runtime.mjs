@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 
 const base = 'http://127.0.0.1:5174';
-const server = spawn('node', ['server/dist/server/src/index.js'], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, BLUEK_PORT: '5174' } });
+const server = spawn('node', ['server/dist/server/src/index.js'], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, BLUEK_PORT: '5174', BLUEK_ACTION_TIMEOUT_MS: '10000' } });
 let output = '';
 server.stdout.on('data', chunk => { output += chunk.toString(); });
 server.stderr.on('data', chunk => { output += chunk.toString(); });
@@ -270,6 +270,9 @@ try {
   const recoveredAction = body => post(`/api/session/${session.sessionId}/action`, { ...body, generationId: recoveredCompile.body.generationId });
   const recoveredCounter = (await recoveredAction({ op: 'create', className: 'Counter', name: 'recoveredCounter', args: '[]' })).body;
   assert.equal((await recoveredAction({ op: 'invoke', objectId: recoveredCounter.objectId, name: 'current', args: '[]' })).body.display, '0');
+  const timedOut = await recoveredAction({ op: 'eval', code: 'while (true) { Thread.sleep(10) }', mode: 'block' });
+  assert.equal(timedOut.response.status, 500, JSON.stringify(timedOut));
+  assert.equal((await json(`/api/session/${session.sessionId}/status`)).body.available, false);
   console.log('BlueK runtime smoke test passed');
 } finally {
   server.kill('SIGTERM');

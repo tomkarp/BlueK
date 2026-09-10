@@ -13,6 +13,8 @@ npm start
 
 `npm start` baut Worker und Frontend vor jedem Start reproduzierbar neu, startet den Server im Vordergrund und kann mit `Ctrl+C` beendet werden. Danach `http://localhost:5173` öffnen. Der vollständige Testlauf ist separat mit `npm run smoke` möglich.
 
+Benutzeraktionen haben standardmäßig ein Zeitlimit von 120 Sekunden. Bei einem Timeout wird der Benutzer-Worker beendet; nach einem erneuten `Compile` wird er automatisch neu erzeugt. Für kurze lokale Tests kann `BLUEK_ACTION_TIMEOUT_MS` gesetzt werden.
+
 Der Server verwendet standardmäßig Port `5173`; für parallele lokale Instanzen kann `BLUEK_PORT=5175 npm start` verwendet werden.
 
 ## Bedienung
