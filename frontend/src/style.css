@@ -43,7 +43,7 @@ footer{flex:0 0 108px}
 .inspect-row span{padding:8px;font:16px Arial,sans-serif}
 .inspect-row output{padding:8px;background:#fff;border-left:2px solid #e65f6b;font:16px monospace;min-height:35px}
 .classcard{position:relative}
-.framework-card{display:none}
+.framework-card{display:flex}
 .card-menu{position:absolute;top:7px;right:8px;width:28px;height:24px;border:1px solid #9a6b2f;border-radius:4px;background:#f8d59f;color:#333;font:bold 18px/16px Arial;cursor:pointer}
 .card-menu:hover{background:#fff1d4}
 .object{position:relative}
