@@ -305,15 +305,22 @@ export class HybridRuntimeClient implements RuntimeClient {
           this.localValues.set(declaration.name, parseKotlinArgument(declaration.value, this.bindings, this.localValues));
           return { kind: 'unit', display: 'Unit' };
         } catch { /* The normal call parser may handle a constructor declaration. */ }
-        if (/^[A-Za-z_]\w*\.[A-Za-z_]\w*$/.test(declaration.value)) {
+        try {
           const evaluated = await this.execute({ op: 'eval', code: declaration.value, mode: 'expression' });
           this.rememberCodepadBinding(declaration.name, evaluated);
           return { kind: 'unit', display: 'Unit', output: evaluated.output };
-        }
+        } catch { /* The normal call parser may handle an unsupported expression. */ }
       }
       const assignment = request.mode === 'block' ? simpleCodepadAssignment(source) : null;
       if (assignment && this.localValues.has(assignment.name)) {
-        this.localValues.set(assignment.name, parseKotlinArgument(assignment.value, this.bindings, this.localValues));
+        try {
+          this.localValues.set(assignment.name, parseKotlinArgument(assignment.value, this.bindings, this.localValues));
+        } catch {
+          const evaluated = await this.execute({ op: 'eval', code: assignment.value, mode: 'expression' });
+          const value = displayedSimpleValue(evaluated);
+          if (value === undefined) throw new Error('Only scalar Kotlin values can be assigned locally.');
+          this.localValues.set(assignment.name, value);
+        }
         return { kind: 'unit', display: 'Unit' };
       }
       // A Codepad Run block may end with a value expression. BlueJ displays
