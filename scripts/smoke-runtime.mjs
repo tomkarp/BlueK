@@ -30,6 +30,7 @@ try {
     { id: 'person', fileName: 'Person.kt', kind: 'class', revision: 1, source: 'class Person(var name: String) { fun greet(): String = "Hello, $name!"; fun rename(newName: String) { name = newName }; fun greetInConsole() { println(greet() + "\\t✓"); System.err.println("warning") }; fun friend(): Person = Person("$name Jr") }' },
     { id: 'helpers', fileName: 'Helpers.kt', kind: 'functions', revision: 1, source: 'fun square(x: Int): Int = x * x; fun askName(): String { println("What is your name?"); val name = readln(); println("Hello, $name!"); return name }' },
     { id: 'box', fileName: 'Box.kt', kind: 'class', revision: 1, source: 'class Box<T>(var value: T) { fun replace(next: T) { value = next }; fun get(): T = value }' },
+    { id: 'typed', fileName: 'Typed.kt', kind: 'class', revision: 1, source: 'class Typed(val value: Map<String, List<Int>?>, val sink: MutableList<in Number>)' },
     { id: 'overloaded', fileName: 'Overloaded.kt', kind: 'class', revision: 1, source: 'class Overloaded { val kind: String; constructor(value: Int) { kind = "int" }; constructor(value: String) { kind = "string" } }' },
     { id: 'base', fileName: 'Base.kt', kind: 'class', revision: 1, source: 'open class Base(var baseValue: String)' },
     { id: 'child', fileName: 'Child.kt', kind: 'class', revision: 1, source: 'class Child(baseValue: String): Base(baseValue) { var ownValue: Int = 7 }' },
@@ -54,6 +55,10 @@ try {
   assert.equal(compiled.body.classes.find(value => value.name === 'Factory').companionMethods.find(value => value.name === 'make').parameters.length, 1);
   assert.equal(compiled.body.classes.find(value => value.name === 'AbstractThing').kind, 'abstract');
   assert.equal(compiled.body.classes.find(value => value.name === 'AbstractThing').constructors.length, 0);
+  const typedConstructor = compiled.body.classes.find(value => value.name === 'Typed').constructors[0];
+  assert.deepEqual(typedConstructor.parameters[0].type.arguments.map(value => value.displayName), ['String', 'List<Int>?']);
+  assert.equal(typedConstructor.parameters[0].type.arguments[1].arguments[0].displayName, 'Int');
+  assert.equal(typedConstructor.parameters[1].type.arguments[0].projection, 'in');
   const generationId = compiled.body.generationId;
   const action = body => post(`/api/session/${session.sessionId}/action`, { ...body, generationId });
   const counter = (await action({ op: 'create', className: 'Counter', name: 'counter1', args: JSON.stringify(['3']) })).body;
