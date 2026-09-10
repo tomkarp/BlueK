@@ -36,8 +36,8 @@ try {
     { id: 'tools', fileName: 'Tools.kt', kind: 'class', revision: 1, source: 'object Tools { fun twice(value: Int): Int = value * 2; fun ping() { println("pong") } }' },
     { id: 'factory', fileName: 'Factory.kt', kind: 'class', revision: 1, source: 'class Factory { companion object { fun make(value: Int): Counter = Counter(value) } }' },
     { id: 'abstract', fileName: 'AbstractThing.kt', kind: 'class', revision: 1, source: 'abstract class AbstractThing { fun ping() {} }' },
-    { id: 'world', fileName: 'World.kt', kind: 'class', revision: 1, source: 'open class World(val width: Int, val height: Int, val cellSize: Int) { val actors = mutableListOf<Actor>(); fun addObject(actor: Actor, x: Int, y: Int) { actors.add(actor); actor.x = x; actor.y = y; setWorldOf(actor, this) }; fun allObjects(): List<Actor> = actors.toList(); fun show() { showWorld(this) }; open fun act() {} }' },
-    { id: 'actor', fileName: 'Actor.kt', kind: 'class', revision: 1, source: 'open class Actor { var x: Int = 0; var y: Int = 0; var image: Image? = null; open fun act() {}; fun move(distance: Int) { x += distance } }' },
+    { id: 'world', fileName: 'World.kt', kind: 'class', revision: 1, source: 'open class World(val width: Int, val height: Int, val cellSize: Int) { val actors = mutableListOf<Actor>(); val isClicked: Boolean get() = isWorldClicked(); fun addObject(actor: Actor, x: Int, y: Int) { actors.add(actor); actor.x = x; actor.y = y; setWorldOf(actor, this) }; fun allObjects(): List<Actor> = actors.toList(); fun show() { showWorld(this) }; fun clicked(): Boolean = isClicked; open fun act() {} }' },
+    { id: 'actor', fileName: 'Actor.kt', kind: 'class', revision: 1, source: 'open class Actor { var x: Int = 0; var y: Int = 0; var image: Image? = null; val isClicked: Boolean get() = isActorClicked(this); open fun act() {}; fun move(distance: Int) { x += distance }; fun clicked(): Boolean = isClicked }' },
     { id: 'image', fileName: 'Image.kt', kind: 'class', revision: 1, source: 'class Image(val width: Int, val height: Int)' },
     { id: 'walker', fileName: 'Walker.kt', kind: 'class', revision: 1, source: 'class Walker: Actor() { override fun act() { move(1) } }' },
     { id: 'broken', fileName: 'Broken.kt', kind: 'class', revision: 1, source: 'class Broken: Actor() { override fun act() { error("boom") } }' },
@@ -98,6 +98,10 @@ try {
   const walker = (await action({ op: 'create', className: 'Walker', name: 'walker1', args: '[]' })).body;
   assert.equal((await action({ op: 'invoke', objectId: world.objectId, name: 'addObject', args: JSON.stringify(['walker1', '2', '3']) })).body.kind, 'unit');
   assert.equal((await action({ op: 'invoke', objectId: world.objectId, name: 'show', args: '[]' })).body.kind, 'unit');
+  assert.equal((await post(`/api/session/${session.sessionId}/click`, { x: 3, y: 3 })).response.status, 202);
+  assert.equal((await action({ op: 'invoke', objectId: walker.objectId, name: 'clicked', args: '[]' })).body.display, 'true');
+  assert.equal((await post(`/api/session/${session.sessionId}/click`, { x: 18, y: 8 })).response.status, 202);
+  assert.equal((await action({ op: 'invoke', objectId: world.objectId, name: 'clicked', args: '[]' })).body.display, 'true');
   assert.equal((await action({ op: 'eval', code: 'start()', mode: 'expression' })).body.kind, 'unit');
   await wait(120);
   const movingStage = (await json(`/api/session/${session.sessionId}/stage`)).body.stage;

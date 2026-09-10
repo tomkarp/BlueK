@@ -43,9 +43,20 @@ fun soundsOf(): List<String> = buildList { while (true) { val sound = pendingSou
 fun errorsOf(): List<String> = buildList { while (true) { val error = pendingErrors.poll() ?: break; add(error) } }
 internal fun repaintWorld() { }
 internal fun showWorld(world: World) { stop(); currentWorld = world }
-internal fun isActorClicked(actor: Actor): Boolean { if (clickPending && currentWorld?.allObjects()?.firstOrNull { it.x == clickX && it.y == clickY } === actor) { clickPending = false; return true }; return false }
-internal fun isWorldClicked(): Boolean { if (!clickPending) return false; val hit = currentWorld?.allObjects()?.any { it.x == clickX && it.y == clickY } == true; if (!hit) { clickPending = false; return true }; return false }
-internal fun imageOrPlaceholder(actor: Actor): Image = actor.image ?: Image(1, 1)
+private fun actorAt(cellX: Int, cellY: Int): Actor? {
+    val world = currentWorld ?: return null
+    val px = cellX * world.cellSize + world.cellSize / 2
+    val py = cellY * world.cellSize + world.cellSize / 2
+    return world.allObjects().asReversed().firstOrNull { actor ->
+        val image = imageOrPlaceholder(actor)
+        val left = actor.x * world.cellSize + world.cellSize / 2 - image.width / 2
+        val top = actor.y * world.cellSize + world.cellSize / 2 - image.height / 2
+        px in left until (left + image.width) && py in top until (top + image.height)
+    }
+}
+internal fun isActorClicked(actor: Actor): Boolean { if (!clickPending || actorAt(clickX, clickY) !== actor) return false; clickPending = false; return true }
+internal fun isWorldClicked(): Boolean { if (!clickPending || actorAt(clickX, clickY) != null) return false; clickPending = false; return true }
+internal fun imageOrPlaceholder(actor: Actor): Image = actor.image ?: Image(30, 30)
 internal fun cachedImage(fileName: String): BufferedImage = imageCache.getOrPut(fileName) { listOf(File(fileName), File("images", fileName)).firstNotNullOfOrNull { file -> if (file.exists()) ImageIO.read(file) else null } ?: BufferedImage(30, 30, BufferedImage.TYPE_INT_ARGB) }
 internal fun setKeyState(key: String, pressed: Boolean) { if (pressed) keysDown.add(key.lowercase()) else keysDown.remove(key.lowercase()) }
 internal fun setClickPosition(x: Int, y: Int) { clickX = x; clickY = y; clickPending = true }
