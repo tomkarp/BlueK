@@ -21,7 +21,7 @@ private val pendingErrors = java.util.concurrent.ConcurrentLinkedQueue<String>()
 fun isKeyDown(key: String): Boolean = keysDown.contains(key.lowercase())
 fun playSound(fileName: String) { pendingSounds.add(fileName) }
 fun getSpeed(): Int = speedValue
-fun setSpeed(value: Int) { speedValue = value.coerceIn(1, 1000) }
+fun setSpeed(value: Int) { speedValue = value.coerceIn(1, 100) }
 fun start() {
     if (running) return
     running = true
