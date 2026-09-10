@@ -15,6 +15,8 @@ npm start
 
 Benutzeraktionen haben standardmäßig ein Zeitlimit von 120 Sekunden. Bei einem Timeout wird der Benutzer-Worker beendet; nach einem erneuten `Compile` wird er automatisch neu erzeugt. Für kurze lokale Tests kann `BLUEK_ACTION_TIMEOUT_MS` gesetzt werden.
 
+Projekt- und Medienimporte werden als eine Compile-Anfrage übertragen (maximal 32 MB JSON). Beim erneuten Compile werden nicht mehr importierte Medien aus der temporären Session entfernt.
+
 Der Server verwendet standardmäßig Port `5173`; für parallele lokale Instanzen kann `BLUEK_PORT=5175 npm start` verwendet werden.
 
 ## Bedienung
@@ -35,7 +37,7 @@ Der Server verwendet standardmäßig Port `5173`; für parallele lokale Instanze
 
 ## BluePlay
 
-Enthält ein Projekt eine `BluePlayFunctions.kt`, kompiliert der lokale Adapter diese interne Steuerdatei headless. Die öffentliche BluePlay-API von `World`, `Actor` und `Image` bleibt verwendbar; `show()` setzt die aktuelle World, `step()` und `start()` führen die Simulation aus. World-/Actor-Zustände werden als begrenzte Snapshots an die Weboberfläche übertragen und dort als Spielfeld dargestellt. Importierte Actor- und Hintergrundbilder werden als PNG-Daten gerendert; fehlende Bilddateien erscheinen als Platzhalter. Maus-/Tastaturereignisse verwenden dieselbe Actor-Hitbox-Regel wie BluePlay; `isClicked` und `World.isClicked` sind damit nutzbar. Die Stage bietet `Act`, `Run`, `Pause` und einen Geschwindigkeitsregler für `setSpeed(1..100)`. `playSound(...)` wird als Ereignis übertragen und aus importierten WAV-Dateien im Browser abgespielt; der Browser kann die Wiedergabe bei fehlender vorheriger Benutzerinteraktion blockieren.
+Enthält ein Projekt eine `BluePlayFunctions.kt`, kompiliert der lokale Adapter diese interne Steuerdatei headless. Das funktioniert auch bei einer gemeinsamen Kotlin-Package-Deklaration; die öffentliche BluePlay-API von `World`, `Actor` und `Image` bleibt verwendbar. `show()` setzt die aktuelle World, `step()` und `start()` führen die Simulation aus. World-/Actor-Zustände werden als begrenzte Snapshots an die Weboberfläche übertragen und dort als Spielfeld dargestellt. Importierte Actor- und Hintergrundbilder werden als PNG-Daten gerendert; fehlende Bilddateien erscheinen als Platzhalter. Maus-/Tastaturereignisse verwenden dieselbe Actor-Hitbox-Regel wie BluePlay; `isClicked` und `World.isClicked` sind damit nutzbar. Die Stage bietet `Act`, `Run`, `Pause` und einen Geschwindigkeitsregler für `setSpeed(1..100)`. `playSound(...)` wird als Ereignis übertragen und aus importierten WAV-Dateien im Browser abgespielt; der Browser kann die Wiedergabe bei fehlender vorheriger Benutzerinteraktion blockieren.
 
 ## Architektur
 
