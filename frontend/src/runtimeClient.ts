@@ -244,8 +244,47 @@ export class HybridRuntimeClient implements RuntimeClient {
     const scalar = displayedSimpleValue(value);
     if (scalar !== undefined) this.localValues.set(name, scalar);
   }
+  private standaloneExpression(source: string): unknown {
+    try { return parseKotlinArgument(source, this.bindings, this.localValues); } catch { /* continue with operators */ }
+    const binary = topLevelBinary(source);
+    if (!binary) throw new Error(`This simple expression needs a compiled project: ${source}`);
+    const left = this.standaloneExpression(binary.left);
+    const right = this.standaloneExpression(binary.right);
+    switch (binary.operator) {
+      case '+': return typeof left === 'number' && typeof right === 'number' ? left + right : `${left ?? 'null'}${right ?? 'null'}`;
+      case '-': return Number(left) - Number(right);
+      case '*': return Number(left) * Number(right);
+      case '/': return Number(left) / Number(right);
+      case '%': return Number(left) % Number(right);
+      case '==': return left === right;
+      case '!=': return left !== right;
+      case '<': return (left as any) < (right as any);
+      case '<=': return (left as any) <= (right as any);
+      case '>': return (left as any) > (right as any);
+      case '>=': return (left as any) >= (right as any);
+      case '&&': return Boolean(left) && Boolean(right);
+      case '||': return Boolean(left) || Boolean(right);
+      default: throw new Error(`Unsupported simple expression: ${source}`);
+    }
+  }
   async execute(request: Action): Promise<Value & { output?: string; stage?: unknown; name?: string }> {
     if (request.op === 'reset' && this.worker && this.ready) { await this.reset(); return { kind: 'unit', display: 'Unit' }; }
+    if (!this.worker && request.op === 'eval') {
+      const source = String(request.code || '').trim().replace(/;$/, '');
+      const outputCall = source.match(/^(print|println)\((.*)\)$/s);
+      if (outputCall) {
+        const value = this.standaloneExpression(outputCall[2].trim());
+        return { kind: 'unit', display: 'Unit', output: `${String(value ?? 'null')}${outputCall[1] === 'println' ? '\n' : ''}` };
+      }
+      if (request.mode === 'block') {
+        const declaration = simpleCodepadDeclaration(source);
+        if (declaration) { this.localValues.set(declaration.name, this.standaloneExpression(declaration.value)); return { kind: 'unit', display: 'Unit' }; }
+        const assignment = simpleCodepadAssignment(source);
+        if (assignment) { this.localValues.set(assignment.name, this.standaloneExpression(assignment.value)); return { kind: 'unit', display: 'Unit' }; }
+      }
+      const value = this.standaloneExpression(source);
+      return value === null ? { kind: 'null', display: 'null' } : { kind: 'scalar', display: String(value) };
+    }
     if (this.worker && this.ready && request.op === 'main') { const result = await this.local({ op: 'main' }); return { ...result.value, output: result.output }; }
     if (this.worker && this.ready && request.op === 'eval') {
       const code = String(request.code || '').replace(/\s+/g, '');
