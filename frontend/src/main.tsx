@@ -7,6 +7,8 @@ type FileModel = { id: string; fileName: string; kind: 'class' | 'functions'; so
 type ClassModel = { id: string; name: string; kind: string; constructors: any[]; methods: any[]; typeParameters?: string[] };
 type ObjectModel = { objectId: string; className: string; name: string };
 type ResourceModel = { path: string; data: string };
+const svgEscape = (value: string) => value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[character] || character));
+const decodeDrawingText = (value: string) => { try { return decodeURIComponent(value); } catch { return value; } };
 
 const backgroundDataUrl = (operations: string[] = [], width: number, height: number, resources: ResourceModel[] = []) => {
   if (!operations.length) return undefined;
@@ -25,7 +27,7 @@ const backgroundDataUrl = (operations: string[] = [], width: number, height: num
     if (name === 'fillOval' && values.length >= 4) return `<ellipse cx="${Number(values[0]) + Number(values[2]) / 2}" cy="${Number(values[1]) + Number(values[3]) / 2}" rx="${Number(values[2]) / 2}" ry="${Number(values[3]) / 2}" fill="${paint}"/>`;
     if (name === 'drawOval' && values.length >= 4) return `<ellipse cx="${Number(values[0]) + Number(values[2]) / 2}" cy="${Number(values[1]) + Number(values[3]) / 2}" rx="${Number(values[2]) / 2}" ry="${Number(values[3]) / 2}" fill="none" stroke="${paint}"/>`;
     if (name === 'drawLine' && values.length >= 4) return `<line x1="${values[0]}" y1="${values[1]}" x2="${values[2]}" y2="${values[3]}" stroke="${paint}"/>`;
-    if (name === 'drawString' && values.length >= 3) return `<text x="${values[1]}" y="${values[2]}" fill="${paint}">${values[0]}</text>`;
+    if (name === 'drawString' && values.length >= 3) return `<text x="${values[1]}" y="${values[2]}" fill="${paint}">${svgEscape(decodeDrawingText(values[0]))}</text>`;
     return '';
   }).join('');
   if (!elements) return undefined;
@@ -43,7 +45,7 @@ const drawnImageDataUrl = (operations: string[] = [], width: number, height: num
     if (name === 'fillOval' && values.length >= 4) return `<ellipse cx="${Number(values[0]) + Number(values[2]) / 2}" cy="${Number(values[1]) + Number(values[3]) / 2}" rx="${Number(values[2]) / 2}" ry="${Number(values[3]) / 2}" fill="${paint}"/>`;
     if (name === 'drawOval' && values.length >= 4) return `<ellipse cx="${Number(values[0]) + Number(values[2]) / 2}" cy="${Number(values[1]) + Number(values[3]) / 2}" rx="${Number(values[2]) / 2}" ry="${Number(values[3]) / 2}" fill="none" stroke="${paint}"/>`;
     if (name === 'drawLine' && values.length >= 4) return `<line x1="${values[0]}" y1="${values[1]}" x2="${values[2]}" y2="${values[3]}" stroke="${paint}"/>`;
-    if (name === 'drawString' && values.length >= 3) return `<text x="${values[1]}" y="${values[2]}" fill="${paint}">${values[0]}</text>`;
+    if (name === 'drawString' && values.length >= 3) return `<text x="${values[1]}" y="${values[2]}" fill="${paint}">${svgEscape(decodeDrawingText(values[0]))}</text>`;
     return '';
   }).join('');
   if (!elements) return undefined;
