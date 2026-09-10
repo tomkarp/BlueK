@@ -2,6 +2,7 @@
 .sidebar button:disabled,.codepad button:disabled{cursor:not-allowed;opacity:.55}.console input:disabled{background:#e5e5e5;cursor:not-allowed}
 .object.selected{outline:3px solid #222;outline-offset:3px}
 .game-actor.image{background-color:transparent;border:0;border-radius:0}
+.game-actor-image{display:block;width:100%;height:100%;object-fit:fill;pointer-events:none;user-select:none}
 .game-text{position:absolute;z-index:2;color:#fff;font-weight:bold;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;pointer-events:none;white-space:pre;transform:translateY(-50%)}
 .game-controls{position:absolute;right:28px;bottom:12px;display:flex;align-items:center;gap:6px}.game-controls button{padding:4px 12px;border:1px solid #999;border-radius:4px;background:linear-gradient(#fff,#d5d5d5);cursor:pointer}.game-controls button:active{background:#c7c7c7}.game-controls label{display:flex;align-items:center;gap:4px;color:#555;font-size:12px}.game-controls input{width:100px}
 .game-stage{max-height:calc(100% - 72px)}

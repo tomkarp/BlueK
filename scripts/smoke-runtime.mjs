@@ -29,6 +29,20 @@ try {
     if (attempt === 99) throw new Error(`Smoke server did not become ready.\nServer output:\n${output}`);
     await wait(100);
   }
+  const defaultExample = (await json('/api/examples')).body;
+  assert.ok(Array.isArray(defaultExample.files));
+  assert.ok(defaultExample.files.some(file => file.fileName === 'BluePlayFunctions.kt'));
+  assert.ok(defaultExample.resources.some(resource => resource.path === 'images/figure.png'));
+  const defaultSession = (await post('/api/session', {})).body;
+  const defaultCompile = await post(`/api/session/${defaultSession.sessionId}/compile`, { files: defaultExample.files, resources: defaultExample.resources, revision: 1 });
+  assert.equal(defaultCompile.response.status, 200);
+  assert.deepEqual(defaultCompile.body.diagnostics, []);
+  const defaultMain = await post(`/api/session/${defaultSession.sessionId}/action`, { op: 'main', fileName: 'Main.kt', generationId: defaultCompile.body.generationId });
+  assert.equal(defaultMain.response.status, 200);
+  assert.equal(defaultMain.body.stage.width, 600);
+  assert.equal(defaultMain.body.stage.objects[0].type, 'Figure');
+  assert.ok(defaultMain.body.stage.objects[0].image?.startsWith('data:image/png;base64,'));
+  await post(`/api/session/${defaultSession.sessionId}/close`, {});
   const session = (await post('/api/session', {})).body;
   const invalidFiles = await post(`/api/session/${session.sessionId}/compile`, { files: [{ fileName: '../escape.kt', source: 'class Escape', kind: 'class' }], revision: 1 });
   assert.equal(invalidFiles.response.status, 400);
