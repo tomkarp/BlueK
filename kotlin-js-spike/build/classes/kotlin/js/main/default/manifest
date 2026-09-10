@@ -1,0 +1,12 @@
+abi_version=2.2.0
+builtins_platform=JS
+compiler_version=2.2.21
+depends=kotlin org.jetbrains.kotlin\:kotlin-dom-api-compat
+ir_signature_versions=1,2
+jsOutputName=bluek-kotlin-js-spike
+language_features=+AllowAnyAsAnActualTypeForExpectInterface +JsAllowValueClassesInExternals +MultiPlatformProjects
+metadata_version=1.4.1
+serializedIrFileFingerprints=vg4t8fabzxj3.3lz5yja6xmqrd 1gt39wgbtxe6m.3ga19giv9v39b
+serializedKlibFingerprint=36yi8xxqj1ufu.3vlhtkaf6vvav
+unique_name=bluek-kotlin-js-spike
+wasm_targets=wasm-js

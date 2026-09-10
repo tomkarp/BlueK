@@ -1,0 +1,10 @@
+{
+  "name": "bluek-kotlin-js-spike",
+  "version": "0.0.0-unspecified",
+  "main": "kotlin/bluek-kotlin-js-spike.js",
+  "devDependencies": {},
+  "dependencies": {},
+  "peerDependencies": {},
+  "optionalDependencies": {},
+  "bundledDependencies": []
+}
