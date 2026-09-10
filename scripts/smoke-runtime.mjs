@@ -90,6 +90,8 @@ try {
   assert.deepEqual(counterInspection.fields.find(field => field.name === 'value').display, '9');
   const person = (await action({ op: 'create', className: 'Person', name: 'person1', args: JSON.stringify(['"Ada"']) })).body;
   assert.equal((await action({ op: 'invoke', objectId: person.objectId, name: 'greet', args: '[]' })).body.display, 'Hello, Ada!');
+  const emptyNamePerson = (await action({ op: 'create', className: 'Person', name: 'emptyName', args: JSON.stringify(['""']) })).body;
+  assert.equal((await action({ op: 'invoke', objectId: emptyNamePerson.objectId, name: 'greet', args: '[]' })).body.display, 'Hello, !');
   assert.equal((await action({ op: 'invoke', objectId: person.objectId, name: 'greetWith', args: JSON.stringify(['suffix = "!"']) })).body.display, 'Hi Ada!');
   const consoleResult = await action({ op: 'invoke', objectId: person.objectId, name: 'greetInConsole', args: '[]' });
   assert.equal(consoleResult.body.output, 'Hello, Ada!\t✓\nwarning\n', JSON.stringify(consoleResult));
