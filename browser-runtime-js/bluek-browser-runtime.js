@@ -39,7 +39,25 @@ Actor.prototype.move = function(distance) { const radians = this.rotation * Math
 Actor.prototype.turn = function(degrees) { this.rotation = ((this.rotation + degrees) % 360 + 360) % 360; };
 Actor.prototype.turnTowards = function(x, y) { if (x !== this.x || y !== this.y) this.rotation = Math.round(Math.atan2(y - this.y, x - this.x) * 180 / Math.PI); };
 Actor.prototype.distanceTo = function(other) { return Math.round(Math.hypot(other.x - this.x, other.y - this.y)); };
-Actor.prototype.intersects = function(other) { return Math.abs(this.x - other.x) * 2 <= ((this.image?.width || 30) + (other.image?.width || 30)) / Math.max(1, this.__world?.cellSize || 1) && Math.abs(this.y - other.y) * 2 <= ((this.image?.height || 30) + (other.image?.height || 30)) / Math.max(1, this.__world?.cellSize || 1); };
+Actor.prototype.intersects = function(other) {
+  if (!other || this === other) return false;
+  const firstImage = this.image, secondImage = other.image;
+  if ((firstImage?.transparency ?? 255) <= 16 || (secondImage?.transparency ?? 255) <= 16) return false;
+  const corners = actor => {
+    const image = actor.image, cellSize = Math.max(1, actor.__world?.cellSize || 1);
+    const halfWidth = (image?.width || 30) / cellSize / 2, halfHeight = (image?.height || 30) / cellSize / 2;
+    const angle = (actor.rotation || 0) * Math.PI / 180, cos = Math.cos(angle), sin = Math.sin(angle);
+    return [[-halfWidth, -halfHeight], [halfWidth, -halfHeight], [halfWidth, halfHeight], [-halfWidth, halfHeight]].map(([x, y]) => [actor.x + cos * x - sin * y, actor.y + sin * x + cos * y]);
+  };
+  const first = corners(this), second = corners(other);
+  const axes = [];
+  for (const polygon of [first, second]) for (let index = 0; index < 2; index += 1) { const [x1, y1] = polygon[index], [x2, y2] = polygon[index + 1]; axes.push([-(y2 - y1), x2 - x1]); }
+  return axes.every(([axisX, axisY]) => {
+    const project = polygon => polygon.map(([x, y]) => x * axisX + y * axisY);
+    const one = project(first), two = project(second);
+    return Math.max(...one) >= Math.min(...two) && Math.max(...two) >= Math.min(...one);
+  });
+};
 Actor.prototype.getIntersecting = function() { return this.__world ? this.__world.allObjects().filter(actor => actor !== this && this.intersects(actor)) : []; };
 Actor.prototype.getOneIntersecting = function() { return this.getIntersecting()[0] || null; };
 Actor.prototype.isTouching = function() { return this.getIntersecting().length > 0; };
