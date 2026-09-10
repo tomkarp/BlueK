@@ -321,8 +321,8 @@ export class HybridRuntimeClient implements RuntimeClient {
         } else {
           const klass = this.classes.find(value => value.name === parsed.callable);
           const constructor = klass?.constructors[0];
-          if (klass && constructor && !constructor.parameters.some(parameter => parameter.hasDefault)) {
-            const args = parsed.args.map(value => parseKotlinArgument(value, this.bindings, this.localValues)); if (!simpleArgumentsMatch(args, constructor.parameters)) throw new Error('The local arguments do not match the Kotlin constructor types; compile the expression first.');
+          if (klass && constructor && parsed.args.length >= requiredParameters(constructor.parameters).length) {
+            const args = parsed.args.map(value => parseKotlinArgument(value, this.bindings, this.localValues)); if (!simpleArgumentsMatch(args, requiredParameters(constructor.parameters))) throw new Error('The local arguments do not match the Kotlin constructor types; compile the expression first.');
             const result = await this.local({ op: 'create', functionName: `bluekCreate_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}`, args, className: klass.name, name: parsed.binding || klass.name.toLowerCase() });
             if (result.objectId) this.localObjects.set(result.objectId, klass.name);
             if (parsed.binding && result.objectId) this.bindings.set(parsed.binding, result.objectId);
