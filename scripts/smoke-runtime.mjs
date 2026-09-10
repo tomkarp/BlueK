@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 
 const base = 'http://127.0.0.1:5174';
-const server = spawn('node', ['server/dist/server/src/index.js'], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, BLUEK_PORT: '5174', BLUEK_ACTION_TIMEOUT_MS: '10000' } });
+// This regression suite exercises the legacy JVM worker protocol. Browser
+// execution has its own focused browser-worker tests; keeping this suite on
+// the explicit test-only switch makes failures attributable to one protocol.
+const server = spawn('node', ['server/dist/server/src/index.js'], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, BLUEK_PORT: '5174', BLUEK_ACTION_TIMEOUT_MS: '10000', BLUEK_SKIP_BROWSER: '1' } });
 let output = '';
 server.stdout.on('data', chunk => { output += chunk.toString(); });
 server.stderr.on('data', chunk => { output += chunk.toString(); });

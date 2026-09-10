@@ -7,22 +7,49 @@ const browserPackage = 'de.tomkarp.bluek.bridge';
 const frameworkNames = new Set(['Actor', 'World', 'Image', 'BluePlayFunctions']);
 
 const kotlinIdentifier = (value: string) => value.replace(/[^A-Za-z0-9_]/g, '_');
-const typeName = (displayName: string) => displayName.trim().replace(/\?$/, '').replace(/<.*$/, '').replace(/^in\s+|^out\s+/, '').trim();
+const typeName = (displayName: string) => displayName.trim().replace(/\?$/, '').replace(/^in\s+|^out\s+/, '').trim();
 const packageOf = (source: string) => source.match(/^\s*package\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)/m)?.[1] || '';
-const kotlinType = (displayName: string) => {
+const browserCompatibleSource = (source: string) => source
+    .replace(/@JvmSynthetic\b/g, '')
+    .replace(/\bThread\.sleep\s*\(/g, 'bluekSleep(')
+    .replace(/\bSystem\.err\b/g, 'bluekSystemErr');
+const splitTypeArguments = (source: string) => {
+    const result: string[] = [];
+    let start = 0;
+    let depth = 0;
+    for (let index = 0; index < source.length; index += 1) {
+        if (source[index] === '<') depth += 1;
+        else if (source[index] === '>') depth -= 1;
+        else if (source[index] === ',' && depth === 0) { result.push(source.slice(start, index).trim()); start = index + 1; }
+    }
+    if (source.slice(start).trim()) result.push(source.slice(start).trim());
+    return result;
+};
+
+const kotlinType = (displayName: string, bindings: Map<string, string> = new Map(), knownTypes: Set<string> = new Set()): string => {
     const raw = displayName.trim();
     const nullable = raw.endsWith('?');
-    const type = typeName(raw);
-    const suffix = nullable ? '?' : '';
-    if (type === 'String') return `String${suffix}`;
-    if (type === 'Int') return `Int${suffix}`;
-    if (type === 'Double') return `Double${suffix}`;
-    if (type === 'Float') return `Float${suffix}`;
-    if (type === 'Boolean') return `Boolean${suffix}`;
-    if (type === 'Long') return `Long${suffix}`;
-    if (type === 'Short') return `Short${suffix}`;
-    if (type === 'Byte') return `Byte${suffix}`;
-    return `${type}${suffix}`;
+    const withoutNullable = nullable ? raw.slice(0, -1).trim() : raw;
+    const variance = withoutNullable.match(/^(in|out)\s+(.+)$/);
+    if (variance) return `${variance[1]} ${kotlinType(variance[2], bindings, knownTypes)}`;
+    const projected = withoutNullable;
+    if (bindings.has(projected)) return `${bindings.get(projected)}${nullable ? '?' : ''}`;
+    // Function types and Kotlin collection types are not valid @JsExport
+    // signatures in all compiler versions. They remain usable in student code,
+    // but are deliberately omitted from generated callable bridges below.
+    if (/\([^)]*\)\s*->/.test(projected)) return 'Any?';
+    const open = projected.indexOf('<');
+    if (open >= 0 && projected.endsWith('>')) {
+        const base = projected.slice(0, open).trim();
+        const args: string[] = splitTypeArguments(projected.slice(open + 1, -1)).map(argument => kotlinType(argument, bindings, knownTypes));
+        if (['Array', 'List', 'MutableList', 'Set', 'MutableSet', 'Map', 'MutableMap', 'Collection', 'Iterable', 'Sequence'].includes(base) || knownTypes.has(base)) {
+            return `${base}<${args.join(', ')}>${nullable ? '?' : ''}`;
+        }
+        return `Any?`;
+    }
+    const type = projected.trim();
+    if (['String', 'Int', 'Double', 'Float', 'Boolean', 'Long', 'Short', 'Byte', 'Char', 'Number', 'Any', 'Unit', 'Nothing'].includes(type) || knownTypes.has(type)) return `${type}${nullable ? '?' : ''}`;
+    return `Any?`;
 };
 const bridgeMethodKey = (method: { name: string; parameters: { type: { displayName: string } }[] }) => `${kotlinIdentifier(method.name)}_${method.parameters.map(parameter => kotlinIdentifier(typeName(parameter.type.displayName))).join('_') || 'noargs'}`;
 const requiredParameters = <T extends { hasDefault?: boolean }>(parameters: T[]) => parameters.filter(parameter => !parameter.hasDefault);
@@ -40,6 +67,7 @@ function bridgeSource(files: ProjectFile[], classes: ClassMeta[]): { source: str
     const mainFile = files.find(file => file.fileName === 'Main.kt') || files.find(file => /\bfun\s+main\s*\(/.test(file.source));
     const mainPackage = mainFile ? packageOf(mainFile.source) : '';
     const imports = new Set<string>();
+    const knownTypes = new Set([...classes.map(value => value.name), ...frameworkNames]);
     for (const file of files) {
         const pkg = packageOf(file.source);
         if (pkg && pkg !== mainPackage) for (const klass of classes) if (klass.name && file.source.includes(`class ${klass.name}`)) imports.add(`${pkg}.${klass.name}`);
@@ -71,28 +99,39 @@ function bridgeSource(files: ProjectFile[], classes: ClassMeta[]): { source: str
         const className = kotlinIdentifier(klass.name);
         const constructor = klass.constructors[0];
         const constructorParameters = requiredParameters(constructor.parameters || []);
-        const parameters = constructorParameters.map((parameter, index) => `arg${index}: ${kotlinType(parameter.type.displayName)}`);
-        lines.push('', '@OptIn(ExperimentalJsExport::class)', '@JsExport', `fun bluekCreate_${className}(${parameters.join(', ')}): ${klass.name} = ${klass.name}(${parameters.map((_, index) => `arg${index}`).join(', ')})`);
+        const typeBindings = new Map<string, string>();
+        for (const value of klass.typeParameters || []) {
+            const [name, bound] = value.split(':', 2).map(part => part.trim());
+            if (name) typeBindings.set(name, bound ? kotlinType(bound, new Map(), knownTypes) : 'Any?');
+        }
+        const classType = klass.typeParameters?.length ? `${klass.name}<${klass.typeParameters.map(value => typeBindings.get(value.split(':', 2)[0].trim()) || 'Any?').join(', ')}>` : klass.name;
+        const unsupportedConstructor = constructorParameters.some(parameter => /\([^)]*\)\s*->/.test(parameter.type.displayName));
+        if (!unsupportedConstructor) {
+            const parameters = constructorParameters.map((parameter, index) => `arg${index}: ${kotlinType(parameter.type.displayName, typeBindings, knownTypes)}`);
+            lines.push('', '@OptIn(ExperimentalJsExport::class)', '@JsExport', `fun bluekCreate_${className}(${parameters.join(', ')}): ${classType} = ${classType}(${parameters.map((_, index) => `arg${index}`).join(', ')})`);
+        }
         const source = files.find(file => file.fileName.replace(/\.kt$/, '') === klass.name)?.source || '';
         const fieldNames = [...source.matchAll(/\b(?:val|var)\s+(\w+)\s*:/g)].map(match => match[1]);
         const fieldJson = JSON.stringify(fieldNames).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
         lines.push('', '@OptIn(ExperimentalJsExport::class)', '@JsExport', `fun bluekInspectNames_${className}(): String = "${fieldJson}"`);
-        for (const method of klass.methods.filter(value => value.visibility === 'public' && !value.typeParameters?.length && !value.returnType.displayName.startsWith('List') && !value.parameters.some(parameter => parameter.type.displayName.startsWith('List')))) {
+        for (const method of klass.methods.filter(value => value.visibility === 'public' && !value.typeParameters?.length && !(value.inheritedFrom && frameworkNames.has(value.declaringType)) && !value.returnType.displayName.startsWith('List') && !value.parameters.some(parameter => parameter.type.displayName.startsWith('List') || /\([^)]*\)\s*->/.test(parameter.type.displayName)))) {
             const methodMeta = method as typeof method & { autoGenerated?: boolean; propertyName?: string };
             const methodName = kotlinIdentifier(method.name);
-            const args = requiredParameters(method.parameters || []).map((parameter, index) => `arg${index}: ${kotlinType(parameter.type.displayName)}`);
-            const returnType = kotlinType(method.returnType.displayName);
+            const args = requiredParameters(method.parameters || []).map((parameter, index) => `arg${index}: ${kotlinType(parameter.type.displayName, typeBindings, knownTypes)}`);
+            const returnType = kotlinType(method.returnType.displayName, typeBindings, knownTypes);
+            if (returnType === 'Any?' && method.returnType.displayName !== 'Any?' && !typeBindings.has(method.returnType.displayName.trim().replace(/\?$/, ''))) continue;
             const requiredKey = bridgeMethodKey({ ...method, parameters: requiredParameters(method.parameters || []) });
             const setter = methodMeta.autoGenerated && method.name.startsWith('set');
             const propertyName = methodMeta.propertyName || '';
             const body = methodMeta.autoGenerated ? (setter ? `{ receiver.${propertyName} = arg0 }` : `= receiver.${propertyName}`) : `= receiver.${method.name}(${bridgeCallArguments(methodMeta).join(', ')})`;
-            lines.push('', '@OptIn(ExperimentalJsExport::class)', '@JsExport', `fun bluekInvoke_${className}_${requiredKey}(receiver: ${klass.name}${args.length ? `, ${args.join(', ')}` : ''}): ${returnType} ${body}`);
+            lines.push('', '@OptIn(ExperimentalJsExport::class)', '@JsExport', `fun bluekInvoke_${className}_${requiredKey}(receiver: ${classType}${args.length ? `, ${args.join(', ')}` : ''}): ${returnType} ${body}`);
         }
     }
     for (const owner of classes.filter(value => value.kind === 'functions')) {
-        for (const method of owner.methods.filter(value => value.declaringType === owner.name && value.visibility === 'public' && !value.typeParameters?.length && !value.returnType.displayName.startsWith('List') && !value.parameters.some(parameter => parameter.type.displayName.startsWith('List')))) {
-            const args = requiredParameters(method.parameters || []).map((parameter, index) => `arg${index}: ${kotlinType(parameter.type.displayName)}`);
-            const returnType = kotlinType(method.returnType.displayName);
+        for (const method of owner.methods.filter(value => value.declaringType === owner.name && value.visibility === 'public' && !value.typeParameters?.length && !value.returnType.displayName.startsWith('List') && !value.parameters.some(parameter => parameter.type.displayName.startsWith('List') || /\([^)]*\)\s*->/.test(parameter.type.displayName)))) {
+            const args = requiredParameters(method.parameters || []).map((parameter, index) => `arg${index}: ${kotlinType(parameter.type.displayName, new Map(), knownTypes)}`);
+            const returnType = kotlinType(method.returnType.displayName, new Map(), knownTypes);
+            if (returnType === 'Any?' && method.returnType.displayName !== 'Any?') continue;
             const requiredKey = bridgeMethodKey({ ...method, parameters: requiredParameters(method.parameters || []) });
             lines.push('', '@OptIn(ExperimentalJsExport::class)', '@JsExport', `fun bluekCall_${kotlinIdentifier(owner.name)}_${requiredKey}(${args.join(', ')}): ${returnType} = ${method.name}(${bridgeCallArguments(method).join(', ')})`);
         }
@@ -120,13 +159,13 @@ export async function compileBrowserProject(root: string, sessionDir: string, fi
     const browserProjectDir = path.join(buildDir, 'project');
     await fs.mkdir(browserProjectDir, { recursive: true });
     const frameworkFiles = new Set(['Actor.kt', 'World.kt', 'Image.kt', 'BluePlayFunctions.kt']);
-    for (const file of files) if (!frameworkFiles.has(file.fileName)) await fs.copyFile(path.join(sessionDir, 'project', file.fileName), path.join(browserProjectDir, file.fileName));
+    for (const file of files) if (!frameworkFiles.has(file.fileName)) await fs.writeFile(path.join(browserProjectDir, file.fileName), browserCompatibleSource(file.source));
     await fs.copyFile(path.join(root, 'browser-runtime-js', 'BluePlayApi.kt'), path.join(browserProjectDir, 'BluePlayApi.kt'));
     const packages = new Set(files.map(file => packageOf(file.source)));
     for (const pkg of packages) {
         const prefix = pkg ? `package ${pkg}\n\n` : '';
         const fileName = `BlueKInput${pkg ? `_${kotlinIdentifier(pkg)}` : ''}.kt`;
-        await fs.writeFile(path.join(browserProjectDir, fileName), `${prefix}fun readln(): String = bluekReadln()\nfun readlnOrNull(): String? = bluekReadlnOrNull()\n`);
+        await fs.writeFile(path.join(browserProjectDir, fileName), `${prefix}fun readln(): String = bluekReadln()\nfun readlnOrNull(): String? = bluekReadlnOrNull()\nfun bluekSleep(millis: Long) {}\nobject bluekSystemErr { fun print(value: Any?) = kotlin.io.print(value); fun println(value: Any?) = kotlin.io.println(value); fun flush() {} }\n`);
     }
     const bridge = bridgeSource(files, classes);
     await fs.writeFile(path.join(bridgeDir, 'BlueKBridge.kt'), bridge.source);
