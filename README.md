@@ -1,6 +1,6 @@
 # BlueK
 
-BlueK ist eine lokale Kotlin/JVM-Lernumgebung nach dem Objektbank-Prinzip von BlueJ. Klassen werden als gelbe Karten dargestellt, echte Instanzen liegen als opake Handles in einem langlebigen JVM-Worker, und Methoden- sowie Codepad-Aufrufe werden durch den offiziellen Kotlin-Compiler geprüft.
+BlueK ist eine browserbasierte Kotlin-Lernumgebung nach dem Objektbank-Prinzip von BlueJ. Klassen werden als gelbe Karten dargestellt, echte Instanzen liegen als opake Handles in einem langlebigen Browser-Worker, und Methoden- sowie Codepad-Aufrufe laufen lokal in Kotlin/JS. Der Server kompiliert und analysiert den Projektcode.
 
 ## Start
 
@@ -11,11 +11,11 @@ npm install
 npm start
 ```
 
-`npm start` baut Worker und Frontend vor jedem Start reproduzierbar neu, startet den Server im Vordergrund und kann mit `Ctrl+C` beendet werden. Danach `http://localhost:5173` öffnen. Der vollständige Testlauf ist separat mit `npm run smoke` möglich.
+`npm start` baut Compileradapter und Frontend vor jedem Start reproduzierbar neu, startet den Server im Vordergrund und kann mit `Ctrl+C` beendet werden. Danach `http://localhost:5173` öffnen. Der vollständige Legacy-Regressionslauf ist separat mit `npm run smoke` möglich; der normale Browserbetrieb startet keinen JVM-Ausführungsworker.
 
 Der Wrapper-Build des JVM-Moduls lässt sich unabhängig prüfen: `cd jvm && ./gradlew build`.
 
-Benutzeraktionen haben standardmäßig ein Zeitlimit von 120 Sekunden. Bei einem Timeout wird der Benutzer-Worker beendet; nach einem erneuten `Compile` wird er automatisch neu erzeugt. Für kurze lokale Tests kann `BLUEK_ACTION_TIMEOUT_MS` gesetzt werden.
+Browser-Ausführungen laufen in einem eigenen Worker. Bei `Stop` wird dieser Worker beendet; nach einem erneuten `Compile` entsteht eine neue Generation. Für den ausdrücklich markierten JVM-Regressionslauf kann `BLUEK_LEGACY_RUNTIME=1` gesetzt werden.
 
 Projekt- und Medienimporte werden als eine Compile-Anfrage übertragen (maximal 32 MB JSON). Beim erneuten Compile werden nicht mehr importierte Medien aus der temporären Session entfernt.
 
@@ -26,7 +26,7 @@ Der Server verwendet standardmäßig Port `5173`; für parallele lokale Instanze
 - `Compile` kompiliert alle Projektdateien gemeinsam und startet eine neue Runtime-Generation.
 - `New Class` und `New Functions` legen editierbare Kotlin-Dateien an.
 - `Import Kotlin Files` übernimmt vorhandene `.kt`-Dateien, sodass auch ein bestehendes BluePlay-Projekt (z. B. mit `Actor.kt`, `World.kt`, `Image.kt` und `Main.kt`) kompiliert werden kann.
-- `Open Project` und `Save Project` lesen beziehungsweise schreiben ein lokales `.bluek.json`-Projekt mit Kotlin-Dateien und eingebetteten Medien. Nach dem Öffnen wird bewusst erst nach `Compile` wieder eine JVM-Session gestartet.
+- `Open Project` und `Save Project` lesen beziehungsweise schreiben ein lokales `.bluek.json`-Projekt mit Kotlin-Dateien und eingebetteten Medien. Nach dem Öffnen wird bewusst erst nach `Compile` wieder eine Browser-Runtime gestartet.
 - `Add Media` importiert Bilder und WAV-Dateien in die BluePlay-Pfade `images/` beziehungsweise `sounds/`.
 - Doppelklick auf eine Karte öffnet den Quelltexteditor; Änderungen müssen erneut kompiliert werden.
 - Klassen- und Funktionskarten lassen sich im BlueJ-Arbeitsbereich per Drag-and-drop frei anordnen; die Positionen werden im `.bluek.json`-Projekt gespeichert.
@@ -36,7 +36,7 @@ Der Server verwendet standardmäßig Port `5173`; für parallele lokale Instanze
 - Abstrakte Klassen öffnen keinen Konstruktor-Dialog; Kotlin-`object`-Singletons zeigen stattdessen ihre Methoden für Aufrufe wie `Tools.twice(7)`.
 - `Evaluate` wertet einen Ausdruck aus, `Run` einen Block. Bench-Objekte und ihre Mutationen bleiben zwischen Eingaben erhalten; im Codepad deklarierte Variablen (z. B. `val p = Person("Ada")`, auch nullable) können in späteren Eingaben wiederverwendet werden.
 - Die Konsole zeigt Rückgabewerte und `stdout` live. Eine eingegebene Zeile wird mit Enter an `readln()` weitergegeben; Prompts erscheinen bereits während der laufenden Eingabeaktion.
-- `Stop` beendet den gesamten Benutzer-Worker. Die Handles werden verworfen und nach einem erneuten Compile neu erzeugt.
+- `Stop` beendet den gesamten Browser-Worker. Die Handles werden verworfen und nach einem erneuten Compile neu erzeugt.
 - Nicht ausführbare Aktionen sind bis zur erfolgreichen Kompilierung deaktiviert. Fällt der Worker aus, werden Runtime, Stage und Bench verworfen und der Fehler im Status/Log angezeigt.
 
 ## BluePlay
@@ -48,10 +48,10 @@ Enthält ein Projekt eine `BluePlayFunctions.kt`, kompiliert der lokale Adapter 
 - `frontend`: React/TypeScript/Vite, ausschließlich gegen serialisierbare Daten; `HttpRuntimeClient` kapselt den aktuellen HTTP-Transport und implementiert den austauschbaren Runtime-Vertrag.
 - `runtime-contract`: RuntimeClient- und Werttypen.
 - `server`: Sitzungen, temporäre Projektverzeichnisse, Kotlin-Kompilierung, request-id-basierte Worker-Antwortverteilung und Generationenprüfung.
-- `jvm`: langlebiger Worker mit Objektregistry, Kotlin-Snippet-Kompilierung, stdin-Kontrollpfad, Stop-Semantik und BluePlay-Stage-Snapshot.
+- `jvm`: Kotlin/JVM-Compileradapter und ausdrücklich markierter Legacy-Regressionsworker; wird im normalen Browserbetrieb nicht zur Ausführung verwendet.
 - `examples`: editierbare Startprojekte. BlueK lädt standardmäßig das kleine BluePlay-Projekt aus `examples/blueplay`; das ursprüngliche Counter/Person-Beispiel bleibt über `/api/examples/basic` verfügbar.
 
-Benutzercode läuft nie im HTTP-Prozess. Ein eigener Prozess ist jedoch keine Sandbox; öffentliche oder nicht vertrauenswürdige Ausführung benötigt zusätzliche OS-/Container-Isolation und Ressourcenlimits.
+Benutzercode läuft nie im HTTP-Prozess. Die normale Ausführung läuft im Browser-Worker. Ein Browser-Worker ist jedoch keine Sandbox für untrusted Code; öffentliche oder nicht vertrauenswürdige Ausführung benötigt zusätzliche Browser-/Server-Sicherheitsmaßnahmen und Ressourcenlimits.
 
 ## Nachgewiesene Proben
 
