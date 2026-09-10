@@ -114,6 +114,12 @@ try {
   const updatedCodepadNumber = (await action({ op: 'eval', code: 'codepadNumber = 2', mode: 'block' })).body;
   assert.equal(updatedCodepadNumber.kind, 'unit', updatedCodepadNumber.display);
   assert.equal((await action({ op: 'eval', code: 'codepadNumber', mode: 'expression' })).body.display, '2');
+  assert.equal((await action({ op: 'eval', code: 'val alias = person1', mode: 'block' })).body.kind, 'unit');
+  assert.equal((await action({ op: 'eval', code: 'alias.rename("Aliased")', mode: 'expression' })).body.kind, 'unit');
+  assert.match((await action({ op: 'inspect', objectId: person.objectId })).body.display, /name="Aliased"/);
+  assert.equal((await action({ op: 'eval', code: 'val typedBox: Box<String> = Box("Ada")', mode: 'block' })).body.kind, 'unit');
+  assert.equal((await action({ op: 'eval', code: 'typedBox.get()', mode: 'expression' })).body.display, 'Ada');
+  assert.equal((await action({ op: 'eval', code: 'typedBox.replace(42)', mode: 'expression' })).body.kind, 'error');
   assert.equal((await action({ op: 'eval', code: 'var optionalName: String? = null', mode: 'block' })).body.kind, 'unit');
   assert.equal((await action({ op: 'eval', code: 'optionalName == null', mode: 'expression' })).body.display, 'true');
   const waiting = action({ op: 'eval', code: 'askName()', mode: 'expression' });
