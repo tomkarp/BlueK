@@ -37,6 +37,8 @@ try {
     { id: 'tools', fileName: 'Tools.kt', kind: 'class', revision: 1, source: 'object Tools { fun twice(value: Int): Int = value * 2; fun ping() { println("pong") } }' },
     { id: 'factory', fileName: 'Factory.kt', kind: 'class', revision: 1, source: 'class Factory { companion object { fun make(value: Int): Counter = Counter(value) } }' },
     { id: 'abstract', fileName: 'AbstractThing.kt', kind: 'class', revision: 1, source: 'abstract class AbstractThing { fun ping() {} }' },
+    { id: 'color', fileName: 'Color.kt', kind: 'class', revision: 1, source: 'enum class Color { RED, BLUE }' },
+    { id: 'tag', fileName: 'Tag.kt', kind: 'class', revision: 1, source: 'annotation class Tag(val value: String)' },
     { id: 'world', fileName: 'World.kt', kind: 'class', revision: 1, source: 'open class World(val width: Int, val height: Int, val cellSize: Int) { val actors = mutableListOf<Actor>(); val isClicked: Boolean get() = isWorldClicked(); fun addObject(actor: Actor, x: Int, y: Int) { actors.add(actor); actor.x = x; actor.y = y; setWorldOf(actor, this) }; fun allObjects(): List<Actor> = actors.toList(); fun show() { showWorld(this) }; fun clicked(): Boolean = isClicked; open fun act() {} }' },
     { id: 'actor', fileName: 'Actor.kt', kind: 'class', revision: 1, source: 'open class Actor { var x: Int = 0; var y: Int = 0; var image: Image? = null; val isClicked: Boolean get() = isActorClicked(this); open fun act() {}; fun move(distance: Int) { x += distance }; fun clicked(): Boolean = isClicked }' },
     { id: 'image', fileName: 'Image.kt', kind: 'class', revision: 1, source: 'class Image(val width: Int, val height: Int)' },
@@ -55,6 +57,10 @@ try {
   assert.equal(compiled.body.classes.find(value => value.name === 'Factory').companionMethods.find(value => value.name === 'make').parameters.length, 1);
   assert.equal(compiled.body.classes.find(value => value.name === 'AbstractThing').kind, 'abstract');
   assert.equal(compiled.body.classes.find(value => value.name === 'AbstractThing').constructors.length, 0);
+  assert.equal(compiled.body.classes.find(value => value.name === 'Color').kind, 'enum');
+  assert.equal(compiled.body.classes.find(value => value.name === 'Color').constructors.length, 0);
+  assert.equal(compiled.body.classes.find(value => value.name === 'Tag').kind, 'annotation');
+  assert.equal(compiled.body.classes.find(value => value.name === 'Tag').constructors.length, 0);
   const typedConstructor = compiled.body.classes.find(value => value.name === 'Typed').constructors[0];
   assert.deepEqual(typedConstructor.parameters[0].type.arguments.map(value => value.displayName), ['String', 'List<Int>?']);
   assert.equal(typedConstructor.parameters[0].type.arguments[1].arguments[0].displayName, 'Int');
