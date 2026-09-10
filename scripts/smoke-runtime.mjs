@@ -40,6 +40,7 @@ try {
     { id: 'box', fileName: 'Box.kt', kind: 'class', revision: 1, source: 'class Box<T>(var value: T) { fun replace(next: T) { value = next }; fun get(): T = value }' },
     { id: 'bounded', fileName: 'Bounded.kt', kind: 'class', revision: 1, source: 'class Bounded<T : Number>(val value: T) { fun get(): T = value }' },
     { id: 'typed', fileName: 'Typed.kt', kind: 'class', revision: 1, source: 'class Typed(val value: Map<String, List<Int>?>, val sink: MutableList<in Number>)' },
+    { id: 'callbacks', fileName: 'Callbacks.kt', kind: 'class', revision: 1, source: 'class Callbacks { fun transform(block: (Int) -> String): String = block(3) }' },
     { id: 'overloaded', fileName: 'Overloaded.kt', kind: 'class', revision: 1, source: 'class Overloaded { val kind: String; constructor(value: Int) { kind = "int" }; constructor(value: String) { kind = "string" } }' },
     { id: 'base', fileName: 'Base.kt', kind: 'class', revision: 1, source: 'open class Base(var baseValue: String)' },
     { id: 'child', fileName: 'Child.kt', kind: 'class', revision: 1, source: 'class Child(baseValue: String): Base(baseValue) { var ownValue: Int = 7 }' },
@@ -75,6 +76,8 @@ try {
   assert.deepEqual(typedConstructor.parameters[0].type.arguments.map(value => value.displayName), ['String', 'List<Int>?']);
   assert.equal(typedConstructor.parameters[0].type.arguments[1].arguments[0].displayName, 'Int');
   assert.equal(typedConstructor.parameters[1].type.arguments[0].projection, 'in');
+  const callbackMethod = compiled.body.classes.find(value => value.name === 'Callbacks').methods.find(value => value.name === 'transform');
+  assert.equal(callbackMethod.parameters[0].type.displayName, '(Int) -> String');
   assert.deepEqual(compiled.body.classes.find(value => value.name === 'Person').properties.map(value => value.name), ['name']);
   assert.equal(compiled.body.classes.find(value => value.name === 'Person').properties[0].mutable, true);
   const generationId = compiled.body.generationId;
@@ -92,6 +95,8 @@ try {
   assert.equal((await action({ op: 'invoke', objectId: person.objectId, name: 'greet', args: '[]' })).body.display, 'Hello, Ada!');
   const emptyNamePerson = (await action({ op: 'create', className: 'Person', name: 'emptyName', args: JSON.stringify(['""']) })).body;
   assert.equal((await action({ op: 'invoke', objectId: emptyNamePerson.objectId, name: 'greet', args: '[]' })).body.display, 'Hello, !');
+  const callbacks = (await action({ op: 'create', className: 'Callbacks', name: 'callbacks1', args: '[]' })).body;
+  assert.equal((await action({ op: 'invoke', objectId: callbacks.objectId, name: 'transform', args: JSON.stringify(['{ value: Int -> value.toString() }']) })).body.display, '3');
   assert.equal((await action({ op: 'invoke', objectId: person.objectId, name: 'greetWith', args: JSON.stringify(['suffix = "!"']) })).body.display, 'Hi Ada!');
   const consoleResult = await action({ op: 'invoke', objectId: person.objectId, name: 'greetInConsole', args: '[]' });
   assert.equal(consoleResult.body.output, 'Hello, Ada!\t✓\nwarning\n', JSON.stringify(consoleResult));
