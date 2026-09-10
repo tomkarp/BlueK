@@ -191,10 +191,12 @@ private fun result(v: Any?, output: String = "", stage: String? = null, register
     }
 }
 private fun stageSnapshot(objects: Map<String, Any>): String? {
-    val world = objects.values.firstOrNull { current -> var type: Class<*>? = current.javaClass; var found = false; while (type != null) { if (type.declaredFields.any { it.name == "actors" }) { found = true; break }; type = type.superclass }; found } ?: return null
-    return synchronized(world) { stageSnapshotUnlocked(objects) }
+    val world = objects.values.asSequence().mapNotNull { value -> try { Class.forName("BluePlayFunctionsKt", true, value.javaClass.classLoader).getMethod("currentWorldState").invoke(null) } catch (_: Throwable) { null } }.firstOrNull()
+        ?: objects.values.firstOrNull { current -> var type: Class<*>? = current.javaClass; var found = false; while (type != null) { if (type.declaredFields.any { it.name == "actors" }) { found = true; break }; type = type.superclass }; found }
+        ?: return null
+    return synchronized(world) { stageSnapshotUnlocked(objects, world) }
 }
-private fun stageSnapshotUnlocked(objects: Map<String, Any>): String? {
+private fun stageSnapshotUnlocked(objects: Map<String, Any>, selectedWorld: Any): String? {
     fun findField(type: Class<*>, name: String): java.lang.reflect.Field? { var current: Class<*>? = type; while (current != null) { current.declaredFields.firstOrNull { it.name == name }?.let { return it }; current = current.superclass }; return null }
     fun number(world: Any, name: String): Int? = findField(world.javaClass, name)?.let { field -> field.isAccessible = true; (field.get(world) as? Number)?.toInt() }
     fun jsonText(value: String): String = value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r")
@@ -232,7 +234,7 @@ private fun stageSnapshotUnlocked(objects: Map<String, Any>): String? {
         }
         return ",\"image\":\"data:image/png;base64,$encoded\",\"imageWidth\":${bufferedImage.width},\"imageHeight\":${bufferedImage.height},\"imageOpacity\":${transparency / 255.0}"
     }
-    val world = objects.values.firstOrNull { findField(it.javaClass, "actors") != null } ?: return null
+    val world = selectedWorld
     val actorsField = findField(world.javaClass, "actors") ?: return null; actorsField.isAccessible = true
     val actors = try {
         (world.javaClass.getMethod("allObjects").invoke(world) as? Iterable<*>)?.filterNotNull()

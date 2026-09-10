@@ -179,6 +179,10 @@ try {
   assert.equal(made.kind, 'object');
   assert.match((await action({ op: 'inspect', objectId: made.objectId })).body.display, /value=8/);
   const world = (await action({ op: 'create', className: 'World', name: 'world1', args: JSON.stringify(['20', '10', '1']) })).body;
+  const secondWorld = (await action({ op: 'create', className: 'World', name: 'world2', args: JSON.stringify(['4', '3', '1']) })).body;
+  assert.equal((await action({ op: 'invoke', objectId: secondWorld.objectId, name: 'show', args: '[]' })).body.kind, 'unit');
+  assert.equal((await json(`/api/session/${session.sessionId}/stage`)).body.stage.width, 4);
+  assert.equal((await action({ op: 'invoke', objectId: world.objectId, name: 'show', args: '[]' })).body.kind, 'unit');
   const walker = (await action({ op: 'create', className: 'Walker', name: 'walker1', args: '[]' })).body;
   assert.equal((await action({ op: 'invoke', objectId: world.objectId, name: 'addObject', args: JSON.stringify(['walker1', '2', '3']) })).body.kind, 'unit');
   assert.equal((await action({ op: 'invoke', objectId: world.objectId, name: 'show', args: '[]' })).body.kind, 'unit');
