@@ -26,7 +26,14 @@ const readExample = async (name: string) => {
         id: fileName,
         fileName,
         kind: fileName === 'Helpers.kt' || fileName === 'Main.kt' || fileName === 'Console.kt' || fileName === 'BluePlayFunctions.kt' ? 'functions' : 'class',
-        source: name === 'blueplay-stress' && fileName === 'Main.kt' ? `fun main() {
+        source: name === 'blueplay-stress' && fileName === 'Figure.kt' ? `class Figure : Actor() {
+    override fun act() {
+        move(1)
+        if (x >= 590) turn(180)
+        if (x <= 10) turn(180)
+    }
+}
+` : name === 'blueplay-stress' && fileName === 'Main.kt' ? `fun main() {
     val world = MyWorld()
     repeat(50) { index ->
         val figure = Figure()
