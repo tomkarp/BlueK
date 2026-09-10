@@ -248,8 +248,12 @@ export class HybridRuntimeClient implements RuntimeClient {
         const statements = splitCodepadStatements(source);
         if (statements.length > 1) {
           let result: any = { kind: 'unit', display: 'Unit' };
-          for (const statement of statements) result = await this.execute({ ...request, code: statement });
-          return result;
+          const createdObjects: any[] = [];
+          for (const statement of statements) {
+            result = await this.execute({ ...request, code: statement });
+            if (result?.objectId) createdObjects.push(result);
+          }
+          return createdObjects.length ? { ...result, createdObjects } : result;
         }
       }
       const propertyAssignment = request.mode === 'block' ? simpleCodepadPropertyAssignment(source) : null;
