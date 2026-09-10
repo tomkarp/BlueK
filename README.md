@@ -27,7 +27,7 @@ Der Server verwendet standardmäßig Port `5173`; für parallele lokale Instanze
 - `Open Project` und `Save Project` lesen beziehungsweise schreiben ein lokales `.bluek.json`-Projekt mit Kotlin-Dateien und eingebetteten Medien. Nach dem Öffnen wird bewusst erst nach `Compile` wieder eine JVM-Session gestartet.
 - `Add Media` importiert Bilder und WAV-Dateien in die BluePlay-Pfade `images/` beziehungsweise `sounds/`.
 - Doppelklick auf eine Karte öffnet den Quelltexteditor; Änderungen müssen erneut kompiliert werden.
-- Klassen- und Funktionskarten lassen sich im BlueJ-Arbeitsbereich per Drag-and-drop frei anordnen.
+- Klassen- und Funktionskarten lassen sich im BlueJ-Arbeitsbereich per Drag-and-drop frei anordnen; die Positionen werden im `.bluek.json`-Projekt gespeichert.
 - Rechtsklick auf eine Klasse öffnet den Kotlin-Konstruktor. Strings werden als Kotlin-Ausdrücke mit Anführungszeichen eingegeben.
 - Rechtsklick auf ein Objekt zeigt überladene und geerbte öffentliche Methoden. Parameter werden einzeln als Kotlin-Ausdrücke eingegeben.
 - Rechtsklick auf eine `«functions»`-Karte zeigt Top-Level-Funktionen; ihre Kotlin-Argumente werden genauso compilergeprüft eingegeben. Ein parameterloses `main()` oder ein übliches `main(args: Array<String>)` kann dort oder über den direkten `Run main`-Befehl wie in BlueJ ausgeführt werden. Mehrere Funktionsdateien mit `main()` bleiben dadurch eindeutig; `Reset` startet gezielt `Main.kt`.
