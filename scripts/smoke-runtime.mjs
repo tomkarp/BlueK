@@ -176,6 +176,10 @@ try {
   assert.equal(namedResult.body.display, 'Ada');
   assert.match(namedResult.body.output, /Hello, Ada!/);
   assert.equal((await action({ op: 'eval', code: 'square(7)', mode: 'expression' })).body.display, '49');
+  const hugeOutput = (await action({ op: 'eval', code: 'repeat(200000) { print("1234567890") }', mode: 'block' })).body;
+  assert.equal(hugeOutput.kind, 'unit');
+  assert.ok(hugeOutput.output.length <= 1_000_100, `output limit not applied: ${hugeOutput.output.length}`);
+  assert.match(hugeOutput.output, /output truncated after 1000000 characters/);
   assert.equal((await action({ op: 'eval', code: 'Tools.twice(7)', mode: 'expression' })).body.display, '14');
   const made = (await action({ op: 'eval', code: 'Factory.make(8)', mode: 'expression' })).body;
   assert.equal(made.kind, 'object');

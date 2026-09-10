@@ -15,6 +15,7 @@ private class Ctx(private val objects: MutableMap<String, Any>) : RuntimeContext
 }
 
 private lateinit var controlOut: java.io.PrintStream
+private const val MAX_USER_OUTPUT_CHARS = 1_000_000
 private val activeRequestId = ThreadLocal.withInitial { "" }
 private val stageImageCache = mutableMapOf<String, String>()
 private fun jsonString(value: String): String = buildString {
@@ -265,8 +266,19 @@ private fun <T> withUserOutput(block: () -> T): Captured<T> {
     val previous = System.out
     val previousError = System.err
     val output = StringBuilder()
-    val stdout = LiveOutputStream { text -> output.append(text); emit("output", "", output = text, stream = "stdout") }
-    val stderr = LiveOutputStream { text -> output.append(text); emit("output", "", output = text, stream = "stderr") }
+    var truncated = false
+    fun capture(text: String, stream: String) {
+        if (output.length >= MAX_USER_OUTPUT_CHARS) {
+            if (!truncated) { truncated = true; val marker = "[output truncated after $MAX_USER_OUTPUT_CHARS characters]\n"; output.append(marker); emit("output", "", output = marker, stream = stream) }
+            return
+        }
+        val chunk = text.take(MAX_USER_OUTPUT_CHARS - output.length)
+        output.append(chunk)
+        emit("output", "", output = chunk, stream = stream)
+        if (chunk.length < text.length && !truncated) { truncated = true; val marker = "[output truncated after $MAX_USER_OUTPUT_CHARS characters]\n"; output.append(marker); emit("output", "", output = marker, stream = stream) }
+    }
+    val stdout = LiveOutputStream { text -> capture(text, "stdout") }
+    val stderr = LiveOutputStream { text -> capture(text, "stderr") }
     return try { val outStream = java.io.PrintStream(stdout, true, Charsets.UTF_8); val errorStream = java.io.PrintStream(stderr, true, Charsets.UTF_8); System.setOut(outStream); System.setErr(errorStream); val value = block(); stdout.flush(); stderr.flush(); Captured(value, output.toString()) }
     finally { System.setOut(previous); System.setErr(previousError) }
 }
