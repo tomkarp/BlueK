@@ -427,8 +427,9 @@ export class HybridRuntimeClient implements RuntimeClient {
       }
       {
         const scalarProperty = source.match(/^(.+)\.(length|size|isEmpty)$/s);
-        if (scalarProperty) {
-          const value = displayedSimpleValue(await this.execute({ op: 'eval', code: scalarProperty[1], mode: 'expression' }));
+      if (scalarProperty) {
+          const builtinValue = simpleBuiltin(scalarProperty[1], this.bindings, this.localValues);
+          const value = builtinValue !== undefined ? builtinValue : displayedSimpleValue(await this.execute({ op: 'eval', code: scalarProperty[1], mode: 'expression' }));
           if (typeof value === 'string' || Array.isArray(value)) return { kind: 'scalar', display: String(scalarProperty[2] === 'length' || scalarProperty[2] === 'size' ? value.length : value.length === 0) };
         }
       }
