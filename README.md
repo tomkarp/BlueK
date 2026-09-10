@@ -29,7 +29,7 @@ Der Server verwendet standardmäßig Port `5173`; für parallele lokale Instanze
 - Doppelklick auf eine Karte öffnet den Quelltexteditor; Änderungen müssen erneut kompiliert werden.
 - Rechtsklick auf eine Klasse öffnet den Kotlin-Konstruktor. Strings werden als Kotlin-Ausdrücke mit Anführungszeichen eingegeben.
 - Rechtsklick auf ein Objekt zeigt überladene und geerbte öffentliche Methoden. Parameter werden einzeln als Kotlin-Ausdrücke eingegeben.
-- Rechtsklick auf eine `«functions»`-Karte zeigt Top-Level-Funktionen; ihre Kotlin-Argumente werden genauso compilergeprüft eingegeben. Ein parameterloses `main()` kann dort wie in BlueJ ausgeführt werden.
+- Rechtsklick auf eine `«functions»`-Karte zeigt Top-Level-Funktionen; ihre Kotlin-Argumente werden genauso compilergeprüft eingegeben. Ein parameterloses `main()` kann dort oder über den direkten `Run main`-Befehl wie in BlueJ ausgeführt werden.
 - Abstrakte Klassen öffnen keinen Konstruktor-Dialog; Kotlin-`object`-Singletons zeigen stattdessen ihre Methoden für Aufrufe wie `Tools.twice(7)`.
 - `Evaluate` wertet einen Ausdruck aus, `Run` einen Block. Bench-Objekte und ihre Mutationen bleiben zwischen Eingaben erhalten; im Codepad deklarierte Variablen (z. B. `val p = Person("Ada")`, auch nullable) können in späteren Eingaben wiederverwendet werden.
 - Die Konsole zeigt Rückgabewerte und `stdout` live. Eine eingegebene Zeile wird mit Enter an `readln()` weitergegeben; Prompts erscheinen bereits während der laufenden Eingabeaktion.
