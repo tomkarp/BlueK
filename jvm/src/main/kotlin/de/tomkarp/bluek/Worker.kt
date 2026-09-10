@@ -101,6 +101,18 @@ fun main() {
                     loader?.let { bluePlayClass(it, projectPackages, "BluePlayFunctionsKt")?.getMethod("resetState")?.invoke(null) }
                     emit("unit", "Runtime reset")
                 }
+                line.contains("\"op\":\"main\"") -> {
+                    val fileName = value(line, "fileName")
+                    require(fileName.matches(Regex("[A-Za-z0-9_]+\\.kt"))) { "Invalid main file" }
+                    val facade = fileName.removeSuffix(".kt") + "Kt"
+                    val mainClass = loader?.let { bluePlayClass(it, projectPackages, facade) } ?: error("Main file is not loaded")
+                    val invoked = withUserOutput {
+                        try { mainClass.getMethod("main").invoke(null) }
+                        catch (_: NoSuchMethodException) { mainClass.getMethod("main", Array<String>::class.java).invoke(null, emptyArray<String>()) }
+                        Unit
+                    }
+                    emit("unit", "Unit", output = invoked.output, stage = stageSnapshot(objects, projectPackages))
+                }
                 line.contains("\"op\":\"create\"") -> {
                     val className = value(line, "className")
                     val requestedName = value(line, "name")

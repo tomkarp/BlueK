@@ -122,6 +122,8 @@ try {
   assert.equal((await action({ op: 'eval', code: 'main()', mode: 'expression' })).body.kind, 'unit');
   assert.equal((await json(`/api/session/${session.sessionId}/stage`)).body.stage.width, 6);
   assert.equal((await action({ op: 'eval', code: 'main(emptyArray())', mode: 'expression' })).body.kind, 'unit');
+  const qualifiedMain = await action({ op: 'main', fileName: 'Main.kt' });
+  assert.equal(qualifiedMain.body.kind, 'unit', JSON.stringify(qualifiedMain.body));
   assert.equal((await action({ op: 'reset' })).body.kind, 'unit');
   assert.equal((await json(`/api/session/${session.sessionId}/stage`)).body.stage, undefined);
   assert.equal((await action({ op: 'eval', code: 'main()', mode: 'expression' })).body.kind, 'unit');
