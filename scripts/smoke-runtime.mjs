@@ -45,10 +45,10 @@ try {
     { id: 'abstract', fileName: 'AbstractThing.kt', kind: 'class', revision: 1, source: 'abstract class AbstractThing { fun ping() {} }' },
     { id: 'color', fileName: 'Color.kt', kind: 'class', revision: 1, source: 'enum class Color { RED, BLUE }' },
     { id: 'tag', fileName: 'Tag.kt', kind: 'class', revision: 1, source: 'annotation class Tag(val value: String)' },
-    { id: 'world', fileName: 'World.kt', kind: 'class', revision: 1, source: 'open class World(val width: Int, val height: Int, val cellSize: Int) { val actors = mutableListOf<Actor>(); val isClicked: Boolean get() = isWorldClicked(); fun addObject(actor: Actor, x: Int, y: Int) { actors.add(actor); actor.x = x; actor.y = y; setWorldOf(actor, this) }; fun allObjects(): List<Actor> = actors.toList(); fun show() { showWorld(this) }; fun clicked(): Boolean = isClicked; open fun act() {} }' },
-    { id: 'actor', fileName: 'Actor.kt', kind: 'class', revision: 1, source: 'open class Actor { var x: Int = 0; var y: Int = 0; var image: Image? = null; val isClicked: Boolean get() = isActorClicked(this); open fun act() {}; fun move(distance: Int) { x += distance }; fun clicked(): Boolean = isClicked }' },
-    { id: 'image', fileName: 'Image.kt', kind: 'class', revision: 1, source: 'class Image(val width: Int, val height: Int)' },
-    { id: 'walker', fileName: 'Walker.kt', kind: 'class', revision: 1, source: 'class Walker: Actor() { override fun act() { move(1) } }' },
+    { id: 'world', fileName: 'World.kt', kind: 'class', revision: 1, source: 'open class World(val width: Int, val height: Int, val cellSize: Int) { private val actors = mutableListOf<Actor>(); var background: Image = Image(width * cellSize, height * cellSize); val isClicked: Boolean get() = isWorldClicked(); fun addObject(actor: Actor, x: Int, y: Int) { actors.add(actor); actor.x = x; actor.y = y; setWorldOf(actor, this) }; fun allObjects(): List<Actor> = actors.toList(); fun show() { showWorld(this) }; fun showText(text: String, x: Int, y: Int) { setTextOf(this, x, y, text) }; fun clicked(): Boolean = isClicked; open fun act() {} }' },
+    { id: 'actor', fileName: 'Actor.kt', kind: 'class', revision: 1, source: 'open class Actor { var x: Int = 0; var y: Int = 0; var rotation: Int = 0; var image: Image? = null; val isClicked: Boolean get() = isActorClicked(this); open fun act() {}; fun move(distance: Int) { x += distance }; fun clicked(): Boolean = isClicked }' },
+    { id: 'image', fileName: 'Image.kt', kind: 'class', revision: 1, source: 'import java.awt.image.BufferedImage\nclass Image(val width: Int, val height: Int) { val awtImage = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB); var transparency: Int = 255 }' },
+    { id: 'walker', fileName: 'Walker.kt', kind: 'class', revision: 1, source: 'class Walker: Actor() { init { image = Image(20, 20) }; override fun act() { move(1) } }' },
     { id: 'broken', fileName: 'Broken.kt', kind: 'class', revision: 1, source: 'class Broken: Actor() { override fun act() { error("boom") } }' },
     { id: 'blueplay', fileName: 'BluePlayFunctions.kt', kind: 'functions', revision: 1, source: '// replaced by the headless BluePlay adapter' },
   ];
@@ -133,6 +133,8 @@ try {
   await wait(120);
   const movingStage = (await json(`/api/session/${session.sessionId}/stage`)).body.stage;
   assert.ok(movingStage.objects.find(value => value.type === 'Walker').x > 2);
+  assert.equal(movingStage.objects.find(value => value.type === 'Walker').imageWidth, 20);
+  assert.equal(movingStage.objects.find(value => value.type === 'Walker').imageHeight, 20);
   assert.equal((await action({ op: 'eval', code: 'stop()', mode: 'expression' })).body.kind, 'unit');
   const stoppedX = (await json(`/api/session/${session.sessionId}/stage`)).body.stage.objects.find(value => value.type === 'Walker').x;
   await wait(80);
