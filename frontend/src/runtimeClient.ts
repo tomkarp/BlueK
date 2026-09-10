@@ -126,8 +126,8 @@ self.onmessage = async ({ data }) => {
     if (data.op === 'act') { const act = runtimeApi?.bluekAct || resolve('bluekAct'); if (typeof act === 'function') act(); stage(); finish(); return; }
     if (data.op === 'pause') { const pause = runtimeApi?.bluekPause || resolve('bluekPause'); if (typeof pause === 'function') pause(); clearTimeout(simulationTimer); clearInterval(renderTimer); simulationTimer = null; renderTimer = null; stage(); finish(); return; }
     if (data.op === 'speed') { const speed = runtimeApi?.bluekSetSpeed || resolve('bluekSetSpeed'); if (typeof speed === 'function') speed(data.value); stage(); finish(); return; }
-    if (data.op === 'key') { const key = runtimeApi?.bluekKey || resolve('bluekKey'); if (typeof key === 'function') key(data.key, data.pressed); return; }
-    if (data.op === 'click') { const click = runtimeApi?.bluekClick || resolve('bluekClick'); if (typeof click === 'function') click(data.x, data.y); return; }
+    if (data.op === 'key') { const key = runtimeApi?.bluekKey || resolve('bluekKey'); if (typeof key === 'function') key(data.key, data.pressed); self.postMessage({ kind: 'input-ack' }); return; }
+    if (data.op === 'click') { const click = runtimeApi?.bluekClick || resolve('bluekClick'); if (typeof click === 'function') click(data.x, data.y); self.postMessage({ kind: 'input-ack' }); return; }
     if (data.op === 'create') { const fn = api[data.functionName] || resolve(data.functionName); if (typeof fn !== 'function') throw new Error('Generated constructor bridge is missing: ' + data.functionName); const object = fn(...resolveArguments(data.args)); const objectId = crypto.randomUUID(); objects.set(objectId, object); displayValues.set(objectId, data.className + '()'); flushStudentOutput(); const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value: { kind: 'object', display: data.className + '()', objectId }, objectId, name: data.name, output }); return; }
     if (data.op === 'invoke') { const receiver = data.objectId ? objects.get(data.objectId) : null; if (data.objectId && !receiver) throw new Error('Object handle is no longer available.'); const directName = String(data.methodName || '').replace(/<.*>$/, ''); const genericBridge = data.typeName && ({ getIntersecting: runtimeApi?.bluekActorGetIntersecting || resolve('bluekActorGetIntersecting'), getOneIntersecting: runtimeApi?.bluekActorGetOneIntersecting || resolve('bluekActorGetOneIntersecting'), isTouching: runtimeApi?.bluekActorIsTouching || resolve('bluekActorIsTouching'), removeTouching: runtimeApi?.bluekActorRemoveTouching || resolve('bluekActorRemoveTouching'), getObjects: runtimeApi?.bluekWorldAllObjects || resolve('bluekWorldAllObjects') }[directName]); const bridge = genericBridge || api[data.functionName] || resolve(data.functionName); const fn = typeof bridge === 'function' ? bridge : receiver && directName && typeof receiver[directName] === 'function' ? (target, ...args) => target[directName](...args) : null; if (typeof fn !== 'function') throw new Error('Generated method bridge is missing: ' + data.functionName); const resolvedArgs = resolveArguments(data.args); const value = valueOf(receiver ? fn(receiver, ...(genericBridge ? [data.typeName, ...resolvedArgs] : resolvedArgs)) : fn(...resolvedArgs), data.className); flushStudentOutput(); const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value, output }); return; }
     if (data.op === 'get') { const object = objects.get(data.objectId); if (!object) throw new Error('Object handle is no longer available.'); const classKey = String(data.className || '').replace(/[^A-Za-z0-9_]/g, '_'); const stem = String(data.property).charAt(0).toUpperCase() + String(data.property).slice(1); const getter = api['bluekInvoke_' + classKey + '_get' + stem + '_noargs']; const value = typeof getter === 'function' ? getter(object) : object[data.property]; const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value: valueOf(value), output }); return; }
@@ -150,6 +150,8 @@ export class HybridRuntimeClient implements RuntimeClient {
   private browserModuleUrl: string | null = null;
   private browserPackageName = '';
   private browserWorkerDead = false;
+  private browserReady = false;
+  private inputBarrier: Promise<void> = Promise.resolve();
   private latestStage: any = null;
   private readonly stageCallbacks = new Map<(value: any) => void, (event: MessageEvent) => void>();
   private inputBuffer: SharedArrayBuffer | null = null;
@@ -168,6 +170,8 @@ export class HybridRuntimeClient implements RuntimeClient {
     if (!this.browserModuleUrl) throw new Error('Browser runtime is not available.');
     this.worker?.terminate();
     this.browserWorkerDead = false;
+    this.browserReady = false;
+    this.inputBarrier = Promise.resolve();
     const worker = new Worker(URL.createObjectURL(new Blob([browserWorkerSource], { type: 'text/javascript' })), { type: 'module' });
     this.worker = worker;
     this.attachStageCallbacks(worker);
@@ -181,7 +185,7 @@ export class HybridRuntimeClient implements RuntimeClient {
     this.ready = new Promise((resolve, reject) => {
       const listener = (event: MessageEvent) => {
         if (event.data?.kind === 'input-buffer') this.inputBuffer = event.data.buffer;
-        if (event.data?.kind === 'ready') { worker.removeEventListener('message', listener); worker.removeEventListener('error', errorListener); resolve(); }
+        if (event.data?.kind === 'ready') { this.browserReady = true; worker.removeEventListener('message', listener); worker.removeEventListener('error', errorListener); resolve(); }
         if (event.data?.kind === 'error') { worker.removeEventListener('message', listener); worker.removeEventListener('error', errorListener); reject(new Error(event.data.message)); }
       };
       const errorListener = () => { worker.removeEventListener('message', listener); reject(new Error('Browser Kotlin/JS worker failed to load.')); };
@@ -193,6 +197,7 @@ export class HybridRuntimeClient implements RuntimeClient {
   private async local(request: BrowserAction): Promise<any> {
     if (!this.worker || !this.ready) throw new Error('Browser runtime is not available.');
     await this.ready;
+    await this.inputBarrier;
     return new Promise((resolve, reject) => {
       const worker = this.worker!;
       const onMessage = (event: MessageEvent) => { if (event.data?.kind === 'input-request') { this.onInputRequest(event.data.output); return; } if (event.data?.kind === 'value' || event.data?.kind === 'ready') { cleanup(); resolve(event.data); } else if (event.data?.kind === 'error') { cleanup(); reject(new Error(event.data.message)); } };
@@ -341,10 +346,26 @@ export class HybridRuntimeClient implements RuntimeClient {
   async evaluate(code: string, mode: 'expression' | 'block'): Promise<Value> { if (this.worker && this.ready) throw new Error('This expression is not prepared for local Kotlin/JS execution yet.'); return this.http.evaluate(code, mode); }
   async removeObject(objectId: string): Promise<void> { this.localObjects.delete(objectId); if (this.worker && this.ready) { await this.local({ op: 'remove', objectId }); return; } await this.http.removeObject(objectId); }
   sendInput(text: string): Promise<void> { if (!this.worker) return this.http.sendInput(text); if (!this.inputBuffer) return Promise.reject(new Error('Terminal input requires a cross-origin-isolated browser context.')); const bytes = new TextEncoder().encode(text); const state = new Int32Array(this.inputBuffer, 0, 1); const buffer = new Uint8Array(this.inputBuffer, 4); buffer.fill(0); buffer.set(bytes.subarray(0, buffer.length)); Atomics.store(state, 0, Math.min(bytes.length, buffer.length)); Atomics.notify(state, 0); return Promise.resolve(); }
-  async stop(): Promise<void> { const hadBrowserWorker = Boolean(this.worker); this.worker?.terminate(); this.worker = null; this.ready = null; this.browserWorkerDead = true; this.browserGeneration = null; this.browserModuleUrl = null; this.browserPackageName = ''; this.localObjects.clear(); this.localValues.clear(); this.bindings.clear(); if (!hadBrowserWorker) await this.http.stop(); }
+  async stop(): Promise<void> { const hadBrowserWorker = Boolean(this.worker); this.worker?.terminate(); this.worker = null; this.ready = null; this.browserReady = false; this.browserWorkerDead = true; this.inputBarrier = Promise.resolve(); this.browserGeneration = null; this.browserModuleUrl = null; this.browserPackageName = ''; this.localObjects.clear(); this.localValues.clear(); this.bindings.clear(); if (!hadBrowserWorker) await this.http.stop(); }
   async reset(): Promise<void> { if (!this.browserModuleUrl) { await this.stop(); return; } this.worker?.terminate(); this.worker = null; this.ready = null; this.localObjects.clear(); this.localValues.clear(); this.bindings.clear(); this.latestStage = null; this.startBrowserWorker(); await this.ready; }
-  sendKey(key: string, pressed: boolean): Promise<void> { if (this.worker && this.ready) { return this.ready.then(() => { this.worker!.postMessage({ op: 'key', key, pressed }); }); } return this.http.sendKey(key, pressed); }
-  sendClick(x: number, y: number): Promise<void> { if (this.worker && this.ready) { return this.ready.then(() => { this.worker!.postMessage({ op: 'click', x, y }); }); } return this.http.sendClick(x, y); }
+  private postBrowserInput(message: { op: 'key'; key: string; pressed: boolean } | { op: 'click'; x: number; y: number }): Promise<void> {
+    if (!this.worker || !this.ready) return Promise.reject(new Error('Browser runtime is not available.'));
+    const worker = this.worker;
+    const next = this.inputBarrier.then(async () => {
+      await this.ready;
+      if (!this.worker || this.worker !== worker || this.browserWorkerDead) throw new Error('Browser Kotlin/JS worker stopped.');
+      await new Promise<void>((resolve, reject) => {
+        const onMessage = (event: MessageEvent) => { if (event.data?.kind !== 'input-ack') return; cleanup(); resolve(); };
+        const onError = (event: ErrorEvent) => { cleanup(); reject(new Error(event.message || 'Browser Kotlin/JS worker stopped.')); };
+        const cleanup = () => { worker.removeEventListener('message', onMessage); worker.removeEventListener('error', onError); };
+        worker.addEventListener('message', onMessage); worker.addEventListener('error', onError); worker.postMessage(message);
+      });
+    });
+    this.inputBarrier = next.catch(() => undefined);
+    return next;
+  }
+  sendKey(key: string, pressed: boolean): Promise<void> { if (this.worker && this.ready) return this.postBrowserInput({ op: 'key', key, pressed }); return this.http.sendKey(key, pressed); }
+  sendClick(x: number, y: number): Promise<void> { if (this.worker && this.ready) return this.postBrowserInput({ op: 'click', x, y }); return this.http.sendClick(x, y); }
   stage(): Promise<any> { if (this.worker) { this.worker.postMessage({ op: 'stage' }); return Promise.resolve({ stage: this.latestStage }); } return this.http.stage(); }
   stageStream(onStage: (value: any) => void): () => void { if (!this.worker || !this.ready) return this.http.stageStream(onStage); const worker = this.worker; const listener = (event: MessageEvent) => { if (event.data?.kind === 'stage') { this.latestStage = event.data.stage; onStage({ stage: event.data.stage }); } }; this.stageCallbacks.set(onStage, listener); worker.addEventListener('message', listener); this.ready.then(() => worker.postMessage({ op: 'stage' })); return () => { const current = this.stageCallbacks.get(onStage); if (current) this.worker?.removeEventListener('message', current); this.stageCallbacks.delete(onStage); }; }
   events(): Promise<any[]> { return this.worker ? Promise.resolve([]) : this.http.events(); }
