@@ -187,6 +187,8 @@ try {
   assert.equal(box.display, 'Box<String>');
   const bounded = (await action({ op: 'create', className: 'Bounded', name: 'bounded1', typeArguments: JSON.stringify(['Int']), args: JSON.stringify(['7']) })).body;
   assert.equal(bounded.display, 'Bounded<Int>');
+  const invalidBounded = (await action({ op: 'create', className: 'Bounded', name: 'invalidBounded', typeArguments: JSON.stringify(['String']), args: JSON.stringify(['"not a number"']) })).body;
+  assert.equal(invalidBounded.kind, 'error');
   assert.equal((await action({ op: 'invoke', objectId: bounded.objectId, name: 'get', args: '[]' })).body.display, '7');
   assert.equal((await action({ op: 'invoke', objectId: box.objectId, name: 'replace', args: JSON.stringify(['42']) })).body.kind, 'error');
   assert.equal((await action({ op: 'invoke', objectId: box.objectId, name: 'get', args: '[]' })).body.display, 'Ada');
