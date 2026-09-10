@@ -159,20 +159,6 @@ const resolve = (path) => path.split('.').filter(Boolean).reduce((current, part)
 const flushStudentOutput = () => { const flush = api?.bluekFlushOutput || resolve('bluekFlushOutput'); if (typeof flush !== 'function') return; flushingOutput = true; try { flush(); } finally { flushingOutput = false; } };
 const resolveArguments = (args) => args.map((arg) => arg && typeof arg === 'object' && arg.__bluekObjectId ? objects.get(arg.__bluekObjectId) : arg);
 const finish = () => { flushStudentOutput(); const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' }, output }); };
-const builtinValue = (source) => {
-  const match = String(source).trim().match(/^(maxOf|minOf|abs|listOf|arrayOf|setOf)\\((.*)\\)$/s);
-  if (!match) return undefined;
-  const parts = splitRuntimeArguments(match[2]).map(value => runtimeLiteral(value));
-  if (parts.some(value => value === undefined && String(value) !== 'undefined')) return undefined;
-  if (match[1] === 'maxOf') return Math.max(...parts.map(Number));
-  if (match[1] === 'minOf') return Math.min(...parts.map(Number));
-  if (match[1] === 'abs') return Math.abs(Number(parts[0]));
-  if (match[1] === 'setOf') return [...new Set(parts)];
-  return parts;
-};
-const splitRuntimeArguments = (source) => { const result = []; let start = 0, depth = 0, quote = ''; for (let index = 0; index < source.length; index += 1) { const char = source[index]; if (quote) { if (char === quote && source[index - 1] !== '\\\\') quote = ''; continue; } if (char === '"' || char === "'") quote = char; else if (char === '(' || char === '[') depth += 1; else if (char === ')' || char === ']') depth -= 1; else if (char === ',' && depth === 0) { result.push(source.slice(start, index).trim()); start = index + 1; } } if (source.slice(start).trim()) result.push(source.slice(start).trim()); return result; };
-const runtimeLiteral = (source) => { const value = String(source).trim(); if (value === 'true') return true; if (value === 'false') return false; if (value === 'null') return null; if (/^-?\\d+$/.test(value)) return Number(value); if (/^-?(?:\\d+\\.\\d*|\\d*\\.\\d+)$/.test(value)) return Number(value); if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) return value.slice(1, -1); return undefined; };
-const displayRuntimeValue = (value) => Array.isArray(value) ? '[' + value.map(item => item === null ? 'null' : String(item)).join(', ') + ']' : String(value);
 const stage = () => { const value = runtimeApi?.bluekStage || globalThis.bluekStage; if (typeof value === 'function') self.postMessage({ kind: 'stage', stage: JSON.parse(value()) }); };
 self.addEventListener('message', ({ data }) => { if (data?.op === 'resources') { globalThis.__bluekPendingResourceSizes = data.sizes || {}; runtimeApi?.bluekSetResourceSizes?.(globalThis.__bluekPendingResourceSizes); } });
 self.onmessage = async ({ data }) => {
@@ -367,8 +353,8 @@ export class HybridRuntimeClient implements RuntimeClient {
         return { ...result.value, output: result.output };
       }
       if (request.mode === 'expression') {
-        const builtin = builtinValue(source);
-        if (builtin !== undefined) return { kind: 'scalar', display: displayRuntimeValue(builtin) };
+        const builtin = simpleBuiltin(source, this.bindings, this.localValues);
+        if (builtin !== undefined) return { kind: 'scalar', display: Array.isArray(builtin) ? `[${builtin.map(value => value === null ? 'null' : String(value)).join(', ')}]` : String(builtin) };
       }
       if (request.mode === 'block') {
         const statements = splitCodepadStatements(source);
@@ -440,10 +426,10 @@ export class HybridRuntimeClient implements RuntimeClient {
         if (objectId && this.localObjects.has(String(objectId))) return (await this.local({ op: 'get', objectId: String(objectId), property: property.property, className: String(this.localObjects.get(String(objectId))) })).value;
       }
       {
-        const scalarProperty = source.match(/^(.+)\.(length|isEmpty)$/s);
+        const scalarProperty = source.match(/^(.+)\.(length|size|isEmpty)$/s);
         if (scalarProperty) {
           const value = displayedSimpleValue(await this.execute({ op: 'eval', code: scalarProperty[1], mode: 'expression' }));
-          if (typeof value === 'string' || Array.isArray(value)) return { kind: 'scalar', display: String(scalarProperty[2] === 'length' ? value.length : value.length === 0) };
+          if (typeof value === 'string' || Array.isArray(value)) return { kind: 'scalar', display: String(scalarProperty[2] === 'length' || scalarProperty[2] === 'size' ? value.length : value.length === 0) };
         }
       }
       const parsed = simpleCodepadCall(String(request.code || ''));
