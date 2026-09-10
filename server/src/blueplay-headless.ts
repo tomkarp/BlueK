@@ -22,6 +22,7 @@ fun isKeyDown(key: String): Boolean = keysDown.contains(key.lowercase())
 fun playSound(fileName: String) { pendingSounds.add(fileName) }
 fun getSpeed(): Int = speedValue
 fun setSpeed(value: Int) { speedValue = value.coerceIn(1, 100) }
+internal fun runningState(): Boolean = running
 fun start() {
     if (running) return
     running = true

@@ -149,11 +149,13 @@ try {
   assert.equal((await action({ op: 'eval', code: 'start()', mode: 'expression' })).body.kind, 'unit');
   await wait(120);
   const movingStage = (await json(`/api/session/${session.sessionId}/stage`)).body.stage;
+  assert.equal(movingStage.running, true);
   assert.ok(movingStage.objects.find(value => value.type === 'Walker').x > 2);
   assert.equal(movingStage.objects.find(value => value.type === 'Walker').imageWidth, 20);
   assert.equal(movingStage.objects.find(value => value.type === 'Walker').imageHeight, 20);
   assert.equal((await action({ op: 'eval', code: 'stop()', mode: 'expression' })).body.kind, 'unit');
   const stoppedX = (await json(`/api/session/${session.sessionId}/stage`)).body.stage.objects.find(value => value.type === 'Walker').x;
+  assert.equal((await json(`/api/session/${session.sessionId}/stage`)).body.stage.running, false);
   await wait(80);
   assert.equal((await json(`/api/session/${session.sessionId}/stage`)).body.stage.objects.find(value => value.type === 'Walker').x, stoppedX);
   const broken = (await action({ op: 'create', className: 'Broken', name: 'broken1', args: '[]' })).body;

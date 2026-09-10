@@ -248,7 +248,8 @@ private fun stageSnapshot(objects: Map<String, Any>): String? {
             "{\"x\":${x.toInt()},\"y\":${y.toInt()},\"text\":\"${jsonText(text)}\"}"
         }.joinToString(",")
     } catch (_: Throwable) { "" }
-    return "{\"width\":$width,\"height\":$height,\"cellSize\":$cellSize${imageJson(world, "background")},\"objects\":[$entries],\"texts\":[$textEntries],\"sounds\":[${soundsJson(world.javaClass.classLoader)}],\"errors\":[${errorsJson(world.javaClass.classLoader)}]}"
+    val running = try { Class.forName("BluePlayFunctionsKt", true, world.javaClass.classLoader).getMethod("runningState").invoke(null) as? Boolean ?: false } catch (_: Throwable) { false }
+    return "{\"width\":$width,\"height\":$height,\"cellSize\":$cellSize,\"running\":$running${imageJson(world, "background")},\"objects\":[$entries],\"texts\":[$textEntries],\"sounds\":[${soundsJson(world.javaClass.classLoader)}],\"errors\":[${errorsJson(world.javaClass.classLoader)}]}"
 }
 private data class Captured<T>(val value: T, val output: String)
 private fun <T> withUserOutput(block: () -> T): Captured<T> {
