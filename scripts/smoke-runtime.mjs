@@ -49,6 +49,7 @@ try {
     { id: 'person', fileName: 'Person.kt', kind: 'class', revision: 1, source: 'class Person(var name: String, var isReady: Boolean = false) { fun greet(): String = "Hello, $name!"; fun localValue(): String { fun hidden() = "hidden"\nval local: String = "local"; return local }; fun rename(newName: String) { name = newName }; fun greetInConsole() { Thread.sleep(200); println(greet() + "\\t✓"); Thread.sleep(1500); System.err.println("warning"); System.err.flush() }; fun greetWith(prefix: String = "Hi", suffix: String): String = "$prefix $name$suffix"; fun friend(): Person = Person("$name Jr") }' },
     { id: 'helpers', fileName: 'Helpers.kt', kind: 'functions', revision: 1, source: 'fun square(x: Int): Int = x * x; fun askName(): String { println("What is your name?"); val name = readln(); println("Hello, $name!"); return name }; fun noisyInput(): String { System.err.println("warning"); System.err.flush(); return readln() }' },
     { id: 'box', fileName: 'Box.kt', kind: 'class', revision: 1, source: 'class Box<T>(var value: T) { fun replace(next: T) { value = next }; fun get(): T = value }' },
+    { id: 'generic-methods', fileName: 'GenericMethods.kt', kind: 'class', revision: 1, source: 'class GenericMethods { fun <T : Number> echo(value: T): T = value }' },
     { id: 'bounded', fileName: 'Bounded.kt', kind: 'class', revision: 1, source: 'class Bounded<T : Number>(val value: T) { fun get(): T = value }' },
     { id: 'typed', fileName: 'Typed.kt', kind: 'class', revision: 1, source: 'class Typed(val value: Map<String, List<Int>?>, val sink: MutableList<in Number>)' },
     { id: 'nested', fileName: 'Nested.kt', kind: 'class', revision: 1, source: 'class Nested(val values: List<Map<String, Int>> = emptyList())' },
@@ -86,6 +87,7 @@ try {
   assert.equal(compiled.body.classes.find(value => value.name === 'Nested').constructors[0].parameters[0].hasDefault, true);
   assert.equal(compiled.body.classes.find(value => value.name === 'LambdaBox').constructors[0].parameters.length, 1);
   assert.equal(compiled.body.classes.find(value => value.name === 'LambdaBox').constructors[0].parameters[0].type.displayName, '(Int, Int) -> String');
+  assert.deepEqual(compiled.body.classes.find(value => value.name === 'GenericMethods').methods.find(value => value.name === 'echo').typeParameters, ['T : Number']);
   assert.equal(compiled.body.classes.find(value => value.name === 'PrivateCtor').constructors.length, 0);
   assert.equal(compiled.body.classes.find(value => value.name === 'Tools').kind, 'object');
   assert.equal(compiled.body.classes.find(value => value.name === 'Tools').constructors.length, 0);
@@ -267,6 +269,8 @@ try {
   assert.match(simulationErrors, /boom/);
   assert.equal((await action({ op: 'eval', code: 'error("Demo")', mode: 'expression' })).body.kind, 'error');
   assert.equal((await action({ op: 'eval', code: 'square(7)', mode: 'expression' })).body.display, '49');
+  const genericMethods = (await action({ op: 'create', className: 'GenericMethods', name: 'genericMethods1', args: '[]' })).body;
+  assert.equal((await action({ op: 'invoke', objectId: genericMethods.objectId, name: 'echo<Int>', args: JSON.stringify(['7']) })).body.display, '7');
   const box = (await action({ op: 'create', className: 'Box', name: 'box1', typeArguments: JSON.stringify(['String']), args: JSON.stringify(['"Ada"']) })).body;
   assert.equal(box.display, 'Box<String>');
   const bounded = (await action({ op: 'create', className: 'Bounded', name: 'bounded1', typeArguments: JSON.stringify(['Int']), args: JSON.stringify(['7']) })).body;

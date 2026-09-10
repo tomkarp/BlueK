@@ -58,6 +58,7 @@ Mit echten `kotlinc`- und Worker-Prozessen geprüft:
 - `Counter()` mit ausgelassenem Default-Argument und unabhängige Objektidentität.
 - Überladungen `choose(Int)`/`choose(String)`.
 - `Box<String>`: `replace(42)` wird vom Kotlin-Compiler abgelehnt, der ursprüngliche String bleibt erhalten.
+- Generische Methoden bewahren ihre Typparameter; Aufrufe wie `getObjects<Ball>()` und `getOneIntersecting<Muenze>()` können über den Dialog mit expliziten Kotlin-Typen ausgeführt werden.
 - `Animal`/`Dog`: dynamischer Dispatch, geerbte Methode einmalig im Menü, Interface ohne Konstruktoraktion.
 - BluePlay `MyWorld` mit Actor-Snapshot und Mutation per `show(); step()`.
 - Die realen BluePlay-Referenzdateien (`Actor.kt`, `World.kt`, `Image.kt`, `Figure.kt`, `MyWorld.kt` und `Main.kt`) kompilieren; `MyWorld()` und `show()` liefern einen fehlerfreien 600×400-Stage-Snapshot.

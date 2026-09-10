@@ -1,7 +1,7 @@
 export type FileKind='class'|'functions';
 export interface ProjectFile{id:string;fileName:string;kind:FileKind;source:string;revision:number}
 export interface TypeRef{classifier:string;arguments:TypeRef[];nullable:boolean;displayName:string;projection?:'in'|'out'|'star'}
-export interface CallableMeta{id:string;name:string;declaringType:string;parameters:{name:string;type:TypeRef;hasDefault:boolean}[];returnType:TypeRef;visibility:string;inheritedFrom?:string}
+export interface CallableMeta{id:string;name:string;declaringType:string;parameters:{name:string;type:TypeRef;hasDefault:boolean}[];returnType:TypeRef;visibility:string;inheritedFrom?:string;typeParameters?:string[]}
 export interface ClassMeta{id:string;name:string;kind:string;constructors:{id:string;parameters:any[]}[];methods:CallableMeta[];properties:any[];supertypes:TypeRef[];typeParameters:string[]}
 export interface CompileResult{generationId:string;sourceRevision:number;classes:ClassMeta[];diagnostics:any[]}
 export interface RuntimeStatus{workerAlive:boolean;generationId:string|null;available:boolean;error:string|null}
