@@ -10,7 +10,8 @@ export function Image(value, height) {
   const resourceSize = typeof value === 'string' ? resourceSizes.get(value) || resourceSizes.get(`images/${value}`) : undefined;
   this.width = typeof value === 'number' ? Math.max(1, value) : resourceSize?.width || 30;
   this.height = typeof value === 'number' ? Math.max(1, height) : resourceSize?.height || 30;
-  if (value instanceof Image) { this.fileName = value.fileName; this.width = value.width; this.height = value.height; }
+  this._alphaMask = typeof value === 'string' ? resourceSize?.alpha || null : null;
+  if (value instanceof Image) { this.fileName = value.fileName; this.width = value.width; this.height = value.height; this._alphaMask = value._alphaMask ? [...value._alphaMask] : null; }
   this.transparency = value instanceof Image ? value.transparency : 255;
   this._color = value instanceof Image ? value._color : 'rgb(0, 0, 0)'; this._operations = value instanceof Image ? [...value._operations] : [];
 }
@@ -54,11 +55,25 @@ Actor.prototype.intersects = function(other) {
   const first = corners(this), second = corners(other);
   const axes = [];
   for (const polygon of [first, second]) for (let index = 0; index < 2; index += 1) { const [x1, y1] = polygon[index], [x2, y2] = polygon[index + 1]; axes.push([-(y2 - y1), x2 - x1]); }
-  return axes.every(([axisX, axisY]) => {
+  if (!axes.every(([axisX, axisY]) => {
     const project = polygon => polygon.map(([x, y]) => x * axisX + y * axisY);
     const one = project(first), two = project(second);
     return Math.max(...one) >= Math.min(...two) && Math.max(...two) >= Math.min(...one);
-  });
+  })) return false;
+  if (!firstImage?._alphaMask || !secondImage?._alphaMask) return true;
+  const cellSize = Math.max(1, this.__world?.cellSize || 1), otherCellSize = Math.max(1, other.__world?.cellSize || 1);
+  const firstCenter = [(this.x + 0.5) * cellSize, (this.y + 0.5) * cellSize], secondCenter = [(other.x + 0.5) * otherCellSize, (other.y + 0.5) * otherCellSize];
+  const sample = (image, center, actor, pixelX, pixelY) => {
+    const radians = -(actor.rotation || 0) * Math.PI / 180, cos = Math.cos(radians), sin = Math.sin(radians);
+    const dx = pixelX + 0.5 - center[0], dy = pixelY + 0.5 - center[1];
+    const localX = cos * dx - sin * dy + image.width / 2, localY = sin * dx + cos * dy + image.height / 2;
+    const x = Math.floor(localX), y = Math.floor(localY);
+    return x >= 0 && y >= 0 && x < image.width && y < image.height && image._alphaMask[y * image.width + x] > 16;
+  };
+  const left = Math.floor(Math.max(0, Math.min(...first.map(point => point[0])) * cellSize)), right = Math.ceil(Math.max(...first.map(point => point[0])) * cellSize);
+  const top = Math.floor(Math.max(0, Math.min(...first.map(point => point[1])) * cellSize)), bottom = Math.ceil(Math.max(...first.map(point => point[1])) * cellSize);
+  for (let y = top; y < bottom; y += 1) for (let x = left; x < right; x += 1) if (sample(firstImage, firstCenter, this, x, y) && sample(secondImage, secondCenter, other, x, y)) return true;
+  return false;
 };
 Actor.prototype.getIntersecting = function() { return this.__world ? this.__world.allObjects().filter(actor => actor !== this && this.intersects(actor)) : []; };
 Actor.prototype.getOneIntersecting = function() { return this.getIntersecting()[0] || null; };
@@ -116,7 +131,7 @@ export const bluekStage = () => { const background = state.world?.background; co
 export const bluekStageJson = bluekStage;
 export const bluekReadln = () => globalThis.__bluekReadln ? globalThis.__bluekReadln() : '';
 export const bluekReadlnOrNull = () => globalThis.__bluekReadlnOrNull ? globalThis.__bluekReadlnOrNull() : null;
-export const bluekSetResourceSizes = values => { resourceSizes.clear(); Object.entries(values || {}).forEach(([key, value]) => { if (value && Number(value.width) > 0 && Number(value.height) > 0) { const size = { width: Number(value.width), height: Number(value.height) }; resourceSizes.set(key, size); resourceSizes.set(key.replace(/^images\//, ''), size); } }); };
+export const bluekSetResourceSizes = values => { resourceSizes.clear(); Object.entries(values || {}).forEach(([key, value]) => { if (value && Number(value.width) > 0 && Number(value.height) > 0) { const size = { width: Number(value.width), height: Number(value.height), alpha: Array.isArray(value.alpha) ? value.alpha : null }; resourceSizes.set(key, size); resourceSizes.set(key.replace(/^images\//, ''), size); } }); };
 const matchesType = (actor, typeName) => !typeName || actor?.constructor?.name === String(typeName).split('.').pop();
 export const bluekActorGetIntersecting = (actor, typeName) => (actor?.getIntersecting?.() || []).filter(value => matchesType(value, typeName));
 export const bluekActorGetOneIntersecting = (actor, typeName) => bluekActorGetIntersecting(actor, typeName)[0] || null;

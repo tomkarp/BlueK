@@ -170,7 +170,7 @@ export class HybridRuntimeClient implements RuntimeClient {
   private browserPackageName = '';
   private browserWorkerDead = false;
   private browserReady = false;
-  private browserResourceSizes: Record<string, { width: number; height: number }> = {};
+  private browserResourceSizes: Record<string, { width: number; height: number; alpha?: number[] }> = {};
   private inputBarrier: Promise<void> = Promise.resolve();
   private latestStage: any = null;
   private readonly stageCallbacks = new Map<(value: any) => void, (event: MessageEvent) => void>();
@@ -391,9 +391,9 @@ export class HybridRuntimeClient implements RuntimeClient {
     if (this.worker && this.ready && ['create', 'invoke', 'eval', 'inspect', 'remove'].includes(request.op)) throw new Error('This Kotlin expression is not prepared for local execution yet. Compile it before running it.');
     return this.http.execute(request);
   }
-  async compile(files: ProjectFile[], revision: number, resources: Resource[] = [], resourceSizes: Record<string, { width: number; height: number }> = {}): Promise<CompileResult> {
+  async compile(files: ProjectFile[], revision: number, resources: Resource[] = [], resourceSizes: Record<string, { width: number; height: number }> = {}, resourceAlphaMasks: Record<string, number[]> = {}): Promise<CompileResult> {
     const result = await this.http.compile(files, revision, resources); this.classes = result.classes; this.localObjects.clear(); this.localValues.clear(); this.bindings.clear(); this.latestStage = null;
-    this.browserResourceSizes = resourceSizes;
+    this.browserResourceSizes = Object.fromEntries(Object.entries(resourceSizes).map(([key, size]) => [key, { ...size, alpha: resourceAlphaMasks[key] }]));
     if (result.browserRuntime) {
       this.browserGeneration = result.generationId;
       this.browserModuleUrl = new URL(`/api/session/${this.http.sessionId}/browser/${result.browserRuntime.entry}`, window.location.origin).href;
