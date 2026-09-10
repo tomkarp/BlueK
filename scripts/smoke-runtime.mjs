@@ -88,6 +88,7 @@ try {
   assert.deepEqual(compiled.body.classes.find(value => value.name === 'Person').properties.map(value => value.name), ['name']);
   assert.equal(compiled.body.classes.find(value => value.name === 'Person').properties[0].mutable, true);
   const generationId = compiled.body.generationId;
+  assert.deepEqual((await json(`/api/session/${session.sessionId}/status`)).body, { workerAlive: true, generationId, available: true });
   const action = body => post(`/api/session/${session.sessionId}/action`, { ...body, generationId });
   const counter = (await action({ op: 'create', className: 'Counter', name: 'counter1', args: JSON.stringify(['3']) })).body;
   assert.ok(counter.objectId, JSON.stringify(counter));
@@ -221,6 +222,7 @@ try {
   const crashed = await action({ op: 'eval', code: 'System.exit(3)', mode: 'expression' });
   assert.equal(crashed.response.status, 500);
   await wait(100);
+  assert.equal((await json(`/api/session/${session.sessionId}/status`)).body.available, false);
   assert.equal((await json(`/api/session/${session.sessionId}/stage`)).response.status, 409);
   console.log('BlueK runtime smoke test passed');
 } finally {
