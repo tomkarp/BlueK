@@ -93,6 +93,7 @@ const simpleCodepadDeclaration = (code: string): { mutable: boolean; name: strin
 const simpleCodepadAssignment = (code: string): { name: string; value: string } | null => { const match = code.trim().replace(/;$/, '').match(/^([A-Za-z_]\w*)\s*=\s*(.+)$/s); return match ? { name: match[1], value: match[2].trim() } : null; };
 const simpleCodepadIdentifier = (code: string) => code.trim().replace(/;$/, '').match(/^[A-Za-z_]\w*$/)?.[0] || null;
 const requiredParameters = (parameters: any[] = []) => parameters.filter(parameter => !parameter.hasDefault);
+const simpleCallableMatches = (args: unknown[], parameters: any[] = []) => args.length >= requiredParameters(parameters).length && args.length <= parameters.length && simpleArgumentsMatch(args, parameters.slice(0, args.length));
 const stripExpressionParentheses = (source: string) => { let value = source.trim(); while (value.startsWith('(') && value.endsWith(')')) { let depth = 0, quote = '', escaped = false, closesAt = -1; for (let index = 0; index < value.length; index += 1) { const char = value[index]; if (quote) { if (escaped) escaped = false; else if (char === '\\') escaped = true; else if (char === quote) quote = ''; continue; } if (char === '"' || char === "'") { quote = char; continue; } if (char === '(') depth += 1; else if (char === ')' && --depth === 0) { closesAt = index; break; } } if (closesAt !== value.length - 1) break; value = value.slice(1, -1).trim(); } return value; };
 const topLevelBinary = (source: string): { left: string; operator: string; right: string } | null => {
   const operators = ['||', '&&', '==', '!=', '<=', '>=', '<', '>', '+', '-', '*', '/', '%'];
@@ -327,9 +328,9 @@ export class HybridRuntimeClient implements RuntimeClient {
       if (localAction) { const result = await this.local(localAction); return { ...result.value, output: result.output }; }
     }
     if (this.worker && this.ready && request.op === 'create') {
-      const klass = this.classes.find(value => value.name === request.className); const constructor = klass?.constructors.find(value => value.id === request.constructorId) || klass?.constructors[0];
+      const klass = this.classes.find(value => value.name === request.className); const constructorIndex = Number(request.constructorIndex); const selectedConstructor = Number.isInteger(constructorIndex) && constructorIndex >= 0 ? klass?.constructors[constructorIndex] : undefined; const constructor = selectedConstructor || klass?.constructors.find(value => value.id === request.constructorId) || klass?.constructors[0];
       if (klass && constructor) {
-        const args = JSON.parse(String(request.args || '[]')).map((value: string) => parseKotlinArgument(value, this.bindings, this.localValues)); if (!simpleArgumentsMatch(args, constructor.parameters)) throw new Error('The local arguments do not match the Kotlin constructor types; compile the expression first.'); const functionName = `bluekCreate_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}`;
+        const args = JSON.parse(String(request.args || '[]')).map((value: string) => parseKotlinArgument(value, this.bindings, this.localValues)); if (!simpleArgumentsMatch(args, requiredParameters(constructor.parameters))) throw new Error('The local arguments do not match the Kotlin constructor types; compile the expression first.'); const functionName = `bluekCreate_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}${klass.constructors.indexOf(constructor) === 0 ? '' : `_${klass.constructors.indexOf(constructor)}`}`;
         const result = await this.local({ op: 'create', functionName, args, className: klass.name, name: String(request.name || klass.name.toLowerCase()) });
         if (result.objectId) this.localObjects.set(result.objectId, klass.name); if (result.name) this.bindings.set(result.name, result.objectId); return { ...result.value, output: result.output };
       }
@@ -439,7 +440,7 @@ export class HybridRuntimeClient implements RuntimeClient {
           const objectId = this.bindings.get(parsed.receiver);
           const localClassName = objectId ? this.localObjects.get(String(objectId)) : undefined;
           const klass = this.classes.find(value => value.name === localClassName);
-          const method = klass?.methods.find(value => value.name === parsed.callable);
+          const method = klass?.methods.filter(value => value.name === parsed.callable).find(value => { try { return simpleCallableMatches(parsed.args.map(argument => parseKotlinArgument(argument, this.bindings, this.localValues)), value.parameters); } catch { return false; } });
           if (!objectId && this.localValues.has(parsed.receiver) && parsed.args.length === 0) {
             const scalar = this.localValues.get(parsed.receiver);
             if (typeof scalar === 'string') {
@@ -467,10 +468,11 @@ export class HybridRuntimeClient implements RuntimeClient {
           }
         } else {
           const klass = this.classes.find(value => value.name === parsed.callable);
-          const constructor = klass?.constructors[0];
+          const constructorIndex = klass?.constructors.findIndex(value => { try { return simpleCallableMatches(parsed.args.map(argument => parseKotlinArgument(argument, this.bindings, this.localValues)), value.parameters); } catch { return false; } }) ?? -1;
+          const constructor = constructorIndex >= 0 ? klass?.constructors[constructorIndex] : undefined;
           if (klass && constructor && parsed.args.length >= requiredParameters(constructor.parameters).length) {
             const args = parsed.args.map(value => parseKotlinArgument(value, this.bindings, this.localValues)); if (!simpleArgumentsMatch(args, requiredParameters(constructor.parameters))) throw new Error('The local arguments do not match the Kotlin constructor types; compile the expression first.');
-            const result = await this.local({ op: 'create', functionName: `bluekCreate_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}`, args, className: klass.name, name: parsed.binding || klass.name.toLowerCase() });
+            const result = await this.local({ op: 'create', functionName: `bluekCreate_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}${constructorIndex === 0 ? '' : `_${constructorIndex}`}`, args, className: klass.name, name: parsed.binding || klass.name.toLowerCase() });
             if (result.objectId) this.localObjects.set(result.objectId, klass.name);
             if (parsed.binding && result.objectId) this.bindings.set(parsed.binding, result.objectId);
             return { ...result.value, name: parsed.binding, output: result.output };
@@ -529,7 +531,7 @@ export class HybridRuntimeClient implements RuntimeClient {
     }
     if (this.worker && this.ready && request.op === 'invoke') {
       const object = this.localObjects.has(String(request.objectId)); const localClassName = this.localObjects.get(String(request.objectId)); const klass = this.classes.find(value => value.name === localClassName);
-      const requestName = String(request.name || ''); const genericMatch = requestName.match(/^([^<]+)<(.+)>$/); const methodName = genericMatch?.[1] || requestName; const method = klass?.methods.find(value => value.name === methodName);
+      const requestName = String(request.name || ''); const genericMatch = requestName.match(/^([^<]+)<(.+)>$/); const methodName = genericMatch?.[1] || requestName; const method = klass?.methods.find(value => value.id === request.callableId) || klass?.methods.find(value => value.name === methodName);
       if (object && klass && method) {
         const args = JSON.parse(String(request.args || '[]')).map((value: string) => parseKotlinArgument(value, this.bindings, this.localValues)); if (!simpleArgumentsMatch(args, requiredParameters(method.parameters))) throw new Error('The local arguments do not match the Kotlin method types; compile the expression first.');
         const typeName = genericMatch?.[2].split(',')[0].trim(); if (method.typeParameters?.length) { if (!typeName) throw new Error('A Kotlin type argument is required for this method.'); const result = await this.local({ op: 'invoke', functionName: `bluekGeneric_${methodName}`, methodName, typeName, objectId: String(request.objectId), args, className: method.returnType.classifier }); return { ...result.value, output: result.output }; }

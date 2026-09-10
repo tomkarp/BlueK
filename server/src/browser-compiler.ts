@@ -101,19 +101,20 @@ function bridgeSource(files: ProjectFile[], classes: ClassMeta[]): { source: str
     }
     for (const klass of classes.filter(value => value.kind === 'class' && value.constructors.length && !frameworkNames.has(value.name))) {
         const className = kotlinIdentifier(klass.name);
-        const constructor = klass.constructors[0];
-        const constructorParameters = requiredParameters(constructor.parameters || []);
         const typeBindings = new Map<string, string>();
         for (const value of klass.typeParameters || []) {
             const [name, bound] = value.split(':', 2).map(part => part.trim());
             if (name) typeBindings.set(name, bound ? kotlinType(bound, new Map(), knownTypes) : 'Any?');
         }
         const classType = klass.typeParameters?.length ? `${klass.name}<${klass.typeParameters.map(value => typeBindings.get(value.split(':', 2)[0].trim()) || 'Any?').join(', ')}>` : klass.name;
-        const unsupportedConstructor = constructorParameters.some(parameter => /\([^)]*\)\s*->/.test(parameter.type.displayName));
-        if (!unsupportedConstructor) {
+        klass.constructors.forEach((constructor, constructorIndex) => {
+            const constructorParameters = requiredParameters(constructor.parameters || []);
+            const unsupportedConstructor = constructorParameters.some(parameter => /\([^)]*\)\s*->/.test(parameter.type.displayName));
+            if (unsupportedConstructor) return;
             const parameters = constructorParameters.map((parameter, index) => `arg${index}: ${kotlinType(parameter.type.displayName, typeBindings, knownTypes)}`);
-            lines.push('', '@OptIn(ExperimentalJsExport::class)', '@JsExport', `fun bluekCreate_${className}(${parameters.join(', ')}): ${classType} = ${classType}(${parameters.map((_, index) => `arg${index}`).join(', ')})`);
-        }
+            const suffix = constructorIndex === 0 ? '' : `_${constructorIndex}`;
+            lines.push('', '@OptIn(ExperimentalJsExport::class)', '@JsExport', `fun bluekCreate_${className}${suffix}(${parameters.join(', ')}): ${classType} = ${classType}(${parameters.map((_, index) => `arg${index}`).join(', ')})`);
+        });
         const source = files.find(file => file.fileName.replace(/\.kt$/, '') === klass.name)?.source || '';
         const fieldNames = [...source.matchAll(/\b(?:val|var)\s+(\w+)\s*:/g)].map(match => match[1]);
         const fieldJson = JSON.stringify(fieldNames).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
