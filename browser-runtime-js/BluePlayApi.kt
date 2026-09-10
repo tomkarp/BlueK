@@ -42,6 +42,7 @@ external class Image {
     val width: Int
     val height: Int
     var transparency: Int
+    fun setTransparency(value: Int)
     fun scale(width: Int, height: Int)
     fun setColor(r: Int, g: Int, b: Int)
     fun fill()
