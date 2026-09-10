@@ -186,6 +186,19 @@ try {
   assert.match((await action({ op: 'inspect', objectId: overloadedString.objectId })).body.display, /kind="string"/);
   const child = (await action({ op: 'create', className: 'Child', name: 'child1', args: JSON.stringify(['"Ada"']) })).body;
   assert.match((await action({ op: 'inspect', objectId: child.objectId })).body.display, /baseValue="Ada"/);
+  const packageSession = (await post('/api/session', {})).body;
+  const packageFiles = [
+    { id: 'package-person', fileName: 'PackagePerson.kt', kind: 'class', revision: 1, source: 'package demo\nclass PackagePerson(val name: String) { fun greet(): String = "Hi $name" }' },
+    { id: 'package-helpers', fileName: 'PackageHelpers.kt', kind: 'functions', revision: 1, source: 'package demo\nfun twice(value: Int): Int = value * 2' },
+  ];
+  const packageCompiled = await post(`/api/session/${packageSession.sessionId}/compile`, { files: packageFiles, revision: 1 });
+  assert.equal(packageCompiled.body.diagnostics.length, 0, JSON.stringify(packageCompiled.body.diagnostics));
+  const packageGeneration = packageCompiled.body.generationId;
+  const packageAction = body => post(`/api/session/${packageSession.sessionId}/action`, { ...body, generationId: packageGeneration });
+  const packagePerson = (await packageAction({ op: 'create', className: 'PackagePerson', name: 'packagePerson1', args: JSON.stringify(['"Ada"']) })).body;
+  assert.equal((await packageAction({ op: 'invoke', objectId: packagePerson.objectId, name: 'greet', args: '[]' })).body.display, 'Hi Ada');
+  assert.equal((await packageAction({ op: 'eval', code: 'twice(4)', mode: 'expression' })).body.display, '8');
+  assert.equal((await post(`/api/session/${packageSession.sessionId}/close`, {})).response.status, 204);
   const stale = await post(`/api/session/${session.sessionId}/action`, { op: 'create', className: 'Counter', name: 'stale', args: '[]', generationId: 'old-generation' });
   assert.equal(stale.response.status, 409);
   const crashed = await action({ op: 'eval', code: 'System.exit(3)', mode: 'expression' });

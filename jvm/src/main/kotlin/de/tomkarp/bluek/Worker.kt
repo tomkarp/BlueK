@@ -54,6 +54,7 @@ fun main() {
     controlOut = System.out
     var loader: URLClassLoader? = null
     var projectPath = ""
+    var projectPackages = emptyList<String>()
     val objects = mutableMapOf<String, Any>()
     val names = mutableMapOf<String, String>()
     val bindingTypes = mutableMapOf<String, String>()
@@ -87,6 +88,7 @@ fun main() {
                 line.contains("\"op\":\"click\"") -> { loader?.loadClass("BluePlayFunctionsKt")?.getMethod("setClickPosition", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)?.invoke(null, value(line, "x").toInt(), value(line, "y").toInt()) }
                 line.contains("\"op\":\"load\"") -> {
                     projectPath = value(line, "path")
+                    projectPackages = argumentValues(line, "packages")
                     loader = URLClassLoader(arrayOf(File(projectPath).toURI().toURL()), Worker::class.java.classLoader)
                     objects.clear(); names.clear(); bindingTypes.clear(); mutableBindings.clear(); emit("unit", "loaded")
                 }
@@ -97,8 +99,9 @@ fun main() {
                     val args = argumentValues(line).joinToString(", ")
                     val typeArguments = argumentValues(line, "typeArguments").joinToString(", ")
                     val typeSuffix = if (typeArguments.isEmpty()) "" else "<$typeArguments>"
+                    val imports = projectPackages.joinToString("\n") { "import $it.*" }
                     val helperName = "BlueKFactory_${UUID.randomUUID().toString().replace("-", "")}"; val dir = createTempDir(prefix = "bluek-create-"); val src = File(dir, "$helperName.kt")
-                    src.writeText("class $helperName { fun execute(): Any? = $className$typeSuffix($args) }")
+                    src.writeText("$imports\nclass $helperName { fun execute(): Any? = $className$typeSuffix($args) }")
                     val jar = File(dir, "factory.jar"); val compiler = ProcessBuilder("kotlinc", src.absolutePath, "-classpath", "${projectPath}:${File(Worker::class.java.protectionDomain.codeSource.location.toURI())}", "-d", jar.absolutePath).redirectInput(ProcessBuilder.Redirect.PIPE).redirectErrorStream(true).start()
                     compiler.outputStream.close()
                     if (!compiler.waitFor(60, java.util.concurrent.TimeUnit.SECONDS)) { compiler.destroyForcibly(); emit("error", "Constructor compilation timed out"); return }
@@ -112,8 +115,9 @@ fun main() {
                 line.contains("\"op\":\"invoke\"") -> {
                     val objectId = value(line, "objectId"); val objectName = names.entries.firstOrNull { it.value == objectId }?.key ?: error("Object is not named on the bench")
                     val methodName = value(line, "name"); val args = argumentValues(line).joinToString(", "); val bindings = names.entries.joinToString("\n") { "${if (mutableBindings.contains(it.key)) "var" else "val"} ${it.key} = ctx.objectById(\"${it.value}\") as ${bindingTypes[it.key] ?: objects[it.value]!!.javaClass.name}" }
+                    val imports = projectPackages.joinToString("\n") { "import $it.*" }
                     val helperName = "BlueKInvoke_${UUID.randomUUID().toString().replace("-", "")}"; val dir = createTempDir(prefix = "bluek-invoke-"); val src = File(dir, "$helperName.kt")
-                    src.writeText("import de.tomkarp.bluek.RuntimeContext\nclass $helperName { fun execute(ctx: RuntimeContext): Any? = run { $bindings\nreturn@run $objectName.$methodName($args) } }")
+                    src.writeText("$imports\nimport de.tomkarp.bluek.RuntimeContext\nclass $helperName { fun execute(ctx: RuntimeContext): Any? = run { $bindings\nreturn@run $objectName.$methodName($args) } }")
                     val jar = File(dir, "snippet.jar"); val compiler = ProcessBuilder("kotlinc", src.absolutePath, "-classpath", "${projectPath}:${File(Worker::class.java.protectionDomain.codeSource.location.toURI())}", "-d", jar.absolutePath).redirectInput(ProcessBuilder.Redirect.PIPE).redirectErrorStream(true).start()
                     compiler.outputStream.close()
                     if (!compiler.waitFor(60, java.util.concurrent.TimeUnit.SECONDS)) { compiler.destroyForcibly(); emit("error", "Snippet compilation timed out"); return }
@@ -143,8 +147,9 @@ fun main() {
                     val exported = (declared + mutableBindings.toList()).distinct()
                     val exports = exported.joinToString(",") { "\"__bluek_binding:$it\" to $it" }
                     val expression = if (mode == "expression") "return@run $code" else if (exported.isEmpty()) "$code\nreturn@run Unit" else "$code\nreturn@run mapOf(\"__bluek_value\" to Unit${if (exports.isEmpty()) "" else "," + exports})"
+                    val imports = projectPackages.joinToString("\n") { "import $it.*" }
                     val helperName = "BlueKEval_${UUID.randomUUID().toString().replace("-", "")}"; val dir = createTempDir(prefix = "bluek-snippet-"); val src = File(dir, "$helperName.kt")
-                    src.writeText("import de.tomkarp.bluek.RuntimeContext\nclass $helperName { fun execute(ctx: RuntimeContext): Any? = run { $bindings\n$expression } }")
+                    src.writeText("$imports\nimport de.tomkarp.bluek.RuntimeContext\nclass $helperName { fun execute(ctx: RuntimeContext): Any? = run { $bindings\n$expression } }")
                     val jar = File(dir, "snippet.jar"); val compiler = ProcessBuilder("kotlinc", src.absolutePath, "-classpath", "${projectPath}:${File(Worker::class.java.protectionDomain.codeSource.location.toURI())}", "-d", jar.absolutePath).redirectInput(ProcessBuilder.Redirect.PIPE).redirectErrorStream(true).start()
                     compiler.outputStream.close()
                     if (!compiler.waitFor(60, java.util.concurrent.TimeUnit.SECONDS)) { compiler.destroyForcibly(); emit("error", "Snippet compilation timed out"); return }
