@@ -63,6 +63,7 @@ Mit echten `kotlinc`- und Worker-Prozessen geprüft:
 - `Box<String>`: `replace(42)` wird vom Kotlin-Compiler abgelehnt, der ursprüngliche String bleibt erhalten.
 - Generische Methoden bewahren ihre Typparameter; Aufrufe wie `getObjects<Ball>()` und `getOneIntersecting<Muenze>()` können über den Dialog mit expliziten Kotlin-Typen ausgeführt werden.
 - `Animal`/`Dog`: dynamischer Dispatch, geerbte Methode einmalig im Menü, Interface ohne Konstruktoraktion.
+- Geerbte Kotlin-Properties liefern im Unterklassenmenü ebenfalls nutzbare Getter-/Setter-Aktionen.
 - Kotlin-`Any`-Methoden (`toString`, `hashCode`, `equals`) erscheinen bei Klassen als geerbte, ausführbare Objektaktionen.
 - Interfaces bleiben nicht instanziierbar; eine konkrete Implementierung wird kompiliert, erzeugt und über ihre echte Implementierung aufgerufen.
 - `Inspect` liest nur Instanzfelder und löst berechnete Getter nicht automatisch aus; solche Properties werden erst durch einen expliziten Kotlin-Aufruf ausgewertet.
