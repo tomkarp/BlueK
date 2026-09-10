@@ -25,10 +25,25 @@ const readExample = async (name: string) => {
         revision: 1
     })));
 };
-app.get('/api/examples', asyncRoute(async (_: any, r: any) => r.json(await readExample('blueplay'))));
+const readExampleResources = async (name: string) => {
+    const directory = exampleDirectory(name);
+    const resources: { path: string; data: string }[] = [];
+    for (const folder of ['images', 'sounds']) {
+        const resourceDirectory = path.join(directory, folder);
+        const names = await fs.readdir(resourceDirectory).catch(() => [] as string[]);
+        for (const fileName of names.sort()) {
+            const filePath = path.join(resourceDirectory, fileName);
+            const data = await fs.readFile(filePath);
+            const mime = folder === 'images' ? 'image/png' : 'audio/wav';
+            resources.push({ path: `${folder}/${fileName}`, data: `data:${mime};base64,${data.toString('base64')}` });
+        }
+    }
+    return resources;
+};
+app.get('/api/examples', asyncRoute(async (_: any, r: any) => r.json({ files: await readExample('blueplay'), resources: await readExampleResources('blueplay') })));
 app.get('/api/examples/:name', asyncRoute(async (req: any, r: any) => {
     if (!['basic', 'blueplay'].includes(req.params.name)) return r.sendStatus(404);
-    r.json(await readExample(req.params.name));
+    r.json({ files: await readExample(req.params.name), resources: await readExampleResources(req.params.name) });
 }));
 app.use('/api/session/:id',(req,_r,next)=>{const s=sessions.get(req.params.id);if(s)s.lastActivity=Date.now();next()});
 app.post('/api/session',asyncRoute(async(_:any,r:any)=>{const d=await fs.mkdtemp(path.join(os.tmpdir(),'bluek-'));const id=randomUUID();const session={dir:d,worker:undefined as unknown as ChildProcess,workerDead:false,files:[],resourcePaths:[],buffer:'',pending:new Map<string,Pending>(),events:[],lastActivity:Date.now(),workerError:''};sessions.set(id,session);startWorker(session);r.json({sessionId:id})}));
