@@ -11,7 +11,7 @@ export class HttpRuntimeClient implements RuntimeClient {
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
       const message = body.message || `Runtime request failed (${response.status}).`;
-      if (response.status === 409 || response.status === 503) this.onFailure(message);
+      if (response.status === 409 || response.status === 503 || response.status === 504) this.onFailure(message);
       throw new Error(message);
     }
     return response;
