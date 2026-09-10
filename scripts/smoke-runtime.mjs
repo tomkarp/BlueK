@@ -59,6 +59,8 @@ try {
   assert.deepEqual(typedConstructor.parameters[0].type.arguments.map(value => value.displayName), ['String', 'List<Int>?']);
   assert.equal(typedConstructor.parameters[0].type.arguments[1].arguments[0].displayName, 'Int');
   assert.equal(typedConstructor.parameters[1].type.arguments[0].projection, 'in');
+  assert.deepEqual(compiled.body.classes.find(value => value.name === 'Person').properties.map(value => value.name), ['name']);
+  assert.equal(compiled.body.classes.find(value => value.name === 'Person').properties[0].mutable, true);
   const generationId = compiled.body.generationId;
   const action = body => post(`/api/session/${session.sessionId}/action`, { ...body, generationId });
   const counter = (await action({ op: 'create', className: 'Counter', name: 'counter1', args: JSON.stringify(['3']) })).body;
