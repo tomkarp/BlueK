@@ -16,6 +16,8 @@ export class Image {
   setColor(r, g, b) { this._color = color(r, g, b); }
   scale(width, height) { this.width = Math.max(1, width); this.height = Math.max(1, height); }
   _op(name, ...args) { this._operations.push([name, ...args, this._color].join('|')); }
+  get drawOperations() { return [...this._operations]; }
+  get backgroundColor() { return this._operations.at(-1)?.split('|').at(-1) || this._color; }
   fill() { this.fillRect(0, 0, this.width, this.height); }
   fillRect(x, y, w, h) { this._op('fillRect', x, y, w, h); }
   drawRect(x, y, w, h) { this._op('drawRect', x, y, w, h); }
@@ -81,7 +83,7 @@ const actorAt = point => state.world?.allObjects().slice().reverse().find(actor 
 const consumeClick = () => { if (!state.click) return false; state.click = null; return true; };
 const oneStep = () => { if (!state.world) return; state.world.act(); state.world.allObjects().slice().forEach(actor => actor.act()); };
 export const bluekStep = () => { if (state.running) oneStep(); };
-export const bluekStage = () => { const background = state.world?.background; return JSON.stringify({ width: state.world?.width || 0, height: state.world?.height || 0, cellSize: state.world?.cellSize || 1, running: state.running, speed: state.speed, objects: state.world?.allObjects().map(actor => ({ type: actor.constructor.name || 'Actor', x: actor.x, y: actor.y, rotation: actor.rotation, imagePath: actor.image?.fileName || null, imageWidth: actor.image?.width || 30, imageHeight: actor.image?.height || 30 })) || [], texts: state.world ? [...state.world._texts.values()].map(([x, y, text]) => ({ x, y, text })) : [], backgroundColor: background?._operations.at(-1)?.split('|').at(-1) || background?._color || null, backgroundOperations: background?._operations || [], sounds: state.sounds.splice(0) }); };
+export const bluekStage = () => { const background = state.world?.background; const operations = background?.drawOperations || background?._operations || []; return JSON.stringify({ width: state.world?.width || 0, height: state.world?.height || 0, cellSize: state.world?.cellSize || 1, running: state.running, speed: state.speed, objects: state.world?.allObjects().map(actor => ({ type: actor.constructor.name || 'Actor', x: actor.x, y: actor.y, rotation: actor.rotation, imagePath: actor.image?.fileName || null, imageWidth: actor.image?.width || 30, imageHeight: actor.image?.height || 30 })) || [], texts: state.world ? [...state.world._texts.values()].map(([x, y, text]) => ({ x, y, text })) : [], backgroundColor: background?.backgroundColor || background?._color || null, backgroundOperations: operations, sounds: state.sounds.splice(0) }); };
 export const bluekStageJson = bluekStage;
 export const bluekReadln = () => globalThis.__bluekReadln ? globalThis.__bluekReadln() : '';
 export const bluekReadlnOrNull = () => globalThis.__bluekReadlnOrNull ? globalThis.__bluekReadlnOrNull() : null;

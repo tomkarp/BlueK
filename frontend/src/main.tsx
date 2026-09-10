@@ -14,6 +14,7 @@ const backgroundDataUrl = (operations: string[] = [], width: number, height: num
     const [name, ...parts] = operation.split('|');
     const paint = parts.at(-1) || 'rgb(255, 255, 255)';
     const values = parts.slice(0, -1);
+    if (name === 'fill') return `<rect x="0" y="0" width="${width}" height="${height}" fill="${paint}"/>`;
     if (name === 'fillRect' && values.length >= 4) return `<rect x="${values[0]}" y="${values[1]}" width="${values[2]}" height="${values[3]}" fill="${paint}"/>`;
     if (name === 'drawRect' && values.length >= 4) return `<rect x="${values[0]}" y="${values[1]}" width="${values[2]}" height="${values[3]}" fill="none" stroke="${paint}"/>`;
     if (name === 'fillOval' && values.length >= 4) return `<ellipse cx="${Number(values[0]) + Number(values[2]) / 2}" cy="${Number(values[1]) + Number(values[3]) / 2}" rx="${Number(values[2]) / 2}" ry="${Number(values[3]) / 2}" fill="${paint}"/>`;
