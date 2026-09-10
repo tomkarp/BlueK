@@ -11,7 +11,9 @@ export function Image(value, height) {
   this.width = typeof value === 'number' ? Math.max(1, value) : resourceSize?.width || 30;
   this.height = typeof value === 'number' ? Math.max(1, height) : resourceSize?.height || 30;
   this._alphaMask = typeof value === 'string' ? resourceSize?.alpha || null : null;
-  if (value instanceof Image) { this.fileName = value.fileName; this.width = value.width; this.height = value.height; this._alphaMask = value._alphaMask ? [...value._alphaMask] : null; }
+  this._alphaWidth = typeof value === 'string' ? resourceSize?.width || this.width : this.width;
+  this._alphaHeight = typeof value === 'string' ? resourceSize?.height || this.height : this.height;
+  if (value instanceof Image) { this.fileName = value.fileName; this.width = value.width; this.height = value.height; this._alphaMask = value._alphaMask ? [...value._alphaMask] : null; this._alphaWidth = value._alphaWidth; this._alphaHeight = value._alphaHeight; }
   this.transparency = value instanceof Image ? value.transparency : 255;
   this._color = value instanceof Image ? value._color : 'rgb(0, 0, 0)'; this._operations = value instanceof Image ? [...value._operations] : [];
 }
@@ -68,7 +70,11 @@ Actor.prototype.intersects = function(other) {
     const dx = pixelX + 0.5 - center[0], dy = pixelY + 0.5 - center[1];
     const localX = cos * dx - sin * dy + image.width / 2, localY = sin * dx + cos * dy + image.height / 2;
     const x = Math.floor(localX), y = Math.floor(localY);
-    return x >= 0 && y >= 0 && x < image.width && y < image.height && image._alphaMask[y * image.width + x] > 16;
+    if (x < 0 || y < 0 || x >= image.width || y >= image.height) return false;
+    const maskWidth = image._alphaWidth || image.width, maskHeight = image._alphaHeight || image.height;
+    const maskX = Math.min(maskWidth - 1, Math.floor(x * maskWidth / image.width));
+    const maskY = Math.min(maskHeight - 1, Math.floor(y * maskHeight / image.height));
+    return image._alphaMask[maskY * maskWidth + maskX] > 16;
   };
   const left = Math.floor(Math.max(0, Math.min(...first.map(point => point[0])) * cellSize)), right = Math.ceil(Math.max(...first.map(point => point[0])) * cellSize);
   const top = Math.floor(Math.max(0, Math.min(...first.map(point => point[1])) * cellSize)), bottom = Math.ceil(Math.max(...first.map(point => point[1])) * cellSize);
