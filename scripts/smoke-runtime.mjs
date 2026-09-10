@@ -37,6 +37,9 @@ try {
   const mixedFile = await post(`/api/session/${session.sessionId}/compile`, { files: [{ fileName: 'Mixed.kt', source: 'class Mixed\nfun helper() = 1', kind: 'class' }], revision: 1 });
   assert.equal(mixedFile.response.status, 200);
   assert.match(mixedFile.body.diagnostics[0].message, /BlueK class files/);
+  const mismatchedName = await post(`/api/session/${session.sessionId}/compile`, { files: [{ fileName: 'Person.kt', source: 'class Student', kind: 'class' }], revision: 1 });
+  assert.equal(mismatchedName.response.status, 200);
+  assert.match(mismatchedName.body.diagnostics[0].message, /file names must match/);
   const syntaxError = await post(`/api/session/${session.sessionId}/compile`, { files: [{ fileName: 'Broken.kt', source: 'class Broken(', kind: 'class' }], revision: 1 });
   assert.equal(syntaxError.response.status, 200);
   assert.ok(syntaxError.body.diagnostics.some(diagnostic => diagnostic.fileName === 'Broken.kt' && diagnostic.line >= 1 && diagnostic.column >= 1));
@@ -60,7 +63,7 @@ try {
     { id: 'abstract', fileName: 'AbstractThing.kt', kind: 'class', revision: 1, source: 'abstract class AbstractThing { fun ping() {} }' },
     { id: 'color', fileName: 'Color.kt', kind: 'class', revision: 1, source: 'enum class Color { RED, BLUE }' },
     { id: 'tag', fileName: 'Tag.kt', kind: 'class', revision: 1, source: 'annotation class Tag(val value: String)' },
-    { id: 'comments', fileName: 'Comments.kt', kind: 'class', revision: 1, source: '// class that should not become metadata\nclass Commented { val text: String = "object fake" }' },
+    { id: 'comments', fileName: 'Commented.kt', kind: 'class', revision: 1, source: '// class that should not become metadata\nclass Commented { val text: String = "object fake" }' },
     { id: 'world', fileName: 'World.kt', kind: 'class', revision: 1, source: 'open class World(val width: Int, val height: Int, val cellSize: Int) { private val actors = mutableListOf<Actor>(); var background: Image = Image(width * cellSize, height * cellSize); val isClicked: Boolean get() = isWorldClicked(); fun addObject(actor: Actor, x: Int, y: Int) { actors.add(actor); actor.x = x; actor.y = y; setWorldOf(actor, this) }; fun allObjects(): List<Actor> = actors.toList(); fun show() { showWorld(this) }; fun showText(text: String, x: Int, y: Int) { setTextOf(this, x, y, text) }; fun clicked(): Boolean = isClicked; open fun act() {} }' },
     { id: 'actor', fileName: 'Actor.kt', kind: 'class', revision: 1, source: 'open class Actor { var x: Int = 0; var y: Int = 0; var rotation: Int = 0; var image: Image? = null; val isClicked: Boolean get() = isActorClicked(this); open fun act() {}; fun move(distance: Int) { x += distance }; fun clicked(): Boolean = isClicked }' },
     { id: 'image', fileName: 'Image.kt', kind: 'class', revision: 1, source: 'import java.awt.Color\nimport java.awt.image.BufferedImage\nclass Image { var awtImage: BufferedImage; var color: Color = Color.BLACK; @get:JvmSynthetic @set:JvmSynthetic internal var transparency: Int = 255; constructor(width: Int, height: Int) { awtImage = BufferedImage(maxOf(1, width), maxOf(1, height), BufferedImage.TYPE_INT_ARGB) }; constructor(fileName: String) { awtImage = cachedImage(fileName) }; val width: Int get() = awtImage.width; val height: Int get() = awtImage.height; fun setColor(r: Int, g: Int, b: Int) { color = Color(r, g, b) }; fun fill() { val g = awtImage.createGraphics(); g.color = color; g.fillRect(0, 0, width, height); g.dispose() }; fun scale(nextWidth: Int, nextHeight: Int) { awtImage = BufferedImage(maxOf(1, nextWidth), maxOf(1, nextHeight), BufferedImage.TYPE_INT_ARGB) }; fun setTransparency(value: Int) { transparency = value.coerceIn(0, 255) } }' },
