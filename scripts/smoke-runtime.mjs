@@ -135,6 +135,7 @@ try {
   assert.equal((await action({ op: 'eval', code: 'error("Demo")', mode: 'expression' })).body.kind, 'error');
   assert.equal((await action({ op: 'eval', code: 'square(7)', mode: 'expression' })).body.display, '49');
   const box = (await action({ op: 'create', className: 'Box', name: 'box1', typeArguments: JSON.stringify(['String']), args: JSON.stringify(['"Ada"']) })).body;
+  assert.equal(box.display, 'Box<String>');
   assert.equal((await action({ op: 'invoke', objectId: box.objectId, name: 'replace', args: JSON.stringify(['42']) })).body.kind, 'error');
   assert.equal((await action({ op: 'invoke', objectId: box.objectId, name: 'get', args: '[]' })).body.display, 'Ada');
   assert.equal((await action({ op: 'remove', objectId: box.objectId })).body.display, 'Removed');

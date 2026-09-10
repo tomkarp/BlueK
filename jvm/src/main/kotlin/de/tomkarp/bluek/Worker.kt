@@ -103,7 +103,8 @@ fun main() {
                     val child = URLClassLoader(arrayOf(jar.toURI().toURL()), loader); val factory = child.loadClass(helperName).getDeclaredConstructor().newInstance()
                     val created = withUserOutput { factory.javaClass.getMethod("execute").invoke(factory) }; val id = UUID.randomUUID().toString()
                     objects[id] = created.value; value(line, "name").takeIf { it.isNotEmpty() }?.let { name -> names[name] = id; val typeArgs = argumentValues(line, "typeArguments"); bindingTypes[name] = if (typeArgs.isEmpty()) className else "$className<${typeArgs.joinToString(", ")}>" }
-                    emit("object", created.value.javaClass.simpleName, id, created.output, stageSnapshot(objects))
+                    val displayType = if (typeArguments.isEmpty()) className else "$className<$typeArguments>"
+                    emit("object", displayType, id, created.output, stageSnapshot(objects))
                 }
                 line.contains("\"op\":\"invoke\"") -> {
                     val objectId = value(line, "objectId"); val objectName = names.entries.firstOrNull { it.value == objectId }?.key ?: error("Object is not named on the bench")
