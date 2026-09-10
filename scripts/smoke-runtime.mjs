@@ -30,6 +30,7 @@ try {
     { id: 'person', fileName: 'Person.kt', kind: 'class', revision: 1, source: 'class Person(var name: String) { fun greet(): String = "Hello, $name!"; fun rename(newName: String) { name = newName }; fun greetInConsole() { println(greet() + "\\t✓"); System.err.println("warning") }; fun greetWith(prefix: String = "Hi", suffix: String): String = "$prefix $name$suffix"; fun friend(): Person = Person("$name Jr") }' },
     { id: 'helpers', fileName: 'Helpers.kt', kind: 'functions', revision: 1, source: 'fun square(x: Int): Int = x * x; fun askName(): String { println("What is your name?"); val name = readln(); println("Hello, $name!"); return name }' },
     { id: 'box', fileName: 'Box.kt', kind: 'class', revision: 1, source: 'class Box<T>(var value: T) { fun replace(next: T) { value = next }; fun get(): T = value }' },
+    { id: 'bounded', fileName: 'Bounded.kt', kind: 'class', revision: 1, source: 'class Bounded<T : Number>(val value: T) { fun get(): T = value }' },
     { id: 'typed', fileName: 'Typed.kt', kind: 'class', revision: 1, source: 'class Typed(val value: Map<String, List<Int>?>, val sink: MutableList<in Number>)' },
     { id: 'overloaded', fileName: 'Overloaded.kt', kind: 'class', revision: 1, source: 'class Overloaded { val kind: String; constructor(value: Int) { kind = "int" }; constructor(value: String) { kind = "string" } }' },
     { id: 'base', fileName: 'Base.kt', kind: 'class', revision: 1, source: 'open class Base(var baseValue: String)' },
@@ -61,6 +62,7 @@ try {
   assert.equal(compiled.body.classes.find(value => value.name === 'Color').constructors.length, 0);
   assert.equal(compiled.body.classes.find(value => value.name === 'Tag').kind, 'annotation');
   assert.equal(compiled.body.classes.find(value => value.name === 'Tag').constructors.length, 0);
+  assert.deepEqual(compiled.body.classes.find(value => value.name === 'Bounded').typeParameters, ['T : Number']);
   const typedConstructor = compiled.body.classes.find(value => value.name === 'Typed').constructors[0];
   assert.deepEqual(typedConstructor.parameters[0].type.arguments.map(value => value.displayName), ['String', 'List<Int>?']);
   assert.equal(typedConstructor.parameters[0].type.arguments[1].arguments[0].displayName, 'Int');
@@ -145,6 +147,9 @@ try {
   assert.equal((await action({ op: 'eval', code: 'square(7)', mode: 'expression' })).body.display, '49');
   const box = (await action({ op: 'create', className: 'Box', name: 'box1', typeArguments: JSON.stringify(['String']), args: JSON.stringify(['"Ada"']) })).body;
   assert.equal(box.display, 'Box<String>');
+  const bounded = (await action({ op: 'create', className: 'Bounded', name: 'bounded1', typeArguments: JSON.stringify(['Int']), args: JSON.stringify(['7']) })).body;
+  assert.equal(bounded.display, 'Bounded<Int>');
+  assert.equal((await action({ op: 'invoke', objectId: bounded.objectId, name: 'get', args: '[]' })).body.display, '7');
   assert.equal((await action({ op: 'invoke', objectId: box.objectId, name: 'replace', args: JSON.stringify(['42']) })).body.kind, 'error');
   assert.equal((await action({ op: 'invoke', objectId: box.objectId, name: 'get', args: '[]' })).body.display, 'Ada');
   assert.equal((await action({ op: 'remove', objectId: box.objectId })).body.display, 'Removed');
