@@ -10,6 +10,10 @@ val bluekBridgeDir = providers.gradleProperty("bluekBridgeDir").map { file(it) }
 kotlin {
     js(IR) {
         browser()
+        compilerOptions {
+            freeCompilerArgs.add("-main")
+            freeCompilerArgs.add("noCall")
+        }
         binaries.library()
     }
 
