@@ -78,6 +78,7 @@ const simpleArgumentMatches = (value: unknown, type: TypeRef): boolean => {
 };
 const simpleArgumentsMatch = (args: unknown[], parameters: { type: TypeRef }[]) => args.every((value, index) => !parameters[index] || simpleArgumentMatches(value, parameters[index].type));
 const splitSimpleArguments = (source: string): string[] => { const result: string[] = []; let start = 0; let depth = 0; let quote = ''; let escaped = false; for (let index = 0; index < source.length; index += 1) { const char = source[index]; if (quote) { if (escaped) escaped = false; else if (char === '\\') escaped = true; else if (char === quote) quote = ''; continue; } if (char === '"' || char === "'") { quote = char; continue; } if (char === '(') depth += 1; else if (char === ')') depth -= 1; else if (char === ',' && depth === 0) { result.push(source.slice(start, index).trim()); start = index + 1; } } if (source.slice(start).trim()) result.push(source.slice(start).trim()); return result; };
+const splitCodepadStatements = (source: string): string[] => { const result: string[] = []; let start = 0; let round = 0; let curly = 0; let square = 0; let quote = ''; let escaped = false; const push = (end: number) => { const statement = source.slice(start, end).trim(); if (statement) result.push(statement); start = end + 1; }; for (let index = 0; index < source.length; index += 1) { const char = source[index]; if (quote) { if (escaped) escaped = false; else if (char === '\\') escaped = true; else if (char === quote) quote = ''; continue; } if (char === '"' || char === "'") { quote = char; continue; } if (char === '(') round += 1; else if (char === ')') round = Math.max(0, round - 1); else if (char === '{') curly += 1; else if (char === '}') curly = Math.max(0, curly - 1); else if (char === '[') square += 1; else if (char === ']') square = Math.max(0, square - 1); else if ((char === ';' || char === '\n') && round === 0 && curly === 0 && square === 0) push(index); } const last = source.slice(start).trim(); if (last) result.push(last); return result; };
 const simpleCodepadCall = (code: string): { binding?: string; receiver?: string; callable: string; args: string[]; typeArguments: string[] } | null => { const match = code.trim().replace(/;$/, '').match(/^(?:(?:val|var)\s+([A-Za-z_]\w*)(?:\s*:\s*[^=]+)?\s*=\s*)?([A-Za-z_]\w*)(?:<([^>]*)>)?(?:\.([A-Za-z_]\w*)(?:<([^>]*)>)?)?\s*\((.*)\)$/s); if (!match) return null; const typeText = match[4] ? match[5] || '' : match[3] || ''; return { binding: match[1], receiver: match[4] ? match[2] : undefined, callable: match[4] || match[2], args: splitSimpleArguments(match[6]), typeArguments: typeText ? typeText.split(',').map(value => value.trim()).filter(Boolean) : [] }; };
 const simpleCodepadProperty = (code: string): { receiver: string; property: string } | null => { const match = code.trim().replace(/;$/, '').match(/^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/); return match ? { receiver: match[1], property: match[2] } : null; };
 const simpleCodepadPropertyAssignment = (code: string): { receiver: string; property: string; value: string } | null => { const match = code.trim().replace(/;$/, '').match(/^([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s*=\s*(.+)$/s); return match ? { receiver: match[1], property: match[2], value: match[3].trim() } : null; };
@@ -208,6 +209,14 @@ export class HybridRuntimeClient implements RuntimeClient {
     }
     if (this.worker && this.ready && request.op === 'eval') {
       const source = String(request.code || '').trim().replace(/;$/, '');
+      if (request.mode === 'block') {
+        const statements = splitCodepadStatements(source);
+        if (statements.length > 1) {
+          let result: any = { kind: 'unit', display: 'Unit' };
+          for (const statement of statements) result = await this.execute({ ...request, code: statement });
+          return result;
+        }
+      }
       const propertyAssignment = request.mode === 'block' ? simpleCodepadPropertyAssignment(source) : null;
       if (propertyAssignment) {
         const objectId = this.bindings.get(propertyAssignment.receiver);
