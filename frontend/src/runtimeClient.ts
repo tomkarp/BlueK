@@ -134,6 +134,7 @@ const flushStudentOutput = () => { const flush = api?.bluekFlushOutput || resolv
 const resolveArguments = (args) => args.map((arg) => arg && typeof arg === 'object' && arg.__bluekObjectId ? objects.get(arg.__bluekObjectId) : arg);
 const finish = () => { flushStudentOutput(); const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' }, output }); };
 const stage = () => { const value = runtimeApi?.bluekStage || globalThis.bluekStage; if (typeof value === 'function') self.postMessage({ kind: 'stage', stage: JSON.parse(value()) }); };
+self.addEventListener('message', ({ data }) => { if (data?.op === 'resources') runtimeApi?.bluekSetResourceSizes?.(data.sizes || {}); });
 self.onmessage = async ({ data }) => {
   try {
     if (data.op === 'load') { await import(new URL('kotlin-kotlin-stdlib.js', data.url).href); runtimeApi = await import(new URL('bluek-runtime.js', data.url).href); const moduleValue = await import(data.url); const exported = globalThis['bluek-browser-runtime'] || moduleValue.default || moduleValue; api = data.packageName ? (exported[data.packageName] || data.packageName.split('.').reduce((v, p) => v?.[p], exported)) : exported; if (!api || typeof api !== 'object') api = exported; if (inputBuffer) self.postMessage({ kind: 'input-buffer', buffer: inputBuffer }); self.postMessage({ kind: 'ready' }); return; }
@@ -169,6 +170,7 @@ export class HybridRuntimeClient implements RuntimeClient {
   private browserPackageName = '';
   private browserWorkerDead = false;
   private browserReady = false;
+  private browserResourceSizes: Record<string, { width: number; height: number }> = {};
   private inputBarrier: Promise<void> = Promise.resolve();
   private latestStage: any = null;
   private readonly stageCallbacks = new Map<(value: any) => void, (event: MessageEvent) => void>();
@@ -203,7 +205,7 @@ export class HybridRuntimeClient implements RuntimeClient {
     this.ready = new Promise((resolve, reject) => {
       const listener = (event: MessageEvent) => {
         if (event.data?.kind === 'input-buffer') this.inputBuffer = event.data.buffer;
-        if (event.data?.kind === 'ready') { this.browserReady = true; worker.removeEventListener('message', listener); worker.removeEventListener('error', errorListener); resolve(); }
+        if (event.data?.kind === 'ready') { this.browserReady = true; worker.postMessage({ op: 'resources', sizes: this.browserResourceSizes }); worker.removeEventListener('message', listener); worker.removeEventListener('error', errorListener); resolve(); }
         if (event.data?.kind === 'error') { worker.removeEventListener('message', listener); worker.removeEventListener('error', errorListener); reject(new Error(event.data.message)); }
       };
       const errorListener = () => { worker.removeEventListener('message', listener); reject(new Error('Browser Kotlin/JS worker failed to load.')); };
@@ -389,8 +391,9 @@ export class HybridRuntimeClient implements RuntimeClient {
     if (this.worker && this.ready && ['create', 'invoke', 'eval', 'inspect', 'remove'].includes(request.op)) throw new Error('This Kotlin expression is not prepared for local execution yet. Compile it before running it.');
     return this.http.execute(request);
   }
-  async compile(files: ProjectFile[], revision: number, resources: Resource[] = []): Promise<CompileResult> {
+  async compile(files: ProjectFile[], revision: number, resources: Resource[] = [], resourceSizes: Record<string, { width: number; height: number }> = {}): Promise<CompileResult> {
     const result = await this.http.compile(files, revision, resources); this.classes = result.classes; this.localObjects.clear(); this.localValues.clear(); this.bindings.clear(); this.latestStage = null;
+    this.browserResourceSizes = resourceSizes;
     if (result.browserRuntime) {
       this.browserGeneration = result.generationId;
       this.browserModuleUrl = new URL(`/api/session/${this.http.sessionId}/browser/${result.browserRuntime.entry}`, window.location.origin).href;

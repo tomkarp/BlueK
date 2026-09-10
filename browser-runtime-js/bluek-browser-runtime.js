@@ -1,13 +1,15 @@
 // Fixed JavaScript BluePlay runtime. Function constructors are intentional:
 // Kotlin/JS ES5 output calls base constructors with Base.call(this, ...).
 const state = { world: null, running: false, speed: 50, keys: new Set(), clicks: [], sounds: [] };
+const resourceSizes = new Map();
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 const color = (r, g, b) => `rgb(${clamp(r, 0, 255)}, ${clamp(g, 0, 255)}, ${clamp(b, 0, 255)})`;
 
 export function Image(value, height) {
   this.fileName = typeof value === 'string' ? value : null;
-  this.width = typeof value === 'number' ? Math.max(1, value) : 30;
-  this.height = typeof value === 'number' ? Math.max(1, height) : 30;
+  const resourceSize = typeof value === 'string' ? resourceSizes.get(value) || resourceSizes.get(`images/${value}`) : undefined;
+  this.width = typeof value === 'number' ? Math.max(1, value) : resourceSize?.width || 30;
+  this.height = typeof value === 'number' ? Math.max(1, height) : resourceSize?.height || 30;
   if (value instanceof Image) { this.fileName = value.fileName; this.width = value.width; this.height = value.height; }
   this.transparency = value instanceof Image ? value.transparency : 255;
   this._color = value instanceof Image ? value._color : 'rgb(0, 0, 0)'; this._operations = value instanceof Image ? [...value._operations] : [];
@@ -114,6 +116,7 @@ export const bluekStage = () => { const background = state.world?.background; co
 export const bluekStageJson = bluekStage;
 export const bluekReadln = () => globalThis.__bluekReadln ? globalThis.__bluekReadln() : '';
 export const bluekReadlnOrNull = () => globalThis.__bluekReadlnOrNull ? globalThis.__bluekReadlnOrNull() : null;
+export const bluekSetResourceSizes = values => { resourceSizes.clear(); Object.entries(values || {}).forEach(([key, value]) => { if (value && Number(value.width) > 0 && Number(value.height) > 0) { const size = { width: Number(value.width), height: Number(value.height) }; resourceSizes.set(key, size); resourceSizes.set(key.replace(/^images\//, ''), size); } }); };
 const matchesType = (actor, typeName) => !typeName || actor?.constructor?.name === String(typeName).split('.').pop();
 export const bluekActorGetIntersecting = (actor, typeName) => (actor?.getIntersecting?.() || []).filter(value => matchesType(value, typeName));
 export const bluekActorGetOneIntersecting = (actor, typeName) => bluekActorGetIntersecting(actor, typeName)[0] || null;
