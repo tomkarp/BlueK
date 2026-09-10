@@ -80,6 +80,7 @@ const valueOf = (value, className = '') => {
 };
 const resolve = (path) => path.split('.').filter(Boolean).reduce((current, part) => current?.[part], api);
 const resolveArguments = (args) => args.map((arg) => arg && typeof arg === 'object' && arg.__bluekObjectId ? objects.get(arg.__bluekObjectId) : arg);
+const finish = () => self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' } });
 const stage = () => { const value = api.bluekStage || resolve('bluekStage'); if (typeof value === 'function') self.postMessage({ kind: 'stage', stage: JSON.parse(value()) }); };
 self.onmessage = async ({ data }) => {
   try {
@@ -87,10 +88,10 @@ self.onmessage = async ({ data }) => {
     if (!api) throw new Error('Browser Kotlin runtime is not loaded.');
     if (data.op === 'main') { const start = api.bluekStart || resolve('bluekStart'); if (!start) throw new Error('This project has no parameterless main().'); start(); stage(); self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' } }); return; }
     if (data.op === 'run') { const run = api.start || resolve('start'); if (typeof run === 'function') run(); clearInterval(timer); timer = setInterval(() => { const tick = api.bluekStep || resolve('bluekStep'); if (typeof tick === 'function') tick(); stage(); }, 16); stage(); self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' } }); return; }
-    if (data.op === 'stage') { stage(); return; }
-    if (data.op === 'act') { const act = api.bluekAct || resolve('bluekAct'); if (typeof act === 'function') act(); stage(); return; }
-    if (data.op === 'pause') { const pause = api.bluekPause || resolve('bluekPause'); if (typeof pause === 'function') pause(); stage(); return; }
-    if (data.op === 'speed') { const speed = api.bluekSetSpeed || resolve('bluekSetSpeed'); if (typeof speed === 'function') speed(data.value); stage(); return; }
+    if (data.op === 'stage') { stage(); finish(); return; }
+    if (data.op === 'act') { const act = api.bluekAct || resolve('bluekAct'); if (typeof act === 'function') act(); stage(); finish(); return; }
+    if (data.op === 'pause') { const pause = api.bluekPause || resolve('bluekPause'); if (typeof pause === 'function') pause(); stage(); finish(); return; }
+    if (data.op === 'speed') { const speed = api.bluekSetSpeed || resolve('bluekSetSpeed'); if (typeof speed === 'function') speed(data.value); stage(); finish(); return; }
     if (data.op === 'key') { const key = api.bluekKey || resolve('bluekKey'); if (typeof key === 'function') key(data.key, data.pressed); return; }
     if (data.op === 'click') { const click = api.bluekClick || resolve('bluekClick'); if (typeof click === 'function') click(data.x, data.y); return; }
     if (data.op === 'create') { const fn = api[data.functionName] || resolve(data.functionName); if (typeof fn !== 'function') throw new Error('Generated constructor bridge is missing: ' + data.functionName); const object = fn(...resolveArguments(data.args)); const objectId = crypto.randomUUID(); objects.set(objectId, object); displayValues.set(objectId, data.className + '()'); self.postMessage({ kind: 'value', value: { kind: 'object', display: data.className + '()', objectId }, objectId, name: data.name }); return; }
@@ -149,7 +150,7 @@ export class HybridRuntimeClient implements RuntimeClient {
             const args = parsed.args.map(value => parseKotlinArgument(value, this.bindings));
             const methodKey = `${method.name.replace(/[^A-Za-z0-9_]/g, '_')}_${method.parameters.map(parameter => parameter.type.classifier.replace(/[^A-Za-z0-9_]/g, '_')).join('_') || 'noargs'}`;
             const result = await this.local({ op: 'invoke', functionName: `bluekInvoke_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}_${methodKey}`, objectId: String(objectId), args, className: method.returnType.classifier });
-            return result.value;
+            return parsed.binding ? { ...result.value, name: parsed.binding } : result.value;
           }
         } else {
           const klass = this.classes.find(value => value.name === parsed.callable);
