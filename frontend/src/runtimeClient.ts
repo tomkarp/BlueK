@@ -230,6 +230,17 @@ export class HybridRuntimeClient implements RuntimeClient {
       worker.postMessage(request);
     });
   }
+  private rememberCodepadBinding(name: string | undefined, result: any): void {
+    if (!name) return;
+    const value = result?.value || result;
+    if (value?.objectId) {
+      this.localObjects.set(String(value.objectId), String(value.display || 'Object').replace(/\(\)$/, ''));
+      this.bindings.set(name, value.objectId);
+      return;
+    }
+    const scalar = displayedSimpleValue(value);
+    if (scalar !== undefined) this.localValues.set(name, scalar);
+  }
   async execute(request: Action): Promise<Value & { output?: string; stage?: unknown; name?: string }> {
     if (request.op === 'reset' && this.worker && this.ready) { await this.reset(); return { kind: 'unit', display: 'Unit' }; }
     if (this.worker && this.ready && request.op === 'main') { const result = await this.local({ op: 'main' }); return { ...result.value, output: result.output }; }
@@ -286,7 +297,10 @@ export class HybridRuntimeClient implements RuntimeClient {
         this.localValues.set(assignment.name, parseKotlinArgument(assignment.value, this.bindings, this.localValues));
         return { kind: 'unit', display: 'Unit' };
       }
-      const identifier = request.mode === 'expression' ? simpleCodepadIdentifier(source) : null;
+      // A Codepad Run block may end with a value expression. BlueJ displays
+      // that result just like Evaluate, so identifiers must be resolved in
+      // both modes; assignments and declarations are handled above.
+      const identifier = simpleCodepadIdentifier(source);
       if (identifier && this.localValues.has(identifier)) return { kind: 'scalar', display: String(this.localValues.get(identifier)) };
       if (request.mode === 'expression') {
         try {
@@ -325,6 +339,7 @@ export class HybridRuntimeClient implements RuntimeClient {
             const args = parsed.args.map(value => parseKotlinArgument(value, this.bindings, this.localValues));
             if (!simpleArgumentsMatch(args, requiredParameters(method.parameters))) throw new Error('The local arguments do not match the Kotlin method types; compile the expression first.');
             const result = await this.local({ op: 'invoke', functionName: `bluekGeneric_${method.name}`, methodName: method.name, typeName: parsed.typeArguments[0], objectId: String(objectId), args, className: method.returnType.classifier });
+            this.rememberCodepadBinding(parsed.binding, result);
             return parsed.binding ? { ...result.value, name: parsed.binding, output: result.output } : { ...result.value, output: result.output };
           }
           if (objectId && klass && method && !method.typeParameters?.length && parsed.args.length >= requiredParameters(method.parameters).length) {
@@ -332,6 +347,7 @@ export class HybridRuntimeClient implements RuntimeClient {
             if (!simpleArgumentsMatch(args, requiredParameters(method.parameters))) throw new Error('The local arguments do not match the Kotlin method types; compile the expression first.');
             const methodKey = `${method.name.replace(/[^A-Za-z0-9_]/g, '_')}_${requiredParameters(method.parameters).map(parameter => parameter.type.classifier.replace(/[^A-Za-z0-9_]/g, '_')).join('_') || 'noargs'}`;
             const result = await this.local({ op: 'invoke', functionName: `bluekInvoke_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}_${methodKey}`, methodName: method.name, objectId: String(objectId), args, className: method.returnType.classifier });
+            this.rememberCodepadBinding(parsed.binding, result);
             return parsed.binding ? { ...result.value, name: parsed.binding, output: result.output } : { ...result.value, output: result.output };
           }
         } else {
@@ -351,6 +367,7 @@ export class HybridRuntimeClient implements RuntimeClient {
             if (!simpleArgumentsMatch(args, requiredParameters(method.parameters))) throw new Error('The local arguments do not match the Kotlin function types; compile the expression first.');
             const methodKey = `${method.name.replace(/[^A-Za-z0-9_]/g, '_')}_${requiredParameters(method.parameters).map(parameter => parameter.type.classifier.replace(/[^A-Za-z0-9_]/g, '_')).join('_') || 'noargs'}`;
             const result = await this.local({ op: 'invoke', functionName: `bluekCall_${owner.name.replace(/[^A-Za-z0-9_]/g, '_')}_${methodKey}`, objectId: '', args, className: method.returnType.classifier });
+            this.rememberCodepadBinding(parsed.binding, result);
             return { ...result.value, output: result.output };
           }
         }
