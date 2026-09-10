@@ -85,9 +85,9 @@ fun main() {
                 line.contains("\"op\":\"input\"") -> {
                     inputWriter.write((value(line, "text") + "\n").toByteArray(Charsets.UTF_8)); inputWriter.flush()
                 }
-                line.contains("\"op\":\"stage\"") -> emit("stage", "", stage = stageSnapshot(objects))
-                line.contains("\"op\":\"key\"") -> { loader?.loadClass("BluePlayFunctionsKt")?.getMethod("setKeyState", String::class.java, Boolean::class.javaPrimitiveType)?.invoke(null, value(line, "key"), value(line, "pressed") == "true") }
-                line.contains("\"op\":\"click\"") -> { loader?.loadClass("BluePlayFunctionsKt")?.getMethod("setClickPosition", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)?.invoke(null, value(line, "x").toInt(), value(line, "y").toInt()) }
+                line.contains("\"op\":\"stage\"") -> emit("stage", "", stage = stageSnapshot(objects, projectPackages))
+                line.contains("\"op\":\"key\"") -> { loader?.let { bluePlayClass(it, projectPackages, "BluePlayFunctionsKt") }?.getMethod("setKeyState", String::class.java, Boolean::class.javaPrimitiveType)?.invoke(null, value(line, "key"), value(line, "pressed") == "true") }
+                line.contains("\"op\":\"click\"") -> { loader?.let { bluePlayClass(it, projectPackages, "BluePlayFunctionsKt") }?.getMethod("setClickPosition", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)?.invoke(null, value(line, "x").toInt(), value(line, "y").toInt()) }
                 line.contains("\"op\":\"load\"") -> {
                     projectPath = value(line, "path")
                     projectPackages = argumentValues(line, "packages")
@@ -112,7 +112,7 @@ fun main() {
                     val created = withUserOutput { factory.javaClass.getMethod("execute").invoke(factory) }; val id = UUID.randomUUID().toString()
                     objects[id] = created.value; value(line, "name").takeIf { it.isNotEmpty() }?.let { name -> names[name] = id; val typeArgs = argumentValues(line, "typeArguments"); bindingTypes[name] = if (typeArgs.isEmpty()) className else "$className<${typeArgs.joinToString(", ")}>" }
                     val displayType = if (typeArguments.isEmpty()) className else "$className<$typeArguments>"
-                    emit("object", displayType, id, created.output, stageSnapshot(objects)); child.close() } finally { dir.deleteRecursively() }
+                    emit("object", displayType, id, created.output, stageSnapshot(objects, projectPackages)); child.close() } finally { dir.deleteRecursively() }
                 }
                 line.contains("\"op\":\"invoke\"") -> {
                     val objectId = value(line, "objectId"); val objectName = names.entries.firstOrNull { it.value == objectId }?.key ?: error("Object is not named on the bench")
@@ -126,7 +126,7 @@ fun main() {
                     if (compiler.exitValue() != 0) { emit("error", compiler.inputStream.bufferedReader().readText()); return }
                     val child = URLClassLoader(arrayOf(jar.toURI().toURL()), loader); val snippet = child.loadClass(helperName).getDeclaredConstructor().newInstance()
                     val invoked = withUserOutput { snippet.javaClass.getMethod("execute", RuntimeContext::class.java).invoke(snippet, ctx) }
-                    result(invoked.value, invoked.output, stageSnapshot(objects), ::registerObject); child.close() } finally { dir.deleteRecursively() }
+                    result(invoked.value, invoked.output, stageSnapshot(objects, projectPackages), ::registerObject); child.close() } finally { dir.deleteRecursively() }
                 }
                 line.contains("\"op\":\"inspect\"") -> {
                     val obj = objects[value(line, "objectId")]!!
@@ -163,8 +163,8 @@ fun main() {
                         raw.entries.filter { it.key is String && (it.key as String).startsWith("__bluek_binding:") }.forEach { entry ->
                             val name = (entry.key as String).removePrefix("__bluek_binding:"); val wasMutable = if (declared.contains(name)) Regex("\\bvar\\s+$name(?:\\s*:\\s*[^=]+)?\\s*=").containsMatchIn(code) else mutableBindings.contains(name); val id = UUID.randomUUID().toString(); objects[id] = entry.value as? Any ?: NullBinding; names[name] = id; val declaration = Regex("\\b(?:val|var)\\s+$name\\s*(?::\\s*([^=]+))?=\\s*([^\\n;]+)").find(code); val explicitType = declaration?.groupValues?.get(1)?.trim()?.takeIf(String::isNotEmpty); val rhs = declaration?.groupValues?.get(2)?.trim(); val inferredType = rhs?.let { bindingTypes[it] ?: Regex("\\b([A-Za-z_]\\w*(?:\\s*<[^>]+>)?)\\s*\\(").find(it)?.groupValues?.get(1) }; bindingTypes[name] = explicitType ?: inferredType ?: if (entry.value == null) "Any?" else kotlinType(entry.value as Any); if (wasMutable) mutableBindings.add(name) else mutableBindings.remove(name)
                         }
-                        result(raw["__bluek_value"], evaluated.output, stageSnapshot(objects), ::registerObject)
-                    } else result(raw, evaluated.output, stageSnapshot(objects), ::registerObject) } finally { dir.deleteRecursively() }
+                        result(raw["__bluek_value"], evaluated.output, stageSnapshot(objects, projectPackages), ::registerObject)
+                    } else result(raw, evaluated.output, stageSnapshot(objects, projectPackages), ::registerObject) } finally { dir.deleteRecursively() }
                 }
                 else -> emit("error", "Unsupported worker operation")
             }
@@ -191,25 +191,26 @@ private fun result(v: Any?, output: String = "", stage: String? = null, register
         }
     }
 }
-private fun stageSnapshot(objects: Map<String, Any>): String? {
-    val world = objects.values.asSequence().mapNotNull { value -> try { Class.forName("BluePlayFunctionsKt", true, value.javaClass.classLoader).getMethod("currentWorldState").invoke(null) } catch (_: Throwable) { null } }.firstOrNull()
+private fun bluePlayClass(loader: ClassLoader, packages: List<String>, name: String): Class<*>? = (listOf(name) + packages.map { "$it.$name" }).firstNotNullOfOrNull { candidate -> try { Class.forName(candidate, true, loader) } catch (_: Throwable) { null } }
+private fun stageSnapshot(objects: Map<String, Any>, packages: List<String>): String? {
+    val world = objects.values.asSequence().mapNotNull { value -> try { bluePlayClass(value.javaClass.classLoader, packages, "BluePlayFunctionsKt")?.getMethod("currentWorldState")?.invoke(null) } catch (_: Throwable) { null } }.firstOrNull()
         ?: objects.values.firstOrNull { current -> var type: Class<*>? = current.javaClass; var found = false; while (type != null) { if (type.declaredFields.any { it.name == "actors" }) { found = true; break }; type = type.superclass }; found }
         ?: return null
-    return synchronized(world) { stageSnapshotUnlocked(objects, world) }
+    return synchronized(world) { stageSnapshotUnlocked(objects, world, packages) }
 }
-private fun stageSnapshotUnlocked(objects: Map<String, Any>, selectedWorld: Any): String? {
+private fun stageSnapshotUnlocked(objects: Map<String, Any>, selectedWorld: Any, packages: List<String>): String? {
     fun findField(type: Class<*>, name: String): java.lang.reflect.Field? { var current: Class<*>? = type; while (current != null) { current.declaredFields.firstOrNull { it.name == name }?.let { return it }; current = current.superclass }; return null }
     fun number(world: Any, name: String): Int? = findField(world.javaClass, name)?.let { field -> field.isAccessible = true; (field.get(world) as? Number)?.toInt() }
     fun jsonText(value: String): String = value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r")
     fun soundsJson(loader: ClassLoader): String {
         return try {
-            val sounds = Class.forName("BluePlayFunctionsKt", true, loader).getMethod("soundsOf").invoke(null) as? Iterable<*> ?: emptyList<Any>()
+            val sounds = bluePlayClass(loader, packages, "BluePlayFunctionsKt")?.getMethod("soundsOf")?.invoke(null) as? Iterable<*> ?: emptyList<Any>()
             sounds.filterIsInstance<String>().joinToString(",") { "\"${jsonText(it)}\"" }
         } catch (_: Throwable) { "" }
     }
     fun errorsJson(loader: ClassLoader): String {
         return try {
-            val errors = Class.forName("BluePlayFunctionsKt", true, loader).getMethod("errorsOf").invoke(null) as? Iterable<*> ?: emptyList<Any>()
+            val errors = bluePlayClass(loader, packages, "BluePlayFunctionsKt")?.getMethod("errorsOf")?.invoke(null) as? Iterable<*> ?: emptyList<Any>()
             errors.filterIsInstance<String>().joinToString(",") { jsonString(it) }
         } catch (_: Throwable) { "" }
     }
@@ -249,14 +250,14 @@ private fun stageSnapshotUnlocked(objects: Map<String, Any>, selectedWorld: Any)
     val width = number(world, "width") ?: 0; val height = number(world, "height") ?: 0; val cellSize = number(world, "cellSize") ?: 1
     val textEntries = try {
         val projectWorld = Class.forName("World", true, world.javaClass.classLoader)
-        val texts = Class.forName("BluePlayFunctionsKt", true, world.javaClass.classLoader).getMethod("textsOf", projectWorld).invoke(null, world) as? Iterable<*> ?: emptyList<Any>()
+        val texts = bluePlayClass(world.javaClass.classLoader, packages, "BluePlayFunctionsKt")?.getMethod("textsOf", projectWorld)?.invoke(null, world) as? Iterable<*> ?: emptyList<Any>()
         texts.mapNotNull { item ->
             val values = item as? Triple<*, *, *> ?: return@mapNotNull null
             val x = values.first as? Number ?: return@mapNotNull null; val y = values.second as? Number ?: return@mapNotNull null; val text = values.third as? String ?: return@mapNotNull null
             "{\"x\":${x.toInt()},\"y\":${y.toInt()},\"text\":\"${jsonText(text)}\"}"
         }.joinToString(",")
     } catch (_: Throwable) { "" }
-    val running = try { Class.forName("BluePlayFunctionsKt", true, world.javaClass.classLoader).getMethod("runningState").invoke(null) as? Boolean ?: false } catch (_: Throwable) { false }
+    val running = try { bluePlayClass(world.javaClass.classLoader, packages, "BluePlayFunctionsKt")?.getMethod("runningState")?.invoke(null) as? Boolean ?: false } catch (_: Throwable) { false }
     return "{\"width\":$width,\"height\":$height,\"cellSize\":$cellSize,\"running\":$running${imageJson(world, "background")},\"objects\":[$entries],\"texts\":[$textEntries],\"sounds\":[${soundsJson(world.javaClass.classLoader)}],\"errors\":[${errorsJson(world.javaClass.classLoader)}]}"
 }
 private data class Captured<T>(val value: T, val output: String)

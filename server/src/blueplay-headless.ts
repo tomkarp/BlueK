@@ -64,7 +64,7 @@ internal fun setKeyState(key: String, pressed: Boolean) { if (pressed) keysDown.
 internal fun setClickPosition(x: Int, y: Int) { clickX = x; clickY = y; clickPending = true }
 
 private fun stepWorld() {
-    try { currentWorld?.let { world -> synchronized(world) { world.act(); world.allObjects().forEach { if (worldOf(it) === world) it.act() } } } }
+    try { currentWorld?.let { world -> synchronized(world) { world.act(); world.allObjects().forEach { actor -> if (worldOf(actor) === world) (actor as Actor).act() } } } }
     catch (error: Throwable) { running = false; pendingErrors.add(error.cause?.message ?: error.message ?: "BluePlay simulation error") }
 }
 `;
