@@ -145,11 +145,40 @@ export class HybridRuntimeClient implements RuntimeClient {
   private readonly localValues = new Map<string, unknown>();
   private readonly localObjects = new Map<string, unknown>();
   private browserGeneration: string | null = null;
+  private browserModuleUrl: string | null = null;
+  private browserPackageName = '';
   private latestStage: any = null;
+  private readonly stageCallbacks = new Map<(value: any) => void, (event: MessageEvent) => void>();
   private inputBuffer: SharedArrayBuffer | null = null;
   private readonly onInputRequest: (output?: string) => void;
 
   constructor(sessionId: string, onFailure?: (message: string) => void, onInputRequest: (output?: string) => void = () => undefined) { this.http = new HttpRuntimeClient(sessionId, onFailure); this.onInputRequest = onInputRequest; }
+  private attachStageCallbacks(worker: Worker): void {
+    for (const callback of this.stageCallbacks.keys()) {
+      const listener = (event: MessageEvent) => { if (event.data?.kind === 'stage') { this.latestStage = event.data.stage; callback({ stage: event.data.stage }); } };
+      this.stageCallbacks.set(callback, listener);
+      worker.addEventListener('message', listener);
+    }
+  }
+  private startBrowserWorker(): void {
+    if (!this.browserModuleUrl) throw new Error('Browser runtime is not available.');
+    this.worker?.terminate();
+    const worker = new Worker(URL.createObjectURL(new Blob([browserWorkerSource], { type: 'text/javascript' })), { type: 'module' });
+    this.worker = worker;
+    this.attachStageCallbacks(worker);
+    this.inputBuffer = null;
+    this.ready = new Promise((resolve, reject) => {
+      const listener = (event: MessageEvent) => {
+        if (event.data?.kind === 'input-buffer') this.inputBuffer = event.data.buffer;
+        if (event.data?.kind === 'ready') { worker.removeEventListener('message', listener); worker.removeEventListener('error', errorListener); resolve(); }
+        if (event.data?.kind === 'error') { worker.removeEventListener('message', listener); worker.removeEventListener('error', errorListener); reject(new Error(event.data.message)); }
+      };
+      const errorListener = () => { worker.removeEventListener('message', listener); reject(new Error('Browser Kotlin/JS worker failed to load.')); };
+      worker.addEventListener('message', listener);
+      worker.addEventListener('error', errorListener);
+      worker.postMessage({ op: 'load', url: this.browserModuleUrl, packageName: this.browserPackageName });
+    });
+  }
   private async local(request: BrowserAction): Promise<any> {
     if (!this.worker || !this.ready) throw new Error('Browser runtime is not available.');
     await this.ready;
@@ -161,6 +190,7 @@ export class HybridRuntimeClient implements RuntimeClient {
     });
   }
   async execute(request: Action): Promise<Value & { output?: string; stage?: unknown; name?: string }> {
+    if (request.op === 'reset' && this.worker && this.ready) { await this.reset(); return { kind: 'unit', display: 'Unit' }; }
     if (this.worker && this.ready && request.op === 'main') { const result = await this.local({ op: 'main' }); return { ...result.value, output: result.output }; }
     if (this.worker && this.ready && request.op === 'eval') {
       const code = String(request.code || '').replace(/\s+/g, '');
@@ -268,10 +298,10 @@ export class HybridRuntimeClient implements RuntimeClient {
     const result = await this.http.compile(files, revision, resources); this.classes = result.classes; this.localObjects.clear(); this.localValues.clear(); this.bindings.clear(); this.latestStage = null;
     if (result.browserRuntime) {
       this.browserGeneration = result.generationId;
-      this.worker?.terminate(); this.worker = new Worker(URL.createObjectURL(new Blob([browserWorkerSource], { type: 'text/javascript' })), { type: 'module' });
-      this.inputBuffer = null;
-      this.ready = new Promise((resolve, reject) => { const worker = this.worker!; const listener = (event: MessageEvent) => { if (event.data?.kind === 'input-buffer') this.inputBuffer = event.data.buffer; if (event.data?.kind === 'ready') { worker.removeEventListener('message', listener); worker.removeEventListener('error', errorListener); resolve(); } if (event.data?.kind === 'error') reject(new Error(event.data.message)); }; const errorListener = () => { worker.removeEventListener('message', listener); reject(new Error('Browser Kotlin/JS worker failed to load.')); }; worker.addEventListener('message', listener); worker.addEventListener('error', errorListener); worker.postMessage({ op: 'load', url: new URL(`/api/session/${this.http.sessionId}/browser/${result.browserRuntime!.entry}`, window.location.origin).href, packageName: result.browserRuntime!.packageName }); });
-    } else { this.browserGeneration = null; this.worker?.terminate(); this.worker = null; this.ready = null; }
+      this.browserModuleUrl = new URL(`/api/session/${this.http.sessionId}/browser/${result.browserRuntime.entry}`, window.location.origin).href;
+      this.browserPackageName = result.browserRuntime.packageName;
+      this.startBrowserWorker();
+    } else { this.browserGeneration = null; this.browserModuleUrl = null; this.browserPackageName = ''; this.worker?.terminate(); this.worker = null; this.ready = null; }
     return result;
   }
   createObject(classId: string, constructorId: string, typeArguments: TypeRef[], args: string[], name: string): Promise<Value> { return this.execute({ op: 'create', className: classId, constructorId, typeArguments: JSON.stringify(typeArguments), args: JSON.stringify(args), name }); }
@@ -280,12 +310,12 @@ export class HybridRuntimeClient implements RuntimeClient {
   async evaluate(code: string, mode: 'expression' | 'block'): Promise<Value> { if (this.worker && this.ready) throw new Error('This expression is not prepared for local Kotlin/JS execution yet.'); return this.http.evaluate(code, mode); }
   async removeObject(objectId: string): Promise<void> { this.localObjects.delete(objectId); if (this.worker && this.ready) { await this.local({ op: 'remove', objectId }); return; } await this.http.removeObject(objectId); }
   sendInput(text: string): Promise<void> { if (!this.worker) return this.http.sendInput(text); if (!this.inputBuffer) return Promise.reject(new Error('Terminal input requires a cross-origin-isolated browser context.')); const bytes = new TextEncoder().encode(text); const state = new Int32Array(this.inputBuffer, 0, 1); const buffer = new Uint8Array(this.inputBuffer, 4); buffer.fill(0); buffer.set(bytes.subarray(0, buffer.length)); Atomics.store(state, 0, Math.min(bytes.length, buffer.length)); Atomics.notify(state, 0); return Promise.resolve(); }
-  async stop(): Promise<void> { const hadBrowserWorker = Boolean(this.worker); this.worker?.terminate(); this.worker = null; this.ready = null; this.browserGeneration = null; this.localObjects.clear(); this.localValues.clear(); this.bindings.clear(); if (!hadBrowserWorker) await this.http.stop(); }
-  reset(): Promise<void> { return this.stop(); }
+  async stop(): Promise<void> { const hadBrowserWorker = Boolean(this.worker); this.worker?.terminate(); this.worker = null; this.ready = null; this.browserGeneration = null; this.browserModuleUrl = null; this.browserPackageName = ''; this.localObjects.clear(); this.localValues.clear(); this.bindings.clear(); if (!hadBrowserWorker) await this.http.stop(); }
+  async reset(): Promise<void> { if (!this.browserModuleUrl) { await this.stop(); return; } this.worker?.terminate(); this.worker = null; this.ready = null; this.localObjects.clear(); this.localValues.clear(); this.bindings.clear(); this.latestStage = null; this.startBrowserWorker(); await this.ready; }
   sendKey(key: string, pressed: boolean): Promise<void> { if (this.worker && this.ready) { return this.ready.then(() => { this.worker!.postMessage({ op: 'key', key, pressed }); }); } return this.http.sendKey(key, pressed); }
   sendClick(x: number, y: number): Promise<void> { if (this.worker && this.ready) { return this.ready.then(() => { this.worker!.postMessage({ op: 'click', x, y }); }); } return this.http.sendClick(x, y); }
   stage(): Promise<any> { if (this.worker) { this.worker.postMessage({ op: 'stage' }); return Promise.resolve({ stage: this.latestStage }); } return this.http.stage(); }
-  stageStream(onStage: (value: any) => void): () => void { if (!this.worker || !this.ready) return this.http.stageStream(onStage); const worker = this.worker; const listener = (event: MessageEvent) => { if (event.data?.kind === 'stage') { this.latestStage = event.data.stage; onStage({ stage: event.data.stage }); } }; worker.addEventListener('message', listener); this.ready.then(() => worker.postMessage({ op: 'stage' })); return () => worker.removeEventListener('message', listener); }
+  stageStream(onStage: (value: any) => void): () => void { if (!this.worker || !this.ready) return this.http.stageStream(onStage); const worker = this.worker; const listener = (event: MessageEvent) => { if (event.data?.kind === 'stage') { this.latestStage = event.data.stage; onStage({ stage: event.data.stage }); } }; this.stageCallbacks.set(onStage, listener); worker.addEventListener('message', listener); this.ready.then(() => worker.postMessage({ op: 'stage' })); return () => { const current = this.stageCallbacks.get(onStage); if (current) this.worker?.removeEventListener('message', current); this.stageCallbacks.delete(onStage); }; }
   events(): Promise<any[]> { return this.worker ? Promise.resolve([]) : this.http.events(); }
   status(): Promise<RuntimeStatus> { return this.worker ? Promise.resolve({ workerAlive: true, generationId: this.browserGeneration, available: true, error: null }) : this.http.status(); }
 }
