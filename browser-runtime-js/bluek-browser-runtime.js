@@ -77,7 +77,15 @@ export const bluekSetSpeed = setSpeed;
 export const bluekAct = step;
 export const bluekKey = (key, pressed) => pressed ? state.keys.add(String(key).toLowerCase()) : state.keys.delete(String(key).toLowerCase());
 export const bluekClick = (x, y) => { state.click = { x, y }; };
-const actorAt = point => state.world?.allObjects().slice().reverse().find(actor => { const image = actor.image; const radius = image ? Math.max(image.width, image.height) / 2 : 15; return point && Math.abs(actor.x * state.world.cellSize + state.world.cellSize / 2 - point.x) <= radius && Math.abs(actor.y * state.world.cellSize + state.world.cellSize / 2 - point.y) <= radius; });
+// Browser input is expressed in world cells, while Image dimensions are pixels.
+// Keep hit testing in the same coordinate system as World.addObject(x, y).
+const actorAt = point => state.world?.allObjects().slice().reverse().find(actor => {
+  const image = actor.image;
+  const cellSize = Math.max(1, state.world.cellSize || 1);
+  const radiusX = image ? image.width / (2 * cellSize) : 0.5;
+  const radiusY = image ? image.height / (2 * cellSize) : 0.5;
+  return point && Math.abs(actor.x + 0.5 - point.x) <= radiusX && Math.abs(actor.y + 0.5 - point.y) <= radiusY;
+});
 const consumeClick = () => { if (!state.click) return false; state.click = null; return true; };
 const oneStep = () => { if (!state.world) return; state.world.act(); state.world.allObjects().slice().forEach(actor => actor.act()); };
 export const bluekStep = () => { if (state.running) oneStep(); };
