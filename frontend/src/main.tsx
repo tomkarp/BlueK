@@ -17,8 +17,7 @@ const backgroundDataUrl = (operations: string[] = [], width: number, height: num
     const [name, ...parts] = operation.split('|');
     if (name === 'drawImage' && parts.length >= 3) {
       const [fileName, x, y, imageWidth = '30', imageHeight = '30'] = parts;
-      const resource = resources.find(item => item.path === `images/${fileName}` || item.path.endsWith(`/images/${fileName}`));
-      return resource ? `<image href="${resource.data}" x="${x}" y="${y}" width="${imageWidth}" height="${imageHeight}"/>` : '';
+      return renderImageElement(fileName, x, y, imageWidth, imageHeight, resources);
     }
     const paint = parts.at(-1) || 'rgb(255, 255, 255)';
     const values = parts.slice(0, -1);
@@ -42,8 +41,7 @@ const drawnImageDataUrl = (operations: string[] | null = [], width: number, heig
     const [name, ...parts] = operation.split('|');
     if (name === 'drawImage' && parts.length >= 3) {
       const [fileName, x, y, imageWidth = '30', imageHeight = '30'] = parts;
-      const resource = resources.find(item => item.path === `images/${fileName}` || item.path.endsWith(`/images/${fileName}`));
-      return resource ? `<image href="${resource.data}" x="${x}" y="${y}" width="${imageWidth}" height="${imageHeight}"/>` : '';
+      return renderImageElement(fileName, x, y, imageWidth, imageHeight, resources);
     }
     const paint = parts.at(-1) || 'rgb(0, 0, 0)';
     const values = parts.slice(0, -1);
@@ -59,6 +57,17 @@ const drawnImageDataUrl = (operations: string[] | null = [], width: number, heig
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${elements}</svg>`)}`;
 };
 const emptyImageDataUrl = (width: number, height: number) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"/>`)}`;
+const renderImageElement = (fileName: string, x: string, y: string, imageWidth: string, imageHeight: string, resources: ResourceModel[]) => {
+  if (fileName.startsWith('__bluek:')) {
+    try {
+      const nested = JSON.parse(decodeURIComponent(fileName.slice('__bluek:'.length)));
+      const href = drawnImageDataUrl(nested.operations || [], Number(nested.width) || Number(imageWidth) || 1, Number(nested.height) || Number(imageHeight) || 1, resources);
+      return `<image href="${href}" x="${x}" y="${y}" width="${imageWidth}" height="${imageHeight}"/>`;
+    } catch { return ''; }
+  }
+  const resource = resources.find(item => item.path === `images/${fileName}` || item.path.endsWith(`/images/${fileName}`));
+  return resource ? `<image href="${resource.data}" x="${x}" y="${y}" width="${imageWidth}" height="${imageHeight}"/>` : '';
+};
 
 const typeName = (type: any) => type?.displayName || 'Any';
 const kotlinCallArguments = (parameters: any[] = [], values: string[]) => { const firstMissing = values.findIndex(value => !value.trim()); if (firstMissing < 0 || parameters.slice(firstMissing).some((parameter, index) => !values[firstMissing + index].trim() && !parameter.hasDefault)) return values; return values.map((value, index) => value.trim() ? (index > firstMissing ? `${parameters[index].name} = ${value}` : value) : '').filter(Boolean); };

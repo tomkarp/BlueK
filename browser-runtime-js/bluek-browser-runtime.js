@@ -6,6 +6,7 @@ const applyResourceSizes = values => { resourceSizes.clear(); Object.entries(val
 if (globalThis.__bluekPendingResourceSizes) applyResourceSizes(globalThis.__bluekPendingResourceSizes);
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 const color = (r, g, b) => `rgb(${clamp(r, 0, 255)}, ${clamp(g, 0, 255)}, ${clamp(b, 0, 255)})`;
+const imageReference = image => image.fileName || `__bluek:${encodeURIComponent(JSON.stringify({ width: image.width, height: image.height, operations: image._operations }))}`;
 
 export function Image(value, height) {
   this.fileName = typeof value === 'string' ? value : null;
@@ -30,7 +31,7 @@ Image.prototype.fillOval = function(x, y, w, h) { this._op('fillOval', x, y, w, 
 Image.prototype.drawOval = function(x, y, w, h) { this._op('drawOval', x, y, w, h); };
 Image.prototype.drawLine = function(x1, y1, x2, y2) { this._op('drawLine', x1, y1, x2, y2); };
 Image.prototype.drawString = function(text, x, y) { this._op('drawString', encodeURIComponent(String(text)), x, y); };
-Image.prototype.drawImage = function(image, x, y) { this._operations.push(['drawImage', image.fileName || '', x, y, image.width, image.height].join('|')); };
+Image.prototype.drawImage = function(image, x, y) { this._operations.push(['drawImage', imageReference(image), x, y, image.width, image.height].join('|')); };
 Image.prototype.clear = function() { this._operations = []; };
 Image.prototype.overlaps = function(other) { return Boolean(other); };
 Object.defineProperties(Image.prototype, { drawOperations: { get() { return [...this._operations]; } }, backgroundColor: { get() { return this._operations.at(-1)?.split('|').at(-1) || this._color; } } });
