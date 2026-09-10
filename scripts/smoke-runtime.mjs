@@ -260,6 +260,12 @@ try {
   await wait(100);
   assert.equal((await json(`/api/session/${session.sessionId}/status`)).body.available, false);
   assert.equal((await json(`/api/session/${session.sessionId}/stage`)).response.status, 409);
+  const recoveredCompile = await post(`/api/session/${session.sessionId}/compile`, { files, revision: 2 });
+  assert.equal(recoveredCompile.response.status, 200, JSON.stringify(recoveredCompile));
+  assert.equal(recoveredCompile.body.diagnostics.length, 0, JSON.stringify(recoveredCompile.body.diagnostics));
+  const recoveredAction = body => post(`/api/session/${session.sessionId}/action`, { ...body, generationId: recoveredCompile.body.generationId });
+  const recoveredCounter = (await recoveredAction({ op: 'create', className: 'Counter', name: 'recoveredCounter', args: '[]' })).body;
+  assert.equal((await recoveredAction({ op: 'invoke', objectId: recoveredCounter.objectId, name: 'current', args: '[]' })).body.display, '0');
   console.log('BlueK runtime smoke test passed');
 } finally {
   server.kill('SIGTERM');
