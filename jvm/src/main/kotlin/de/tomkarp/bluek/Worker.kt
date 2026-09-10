@@ -18,6 +18,7 @@ private lateinit var controlOut: java.io.PrintStream
 private const val MAX_USER_OUTPUT_CHARS = 1_000_000
 private val activeRequestId = ThreadLocal.withInitial { "" }
 private val stageImageCache = mutableMapOf<String, String>()
+private var activeProjectLoader: ClassLoader? = null
 private fun jsonString(value: String): String = buildString {
     append('"')
     value.forEach { char ->
@@ -92,7 +93,7 @@ fun main() {
                 line.contains("\"op\":\"load\"") -> {
                     projectPath = value(line, "path")
                     projectPackages = argumentValues(line, "packages")
-                    loader = URLClassLoader(arrayOf(File(projectPath).toURI().toURL()), Worker::class.java.classLoader)
+                    loader = URLClassLoader(arrayOf(File(projectPath).toURI().toURL()), Worker::class.java.classLoader).also { activeProjectLoader = it }
                     objects.clear(); names.clear(); bindingTypes.clear(); mutableBindings.clear(); emit("unit", "loaded")
                 }
                 line.contains("\"op\":\"create\"") -> {
@@ -194,7 +195,8 @@ private fun result(v: Any?, output: String = "", stage: String? = null, register
 }
 private fun bluePlayClass(loader: ClassLoader, packages: List<String>, name: String): Class<*>? = (listOf(name) + packages.map { "$it.$name" }).firstNotNullOfOrNull { candidate -> try { Class.forName(candidate, true, loader) } catch (_: Throwable) { null } }
 private fun stageSnapshot(objects: Map<String, Any>, packages: List<String>): String? {
-    val world = objects.values.asSequence().mapNotNull { value -> try { bluePlayClass(value.javaClass.classLoader, packages, "BluePlayFunctionsKt")?.getMethod("currentWorldState")?.invoke(null) } catch (_: Throwable) { null } }.firstOrNull()
+    val frameworkLoader = activeProjectLoader ?: objects.values.firstOrNull()?.javaClass?.classLoader
+    val world = frameworkLoader?.let { try { bluePlayClass(it, packages, "BluePlayFunctionsKt")?.getMethod("currentWorldState")?.invoke(null) } catch (_: Throwable) { null } }
         ?: objects.values.firstOrNull { current -> var type: Class<*>? = current.javaClass; var found = false; while (type != null) { if (type.declaredFields.any { it.name == "actors" }) { found = true; break }; type = type.superclass }; found }
         ?: return null
     return synchronized(world) { stageSnapshotUnlocked(objects, world, packages) }

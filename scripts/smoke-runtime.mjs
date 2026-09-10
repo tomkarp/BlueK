@@ -71,6 +71,7 @@ try {
     { id: 'textured', fileName: 'Textured.kt', kind: 'class', revision: 1, source: 'class Textured: Actor() { init { image = Image("hero.png") } }' },
     { id: 'broken', fileName: 'Broken.kt', kind: 'class', revision: 1, source: 'class Broken: Actor() { override fun act() { error("boom") } }' },
     { id: 'blueplay', fileName: 'BluePlayFunctions.kt', kind: 'functions', revision: 1, source: 'private val internalUi = object { val enabled = true }\nfun isKeyDown(key: String): Boolean = false' },
+    { id: 'main', fileName: 'Main.kt', kind: 'functions', revision: 1, source: 'fun main() { val localWorld = World(6, 4, 1); localWorld.show() }' },
   ];
   const compiled = await post(`/api/session/${session.sessionId}/compile`, { files, resources: [{ path: 'images/hero.png', data: `data:image/png;base64,${onePixelPng}` }], revision: 1 });
   assert.equal(compiled.body.diagnostics.length, 0, JSON.stringify(compiled.body.diagnostics));
@@ -113,6 +114,8 @@ try {
   const generationId = compiled.body.generationId;
   assert.deepEqual((await json(`/api/session/${session.sessionId}/status`)).body, { workerAlive: true, generationId, available: true, error: null });
   const action = body => post(`/api/session/${session.sessionId}/action`, { ...body, generationId });
+  assert.equal((await action({ op: 'eval', code: 'main()', mode: 'expression' })).body.kind, 'unit');
+  assert.equal((await json(`/api/session/${session.sessionId}/stage`)).body.stage.width, 6);
   const counter = (await action({ op: 'create', className: 'Counter', name: 'counter1', args: JSON.stringify(['3']) })).body;
   assert.ok(counter.objectId, JSON.stringify(counter));
   const duplicateCounter = await action({ op: 'create', className: 'Counter', name: 'counter1', args: '[]' });
