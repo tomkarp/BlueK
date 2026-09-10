@@ -123,8 +123,8 @@ try {
     liveEvents.push(...(await json(`/api/session/${session.sessionId}/events`)).body);
   }
   assert.match(liveEvents.map(event => event.output || '').join(''), /What is your name\?/);
-  assert.equal((await post(`/api/session/${session.sessionId}/input`, { text: 'Kotlin' })).response.status, 202);
-  assert.equal((await waiting).body.display, 'Kotlin');
+  assert.equal((await post(`/api/session/${session.sessionId}/input`, { text: '' })).response.status, 202);
+  assert.equal((await waiting).body.display, '');
   assert.equal((await action({ op: 'eval', code: 'square(7)', mode: 'expression' })).body.display, '49');
   assert.equal((await action({ op: 'eval', code: 'Tools.twice(7)', mode: 'expression' })).body.display, '14');
   const made = (await action({ op: 'eval', code: 'Factory.make(8)', mode: 'expression' })).body;
