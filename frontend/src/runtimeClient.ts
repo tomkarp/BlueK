@@ -62,7 +62,14 @@ const parseKotlinArgument = (value: string, bindings: Map<string, unknown>, valu
   if (/^-?\d+$/.test(text)) return Number(text);
   if (/^-?(?:\d+\.\d*|\d*\.\d+)$/.test(text)) return Number(text);
   if ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("'") && text.endsWith("'"))) {
-    try { return JSON.parse(text); } catch { return text.slice(1, -1); }
+    if (text.startsWith("'") && text.endsWith("'")) return text.slice(1, -1);
+    const raw = text.slice(1, -1);
+    return raw.replace(/\\?\$\{([^}]+)\}|\\?\$([A-Za-z_]\w*)/g, (match, expression, name) => {
+      const key = String(expression || name).trim();
+      if (values.has(key)) return String(values.get(key));
+      if (bindings.has(key)) return String(bindings.get(key));
+      return match;
+    }).replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
   }
   throw new Error(`This local action only supports simple Kotlin arguments; compile the expression first: ${text}`);
 };
@@ -103,6 +110,25 @@ const topLevelBinary = (source: string): { left: string; operator: string; right
   }
   return null;
 };
+const simpleBuiltin = (source: string, bindings: Map<string, unknown>, values: Map<string, unknown>): unknown => {
+  const match = source.trim().match(/^(maxOf|minOf|abs|listOf|arrayOf|setOf)\((.*)\)$/s);
+  if (!match) return undefined;
+  const args = splitSimpleArguments(match[2]).map(value => simpleCodepadValue(value, bindings, values));
+  switch (match[1]) {
+    case 'maxOf': return Math.max(...args.map(Number));
+    case 'minOf': return Math.min(...args.map(Number));
+    case 'abs': return Math.abs(Number(args[0]));
+    case 'listOf':
+    case 'arrayOf': return args;
+    case 'setOf': return [...new Set(args)];
+    default: return undefined;
+  }
+};
+const simpleCodepadValue = (source: string, bindings: Map<string, unknown>, values: Map<string, unknown>): unknown => {
+  const builtin = simpleBuiltin(source, bindings, values);
+  if (builtin !== undefined) return builtin;
+  return parseKotlinArgument(source, bindings, values);
+};
 const displayedSimpleValue = (value: any): unknown => { if (!value || value.kind === 'unit') return undefined; if (value.kind === 'null') return null; if (value.kind === 'scalar') { if (value.display === 'true') return true; if (value.display === 'false') return false; if (/^-?\d+(?:\.\d+)?$/.test(value.display)) return Number(value.display); return value.display; } return value.display; };
 
 export const browserWorkerSource = `
@@ -133,6 +159,20 @@ const resolve = (path) => path.split('.').filter(Boolean).reduce((current, part)
 const flushStudentOutput = () => { const flush = api?.bluekFlushOutput || resolve('bluekFlushOutput'); if (typeof flush !== 'function') return; flushingOutput = true; try { flush(); } finally { flushingOutput = false; } };
 const resolveArguments = (args) => args.map((arg) => arg && typeof arg === 'object' && arg.__bluekObjectId ? objects.get(arg.__bluekObjectId) : arg);
 const finish = () => { flushStudentOutput(); const output = outputBuffer; outputBuffer = ''; self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' }, output }); };
+const builtinValue = (source) => {
+  const match = String(source).trim().match(/^(maxOf|minOf|abs|listOf|arrayOf|setOf)\\((.*)\\)$/s);
+  if (!match) return undefined;
+  const parts = splitRuntimeArguments(match[2]).map(value => runtimeLiteral(value));
+  if (parts.some(value => value === undefined && String(value) !== 'undefined')) return undefined;
+  if (match[1] === 'maxOf') return Math.max(...parts.map(Number));
+  if (match[1] === 'minOf') return Math.min(...parts.map(Number));
+  if (match[1] === 'abs') return Math.abs(Number(parts[0]));
+  if (match[1] === 'setOf') return [...new Set(parts)];
+  return parts;
+};
+const splitRuntimeArguments = (source) => { const result = []; let start = 0, depth = 0, quote = ''; for (let index = 0; index < source.length; index += 1) { const char = source[index]; if (quote) { if (char === quote && source[index - 1] !== '\\\\') quote = ''; continue; } if (char === '"' || char === "'") quote = char; else if (char === '(' || char === '[') depth += 1; else if (char === ')' || char === ']') depth -= 1; else if (char === ',' && depth === 0) { result.push(source.slice(start, index).trim()); start = index + 1; } } if (source.slice(start).trim()) result.push(source.slice(start).trim()); return result; };
+const runtimeLiteral = (source) => { const value = String(source).trim(); if (value === 'true') return true; if (value === 'false') return false; if (value === 'null') return null; if (/^-?\\d+$/.test(value)) return Number(value); if (/^-?(?:\\d+\\.\\d*|\\d*\\.\\d+)$/.test(value)) return Number(value); if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) return value.slice(1, -1); return undefined; };
+const displayRuntimeValue = (value) => Array.isArray(value) ? '[' + value.map(item => item === null ? 'null' : String(item)).join(', ') + ']' : String(value);
 const stage = () => { const value = runtimeApi?.bluekStage || globalThis.bluekStage; if (typeof value === 'function') self.postMessage({ kind: 'stage', stage: JSON.parse(value()) }); };
 self.addEventListener('message', ({ data }) => { if (data?.op === 'resources') { globalThis.__bluekPendingResourceSizes = data.sizes || {}; runtimeApi?.bluekSetResourceSizes?.(globalThis.__bluekPendingResourceSizes); } });
 self.onmessage = async ({ data }) => {
@@ -245,6 +285,15 @@ export class HybridRuntimeClient implements RuntimeClient {
     if (scalar !== undefined) this.localValues.set(name, scalar);
   }
   private standaloneExpression(source: string): unknown {
+    const value = simpleBuiltin(source, this.bindings, this.localValues);
+    if (value !== undefined) return value;
+    const trimmed = stripExpressionParentheses(source);
+    if (trimmed.startsWith('!') && trimmed.length > 1) return !Boolean(this.standaloneExpression(trimmed.slice(1)));
+    const property = trimmed.match(/^(.+)\.(length|size|isEmpty)$/s);
+    if (property) {
+      const receiver = this.standaloneExpression(property[1]);
+      if (typeof receiver === 'string' || Array.isArray(receiver)) return property[2] === 'isEmpty' ? receiver.length === 0 : receiver.length;
+    }
     try { return parseKotlinArgument(source, this.bindings, this.localValues); } catch { /* continue with operators */ }
     const binary = topLevelBinary(source);
     if (!binary) throw new Error(`This simple expression needs a compiled project: ${source}`);
@@ -316,6 +365,10 @@ export class HybridRuntimeClient implements RuntimeClient {
         const display = objectId ? String(this.localObjects.get(objectId) || objectId) : String(parsed ?? 'null');
         const result = await this.local({ op: 'write', text: display, newline: outputCall[1] === 'println' });
         return { ...result.value, output: result.output };
+      }
+      if (request.mode === 'expression') {
+        const builtin = builtinValue(source);
+        if (builtin !== undefined) return { kind: 'scalar', display: displayRuntimeValue(builtin) };
       }
       if (request.mode === 'block') {
         const statements = splitCodepadStatements(source);
