@@ -39,8 +39,8 @@ try {
   assert.equal((await json(`/api/session/${session.sessionId}/status`)).body.workerAlive, true);
   const files = [
     { id: 'counter', fileName: 'Counter.kt', kind: 'class', revision: 1, source: 'class Counter(var value: Int = 0) { fun increment() { value++ }; fun add(amount: Int) { value += amount }; fun current(): Int = value }' },
-    { id: 'person', fileName: 'Person.kt', kind: 'class', revision: 1, source: 'class Person(var name: String) { fun greet(): String = "Hello, $name!"; fun rename(newName: String) { name = newName }; fun greetInConsole() { println(greet() + "\\t✓"); System.err.println("warning") }; fun greetWith(prefix: String = "Hi", suffix: String): String = "$prefix $name$suffix"; fun friend(): Person = Person("$name Jr") }' },
-    { id: 'helpers', fileName: 'Helpers.kt', kind: 'functions', revision: 1, source: 'fun square(x: Int): Int = x * x; fun askName(): String { println("What is your name?"); val name = readln(); println("Hello, $name!"); return name }' },
+    { id: 'person', fileName: 'Person.kt', kind: 'class', revision: 1, source: 'class Person(var name: String) { fun greet(): String = "Hello, $name!"; fun rename(newName: String) { name = newName }; fun greetInConsole() { Thread.sleep(200); println(greet() + "\\t✓"); Thread.sleep(1500); System.err.println("warning"); System.err.flush() }; fun greetWith(prefix: String = "Hi", suffix: String): String = "$prefix $name$suffix"; fun friend(): Person = Person("$name Jr") }' },
+    { id: 'helpers', fileName: 'Helpers.kt', kind: 'functions', revision: 1, source: 'fun square(x: Int): Int = x * x; fun askName(): String { println("What is your name?"); val name = readln(); println("Hello, $name!"); return name }; fun noisyInput(): String { System.err.println("warning"); System.err.flush(); return readln() }' },
     { id: 'box', fileName: 'Box.kt', kind: 'class', revision: 1, source: 'class Box<T>(var value: T) { fun replace(next: T) { value = next }; fun get(): T = value }' },
     { id: 'bounded', fileName: 'Bounded.kt', kind: 'class', revision: 1, source: 'class Bounded<T : Number>(val value: T) { fun get(): T = value }' },
     { id: 'typed', fileName: 'Typed.kt', kind: 'class', revision: 1, source: 'class Typed(val value: Map<String, List<Int>?>, val sink: MutableList<in Number>)' },
@@ -116,8 +116,24 @@ try {
   const callbacks = (await action({ op: 'create', className: 'Callbacks', name: 'callbacks1', args: '[]' })).body;
   assert.equal((await action({ op: 'invoke', objectId: callbacks.objectId, name: 'transform', args: JSON.stringify(['{ value: Int -> value.toString() }']) })).body.display, '3');
   assert.equal((await action({ op: 'invoke', objectId: person.objectId, name: 'greetWith', args: JSON.stringify(['suffix = "!"']) })).body.display, 'Hi Ada!');
-  const consoleResult = await action({ op: 'invoke', objectId: person.objectId, name: 'greetInConsole', args: '[]' });
+  const consoleRequest = action({ op: 'invoke', objectId: person.objectId, name: 'greetInConsole', args: '[]' });
+  let consoleEvents = [];
+  for (let attempt = 0; attempt < 60 && (!consoleEvents.some(event => event.stream === 'stdout') || !consoleEvents.some(event => event.stream === 'stderr')); attempt += 1) {
+    await wait(100);
+    consoleEvents.push(...(await json(`/api/session/${session.sessionId}/events`)).body);
+  }
+  const consoleResult = await consoleRequest;
   assert.equal(consoleResult.body.output, 'Hello, Ada!\t✓\nwarning\n', JSON.stringify(consoleResult));
+  assert.ok(consoleEvents.some(event => event.stream === 'stdout' && event.output.includes('Hello, Ada!')), JSON.stringify(consoleEvents));
+  const noisyRequest = action({ op: 'eval', code: 'noisyInput()', mode: 'expression' });
+  let noisyEvents = [];
+  for (let attempt = 0; attempt < 30 && !noisyEvents.some(event => event.stream === 'stderr'); attempt += 1) {
+    await wait(100);
+    noisyEvents.push(...(await json(`/api/session/${session.sessionId}/events`)).body);
+  }
+  assert.ok(noisyEvents.some(event => event.stream === 'stderr' && event.output.includes('warning')), JSON.stringify(noisyEvents));
+  assert.equal((await post(`/api/session/${session.sessionId}/input`, { text: 'done' })).response.status, 202);
+  assert.equal((await noisyRequest).body.display, 'done');
   const friend = (await action({ op: 'invoke', objectId: person.objectId, name: 'friend', args: '[]' })).body;
   assert.equal(friend.kind, 'object');
   assert.ok(friend.objectId);

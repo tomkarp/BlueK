@@ -39,14 +39,15 @@ private class LiveOutputStream(private val onFlush: (String) -> Unit) : java.io.
     override fun write(values: ByteArray, offset: Int, length: Int) { buffer.write(values, offset, length); if (values.copyOfRange(offset, offset + length).contains('\n'.code.toByte())) flush() }
     override fun flush() { if (buffer.size() == 0) return; val text = buffer.toString(Charsets.UTF_8); buffer.reset(); onFlush(text) }
 }
-private fun emit(kind: String, display: String, id: String? = null, output: String = "", stage: String? = null, name: String? = null, fields: String? = null) {
+private fun emit(kind: String, display: String, id: String? = null, output: String = "", stage: String? = null, name: String? = null, fields: String? = null, stream: String? = null) {
     val extra = id?.let { ",\"objectId\":${jsonString(it)}" } ?: ""
     val objectName = name?.let { ",\"name\":${jsonString(it)}" } ?: ""
     val out = if (output.isEmpty()) "" else ",\"output\":${jsonString(output)}"
     val request = if (activeRequestId.get().isEmpty()) "" else ",\"requestId\":${jsonString(activeRequestId.get())}"
     val world = stage?.let { ",\"stage\":$it" } ?: ""
     val fieldValues = fields?.let { ",\"fields\":$it" } ?: ""
-    controlOut.println("{\"kind\":${jsonString(kind)},\"display\":${jsonString(display)}$extra$objectName$out$world$request$fieldValues}")
+    val streamValue = stream?.let { ",\"stream\":${jsonString(it)}" } ?: ""
+    controlOut.println("{\"kind\":${jsonString(kind)},\"display\":${jsonString(display)}$extra$objectName$out$world$request$fieldValues$streamValue}")
     controlOut.flush()
 }
 
@@ -256,8 +257,9 @@ private fun <T> withUserOutput(block: () -> T): Captured<T> {
     val previous = System.out
     val previousError = System.err
     val output = StringBuilder()
-    val live = LiveOutputStream { text -> output.append(text); emit("output", "", output = text) }
-    return try { val stream = java.io.PrintStream(live, true, Charsets.UTF_8); System.setOut(stream); System.setErr(stream); val value = block(); live.flush(); Captured(value, output.toString()) }
+    val stdout = LiveOutputStream { text -> output.append(text); emit("output", "", output = text, stream = "stdout") }
+    val stderr = LiveOutputStream { text -> output.append(text); emit("output", "", output = text, stream = "stderr") }
+    return try { val outStream = java.io.PrintStream(stdout, true, Charsets.UTF_8); val errorStream = java.io.PrintStream(stderr, true, Charsets.UTF_8); System.setOut(outStream); System.setErr(errorStream); val value = block(); stdout.flush(); stderr.flush(); Captured(value, output.toString()) }
     finally { System.setOut(previous); System.setErr(previousError) }
 }
 private fun kotlinType(value: Any): String = when (value) {

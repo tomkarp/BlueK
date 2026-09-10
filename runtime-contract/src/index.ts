@@ -6,3 +6,4 @@ export interface ClassMeta{id:string;name:string;kind:string;constructors:{id:st
 export interface CompileResult{generationId:string;sourceRevision:number;classes:ClassMeta[];diagnostics:any[]}
 export interface RuntimeClient{compile(files:ProjectFile[],revision:number):Promise<CompileResult>;createObject(classId:string,constructorId:string,typeArguments:TypeRef[],args:string[],name:string):Promise<Value>;invokeMethod(objectId:string,callableId:string,typeArguments:TypeRef[],args:string[]):Promise<Value>;inspectObject(objectId:string):Promise<unknown>;evaluate(code:string,mode:'expression'|'block'):Promise<Value>;removeObject(objectId:string):Promise<void>;sendInput(text:string):Promise<void>;stop():Promise<void>;reset():Promise<void>}
 export type Value={kind:'unit'|'null'|'scalar'|'object';display:string;objectId?:string};
+export type OutputEvent={kind:'output';display:string;output:string;stream:'stdout'|'stderr';requestId?:string};
