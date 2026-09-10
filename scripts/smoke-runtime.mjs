@@ -25,6 +25,11 @@ const post = (url, body) => json(url, { method: 'POST', headers: { 'content-type
 try {
   await wait(500);
   const session = (await post('/api/session', {})).body;
+  const invalidFiles = await post(`/api/session/${session.sessionId}/compile`, { files: [{ fileName: '../escape.kt', source: 'class Escape', kind: 'class' }], revision: 1 });
+  assert.equal(invalidFiles.response.status, 400);
+  const duplicateFiles = await post(`/api/session/${session.sessionId}/compile`, { files: [{ fileName: 'Same.kt', source: 'class Same', kind: 'class' }, { fileName: 'Same.kt', source: 'class Same', kind: 'class' }], revision: 1 });
+  assert.equal(duplicateFiles.response.status, 400);
+  assert.equal((await json(`/api/session/${session.sessionId}/status`)).body.workerAlive, true);
   const files = [
     { id: 'counter', fileName: 'Counter.kt', kind: 'class', revision: 1, source: 'class Counter(var value: Int = 0) { fun increment() { value++ }; fun add(amount: Int) { value += amount }; fun current(): Int = value }' },
     { id: 'person', fileName: 'Person.kt', kind: 'class', revision: 1, source: 'class Person(var name: String) { fun greet(): String = "Hello, $name!"; fun rename(newName: String) { name = newName }; fun greetInConsole() { println(greet() + "\\t✓"); System.err.println("warning") }; fun greetWith(prefix: String = "Hi", suffix: String): String = "$prefix $name$suffix"; fun friend(): Person = Person("$name Jr") }' },
