@@ -71,7 +71,7 @@ try {
     { id: 'textured', fileName: 'Textured.kt', kind: 'class', revision: 1, source: 'class Textured: Actor() { init { image = Image("hero.png") } }' },
     { id: 'broken', fileName: 'Broken.kt', kind: 'class', revision: 1, source: 'class Broken: Actor() { override fun act() { error("boom") } }' },
     { id: 'blueplay', fileName: 'BluePlayFunctions.kt', kind: 'functions', revision: 1, source: 'private val internalUi = object { val enabled = true }\nfun isKeyDown(key: String): Boolean = false' },
-    { id: 'main', fileName: 'Main.kt', kind: 'functions', revision: 1, source: 'fun main() { val localWorld = World(6, 4, 1); localWorld.show() }' },
+    { id: 'main', fileName: 'Main.kt', kind: 'functions', revision: 1, source: 'fun main(args: Array<String> = emptyArray()) { val localWorld = World(6, 4, 1); localWorld.show() }' },
     { id: 'hidden-api', fileName: 'HiddenApi.kt', kind: 'class', revision: 1, source: 'class HiddenApi { @JvmSynthetic val implementation: Int = 1; @JvmSynthetic fun implementationCall() {} }' },
   ];
   const compiled = await post(`/api/session/${session.sessionId}/compile`, { files, resources: [{ path: 'images/hero.png', data: `data:image/png;base64,${onePixelPng}` }], revision: 1 });
@@ -81,6 +81,7 @@ try {
   assert.equal(compiled.body.classes.find(value => value.name === 'Person').methods.some(value => value.name === 'hidden'), false);
   assert.equal(compiled.body.classes.find(value => value.name === 'Helpers').kind, 'functions');
   assert.equal(compiled.body.classes.find(value => value.name === 'Helpers').methods.find(value => value.name === 'square').parameters.length, 1);
+  assert.equal(compiled.body.classes.find(value => value.name === 'Main').methods.find(value => value.name === 'main').parameters[0].type.displayName, 'Array<String>');
   assert.equal(compiled.body.classes.find(value => value.name === 'Nested').constructors[0].parameters[0].type.displayName, 'List<Map<String, Int>>');
   assert.equal(compiled.body.classes.find(value => value.name === 'Nested').constructors[0].parameters[0].hasDefault, true);
   assert.equal(compiled.body.classes.find(value => value.name === 'LambdaBox').constructors[0].parameters.length, 1);
@@ -120,6 +121,7 @@ try {
   const action = body => post(`/api/session/${session.sessionId}/action`, { ...body, generationId });
   assert.equal((await action({ op: 'eval', code: 'main()', mode: 'expression' })).body.kind, 'unit');
   assert.equal((await json(`/api/session/${session.sessionId}/stage`)).body.stage.width, 6);
+  assert.equal((await action({ op: 'eval', code: 'main(emptyArray())', mode: 'expression' })).body.kind, 'unit');
   assert.equal((await action({ op: 'reset' })).body.kind, 'unit');
   assert.equal((await json(`/api/session/${session.sessionId}/stage`)).body.stage, undefined);
   assert.equal((await action({ op: 'eval', code: 'main()', mode: 'expression' })).body.kind, 'unit');
