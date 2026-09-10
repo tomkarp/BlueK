@@ -297,7 +297,6 @@ try {
   assert.equal(stale.response.status, 409);
   const crashed = await action({ op: 'eval', code: 'System.exit(3)', mode: 'expression' });
   assert.equal(crashed.response.status, 500);
-  await wait(100);
   const crashedStatus = (await json(`/api/session/${session.sessionId}/status`)).body;
   assert.equal(crashedStatus.available, false);
   assert.match(crashedStatus.error, /worker exited/);
