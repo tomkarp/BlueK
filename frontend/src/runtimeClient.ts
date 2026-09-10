@@ -46,6 +46,7 @@ export class HttpRuntimeClient implements RuntimeClient {
   async sendClick(x: number, y: number): Promise<void> { await this.request('/click', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ x, y }) }); }
   async stage(): Promise<any> { return (await this.request('/stage')).json(); }
   async events(): Promise<any[]> { return (await this.request('/events')).json(); }
+  async status(): Promise<{ workerAlive: boolean; available: boolean }> { return (await this.request('/status')).json(); }
 }
 
 export type { ClassMeta };
