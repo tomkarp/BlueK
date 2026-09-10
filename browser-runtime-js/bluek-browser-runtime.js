@@ -23,7 +23,7 @@ Image.prototype.fillOval = function(x, y, w, h) { this._op('fillOval', x, y, w, 
 Image.prototype.drawOval = function(x, y, w, h) { this._op('drawOval', x, y, w, h); };
 Image.prototype.drawLine = function(x1, y1, x2, y2) { this._op('drawLine', x1, y1, x2, y2); };
 Image.prototype.drawString = function(text, x, y) { this._op('drawString', text, x, y); };
-Image.prototype.drawImage = function(image, x, y) { this._operations.push(['drawImage', image.fileName || '', x, y].join('|')); };
+Image.prototype.drawImage = function(image, x, y) { this._operations.push(['drawImage', image.fileName || '', x, y, image.width, image.height].join('|')); };
 Image.prototype.clear = function() { this._operations = []; };
 Image.prototype.overlaps = function(other) { return Boolean(other); };
 Object.defineProperties(Image.prototype, { drawOperations: { get() { return [...this._operations]; } }, backgroundColor: { get() { return this._operations.at(-1)?.split('|').at(-1) || this._color; } } });
