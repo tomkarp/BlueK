@@ -8,12 +8,10 @@ Voraussetzungen: Node 22, Java 21 und Kotlin/JVM 2.2.21.
 
 ```sh
 npm install
-kotlinc jvm/src/main/kotlin/de/tomkarp/bluek/*.kt -include-runtime -d jvm/worker.jar
-npm run build
 npm start
 ```
 
-Danach `http://localhost:5173` öffnen. `npm start` läuft absichtlich im Vordergrund und kann mit `Ctrl+C` beendet werden.
+`npm start` baut Worker und Frontend vor jedem Start reproduzierbar neu, startet den Server im Vordergrund und kann mit `Ctrl+C` beendet werden. Danach `http://localhost:5173` öffnen. Der vollständige Testlauf ist separat mit `npm run smoke` möglich.
 
 ## Bedienung
 
@@ -28,14 +26,15 @@ Danach `http://localhost:5173` öffnen. `npm start` läuft absichtlich im Vorder
 - `Evaluate` wertet einen Ausdruck aus, `Run` einen Block. Bench-Objekte und ihre Mutationen bleiben zwischen Eingaben erhalten; im Codepad deklarierte Variablen (z. B. `val p = Person("Ada")`, auch nullable) können in späteren Eingaben wiederverwendet werden.
 - Die Konsole zeigt Rückgabewerte und `stdout` live. Eine eingegebene Zeile wird mit Enter an `readln()` weitergegeben; Prompts erscheinen bereits während der laufenden Eingabeaktion.
 - `Stop` beendet den gesamten Benutzer-Worker. Die Handles werden verworfen und nach einem erneuten Compile neu erzeugt.
+- Nicht ausführbare Aktionen sind bis zur erfolgreichen Kompilierung deaktiviert. Fällt der Worker aus, werden Runtime, Stage und Bench verworfen und der Fehler im Status/Log angezeigt.
 
 ## BluePlay
 
-Enthält ein Projekt eine `BluePlayFunctions.kt`, kompiliert der lokale Adapter diese interne Steuerdatei headless. Die öffentliche BluePlay-API von `World`, `Actor` und `Image` bleibt verwendbar; `show()` setzt die aktuelle World, `step()` und `start()` führen die Simulation aus. World-/Actor-Zustände werden als begrenzte Snapshots an die Weboberfläche übertragen und dort als Spielfeld dargestellt. Importierte Actor- und Hintergrundbilder werden als PNG-Daten gerendert; fehlende Bilddateien erscheinen als Platzhalter. Eine kontinuierliche Positionserfassung sowie Maus-/Tastaturereignisse sind vorhanden. `playSound(...)` wird als Ereignis übertragen und aus importierten WAV-Dateien im Browser abgespielt; der Browser kann die Wiedergabe bei fehlender vorheriger Benutzerinteraktion blockieren.
+Enthält ein Projekt eine `BluePlayFunctions.kt`, kompiliert der lokale Adapter diese interne Steuerdatei headless. Die öffentliche BluePlay-API von `World`, `Actor` und `Image` bleibt verwendbar; `show()` setzt die aktuelle World, `step()` und `start()` führen die Simulation aus. World-/Actor-Zustände werden als begrenzte Snapshots an die Weboberfläche übertragen und dort als Spielfeld dargestellt. Importierte Actor- und Hintergrundbilder werden als PNG-Daten gerendert; fehlende Bilddateien erscheinen als Platzhalter. Maus-/Tastaturereignisse verwenden dieselbe Actor-Hitbox-Regel wie BluePlay; `isClicked` und `World.isClicked` sind damit nutzbar. Die Stage bietet `Act`, `Run`, `Pause` und einen Geschwindigkeitsregler für `setSpeed(1..100)`. `playSound(...)` wird als Ereignis übertragen und aus importierten WAV-Dateien im Browser abgespielt; der Browser kann die Wiedergabe bei fehlender vorheriger Benutzerinteraktion blockieren.
 
 ## Architektur
 
-- `frontend`: React/TypeScript/Vite, ausschließlich gegen serialisierbare Daten.
+- `frontend`: React/TypeScript/Vite, ausschließlich gegen serialisierbare Daten; `HttpRuntimeClient` kapselt den aktuellen HTTP-Transport und implementiert den austauschbaren Runtime-Vertrag.
 - `runtime-contract`: RuntimeClient- und Werttypen.
 - `server`: Sitzungen, temporäre Projektverzeichnisse, Kotlin-Kompilierung, request-id-basierte Worker-Antwortverteilung und Generationenprüfung.
 - `jvm`: langlebiger Worker mit Objektregistry, Kotlin-Snippet-Kompilierung, stdin-Kontrollpfad, Stop-Semantik und BluePlay-Stage-Snapshot.
@@ -53,8 +52,10 @@ Mit echten `kotlinc`- und Worker-Prozessen geprüft:
 - `Box<String>`: `replace(42)` wird vom Kotlin-Compiler abgelehnt, der ursprüngliche String bleibt erhalten.
 - `Animal`/`Dog`: dynamischer Dispatch, geerbte Methode einmalig im Menü, Interface ohne Konstruktoraktion.
 - BluePlay `MyWorld` mit Actor-Snapshot und Mutation per `show(); step()`.
+- BluePlay-Actor- und World-Klicks einschließlich Hitbox und Geschwindigkeitsgrenzen.
 - stale `generationId` wird per HTTP mit `409` abgewiesen.
+- Browser-Session-Cleanup entfernt Worker und temporäre Verzeichnisse beim Verlassen der Seite.
 
 ## Bewusste Grenzen
 
-Die Metadatenanzeige ist noch keine vollständige Kotlin-PSI-/`kotlin-reflect`-Analyse; komplexe Sprachkonstrukte können daher im Menü fehlen, bleiben aber über Compile/Codepad dem Kotlin-Compiler überlassen. Persistente Codepad-Deklarationen, Projekt speichern/laden, selbst gezeichnete Bildänderungen und ein öffentlicher Mehrbenutzerbetrieb sind nicht Teil des aktuellen lokalen Adapters.
+Die Metadatenanzeige ist noch keine vollständige Kotlin-PSI-/`kotlin-reflect`-Analyse; komplexe Sprachkonstrukte können daher im Menü fehlen, bleiben aber über Compile/Codepad dem Kotlin-Compiler überlassen. TypeRefs bewahren bereits verschachtelte Generics, Nullbarkeit und `in`/`out`/`*`-Projektionen. Persistente Codepad-Deklarationen, Projekt speichern/laden, selbst gezeichnete Bildänderungen und ein öffentlicher Mehrbenutzerbetrieb sind nicht Teil des aktuellen lokalen Adapters.
