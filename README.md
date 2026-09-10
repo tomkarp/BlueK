@@ -4,7 +4,7 @@ BlueK ist eine lokale Kotlin/JVM-Lernumgebung nach dem Objektbank-Prinzip von Bl
 
 ## Start
 
-Voraussetzungen: Node 22, Java 21 und Kotlin/JVM 2.2.21.
+Voraussetzungen: Node 22, Java 21 und Kotlin/JVM 2.2.21. Die JVM-Modul-Toolchain ist über den mitgelieferten Gradle-Wrapper auf Gradle 8.14.1 festgelegt; die npm-Abhängigkeiten sind ebenfalls versionsgenau gepinnt.
 
 ```sh
 npm install
@@ -12,6 +12,8 @@ npm start
 ```
 
 `npm start` baut Worker und Frontend vor jedem Start reproduzierbar neu, startet den Server im Vordergrund und kann mit `Ctrl+C` beendet werden. Danach `http://localhost:5173` öffnen. Der vollständige Testlauf ist separat mit `npm run smoke` möglich.
+
+Der Wrapper-Build des JVM-Moduls lässt sich unabhängig prüfen: `cd jvm && ./gradlew build`.
 
 Benutzeraktionen haben standardmäßig ein Zeitlimit von 120 Sekunden. Bei einem Timeout wird der Benutzer-Worker beendet; nach einem erneuten `Compile` wird er automatisch neu erzeugt. Für kurze lokale Tests kann `BLUEK_ACTION_TIMEOUT_MS` gesetzt werden.
 
