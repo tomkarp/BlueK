@@ -338,6 +338,11 @@ export class HybridRuntimeClient implements RuntimeClient {
         }
       }
       if (request.mode === 'expression') {
+        if (source.startsWith('!') && source.length > 1) {
+          const value = displayedSimpleValue(await this.execute({ op: 'eval', code: source.slice(1), mode: 'expression' }));
+          return { kind: 'scalar', display: String(!Boolean(value)) };
+        }
+        if (/^-\d+(?:\.\d+)?$/.test(source)) return { kind: 'scalar', display: source };
         const binary = topLevelBinary(source);
         if (binary) {
           const left = displayedSimpleValue(await this.execute({ op: 'eval', code: binary.left, mode: 'expression' }));
