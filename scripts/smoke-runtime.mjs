@@ -249,6 +249,8 @@ try {
   const packageAction = body => post(`/api/session/${packageSession.sessionId}/action`, { ...body, generationId: packageGeneration });
   const packagePerson = (await packageAction({ op: 'create', className: 'PackagePerson', name: 'packagePerson1', args: JSON.stringify(['"Ada"']) })).body;
   assert.equal((await packageAction({ op: 'invoke', objectId: packagePerson.objectId, name: 'greet', args: '[]' })).body.display, 'Hi Ada');
+  assert.equal((await packageAction({ op: 'eval', code: 'counter1.current()', mode: 'expression' })).body.kind, 'error');
+  assert.equal((await action({ op: 'invoke', objectId: packagePerson.objectId, name: 'greet', args: '[]' })).body.kind, 'error');
   assert.equal((await packageAction({ op: 'eval', code: 'twice(4)', mode: 'expression' })).body.display, '8');
   assert.equal((await post(`/api/session/${packageSession.sessionId}/close`, {})).response.status, 204);
   const stale = await post(`/api/session/${session.sessionId}/action`, { op: 'create', className: 'Counter', name: 'stale', args: '[]', generationId: 'old-generation' });
