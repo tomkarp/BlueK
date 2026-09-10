@@ -28,6 +28,13 @@
 footer{flex:0 0 108px}
 .panels{flex:0 1 var(--pane-split,66%)}
 .panels .canvas{flex:1 1 auto}
+.classcard strong{border-top:0;border-bottom:2px solid #333}
+.pane-splitter{height:7px;flex-basis:7px;background:transparent;border:0;position:relative}
+.pane-splitter::after{content:"";position:absolute;left:0;right:0;top:3px;height:2px;background:#aaa}
+.pane-splitter:hover::after{height:4px;top:2px;background:#777}
+.codepad{display:flex;flex-direction:column;min-height:0}
+.codepad-history{height:auto;flex:1 1 auto;min-height:0}
+.codepad textarea{flex:0 0 36px;height:36px;min-height:36px}
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:24px;margin:56px 10px 0}
 .classcard{width:auto;min-width:0;height:124px}
 .classcard strong{font-size:24px}
