@@ -1001,7 +1001,27 @@ export class HybridRuntimeClient implements RuntimeClient {
   async removeObject(objectId: string): Promise<void> { this.localObjects.delete(objectId); if (this.worker && this.ready) { await this.local({ op: 'remove', objectId }); return; } await this.http.removeObject(objectId); }
   sendInput(text: string): Promise<void> { if (!this.worker) return this.http.sendInput(text); if (!this.inputBuffer) return Promise.reject(new Error('Terminal input requires a cross-origin-isolated browser context.')); const bytes = new TextEncoder().encode(text); const state = new Int32Array(this.inputBuffer, 0, 1); const buffer = new Uint8Array(this.inputBuffer, 4); buffer.fill(0); buffer.set(bytes.subarray(0, buffer.length)); Atomics.store(state, 0, Math.min(bytes.length, buffer.length)); Atomics.notify(state, 0); return Promise.resolve(); }
   async stop(): Promise<void> { const hadBrowserWorker = Boolean(this.worker); this.worker?.terminate(); this.worker = null; this.ready = null; this.browserReady = false; this.browserWorkerDead = true; this.inputBarrier = Promise.resolve(); this.browserGeneration = null; this.browserModuleUrl = null; this.browserPackageName = ''; this.codepadModules.clear(); this.localObjects.clear(); this.localValues.clear(); this.localValueMutability.clear(); this.localValueTypes.clear(); this.bindings.clear(); if (!hadBrowserWorker) await this.http.stop(); }
-  async reset(): Promise<void> { if (!this.browserModuleUrl) { await this.stop(); return; } this.worker?.terminate(); this.worker = null; this.ready = null; this.codepadModules.clear(); this.localObjects.clear(); this.localValues.clear(); this.localValueMutability.clear(); this.localValueTypes.clear(); this.bindings.clear(); this.latestStage = null; this.startBrowserWorker(); await this.ready; }
+  async reset(): Promise<void> {
+    if (!this.browserModuleUrl) { await this.stop(); return; }
+    this.worker?.terminate();
+    this.worker = null;
+    this.ready = null;
+    this.browserReady = false;
+    this.browserWorkerDead = false;
+    this.inputBuffer = null;
+    this.inputBarrier = Promise.resolve();
+    this.codepadModules.clear();
+    this.localObjects.clear();
+    this.localValues.clear();
+    this.localValueMutability.clear();
+    this.localValueTypes.clear();
+    this.bindings.clear();
+    this.latestStage = null;
+    this.startBrowserWorker();
+    const ready = this.ready;
+    if (!ready) throw new Error('Browser runtime did not start after reset.');
+    await ready;
+  }
   private postBrowserInput(message: { op: 'key'; key: string; pressed: boolean } | { op: 'click'; x: number; y: number }): Promise<void> {
     if (!this.worker || !this.ready) return Promise.reject(new Error('Browser runtime is not available.'));
     const worker = this.worker;
