@@ -409,6 +409,7 @@ export class HybridRuntimeClient implements RuntimeClient {
           for (const statement of statements) {
             result = await this.execute({ ...request, code: statement });
             if (result?.objectId) createdObjects.push(result);
+            if (Array.isArray(result?.createdObjects)) createdObjects.push(...result.createdObjects);
           }
           return createdObjects.length ? { ...result, createdObjects } : result;
         }

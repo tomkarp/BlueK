@@ -82,7 +82,7 @@ footer{flex:0 0 108px}
 .codepad textarea{flex:0 0 38px;height:38px!important;min-height:38px;max-height:38px}
 
 /* The separator belongs between the two main panes, so both panes resize together. */
-.workspace{display:grid;grid-template-rows:minmax(180px,var(--upper-pane,1fr)) 21px minmax(170px,1fr) 108px}
+.workspace{display:grid;grid-template-rows:minmax(180px,var(--upper-pane,2fr)) 21px minmax(170px,1fr) 108px}
 .workspace>.panels{grid-row:1;min-height:0;display:flex;flex:initial}
 .workspace>.pane-splitter{grid-row:2}
 .workspace>.lower{grid-row:3;min-height:0}
