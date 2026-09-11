@@ -1,6 +1,6 @@
 // Fixed JavaScript BluePlay runtime. Function constructors are intentional:
 // Kotlin/JS ES5 output calls base constructors with Base.call(this, ...).
-const state = { world: null, running: false, speed: 50, keys: new Set(), clicks: [], sounds: [] };
+const state = { world: null, running: false, speed: 50, keys: new Set(), clicks: [], sounds: [], errors: [] };
 const resourceSizes = new Map();
 const applyResourceSizes = values => { resourceSizes.clear(); Object.entries(values || {}).forEach(([key, value]) => { if (value && Number(value.width) > 0 && Number(value.height) > 0) { const size = { width: Number(value.width), height: Number(value.height), alpha: Array.isArray(value.alpha) ? value.alpha : null }; resourceSizes.set(key, size); resourceSizes.set(key.replace(/^images\//, ''), size); } }); };
 if (globalThis.__bluekPendingResourceSizes) applyResourceSizes(globalThis.__bluekPendingResourceSizes);
@@ -16,6 +16,7 @@ export function Image(value, height) {
   this._alphaMask = typeof value === 'string' ? resourceSize?.alpha || null : null;
   this._alphaWidth = typeof value === 'string' ? resourceSize?.width || this.width : this.width;
   this._alphaHeight = typeof value === 'string' ? resourceSize?.height || this.height : this.height;
+  if (typeof value === 'string' && !resourceSize) state.errors.push(`Image resource not found: ${value}`);
   if (value instanceof Image) { this.fileName = value.fileName; this.width = value.width; this.height = value.height; this._alphaMask = value._alphaMask ? [...value._alphaMask] : null; this._alphaWidth = value._alphaWidth; this._alphaHeight = value._alphaHeight; }
   this.transparency = value instanceof Image ? value.transparency : 255;
   this._color = value instanceof Image ? value._color : 'rgb(0, 0, 0)'; this._operations = value instanceof Image ? [...value._operations] : [];
@@ -136,7 +137,7 @@ const actorAt = point => state.world?.allObjects().slice().reverse().find(actor 
 const consumeClick = () => { if (!state.clicks.length) return false; state.clicks.shift(); return true; };
 const oneStep = () => { if (!state.world) return; state.world.act(); state.world.allObjects().slice().forEach(actor => actor.act()); };
 export const bluekStep = () => { if (state.running) oneStep(); };
-export const bluekStage = () => { const background = state.world?.background; const operations = background?.drawOperations || background?._operations || []; return JSON.stringify({ width: state.world?.width || 0, height: state.world?.height || 0, cellSize: state.world?.cellSize || 1, running: state.running, speed: state.speed, objects: state.world?.allObjects().map(actor => ({ type: actor.constructor.name || 'Actor', x: actor.x, y: actor.y, rotation: actor.rotation, hasImage: actor.image !== null, imagePath: actor.image?.fileName || null, imageWidth: actor.image?.width || 30, imageHeight: actor.image?.height || 30, imageOpacity: (actor.image?.transparency ?? 255) / 255, imageOperations: actor.image && (!actor.image.fileName || actor.image.drawOperations.length) ? actor.image.drawOperations : null })) || [], texts: state.world ? [...state.world._texts.values()].map(([x, y, text]) => ({ x, y, text })) : [], backgroundPath: background?.fileName || null, backgroundColor: background?.backgroundColor || background?._color || null, backgroundOperations: operations, sounds: state.sounds.splice(0) }); };
+export const bluekStage = () => { const background = state.world?.background; const operations = background?.drawOperations || background?._operations || []; return JSON.stringify({ width: state.world?.width || 0, height: state.world?.height || 0, cellSize: state.world?.cellSize || 1, running: state.running, speed: state.speed, objects: state.world?.allObjects().map(actor => ({ type: actor.constructor.name || 'Actor', x: actor.x, y: actor.y, rotation: actor.rotation, hasImage: actor.image !== null, imagePath: actor.image?.fileName || null, imageWidth: actor.image?.width || 30, imageHeight: actor.image?.height || 30, imageOpacity: (actor.image?.transparency ?? 255) / 255, imageOperations: actor.image && (!actor.image.fileName || actor.image.drawOperations.length) ? actor.image.drawOperations : null })) || [], texts: state.world ? [...state.world._texts.values()].map(([x, y, text]) => ({ x, y, text })) : [], backgroundPath: background?.fileName || null, backgroundColor: background?.backgroundColor || background?._color || null, backgroundOperations: operations, sounds: state.sounds.splice(0), errors: state.errors.splice(0) }); };
 export const bluekStageJson = bluekStage;
 export const bluekReadln = () => globalThis.__bluekReadln ? globalThis.__bluekReadln() : '';
 export const bluekReadlnOrNull = () => globalThis.__bluekReadlnOrNull ? globalThis.__bluekReadlnOrNull() : null;
