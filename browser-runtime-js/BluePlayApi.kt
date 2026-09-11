@@ -61,6 +61,7 @@ external fun step()
 external fun bluekStageJson(): String
 external fun bluekReadln(): String
 external fun bluekReadlnOrNull(): String?
+external fun bluekSleep(millis: Long)
 
 external fun bluekActorGetIntersecting(actor: Actor): Array<Actor>
 external fun bluekActorGetOneIntersecting(actor: Actor): Actor?

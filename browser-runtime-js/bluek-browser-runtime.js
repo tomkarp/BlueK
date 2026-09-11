@@ -141,6 +141,11 @@ export const bluekStage = () => { const background = state.world?.background; co
 export const bluekStageJson = bluekStage;
 export const bluekReadln = () => globalThis.__bluekReadln ? globalThis.__bluekReadln() : '';
 export const bluekReadlnOrNull = () => globalThis.__bluekReadlnOrNull ? globalThis.__bluekReadlnOrNull() : null;
+// Student Kotlin code runs in a Web Worker. Waiting there keeps the UI
+// responsive while preserving Thread.sleep semantics for browser execution.
+const sleepBuffer = new SharedArrayBuffer(4);
+const sleepState = new Int32Array(sleepBuffer);
+export const bluekSleep = millis => { const duration = Math.max(0, Number(millis) || 0); if (duration > 0) Atomics.wait(sleepState, 0, 0, duration); };
 export const bluekSetResourceSizes = applyResourceSizes;
 const matchesType = (actor, typeName) => !typeName || actor?.constructor?.name === String(typeName).split('.').pop();
 export const bluekActorGetIntersecting = (actor, typeName) => (actor?.getIntersecting?.() || []).filter(value => matchesType(value, typeName));
@@ -150,4 +155,4 @@ export const bluekActorRemoveTouching = (actor, typeName) => { const hit = bluek
 export const bluekWorldAllObjects = (world, typeName) => (world?.allObjects?.() || []).filter(value => matchesType(value, typeName));
 export const bluekStart = () => { if (typeof globalThis.main === 'function') globalThis.main(); };
 globalThis.Actor = Actor; globalThis.World = World; globalThis.Image = Image;
-Object.assign(globalThis, { isKeyDown, playSound, getSpeed, setSpeed, start, stop, step, bluekActorGetIntersecting, bluekActorGetOneIntersecting, bluekActorIsTouching, bluekActorRemoveTouching, bluekWorldAllObjects });
+Object.assign(globalThis, { isKeyDown, playSound, getSpeed, setSpeed, start, stop, step, bluekSleep, bluekActorGetIntersecting, bluekActorGetOneIntersecting, bluekActorIsTouching, bluekActorRemoveTouching, bluekWorldAllObjects });
