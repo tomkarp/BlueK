@@ -174,6 +174,8 @@ const simpleCollectionCall = (receiver: unknown, callable: string, args: unknown
     case 'count': return collection.length;
     case 'first': if (collection.length) return collection[0]; throw new Error('Collection is empty.');
     case 'last': if (collection.length) return collection[collection.length - 1]; throw new Error('Collection is empty.');
+    case 'random': if (collection.length) return collection[Math.floor(Math.random() * collection.length)]; throw new Error('Collection is empty.');
+    case 'randomOrNull': return collection.length ? collection[Math.floor(Math.random() * collection.length)] : null;
     case 'contains': return collection.some(value => value === args[0]);
     case 'add': if (!Array.isArray(receiver)) return undefined; receiver.push(args[0]); return SIMPLE_UNIT;
     case 'remove': { if (!Array.isArray(receiver)) return undefined; const index = receiver.findIndex(value => value === args[0]); if (index < 0) return false; receiver.splice(index, 1); return true; }
@@ -426,7 +428,7 @@ export class HybridRuntimeClient implements RuntimeClient {
   private standaloneExpression(source: string): unknown {
     const conditional = source.trim().match(/^if\s*\(([^()]*)\)\s+([\s\S]+?)\s+else\s+([\s\S]+)$/);
     if (conditional) return this.standaloneExpression(conditional[1]) ? this.standaloneExpression(conditional[2]) : this.standaloneExpression(conditional[3]);
-    const range = source.trim().match(/^(-?\d+)\.\.(-?\d+)$/);
+    const range = stripExpressionParentheses(source).match(/^(-?\d+)\.\.(-?\d+)$/);
     if (range) {
       const start = Number(range[1]);
       const end = Number(range[2]);
@@ -456,6 +458,13 @@ export class HybridRuntimeClient implements RuntimeClient {
           }
         }
       }
+    }
+    const collectionCall = source.trim().match(/^([\s\S]+)\.([A-Za-z_]\w*)\s*\(([^()]*)\)$/);
+    if (collectionCall) {
+      const receiver = this.standaloneExpression(collectionCall[1]);
+      const args = splitSimpleArguments(collectionCall[3]).map(value => simpleCodepadValue(value, this.bindings, this.localValues));
+      const result = simpleCollectionCall(receiver, collectionCall[2], args);
+      if (result !== undefined && result !== SIMPLE_UNIT) return result;
     }
     const collectionExpression = this.simpleCollectionExpression(source);
     if (collectionExpression !== undefined) return collectionExpression;
