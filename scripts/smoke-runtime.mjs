@@ -10,10 +10,14 @@ let output = '';
 server.stdout.on('data', chunk => { output += chunk.toString(); });
 server.stderr.on('data', chunk => { output += chunk.toString(); });
 const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+const stage = name => console.log(`[smoke] ${name}`);
 const onePixelPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 const json = async (url, options) => {
   try {
-    const response = await fetch(`${base}${url}`, options);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    const response = await fetch(`${base}${url}`, { ...options, signal: controller.signal });
+    clearTimeout(timer);
     const text = await response.text();
     let body = {};
     if (text) {
@@ -27,12 +31,14 @@ const json = async (url, options) => {
 const post = (url, body) => json(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
 try {
+  stage('server ready');
   for (let attempt = 0; attempt < 100; attempt += 1) {
     try { if ((await fetch(`${base}/api/examples`)).ok) break; } catch { /* server is still starting */ }
     if (attempt === 99) throw new Error(`Smoke server did not become ready.\nServer output:\n${output}`);
     await wait(100);
   }
   const defaultExample = (await json('/api/examples')).body;
+  stage('default example');
   assert.ok(Array.isArray(defaultExample.files));
   assert.ok(defaultExample.files.some(file => file.fileName === 'BluePlayFunctions.kt'));
   assert.ok(defaultExample.resources.some(resource => resource.path === 'images/figure.png'));
@@ -61,6 +67,7 @@ try {
   assert.match(stageText, /data:/);
   await stageReader.cancel();
   await post(`/api/session/${defaultSession.sessionId}/close`, {});
+  stage('compile validation');
   const session = (await post('/api/session', {})).body;
   const invalidFiles = await post(`/api/session/${session.sessionId}/compile`, { files: [{ fileName: '../escape.kt', source: 'class Escape', kind: 'class' }], revision: 1 });
   assert.equal(invalidFiles.response.status, 400);
@@ -113,6 +120,7 @@ try {
     { id: 'hidden-api', fileName: 'HiddenApi.kt', kind: 'class', revision: 1, source: 'class HiddenApi { @JvmSynthetic val implementation: Int = 1; @JvmSynthetic fun implementationCall() {} }' },
   ];
   const compiled = await post(`/api/session/${session.sessionId}/compile`, { files, resources: [{ path: 'images/hero.png', data: `data:image/png;base64,${onePixelPng}` }], revision: 1 });
+  stage('metadata and compile');
   assert.equal(compiled.body.diagnostics.length, 0, JSON.stringify(compiled.body.diagnostics));
   assert.equal(compiled.body.classes.find(value => value.name === 'Overloaded').constructors.length, 2);
   assert.equal(compiled.body.classes.find(value => value.name === 'Person').methods.find(value => value.name === 'greet').parameters.length, 0);
@@ -171,27 +179,36 @@ try {
   const generationId = compiled.body.generationId;
   assert.deepEqual((await json(`/api/session/${session.sessionId}/status`)).body, { workerAlive: true, generationId, available: true, error: null });
   const action = body => post(`/api/session/${session.sessionId}/action`, { ...body, generationId });
+  stage('first main evaluation');
   assert.equal((await action({ op: 'eval', code: 'main()', mode: 'expression' })).body.kind, 'unit');
   assert.equal((await json(`/api/session/${session.sessionId}/stage`)).body.stage.width, 6);
   assert.equal((await action({ op: 'eval', code: 'main(emptyArray())', mode: 'expression' })).body.kind, 'unit');
   const qualifiedMain = await action({ op: 'main', fileName: 'Main.kt' });
   assert.equal(qualifiedMain.body.kind, 'unit', JSON.stringify(qualifiedMain.body));
   assert.equal((await action({ op: 'reset' })).body.kind, 'unit');
+  stage('object creation');
   assert.equal((await json(`/api/session/${session.sessionId}/stage`)).body.stage, undefined);
   assert.equal((await action({ op: 'eval', code: 'main()', mode: 'expression' })).body.kind, 'unit');
   assert.equal((await json(`/api/session/${session.sessionId}/stage`)).body.stage.width, 6);
   const counter = (await action({ op: 'create', className: 'Counter', name: 'counter1', args: JSON.stringify(['3']) })).body;
+  stage('counter created');
   assert.ok(counter.objectId, JSON.stringify(counter));
   const duplicateCounter = await action({ op: 'create', className: 'Counter', name: 'counter1', args: '[]' });
+  stage('duplicate checked');
   assert.equal(duplicateCounter.body.kind, 'error');
   assert.equal((await action({ op: 'invoke', objectId: counter.objectId, name: 'current', args: '[]' })).body.display, '3');
+  stage('counter invoked');
   const incremented = await action({ op: 'invoke', objectId: counter.objectId, name: 'increment', args: '[]' });
+  stage('counter incremented');
   assert.equal(incremented.body.kind, 'unit', JSON.stringify(incremented));
   await action({ op: 'invoke', objectId: counter.objectId, name: 'add', args: JSON.stringify(['5']) });
+  stage('counter added');
   assert.equal((await action({ op: 'invoke', objectId: counter.objectId, name: 'current', args: '[]' })).body.display, '9');
   const counterUser = (await action({ op: 'create', className: 'CounterUser', name: 'counterUser1', args: JSON.stringify(['counter1']) })).body;
+  stage('counter user created');
   assert.ok(counterUser.objectId, JSON.stringify(counterUser));
   assert.equal((await action({ op: 'invoke', objectId: counterUser.objectId, name: 'addTwo', args: '[]' })).body.kind, 'unit');
+  stage('counter user invoked');
   assert.equal((await action({ op: 'invoke', objectId: counter.objectId, name: 'current', args: '[]' })).body.display, '11');
   const rectangle = (await action({ op: 'create', className: 'Rectangle', name: 'rectangle1', args: JSON.stringify(['4', '5']) })).body;
   assert.equal((await action({ op: 'invoke', objectId: rectangle.objectId, name: 'area', args: '[]' })).body.display, '20');
@@ -199,6 +216,7 @@ try {
   assert.match(counterInspection.display, /value=11/);
   assert.deepEqual(counterInspection.fields.find(field => field.name === 'value').display, '11');
   const person = (await action({ op: 'create', className: 'Person', name: 'person1', args: JSON.stringify(['"Ada"']) })).body;
+  stage('person and codepad');
   assert.equal((await action({ op: 'invoke', objectId: person.objectId, name: 'greet', args: '[]' })).body.display, 'Hello, Ada!');
   assert.equal((await action({ op: 'eval', code: 'person1.name', mode: 'expression' })).body.display, 'Ada');
   assert.equal((await action({ op: 'eval', code: 'person1.name = "Bea"', mode: 'block' })).body.kind, 'unit');
@@ -210,6 +228,7 @@ try {
   assert.equal((await action({ op: 'invoke', objectId: callbacks.objectId, name: 'transform', args: JSON.stringify(['{ value: Int -> value.toString() }']) })).body.display, '3');
   assert.equal((await action({ op: 'invoke', objectId: person.objectId, name: 'greetWith', args: JSON.stringify(['suffix = "!"']) })).body.display, 'Hi Ada!');
   const consoleRequest = action({ op: 'invoke', objectId: person.objectId, name: 'greetInConsole', args: '[]' });
+  stage('object actions and console');
   let consoleEvents = [];
   for (let attempt = 0; attempt < 60 && (!consoleEvents.some(event => event.stream === 'stdout') || !consoleEvents.some(event => event.stream === 'stderr')); attempt += 1) {
     await wait(100);
@@ -268,6 +287,7 @@ try {
   assert.match(namedResult.body.output, /Hello, Ada!/);
   assert.equal((await action({ op: 'eval', code: 'square(7)', mode: 'expression' })).body.display, '49');
   const hugeOutput = (await action({ op: 'eval', code: 'repeat(200000) { print("1234567890") }', mode: 'block' })).body;
+  stage('input and output');
   assert.equal(hugeOutput.kind, 'unit');
   assert.ok(hugeOutput.output.length <= 1_000_100, `output limit not applied: ${hugeOutput.output.length}`);
   assert.match(hugeOutput.output, /output truncated after 1000000 characters/);
@@ -276,6 +296,7 @@ try {
   assert.equal(made.kind, 'object');
   assert.match((await action({ op: 'inspect', objectId: made.objectId })).body.display, /value=8/);
   const world = (await action({ op: 'create', className: 'World', name: 'world1', args: JSON.stringify(['20', '10', '1']) })).body;
+  stage('blueplay actions');
   const secondWorld = (await action({ op: 'create', className: 'World', name: 'world2', args: JSON.stringify(['4', '3', '1']) })).body;
   assert.equal((await action({ op: 'invoke', objectId: secondWorld.objectId, name: 'show', args: '[]' })).body.kind, 'unit');
   assert.equal((await json(`/api/session/${session.sessionId}/stage`)).body.stage.width, 4);
@@ -356,6 +377,7 @@ try {
   const child = (await action({ op: 'create', className: 'Child', name: 'child1', args: JSON.stringify(['"Ada"']) })).body;
   assert.match((await action({ op: 'inspect', objectId: child.objectId })).body.display, /baseValue="Ada"/);
   const packageSession = (await post('/api/session', {})).body;
+  stage('simulation errors and type features');
   const packageFiles = [
     { id: 'package-person', fileName: 'PackagePerson.kt', kind: 'class', revision: 1, source: 'package demo\nclass PackagePerson(val name: String) { fun greet(): String = "Hi $name" }' },
     { id: 'package-helpers', fileName: 'PackageHelpers.kt', kind: 'functions', revision: 1, source: 'package demo\nfun twice(value: Int): Int = value * 2' },
@@ -380,6 +402,7 @@ try {
   assert.deepEqual((await json(`/api/session/${packageSession.sessionId}/stage`)).body.stage.texts, [{ x: 1, y: 2, text: 'hello' }]);
   assert.equal((await post(`/api/session/${packageSession.sessionId}/close`, {})).response.status, 204);
   const stale = await post(`/api/session/${session.sessionId}/action`, { op: 'create', className: 'Counter', name: 'stale', args: '[]', generationId: 'old-generation' });
+  stage('packages and recovery');
   assert.equal(stale.response.status, 409);
   const crashed = await action({ op: 'eval', code: 'System.exit(3)', mode: 'expression' });
   assert.equal(crashed.response.status, 500);
@@ -402,11 +425,18 @@ try {
   assert.equal((await recoveredAction({ op: 'invoke', objectId: recoveredCounter.objectId, name: 'current', args: '[]' })).body.display, '0');
   assert.deepEqual((await json(`/api/session/${isolatedSession.sessionId}/events`)).body, []);
   const timedOut = await recoveredAction({ op: 'eval', code: 'while (true) { Thread.sleep(10) }', mode: 'block' });
+  stage('timeout recovery');
   assert.equal(timedOut.response.status, 504, JSON.stringify(timedOut));
   assert.equal((await json(`/api/session/${session.sessionId}/status`)).body.available, false);
   console.log('BlueK runtime smoke test passed');
 } finally {
   server.kill('SIGTERM');
-  if (server.exitCode === null) await wait(100);
+  if (server.exitCode === null) {
+    await Promise.race([
+      new Promise(resolve => server.once('exit', resolve)),
+      wait(1000),
+    ]);
+  }
+  if (server.exitCode === null) server.kill('SIGKILL');
   if (output.includes('EADDRINUSE')) console.error(output);
 }
