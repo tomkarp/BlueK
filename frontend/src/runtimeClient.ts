@@ -588,7 +588,8 @@ export class HybridRuntimeClient implements RuntimeClient {
       }
       const snippetSource = String(request.code || '').trim().replace(/;$/, '');
       if (snippetSource) {
-        const cacheKey = `${this.browserGeneration}:${request.mode}:${snippetSource}`;
+        const bindingSignature = this.codepadBindings().names.map(name => `${name}:${this.bindings.has(name) ? this.localObjects.get(String(this.bindings.get(name))) || 'object' : 'value'}`).join('|');
+        const cacheKey = `${this.browserGeneration}:${request.mode}:${snippetSource}:${bindingSignature}`;
         let moduleUrl = this.codepadModules.get(cacheKey);
         if (!moduleUrl) {
           const codepadBindings = this.codepadBindings();
