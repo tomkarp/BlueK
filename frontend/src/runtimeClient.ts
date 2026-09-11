@@ -475,6 +475,10 @@ export class HybridRuntimeClient implements RuntimeClient {
       }
     }
     for (const [name, value] of this.localValues) { if (!names.includes(name)) { names.push(name); const mutable = this.localValueMutability.get(name) || false; values[name] = { value, mutable }; types.push({ name, type: this.localValueTypes.get(name) || 'dynamic', mutable }); } }
+    // Keep the compiler-visible symbol list total.  Some project metadata
+    // providers may omit a callable's detailed type information, but the
+    // worker still installs its bridge and can safely expose it as dynamic.
+    for (const name of names) if (!types.some(binding => binding.name === name)) types.push({ name, type: 'dynamic' });
     return { names, values, types };
   }
   private simpleCollectionExpression(source: string): unknown {
@@ -880,7 +884,14 @@ export class HybridRuntimeClient implements RuntimeClient {
         if (scalarProperty) {
           const builtinValue = simpleBuiltin(scalarProperty[1], this.bindings, this.localValues);
           const storedValue = this.localValues.get(scalarProperty[1].trim());
-          const value = builtinValue !== undefined ? builtinValue : storedValue !== undefined ? storedValue : displayedSimpleValue(await this.execute({ op: 'eval', code: scalarProperty[1], mode: 'expression' }));
+          let value: unknown = builtinValue !== undefined ? builtinValue : storedValue;
+          if (value === undefined) {
+            // Do not let the lightweight parser claim a nested Kotlin call
+            // such as `square(5).toString().length`.  If it cannot resolve
+            // the receiver, leave the expression for the real Kotlin/JS
+            // compiler fallback below.
+            try { value = displayedSimpleValue(await this.execute({ op: 'eval', code: scalarProperty[1], mode: 'expression' })); } catch { value = undefined; }
+          }
           if (typeof value === 'string' || Array.isArray(value)) return { kind: 'scalar', display: String(scalarProperty[2] === 'length' || scalarProperty[2] === 'size' ? value.length : value.length === 0) };
         }
       }
