@@ -1,5 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
+import { StreamLanguage } from '@codemirror/language';
+import { searchKeymap } from '@codemirror/search';
+import { EditorState } from '@codemirror/state';
+import { EditorView, drawSelection, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view';
+import { kotlin } from '@codemirror/legacy-modes/mode/clike';
 import './style.css';
 import { HybridRuntimeClient } from './runtimeClient';
 
@@ -116,6 +122,41 @@ const mainInvocation = (method: any, owner = '') => {
   if (parameters.length === 1 && /^Array\s*<\s*(?:out\s+)?String\s*>$/.test(parameters[0].type?.displayName || '')) return `${functionName}(emptyArray())`;
   return null;
 };
+
+function KotlinEditor({ source, onChange }: { source: string; onChange: (value: string) => void }) {
+  const host = useRef<HTMLDivElement>(null);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  useEffect(() => {
+    if (!host.current) return;
+    const state = EditorState.create({
+      doc: source,
+      extensions: [
+        lineNumbers(),
+        history(),
+        drawSelection(),
+        highlightActiveLine(),
+        StreamLanguage.define(kotlin),
+        keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
+        EditorView.updateListener.of(update => {
+          if (update.docChanged) onChangeRef.current(update.state.doc.toString());
+        }),
+        EditorView.theme({
+          '&': { height: '100%', fontSize: '14px' },
+          '.cm-scroller': { overflow: 'auto', fontFamily: 'Menlo, Monaco, Consolas, monospace' },
+          '.cm-content': { minHeight: '100%', padding: '12px 0' },
+          '.cm-gutters': { backgroundColor: '#e8e8e8', color: '#777', border: 'none' },
+          '.cm-activeLine': { backgroundColor: '#eef5ff' },
+          '.cm-activeLineGutter': { backgroundColor: '#dceaff', color: '#333' },
+          '.cm-selectionBackground, ::selection': { backgroundColor: '#b9d7ff !important' },
+        }),
+      ],
+    });
+    const view = new EditorView({ state, parent: host.current });
+    return () => view.destroy();
+  }, []);
+  return <div ref={host} className="kotlin-editor" aria-label="Kotlin source editor" />;
+}
 
 function App() {
   const [stageWindowOpen, setStageWindowOpen] = useState(false), [stageMaximized, setStageMaximized] = useState(false), [stagePosition, setStagePosition] = useState<{ left: number; top: number } | null>(null);
@@ -414,7 +455,7 @@ useEffect(() => { if (!generation || !client) return; let active = true; const t
     {(menu?.object || menu?.classMeta || menu?.file) && <div ref={popupRef} className="popup" style={{ left: menu.x, top: popupTop ?? menu.y }} onClick={event => event.stopPropagation()}><div className="popup-title">{menu.object?.className || menu.classMeta?.name || fileClassName(menu.file!)}</div>{(generation ? (menu.object ? [] : menu.classMeta?.kind === 'class' ? classPopupItems(menu.classMeta) : menu.classMeta?.methods) : [])?.map((meta, index, all) => <React.Fragment key={meta.id}>{meta.inheritedFrom && meta.inheritedFrom !== all[index - 1]?.inheritedFrom && <div className="popup-group">inherited from {meta.inheritedFrom}</div>}<button disabled={executing} onClick={() => { if ((meta as any).isConstructor) { openCreate(menu.classMeta!, (meta as any).index); setMenu(null); return; } const visibleMeta = menu.object ? specializeCallable(meta, menu.object, classes) : meta; const receiver = menu.object ? '' : (menu.classMeta?.kind === 'object' || (meta as any).isCompanion) ? `${menu.classMeta.name}.` : ''; if (!(visibleMeta.parameters || []).length && !(visibleMeta.typeParameters || []).length) { const request = menu.object ? accessorRequest(menu.object, visibleMeta, []) || { op: 'invoke', objectId: menu.object.objectId, name: visibleMeta.name, args: '[]' } : !menu.object && menu.classMeta?.kind === 'functions' && visibleMeta.name === 'main' ? { op: 'main', fileName: `${menu.classMeta.name}.kt` } : { op: 'eval', code: `${receiver}${visibleMeta.name}()`, mode: 'expression' }; action(request).then(showReturnedObject); setMenu(null); } else { setMethod({ object: menu.object, receiver, meta: visibleMeta }); setMethodArgs(visibleMeta.parameters.map(() => '')); setMethodTypeArgs((visibleMeta.typeParameters || []).map(() => '')); setMenu(null); } }}>{(meta as any).isConstructor ? `${menu.classMeta!.name}(${signatureParams(meta.parameters)})` : methodText(menu.object ? specializeCallable(meta, menu.object, classes) : meta)}</button></React.Fragment>)}{generation && menu?.object && <>{directPopupMethods.map(popupMethodButton)}{inheritedPopupGroups.map(([owner, methods]) => <div className="popup-submenu" key={owner}><button className="popup-submenu-trigger" onClick={event => event.stopPropagation()}>inherited from {owner}<span>›</span></button><div className="popup-submenu-panel">{methods.map(popupMethodButton)}</div></div>)}</>}{menu.file && <><hr /><button onClick={() => openFile(menu.file!)}>Open Editor</button><button disabled={compiling || executing} onClick={() => { setMenu(null); compile(); }}>Compile</button><button disabled={compiling || executing} onClick={() => deleteFile(menu.file!)}>Delete</button><button disabled={compiling || executing} onClick={() => duplicateFile(menu.file!)}>Duplicate…</button></>}{menu.object && <><hr /><button disabled={executing} onClick={() => { action({ op: 'inspect', objectId: menu.object!.objectId }).then(setInspect); setMenu(null); }}>Inspect</button><button disabled={executing} onClick={() => { const removedId = menu.object!.objectId; action({ op: 'remove', objectId: removedId }).then(result => { if (result.kind !== 'unit') return; setBench(previous => previous.filter(object => object.objectId !== removedId)); if (selectedObjectId === removedId) setSelectedObjectId(''); }); setMenu(null); }}>Remove</button></>}</div>}
     {resultObject && <div className="modal"><div className="dialog result-dialog"><h3>Method result</h3><div className="result-value">{resultObject.className}</div><button onClick={() => { setSelectedObjectId(resultObject.objectId); setResultInspectionId(resultObject.objectId); action({ op: 'inspect', objectId: resultObject.objectId }).then(setInspect); setResultObject(null); }}>Inspect</button><button onClick={getResultObject}>Get</button><button onClick={() => { discardResultObject(resultObject.objectId); setResultObject(null); }}>Close</button></div></div>}
     {resultValue && <div className="modal"><div className="dialog result-dialog"><h3>Method result</h3><div className="result-value">{resultValue.display ?? resultValue.message ?? String(resultValue)}</div><button onClick={() => setResultValue(null)}>Close</button></div></div>}
-    {editor && <div className="modal"><div className="dialog editor-dialog"><h3>{files[selected]?.fileName}</h3><textarea autoFocus value={files[selected]?.source || ''} onChange={event => updateSource(event.target.value)} /><button onClick={() => setEditor(false)}>Close</button></div></div>}
+    {editor && <div className="modal"><div className="dialog editor-dialog"><h3>{files[selected]?.fileName}</h3><KotlinEditor key={files[selected]?.id} source={files[selected]?.source || ''} onChange={updateSource} /><button onClick={() => setEditor(false)}>Close</button></div></div>}
     {newProjectDialog && <div className="modal" onClick={() => setNewProjectDialog(false)}><div className="dialog new-project-dialog" onClick={event => event.stopPropagation()}><h3>Create New Project</h3><p>Choose a starting point:</p><div className="project-choice-list"><button onClick={() => createProject('empty')}><strong>Empty Project</strong><span>Start with no Kotlin files.</span></button><button onClick={() => createProject('blueplay-template')}><strong>Empty BluePlay Template</strong><span>BluePlay framework with empty starter classes.</span></button><button onClick={() => createProject('blueplay-demo')}><strong>Simple BluePlay Demo</strong><span>A moving Actor subclass in a World subclass; clicking the Actor stops the simulation.</span></button></div><div className="dialog-actions"><button onClick={() => setNewProjectDialog(false)}>Cancel</button></div></div></div>}
     {newClassDialog && <div className="modal" onClick={() => setNewClassDialog(false)}><div className="dialog new-class-dialog" onClick={event => event.stopPropagation()}><h3>Create New Kotlin File</h3><label>Name<input autoFocus value={newClassName} onChange={event => setNewClassName(event.target.value)} onKeyDown={event => { if (event.key !== 'Enter') return; event.preventDefault(); event.stopPropagation(); confirmNewClass(); }} placeholder="e.g. Animal" /></label><fieldset><legend>Type</legend>{([['class', 'Class'], ['interface', 'Interface'], ['open', 'Open Class'], ['abstract', 'Abstract Class'], ['data', 'Data Class']] as const).map(([value, label]) => <label className="new-class-option" key={value}><input type="radio" name="new-class-type" value={value} checked={newClassType === value} onChange={() => setNewClassType(value)} /><span>{label}</span></label>)}</fieldset><div className="dialog-actions"><button onClick={() => setNewClassDialog(false)}>Cancel</button><button onClick={confirmNewClass} disabled={!/^[A-Za-z_]\w*$/.test(newClassName.trim()) || files.some(file => file.fileName === `${newClassName.trim()}.kt`)}>Create</button></div></div></div>}
     {createClass && <div className="modal"><div className="dialog create-object-dialog"><h3>{createClass.name}{genericArgs.length ? `<${genericArgs.map(value => value || '…').join(', ')}>` : ''}({signatureParams(createClass.constructors[constructorIndex]?.parameters)})</h3><label>Name of Instance<input autoFocus value={instanceName} onChange={event => setInstanceName(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); setCreateClass(null); return; } if (event.key !== 'Enter') return; event.preventDefault(); confirmCreate(); }} /></label>{createClass.constructors.length > 1 && <label>Constructor<select value={constructorIndex} onChange={event => chooseConstructor(Number(event.target.value))}>{createClass.constructors.map((constructor: any, index: number) => <option key={constructor.id} value={index}>{createClass.name}({signatureParams(constructor.parameters)})</option>)}</select></label>}{genericArgs.length > 0 && genericArgs.map((value, index) => <label key={`type-${index}`}>Type argument {index + 1}<input value={value} onChange={event => setGenericArgs(previous => previous.map((item, position) => position === index ? event.target.value : item))} placeholder="Kotlin type, e.g. String" /></label>)}{(createClass.constructors[constructorIndex]?.parameters || []).map((parameter: any, index: number) => <label key={parameter.name || index}>{parameter.name}: {typeName(parameter.type)}{parameter.hasDefault ? ' (optional)' : ''} — Kotlin expression<input value={constructorArgs[index] || ''} onChange={event => setConstructorArgs(previous => previous.map((value, position) => position === index ? event.target.value : value))} placeholder={'e.g. 42, "Ada", null, or another bench object'} />{benchArgumentButtons(bench, name => setConstructorArgs(previous => previous.map((value, position) => position === index ? name : value)))}</label>)}<div className="dialog-actions"><button onClick={() => setCreateClass(null)}>Cancel</button><button onClick={confirmCreate} disabled={executing || !/^[A-Za-z_]\w*$/.test(instanceName.trim()) || missingTypeArgument(genericArgs) || missingRequired(createClass.constructors[constructorIndex]?.parameters || [], constructorArgs)}>Create</button></div></div></div>}
