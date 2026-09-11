@@ -169,7 +169,13 @@ const simpleCollectionType = (value: unknown[]): string => {
 };
 const simpleCollectionTypeForSource = (source: string, value: unknown[]): string => {
   const kind = source.trim().match(/^(listOf|mutableListOf|arrayOf|setOf|mutableSetOf|emptyList|emptySet)\s*\(/)?.[1];
-  if (!kind) return simpleCollectionType(value);
+  if (!kind) {
+    if (/\.(?:map|filter|sorted|sortedDescending|reversed|distinct|take|drop)\b/.test(source)) {
+      const element = simpleCollectionType(value).replace(/^Array</, '').replace(/>$/, '');
+      return `List<${element}>`;
+    }
+    return simpleCollectionType(value);
+  }
   const element = simpleCollectionType(value).replace(/^Array</, '').replace(/>$/, '');
   const collectionType = kind === 'mutableListOf' ? 'MutableList' : kind === 'arrayOf' ? 'Array' : kind === 'setOf' || kind === 'emptySet' ? 'Set' : kind === 'mutableSetOf' ? 'MutableSet' : 'List';
   return `${collectionType}<${element}>`;
@@ -414,9 +420,9 @@ export class HybridRuntimeClient implements RuntimeClient {
     return { names, values, types };
   }
   private simpleCollectionExpression(source: string): unknown {
-    const match = source.trim().match(/^([A-Za-z_]\w*)\.(map|filter)\s*\{([\s\S]*)\}$/);
+    const match = source.trim().match(/^([\s\S]+)\.(map|filter)\s*\{([\s\S]*)\}$/);
     if (!match) return undefined;
-    const receiver = this.localValues.get(match[1]);
+    const receiver = this.standaloneExpression(match[1]);
     if (!Array.isArray(receiver)) return undefined;
     const lambda = match[3].trim().match(/^(?:([A-Za-z_]\w*)\s*->\s*)?([\s\S]+)$/);
     if (!lambda) return undefined;
