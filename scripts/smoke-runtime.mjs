@@ -84,7 +84,7 @@ try {
   assert.ok(syntaxError.body.diagnostics.some(diagnostic => diagnostic.fileName === 'Broken.kt' && diagnostic.line >= 1 && diagnostic.column >= 1));
   assert.equal((await json(`/api/session/${session.sessionId}/status`)).body.workerAlive, true);
   const files = [
-    { id: 'counter', fileName: 'Counter.kt', kind: 'class', revision: 1, source: 'class Counter(var value: Int = 0) { fun increment() { value++ }; fun add(amount: Int) { value += amount }; fun current(): Int = value }' },
+    { id: 'counter', fileName: 'Counter.kt', kind: 'class', revision: 1, source: 'class Counter(var value: Int = 0) { fun increment() { value++ }; fun add(amount: Int) { value += amount }; fun current(): Int = value; fun ready() = value > 0 }' },
     { id: 'counter-user', fileName: 'CounterUser.kt', kind: 'class', revision: 1, source: 'class CounterUser(private val counter: Counter) { fun addTwo() { counter.add(2) } }' },
     { id: 'rectangle', fileName: 'Rectangle.kt', kind: 'class', revision: 1, source: 'class Rectangle(val width: Int, val height: Int) { fun area(): Int = width * height }' },
     { id: 'person', fileName: 'Person.kt', kind: 'class', revision: 1, source: 'class Person(var name: String, var isReady: Boolean = false) { fun greet(): String = "Hello, $name!"; fun localValue(): String { fun hidden() = "hidden"\nval local: String = "local"; return local }; fun rename(newName: String) { name = newName }; fun greetInConsole() { Thread.sleep(200); println(greet() + "\\t✓"); Thread.sleep(1500); System.err.println("warning"); System.err.flush() }; fun greetWith(prefix: String = "Hi", suffix: String): String = "$prefix $name$suffix"; fun friend(): Person = Person("$name Jr") }' },
@@ -197,6 +197,7 @@ try {
   stage('duplicate checked');
   assert.equal(duplicateCounter.body.kind, 'error');
   assert.equal((await action({ op: 'invoke', objectId: counter.objectId, name: 'current', args: '[]' })).body.display, '3');
+  assert.equal((await action({ op: 'invoke', objectId: counter.objectId, name: 'ready', args: '[]' })).body.display, 'true');
   stage('counter invoked');
   const incremented = await action({ op: 'invoke', objectId: counter.objectId, name: 'increment', args: '[]' });
   stage('counter incremented');
