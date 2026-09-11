@@ -69,6 +69,9 @@ footer{flex:0 0 108px}
 .popup-group{padding:7px 12px 5px;background:#eee;border-bottom:1px solid #ccc;color:#555;font-size:12px;font-style:italic}
 .cards{position:relative;display:block;min-height:100%;margin:0;touch-action:none}
 .classcard{position:absolute;width:240px;cursor:grab}
+.classcard.uncompiled{background-image:none}
+.classcard .card-body{flex:1 1 auto;min-height:0;border-radius:0 0 10px 10px}
+.classcard.uncompiled .card-body{background:repeating-linear-gradient(135deg,#f5c889 0 10px,#858585 10px 14px,#f5c889 14px 24px)}
 .classcard:active{cursor:grabbing}
 .game-stage{z-index:3}
 .canvas:has(.game-stage) .cards{width:calc(60% - 24px);display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin:0;min-height:0}
