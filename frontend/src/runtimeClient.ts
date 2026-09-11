@@ -147,11 +147,13 @@ const SIMPLE_UNIT = Symbol('unit');
 const simpleValueType = (source: string, value: unknown, explicitType?: string): string | undefined => {
   if (explicitType) return explicitType;
   const trimmed = source.trim();
-  if (/^(?:listOf|mutableListOf|arrayOf)\s*\(/.test(trimmed)) {
+  const collectionFactory = trimmed.match(/^(listOf|mutableListOf|arrayOf|setOf|mutableSetOf|emptyList|emptySet)\s*\(/)?.[1];
+  if (collectionFactory) {
     const inner = trimmed.slice(trimmed.indexOf('(') + 1, -1);
     const args = splitSimpleArguments(inner).filter(Boolean);
     const element = args.length && args.every(item => /^-?\d+$/.test(item)) ? 'Int' : args.length && args.every(item => /^-?(?:\d+\.\d*|\d*\.\d+)$/.test(item)) ? 'Double' : 'Any?';
-    return `Array<${element}>`;
+    const collectionType = collectionFactory === 'mutableListOf' ? 'MutableList' : collectionFactory === 'arrayOf' ? 'Array' : collectionFactory === 'setOf' || collectionFactory === 'emptySet' ? 'Set' : collectionFactory === 'mutableSetOf' ? 'MutableSet' : 'List';
+    return `${collectionType}<${element}>`;
   }
   if (typeof value === 'string') return 'String';
   if (typeof value === 'boolean') return 'Boolean';
@@ -164,6 +166,13 @@ const simpleCollectionType = (value: unknown[]): string => {
     : value.length && value.every(item => typeof item === 'number') ? 'Double'
       : value.length && value.every(item => typeof item === 'string') ? 'String' : 'Any?';
   return `Array<${element}>`;
+};
+const simpleCollectionTypeForSource = (source: string, value: unknown[]): string => {
+  const kind = source.trim().match(/^(listOf|mutableListOf|arrayOf|setOf|mutableSetOf|emptyList|emptySet)\s*\(/)?.[1];
+  if (!kind) return simpleCollectionType(value);
+  const element = simpleCollectionType(value).replace(/^Array</, '').replace(/>$/, '');
+  const collectionType = kind === 'mutableListOf' ? 'MutableList' : kind === 'arrayOf' ? 'Array' : kind === 'setOf' || kind === 'emptySet' ? 'Set' : kind === 'mutableSetOf' ? 'MutableSet' : 'List';
+  return `${collectionType}<${element}>`;
 };
 const simpleCollectionCall = (receiver: unknown, callable: string, args: unknown[]): unknown => {
   const collection = Array.isArray(receiver) ? receiver : typeof receiver === 'string' && /^-?\d+(?:,-?\d+)+$/.test(receiver) ? receiver.split(',').map(Number) : null;
@@ -531,7 +540,7 @@ export class HybridRuntimeClient implements RuntimeClient {
         if (assignment) { this.localValues.set(assignment.name, this.standaloneExpression(assignment.value)); return { kind: 'unit', display: 'Unit' }; }
       }
       const collection = this.simpleCollectionExpression(source);
-      if (Array.isArray(collection)) return { kind: 'collection', display: `[${collection.join(', ')}]`, type: simpleCollectionType(collection) };
+      if (Array.isArray(collection)) return { kind: 'collection', display: `[${collection.join(', ')}]`, type: simpleCollectionTypeForSource(source, collection) };
       if (/^-?\d+\.\.-?\d+$/.test(source)) return { kind: 'collection', display: source, type: 'IntRange' };
       const collectionCall = source.match(/^([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s*\((.*)\)$/s);
       if (collectionCall && this.localValues.has(collectionCall[1])) {
@@ -541,12 +550,16 @@ export class HybridRuntimeClient implements RuntimeClient {
         if (result !== undefined) {
           if (result === SIMPLE_UNIT) return { kind: 'unit', display: 'Unit' };
           return Array.isArray(result)
-            ? { kind: 'collection', display: `[${result.join(', ')}]`, type: simpleCollectionType(result) }
+            ? { kind: 'collection', display: `[${result.join(', ')}]`, type: simpleCollectionTypeForSource(source, result) }
             : { kind: 'scalar', display: String(result) };
         }
       }
       const value = this.standaloneExpression(source);
-      return Array.isArray(value) ? { kind: 'collection', display: `[${value.join(', ')}]`, type: simpleCollectionType(value) } : value === null ? { kind: 'null', display: 'null' } : { kind: 'scalar', display: String(value) };
+      if (Array.isArray(value)) {
+        const identifier = simpleCodepadIdentifier(source);
+        return { kind: 'collection', display: `[${value.join(', ')}]`, type: (identifier && this.localValueTypes.get(identifier)) || simpleCollectionTypeForSource(source, value) };
+      }
+      return value === null ? { kind: 'null', display: 'null' } : { kind: 'scalar', display: String(value) };
     }
     if (this.worker && this.ready && request.op === 'main') { const result = await this.local({ op: 'main' }); return { ...result.value, output: result.output }; }
     if (this.worker && this.ready && request.op === 'eval') {
@@ -555,7 +568,7 @@ export class HybridRuntimeClient implements RuntimeClient {
       if (localAction) { const result = await this.local(localAction); return { ...result.value, output: result.output }; }
       if (request.mode === 'expression') {
         const collection = this.simpleCollectionExpression(String(request.code || '').trim().replace(/;$/, ''));
-        if (Array.isArray(collection)) return { kind: 'collection', display: `[${collection.join(', ')}]`, type: simpleCollectionType(collection) };
+        if (Array.isArray(collection)) return { kind: 'collection', display: `[${collection.join(', ')}]`, type: simpleCollectionTypeForSource(source, collection) };
         const collectionCall = String(request.code || '').trim().replace(/;$/, '').match(/^([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s*\((.*)\)$/s);
         if (collectionCall && this.localValues.has(collectionCall[1])) {
           const receiver = this.localValues.get(collectionCall[1]);
@@ -564,7 +577,7 @@ export class HybridRuntimeClient implements RuntimeClient {
           if (result !== undefined) {
             if (result === SIMPLE_UNIT) return { kind: 'unit', display: 'Unit' };
             return Array.isArray(result)
-              ? { kind: 'collection', display: `[${result.join(', ')}]`, type: simpleCollectionType(result) }
+              ? { kind: 'collection', display: `[${result.join(', ')}]`, type: simpleCollectionTypeForSource(source, result) }
               : { kind: 'scalar', display: String(result) };
           }
         }
@@ -612,7 +625,7 @@ export class HybridRuntimeClient implements RuntimeClient {
       if (request.mode === 'expression') {
         const builtin = simpleBuiltin(source, this.bindings, this.localValues);
         if (builtin !== undefined) return Array.isArray(builtin)
-          ? { kind: 'collection', display: `[${builtin.map(value => value === null ? 'null' : String(value)).join(', ')}]`, type: simpleCollectionType(builtin) }
+          ? { kind: 'collection', display: `[${builtin.map(value => value === null ? 'null' : String(value)).join(', ')}]`, type: simpleCollectionTypeForSource(source, builtin) }
           : { kind: 'scalar', display: String(builtin) };
         if (/^-?\d+\.\.-?\d+$/.test(source)) return { kind: 'collection', display: source, type: 'IntRange' };
         // Keep elementary Kotlin expressions on the local fast path.  In
@@ -624,7 +637,7 @@ export class HybridRuntimeClient implements RuntimeClient {
         try {
           const simple = this.standaloneExpression(source);
           if (simple === null) return { kind: 'null', display: 'null' };
-          if (Array.isArray(simple)) return { kind: 'collection', display: `[${simple.map(value => value === null ? 'null' : String(value)).join(', ')}]`, type: simpleCollectionType(simple) };
+          if (Array.isArray(simple)) return { kind: 'collection', display: `[${simple.map(value => value === null ? 'null' : String(value)).join(', ')}]`, type: simpleCollectionTypeForSource(source, simple) };
           if (typeof simple === 'string' || typeof simple === 'number' || typeof simple === 'boolean') return { kind: 'scalar', display: String(simple) };
         } catch { /* complex expressions still go through Kotlin/JS */ }
       }
