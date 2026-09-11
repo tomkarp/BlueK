@@ -117,7 +117,7 @@ const topLevelBinary = (source: string): { left: string; operator: string; right
   return null;
 };
 const simpleBuiltin = (source: string, bindings: Map<string, unknown>, values: Map<string, unknown>): unknown => {
-  const match = source.trim().match(/^(maxOf|minOf|abs|listOf|arrayOf|setOf)\((.*)\)$/s);
+  const match = source.trim().match(/^(maxOf|minOf|abs|listOf|mutableListOf|arrayOf|setOf|mutableSetOf|emptyList|emptySet)\((.*)\)$/s);
   if (!match) return undefined;
   const args = splitSimpleArguments(match[2]).map(value => simpleCodepadValue(value, bindings, values));
   switch (match[1]) {
@@ -125,8 +125,12 @@ const simpleBuiltin = (source: string, bindings: Map<string, unknown>, values: M
     case 'minOf': return Math.min(...args.map(Number));
     case 'abs': return Math.abs(Number(args[0]));
     case 'listOf':
+    case 'mutableListOf':
     case 'arrayOf': return args;
     case 'setOf': return [...new Set(args)];
+    case 'mutableSetOf': return [...new Set(args)];
+    case 'emptyList':
+    case 'emptySet': return [];
     default: return undefined;
   }
 };
@@ -135,6 +139,7 @@ const simpleCodepadValue = (source: string, bindings: Map<string, unknown>, valu
   if (builtin !== undefined) return builtin;
   return parseKotlinArgument(source, bindings, values);
 };
+const SIMPLE_UNIT = Symbol('unit');
 const simpleCollectionCall = (receiver: unknown, callable: string, args: unknown[]): unknown => {
   if (!Array.isArray(receiver)) return undefined;
   switch (callable) {
@@ -144,6 +149,10 @@ const simpleCollectionCall = (receiver: unknown, callable: string, args: unknown
     case 'first': if (receiver.length) return receiver[0]; throw new Error('Collection is empty.');
     case 'last': if (receiver.length) return receiver[receiver.length - 1]; throw new Error('Collection is empty.');
     case 'contains': return receiver.some(value => value === args[0]);
+    case 'add': receiver.push(args[0]); return SIMPLE_UNIT;
+    case 'remove': { const index = receiver.findIndex(value => value === args[0]); if (index < 0) return false; receiver.splice(index, 1); return true; }
+    case 'clear': receiver.splice(0, receiver.length); return SIMPLE_UNIT;
+    case 'get': return receiver[Number(args[0])];
     case 'joinToString': {
       const separator = args[0] === undefined ? ', ' : String(args[0]);
       return receiver.join(separator);
@@ -597,6 +606,7 @@ export class HybridRuntimeClient implements RuntimeClient {
             const args = parsed.args.map(value => simpleCodepadValue(value, this.bindings, this.localValues));
             const collectionValue = simpleCollectionCall(receiver, parsed.callable, args);
             if (collectionValue !== undefined) {
+              if (collectionValue === SIMPLE_UNIT) return { kind: 'unit', display: 'Unit', name: parsed.binding };
               if (parsed.binding) this.localValues.set(parsed.binding, collectionValue);
               return { kind: collectionValue === null ? 'null' : typeof collectionValue === 'object' ? 'object' : 'scalar', display: Array.isArray(collectionValue) ? `[${collectionValue.join(', ')}]` : String(collectionValue), name: parsed.binding };
             }
