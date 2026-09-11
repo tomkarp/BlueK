@@ -217,7 +217,11 @@ export async function compileBrowserSnippet(root: string, sessionDir: string, so
     const apiSource = await fs.readFile(path.join(root, 'browser-runtime-js', 'BluePlayApi.kt'), 'utf8');
     await fs.writeFile(path.join(projectDir, 'BlueKApi.kt'), apiSource);
     await fs.writeFile(path.join(projectDir, 'BlueKInput.kt'), 'external fun __bluekReadln(): String\nexternal fun __bluekReadlnOrNull(): String?\nexternal fun __bluekPrint(value: Any?, newline: Boolean)\nfun readln(): String = __bluekReadln()\nfun readlnOrNull(): String? = __bluekReadlnOrNull()\nfun readLine(): String? = __bluekReadlnOrNull()\nfun print(value: Any?) = __bluekPrint(value, false)\nfun println(value: Any?) = __bluekPrint(value, true)\n');
-    const declaredBindings = bindings.filter(name => /^[A-Za-z_]\w*$/.test(name) && !new RegExp(`\\b(?:val|var|fun|class|object)\\s+${name}\\b`).test(source));
+    // Fixed BluePlay classes are already declared by BluePlayApi.kt. They are
+    // resolved from the browser runtime, so declaring them again as dynamic
+    // codepad bindings creates a Kotlin conflict (`class Actor` vs
+    // `val Actor: dynamic`) in snippets that access an Actor property.
+    const declaredBindings = bindings.filter(name => /^[A-Za-z_]\w*$/.test(name) && !frameworkNames.has(name) && !new RegExp(`\\b(?:val|var|fun|class|object)\\s+${name}\\b`).test(source));
     const bindingDeclarations = declaredBindings.map(name => `external val ${name}: dynamic`).join('\n');
     const bridge = [
         'import kotlin.js.ExperimentalJsExport',

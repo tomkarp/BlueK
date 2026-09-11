@@ -170,6 +170,10 @@ console.log = (...args) => { appendOutput(args); originalConsoleLog(...args); };
 console.error = (...args) => { appendOutput(args); };
 const valueOf = (value, className = '') => {
   if (value === undefined || value === null) return { kind: value === null ? 'null' : 'unit', display: value === null ? 'null' : 'Unit' };
+  // Kotlin/JS represents kotlin.Unit as a small singleton object rather than
+  // JavaScript undefined. Treat it like Unit so assignments and other
+  // statements do not create a meaningless object-bank entry.
+  if (value?.constructor?.name === 'Unit') return { kind: 'unit', display: 'Unit' };
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') return { kind: 'scalar', display: String(value) };
   const objectId = crypto.randomUUID(); objects.set(objectId, value); const display = className || value.constructor?.name || 'Object'; displayValues.set(objectId, display); return { kind: 'object', display, objectId };
 };
@@ -487,7 +491,8 @@ export class HybridRuntimeClient implements RuntimeClient {
               value = scalar;
             }
           }
-          return (await this.local({ op: 'set', objectId: String(objectId), property: propertyAssignment.property, className: String(this.localObjects.get(String(objectId))), value })).value;
+          await this.local({ op: 'set', objectId: String(objectId), property: propertyAssignment.property, className: String(this.localObjects.get(String(objectId))), value });
+          return { kind: 'unit', display: 'Unit' };
         }
       }
       const declaration = request.mode === 'block' ? simpleCodepadDeclaration(source) : null;
