@@ -175,11 +175,19 @@ const simpleCollectionCall = (receiver: unknown, callable: string, args: unknown
     case 'remove': { if (!Array.isArray(receiver)) return undefined; const index = receiver.findIndex(value => value === args[0]); if (index < 0) return false; receiver.splice(index, 1); return true; }
     case 'clear': if (!Array.isArray(receiver)) return undefined; receiver.splice(0, receiver.length); return SIMPLE_UNIT;
     case 'get': return collection[Number(args[0])];
+    case 'sorted': return [...collection].sort((left, right) => Number(left) - Number(right));
+    case 'sortedDescending': return [...collection].sort((left, right) => Number(right) - Number(left));
+    case 'reversed': return [...collection].reverse();
+    case 'distinct': return [...new Set(collection)];
+    case 'take': return collection.slice(0, Math.max(0, Number(args[0])));
+    case 'drop': return collection.slice(Math.max(0, Number(args[0])));
+    case 'indexOf': return collection.indexOf(args[0]);
     case 'joinToString': {
       const separator = args[0] === undefined ? ', ' : String(args[0]);
       return collection.join(separator);
     }
     case 'isEmpty': return collection.length === 0;
+    case 'isNotEmpty': return collection.length !== 0;
     default: return undefined;
   }
 };
