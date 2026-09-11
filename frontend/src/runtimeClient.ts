@@ -511,6 +511,14 @@ export class HybridRuntimeClient implements RuntimeClient {
       const receiver = this.standaloneExpression(property[1]);
       if (typeof receiver === 'string' || Array.isArray(receiver)) return property[2] === 'isEmpty' ? receiver.length === 0 : receiver.length;
     }
+    const membership = trimmed.match(/^(.+?)\s+(!?in)\s+(-?\d+)\.\.(-?\d+)$/s);
+    if (membership) {
+      const value = this.standaloneExpression(membership[1]);
+      const start = Number(membership[3]);
+      const end = Number(membership[4]);
+      const contained = typeof value === 'number' && Number.isInteger(value) && start <= end && value >= start && value <= end;
+      return membership[2] === 'in' ? contained : !contained;
+    }
     try { return parseKotlinArgument(source, this.bindings, this.localValues); } catch { /* continue with operators */ }
     const binary = topLevelBinary(source);
     if (!binary) throw new Error(`This simple expression needs a compiled project: ${source}`);
