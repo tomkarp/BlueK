@@ -151,3 +151,19 @@ footer{flex:0 0 108px}
 .status-bar .current-element{flex:0 1 auto}
 .status-bar .activity-bar{margin-left:auto;flex:0 0 240px}
 .status-bar .reset-runtime{margin-left:0}
+
+/* Both BlueJ workbench splits stay useful even at extreme sizes. The narrow
+   splitter itself is neutral; only its handle provides visual affordance. */
+.workspace{grid-template-rows:minmax(90px,var(--upper-pane,2fr)) 21px minmax(90px,1fr) 32px}
+.pane-splitter{border-top:0;border-bottom:0}
+.pane-splitter::-webkit-slider-runnable-track{background:#eee}
+.pane-splitter::-moz-range-track{background:#eee}
+.lower{grid-template-columns:minmax(90px,var(--bench-width,60%)) 8px 18px minmax(90px,1fr)}
+.lower .bench{grid-column:1;min-width:0}
+.lower .bench-codepad-splitter{grid-column:2;align-self:stretch;position:relative;cursor:col-resize;touch-action:none}
+.lower .bench-codepad-splitter::after{content:"";position:absolute;left:3px;top:50%;width:2px;height:46px;transform:translateY(-50%);border-radius:2px;background:#aaa}
+.lower .bench-codepad-splitter:hover::after,.lower .bench-codepad-splitter:focus-visible::after{background:#777}
+.lower .codepad-toggle{grid-column:3}
+.lower .codepad{grid-column:4;min-width:0}
+.lower.codepad-collapsed{grid-template-columns:minmax(90px,1fr) 18px}
+.lower.codepad-collapsed .bench-codepad-splitter{display:none}
