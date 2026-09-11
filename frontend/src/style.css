@@ -186,13 +186,13 @@ footer{flex:0 0 108px}
    while the codepad arrow remains an independent control. */
 .lower{padding-top:0}
 .pane-splitter{background:transparent;border:0}
-.pane-splitter::before{content:"";display:block;position:absolute;left:50%;top:50%;width:96px;height:9px;transform:translate(-50%,-50%);border:0;border-radius:0;background:repeating-linear-gradient(to bottom,#8d8d8d 0 1px,transparent 1px 4px)}
+.pane-splitter::before{content:"";display:block;position:absolute;left:50%;top:50%;width:96px;height:9px;transform:translate(-50%,-50%);border:0;border-radius:0;background:linear-gradient(#8d8d8d,#8d8d8d) 0 0/100% 1px no-repeat,linear-gradient(#8d8d8d,#8d8d8d) 0 4px/100% 1px no-repeat,linear-gradient(#8d8d8d,#8d8d8d) 0 8px/100% 1px no-repeat}
 .pane-splitter::after{display:none;content:none}
-.pane-splitter:hover::before,.pane-splitter:focus-visible::before,.pane-splitter:active::before{background:repeating-linear-gradient(to bottom,#666 0 1px,transparent 1px 4px)}
+.pane-splitter:hover::before,.pane-splitter:focus-visible::before,.pane-splitter:active::before{background:linear-gradient(#666,#666) 0 0/100% 1px no-repeat,linear-gradient(#666,#666) 0 4px/100% 1px no-repeat,linear-gradient(#666,#666) 0 8px/100% 1px no-repeat}
 .lower .bench-codepad-splitter{width:14px}
 .lower .bench-codepad-splitter::after{display:none;content:none}
-.lower .bench-codepad-splitter::before{content:"";display:block;position:absolute;left:50%;top:50%;width:9px;height:96px;transform:translate(-50%,-50%);background:repeating-linear-gradient(to right,#8d8d8d 0 1px,transparent 1px 4px)}
-.lower .bench-codepad-splitter:hover::before,.lower .bench-codepad-splitter:focus-visible::before{background:repeating-linear-gradient(to right,#666 0 1px,transparent 1px 4px)}
+.lower .bench-codepad-splitter::before{content:"";display:block;position:absolute;left:50%;top:50%;width:9px;height:96px;transform:translate(-50%,-50%);background:linear-gradient(to right,#8d8d8d,#8d8d8d) 0 0/1px 100% no-repeat,linear-gradient(to right,#8d8d8d,#8d8d8d) 4px 0/1px 100% no-repeat,linear-gradient(to right,#8d8d8d,#8d8d8d) 8px 0/1px 100% no-repeat}
+.lower .bench-codepad-splitter:hover::before,.lower .bench-codepad-splitter:focus-visible::before{background:linear-gradient(to right,#666,#666) 0 0/1px 100% no-repeat,linear-gradient(to right,#666,#666) 4px 0/1px 100% no-repeat,linear-gradient(to right,#666,#666) 8px 0/1px 100% no-repeat}
 .lower .codepad-toggle{position:relative;z-index:2;width:40px;height:92px;margin-left:-14px;border:0;border-radius:0 8px 8px 0;background:#bbb;color:#fff;font:bold 29px/88px Arial,sans-serif;padding:0;overflow:visible;cursor:pointer}
 .lower .codepad-toggle::before{display:none;content:none}
 .lower .codepad-toggle:hover{background:#aaa;color:#fff}
