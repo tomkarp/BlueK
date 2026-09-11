@@ -45,7 +45,16 @@ export class HttpRuntimeClient implements RuntimeClient {
   async removeObject(objectId: string): Promise<void> { await this.execute({ op: 'remove', objectId }); }
   async sendInput(text: string): Promise<void> { await this.request('/input', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) }); }
   async stop(): Promise<void> { await this.request('/stop', { method: 'POST' }); }
-  async reset(): Promise<void> { await this.stop(); }
+  async reset(): Promise<void> {
+    try {
+      await this.stop();
+    } catch (error) {
+      // A stale browser tab can outlive its server session. Reset still has
+      // useful BlueJ semantics in that case: clear the client-side workbench
+      // and codepad without turning a harmless missing session into a UI error.
+      if (!(error instanceof Error) || !/failed \(404\)/.test(error.message)) throw error;
+    }
+  }
 
   async sendKey(key: string, pressed: boolean): Promise<void> { await this.request('/key', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key, pressed }) }); }
   async sendClick(x: number, y: number): Promise<void> { await this.request('/click', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ x, y }) }); }
