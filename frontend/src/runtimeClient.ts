@@ -523,6 +523,7 @@ export class HybridRuntimeClient implements RuntimeClient {
       }
       const collection = this.simpleCollectionExpression(source);
       if (Array.isArray(collection)) return { kind: 'collection', display: `[${collection.join(', ')}]`, type: simpleCollectionType(collection) };
+      if (/^-?\d+\.\.-?\d+$/.test(source)) return { kind: 'collection', display: source, type: 'IntRange' };
       const collectionCall = source.match(/^([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s*\((.*)\)$/s);
       if (collectionCall && this.localValues.has(collectionCall[1])) {
         const receiver = this.localValues.get(collectionCall[1]);
@@ -604,6 +605,7 @@ export class HybridRuntimeClient implements RuntimeClient {
         if (builtin !== undefined) return Array.isArray(builtin)
           ? { kind: 'collection', display: `[${builtin.map(value => value === null ? 'null' : String(value)).join(', ')}]`, type: simpleCollectionType(builtin) }
           : { kind: 'scalar', display: String(builtin) };
+        if (/^-?\d+\.\.-?\d+$/.test(source)) return { kind: 'collection', display: source, type: 'IntRange' };
         // Keep elementary Kotlin expressions on the local fast path.  In
         // particular, arithmetic such as `5 + 3` or `x + 3` must not trigger a
         // compiler round-trip merely because it is not one of the builtin
