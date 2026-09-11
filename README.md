@@ -1,6 +1,6 @@
 # BlueK
 
-BlueK ist eine browserbasierte Kotlin-Lernumgebung nach dem Objektbank-Prinzip von BlueJ. Klassen werden als gelbe Karten dargestellt, echte Instanzen liegen als opake Handles in einem langlebigen Browser-Worker, und Methoden- sowie Codepad-Aufrufe laufen lokal in Kotlin/JS. Der Server kompiliert und analysiert den Projektcode.
+BlueK ist eine browserbasierte Kotlin-Lernumgebung nach dem Objektbank-Prinzip von BlueJ. Klassen werden als gelbe Karten dargestellt, echte Instanzen liegen als opake Handles in einem langlebigen Browser-Worker, und Methoden-, Codepad- sowie BluePlay-Aufrufe laufen lokal in Kotlin/JS. BluePlay-Welten werden im selben Worker auf ein OffscreenCanvas gezeichnet; der Server kompiliert und analysiert den Projektcode.
 
 ## Start
 
