@@ -15,7 +15,7 @@ const onePixelPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mN
 const json = async (url, options) => {
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15000);
+    const timer = setTimeout(() => controller.abort(), 120000);
     const response = await fetch(`${base}${url}`, { ...options, signal: controller.signal });
     clearTimeout(timer);
     const text = await response.text();
