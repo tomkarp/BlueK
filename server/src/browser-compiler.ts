@@ -46,8 +46,9 @@ const codepadFunctionBody = (source: string): string => {
     const statements = splitTopLevelStatements(source);
     const last = statements.at(-1)?.trim() || '';
     if (!last) return 'return Unit';
+    const withoutStrings = last.replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, '');
     const isStatement = /^(?:val|var|fun|class|object|typealias|import|package|return|throw|break|continue|for|while|do)\b/.test(last)
-        || /(^|[^=!<>])=($|[^=])/.test(last);
+        || /(^|[^=!<>])=($|[^=])/.test(withoutStrings);
     const isExpressionBlock = /^(?:if|when|try)\b/.test(last);
     if (isStatement && !isExpressionBlock) return `${source}\nreturn Unit`;
     const lastStart = source.lastIndexOf(last);
