@@ -392,6 +392,7 @@ export class HybridRuntimeClient implements RuntimeClient {
       const source = String(request.code || '').trim().replace(/;$/, '');
       const outputCall = source.match(/^(print|println)\((.*)\)$/s);
       if (outputCall) {
+        if (!outputCall[2].trim() && outputCall[1] === 'println') return { kind: 'unit', display: 'Unit', output: '\n' };
         const value = this.standaloneExpression(outputCall[2].trim());
         return { kind: 'unit', display: 'Unit', output: `${String(value ?? 'null')}${outputCall[1] === 'println' ? '\n' : ''}` };
       }
@@ -432,6 +433,10 @@ export class HybridRuntimeClient implements RuntimeClient {
       const outputCall = source.match(/^(print|println)\((.*)\)$/s);
       if (outputCall) {
         const argument = outputCall[2].trim();
+        if (!argument && outputCall[1] === 'println') {
+          const result = await this.local({ op: 'write', text: '', newline: true });
+          return { ...result.value, output: result.output };
+        }
         let parsed: unknown;
         try {
           parsed = parseKotlinArgument(argument, this.bindings, this.localValues);
