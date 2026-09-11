@@ -228,6 +228,13 @@ footer{flex:0 0 108px}
 .cards{z-index:2}
 .classcard.inheritance-selected{outline:3px solid #168fbd;outline-offset:3px}
 .sidebar button.active-tool{background:#c9e5ed;border-color:#168fbd;box-shadow:0 0 0 1px #168fbd}
+/* BlueJ uses the inheritance tool as a compact icon button rather than a
+   labelled action. Keep the accessible label in the DOM, but show the line
+   and hollow triangle as the visual control. */
+.sidebar button:nth-of-type(4){font-size:0;padding:0;position:relative}
+.sidebar button:nth-of-type(4)::before{content:"";position:absolute;left:50%;top:49%;width:48px;border-top:2px solid #222;transform:translate(-38px,-50%)}
+.sidebar button:nth-of-type(4)::after{content:"▷";position:absolute;left:50%;top:50%;color:#222;background:transparent;font:32px/1 Arial,sans-serif;transform:translate(3px,-50%)}
+.sidebar button:nth-of-type(4).active-tool{background:linear-gradient(#f8f8f8,#d7d7d7);border-color:#aaa;box-shadow:0 1px 2px #aaa}
 .lower .bench-codepad-splitter{grid-column:2}
 .lower .codepad-toggle{grid-column:auto;position:absolute;left:calc(var(--bench-width,60%) - 22px);top:50%;transform:translateY(-50%);z-index:2;height:22px;align-items:center;justify-content:center}
 .lower .codepad{grid-column:3}
