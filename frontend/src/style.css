@@ -156,6 +156,7 @@ footer{flex:0 0 108px}
    splitter itself is neutral; only its handle provides visual affordance. */
 .workspace{grid-template-rows:minmax(90px,var(--upper-pane,2fr)) 21px minmax(90px,1fr) 32px}
 .pane-splitter{border-top:0;border-bottom:0}
+.pane-splitter{box-shadow:none}
 .pane-splitter::-webkit-slider-runnable-track{background:#eee}
 .pane-splitter::-moz-range-track{background:#eee}
 .lower{grid-template-columns:minmax(90px,var(--bench-width,60%)) 8px 18px minmax(90px,1fr)}
@@ -167,3 +168,11 @@ footer{flex:0 0 108px}
 .lower .codepad{grid-column:4;min-width:0}
 .lower.codepad-collapsed{grid-template-columns:minmax(90px,1fr) 18px}
 .lower.codepad-collapsed .bench-codepad-splitter{display:none}
+
+/* Make the horizontal grip easy to acquire with a mouse or finger while
+   keeping the neutral track visually unobtrusive. */
+.pane-splitter::before{width:112px;height:15px;top:3px;border-radius:8px}
+.pane-splitter::after{width:64px;top:8px}
+.lower .bench-codepad-splitter{width:14px}
+.lower .bench-codepad-splitter::after{left:4px;width:6px;height:78px;background:#c4c4c4;border:1px solid #999;border-radius:5px;box-shadow:inset 1px 0 #eee}
+.lower .bench-codepad-splitter:hover::after,.lower .bench-codepad-splitter:focus-visible::after{background:#aaa;border-color:#666}
