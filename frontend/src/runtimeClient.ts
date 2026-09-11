@@ -27,7 +27,7 @@ export class HttpRuntimeClient implements RuntimeClient {
     return response.json();
   }
 
-  async compileCodepad(source: string, generationId: string, bindings: string[] = []): Promise<{ entry: string }> {
+  async compileCodepad(source: string, generationId: string, bindings: Array<string | { name: string; type: string }> = []): Promise<{ entry: string }> {
     const response = await this.request('/codepad', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ source, generationId, bindings }) });
     return response.json();
   }
@@ -94,7 +94,7 @@ const splitCodepadStatements = (source: string): string[] => { const result: str
 const simpleCodepadCall = (code: string): { binding?: string; receiver?: string; callable: string; args: string[]; typeArguments: string[] } | null => { const match = code.trim().replace(/;$/, '').match(/^(?:(?:val|var)\s+([A-Za-z_]\w*)(?:\s*:\s*[^=]+)?\s*=\s*)?([A-Za-z_]\w*)(?:<([^>]*)>)?(?:\.([A-Za-z_]\w*)(?:<([^>]*)>)?)?\s*\((.*)\)$/s); if (!match) return null; const typeText = match[4] ? match[5] || '' : match[3] || ''; return { binding: match[1], receiver: match[4] ? match[2] : undefined, callable: match[4] || match[2], args: splitSimpleArguments(match[6]), typeArguments: typeText ? typeText.split(',').map(value => value.trim()).filter(Boolean) : [] }; };
 const simpleCodepadProperty = (code: string): { receiver: string; property: string } | null => { const match = code.trim().replace(/;$/, '').match(/^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/); return match ? { receiver: match[1], property: match[2] } : null; };
 const simpleCodepadPropertyAssignment = (code: string): { receiver: string; property: string; value: string } | null => { const match = code.trim().replace(/;$/, '').match(/^([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s*=\s*(.+)$/s); return match ? { receiver: match[1], property: match[2], value: match[3].trim() } : null; };
-const simpleCodepadDeclaration = (code: string): { mutable: boolean; name: string; value: string } | null => { const match = code.trim().replace(/;$/, '').match(/^(val|var)\s+([A-Za-z_]\w*)(?:\s*:\s*[^=]+)?\s*=\s*(.+)$/s); return match ? { mutable: match[1] === 'var', name: match[2], value: match[3].trim() } : null; };
+const simpleCodepadDeclaration = (code: string): { mutable: boolean; name: string; explicitType?: string; value: string } | null => { const match = code.trim().replace(/;$/, '').match(/^(val|var)\s+([A-Za-z_]\w*)(?:\s*:\s*([^=]+?))?\s*=\s*(.+)$/s); return match ? { mutable: match[1] === 'var', name: match[2], explicitType: match[3]?.trim(), value: match[4].trim() } : null; };
 const simpleCodepadAssignment = (code: string): { name: string; value: string } | null => { const match = code.trim().replace(/;$/, '').match(/^([A-Za-z_]\w*)\s*=\s*(.+)$/s); return match ? { name: match[1], value: match[2].trim() } : null; };
 const simpleCodepadIdentifier = (code: string) => code.trim().replace(/;$/, '').match(/^[A-Za-z_]\w*$/)?.[0] || null;
 const requiredParameters = (parameters: any[] = []) => parameters.filter(parameter => !parameter.hasDefault);
@@ -140,24 +140,46 @@ const simpleCodepadValue = (source: string, bindings: Map<string, unknown>, valu
   return parseKotlinArgument(source, bindings, values);
 };
 const SIMPLE_UNIT = Symbol('unit');
+const simpleValueType = (source: string, value: unknown, explicitType?: string): string | undefined => {
+  if (explicitType) return explicitType;
+  const trimmed = source.trim();
+  if (/^(?:listOf|mutableListOf|arrayOf)\s*\(/.test(trimmed)) {
+    const inner = trimmed.slice(trimmed.indexOf('(') + 1, -1);
+    const args = splitSimpleArguments(inner).filter(Boolean);
+    const element = args.length && args.every(item => /^-?\d+$/.test(item)) ? 'Int' : args.length && args.every(item => /^-?(?:\d+\.\d*|\d*\.\d+)$/.test(item)) ? 'Double' : 'Any?';
+    return `Array<${element}>`;
+  }
+  if (typeof value === 'string') return 'String';
+  if (typeof value === 'boolean') return 'Boolean';
+  if (typeof value === 'number') return Number.isInteger(value) ? 'Int' : 'Double';
+  if (Array.isArray(value)) return 'Array<Any?>';
+  return undefined;
+};
+const simpleCollectionType = (value: unknown[]): string => {
+  const element = value.length && value.every(item => typeof item === 'number' && Number.isInteger(item)) ? 'Int'
+    : value.length && value.every(item => typeof item === 'number') ? 'Double'
+      : value.length && value.every(item => typeof item === 'string') ? 'String' : 'Any?';
+  return `Array<${element}>`;
+};
 const simpleCollectionCall = (receiver: unknown, callable: string, args: unknown[]): unknown => {
-  if (!Array.isArray(receiver)) return undefined;
+  const collection = Array.isArray(receiver) ? receiver : typeof receiver === 'string' && /^-?\d+(?:,-?\d+)+$/.test(receiver) ? receiver.split(',').map(Number) : null;
+  if (!collection) return undefined;
   switch (callable) {
-    case 'sum': return receiver.reduce((sum, value) => sum + Number(value), 0);
-    case 'average': return receiver.length ? receiver.reduce((sum, value) => sum + Number(value), 0) / receiver.length : NaN;
-    case 'count': return receiver.length;
-    case 'first': if (receiver.length) return receiver[0]; throw new Error('Collection is empty.');
-    case 'last': if (receiver.length) return receiver[receiver.length - 1]; throw new Error('Collection is empty.');
-    case 'contains': return receiver.some(value => value === args[0]);
-    case 'add': receiver.push(args[0]); return SIMPLE_UNIT;
-    case 'remove': { const index = receiver.findIndex(value => value === args[0]); if (index < 0) return false; receiver.splice(index, 1); return true; }
-    case 'clear': receiver.splice(0, receiver.length); return SIMPLE_UNIT;
-    case 'get': return receiver[Number(args[0])];
+    case 'sum': return collection.reduce((sum, value) => sum + Number(value), 0);
+    case 'average': return collection.length ? collection.reduce((sum, value) => sum + Number(value), 0) / collection.length : NaN;
+    case 'count': return collection.length;
+    case 'first': if (collection.length) return collection[0]; throw new Error('Collection is empty.');
+    case 'last': if (collection.length) return collection[collection.length - 1]; throw new Error('Collection is empty.');
+    case 'contains': return collection.some(value => value === args[0]);
+    case 'add': if (!Array.isArray(receiver)) return undefined; receiver.push(args[0]); return SIMPLE_UNIT;
+    case 'remove': { if (!Array.isArray(receiver)) return undefined; const index = receiver.findIndex(value => value === args[0]); if (index < 0) return false; receiver.splice(index, 1); return true; }
+    case 'clear': if (!Array.isArray(receiver)) return undefined; receiver.splice(0, receiver.length); return SIMPLE_UNIT;
+    case 'get': return collection[Number(args[0])];
     case 'joinToString': {
       const separator = args[0] === undefined ? ', ' : String(args[0]);
-      return receiver.join(separator);
+      return collection.join(separator);
     }
-    case 'isEmpty': return receiver.length === 0;
+    case 'isEmpty': return collection.length === 0;
     default: return undefined;
   }
 };
@@ -243,6 +265,7 @@ export class HybridRuntimeClient implements RuntimeClient {
   private classes: ClassMeta[] = [];
   private readonly bindings = new Map<string, unknown>();
   private readonly localValues = new Map<string, unknown>();
+  private readonly localValueTypes = new Map<string, string>();
   private readonly localObjects = new Map<string, unknown>();
   private browserGeneration: string | null = null;
   private browserModuleUrl: string | null = null;
@@ -322,9 +345,10 @@ export class HybridRuntimeClient implements RuntimeClient {
     const scalar = displayedSimpleValue(value);
     if (scalar !== undefined) this.localValues.set(name, scalar);
   }
-  private codepadBindings(): { names: string[]; values: Record<string, unknown> } {
+  private codepadBindings(): { names: string[]; values: Record<string, unknown>; types: Array<{ name: string; type: string }> } {
     const values: Record<string, unknown> = {};
     const names: string[] = [];
+    const types: Array<{ name: string; type: string }> = [];
     for (const [name, objectId] of this.bindings) {
       const className = this.localObjects.get(String(objectId));
       const klass = className ? this.classes.find(value => value.name === className) : undefined;
@@ -362,10 +386,33 @@ export class HybridRuntimeClient implements RuntimeClient {
         values[klass.name] = { bridges };
       }
     }
-    for (const [name, value] of this.localValues) { if (!names.includes(name)) { names.push(name); values[name] = { value }; } }
-    return { names, values };
+    for (const [name, value] of this.localValues) { if (!names.includes(name)) { names.push(name); values[name] = { value }; types.push({ name, type: this.localValueTypes.get(name) || 'dynamic' }); } }
+    return { names, values, types };
+  }
+  private simpleCollectionExpression(source: string): unknown {
+    const match = source.trim().match(/^([A-Za-z_]\w*)\.(map|filter)\s*\{([\s\S]*)\}$/);
+    if (!match) return undefined;
+    const receiver = this.localValues.get(match[1]);
+    if (!Array.isArray(receiver)) return undefined;
+    const lambda = match[3].trim().match(/^(?:([A-Za-z_]\w*)\s*->\s*)?([\s\S]+)$/);
+    if (!lambda) return undefined;
+    const parameter = lambda[1] || 'it';
+    const body = lambda[2].trim();
+    const previous = this.localValues.get(parameter);
+    const hadPrevious = this.localValues.has(parameter);
+    try {
+      return receiver[match[2] === 'map' ? 'map' : 'filter']((item) => {
+        this.localValues.set(parameter, item);
+        return this.standaloneExpression(body);
+      });
+    } finally {
+      if (hadPrevious) this.localValues.set(parameter, previous);
+      else this.localValues.delete(parameter);
+    }
   }
   private standaloneExpression(source: string): unknown {
+    const collectionExpression = this.simpleCollectionExpression(source);
+    if (collectionExpression !== undefined) return collectionExpression;
     const value = simpleBuiltin(source, this.bindings, this.localValues);
     if (value !== undefined) return value;
     const trimmed = stripExpressionParentheses(source);
@@ -401,11 +448,11 @@ export class HybridRuntimeClient implements RuntimeClient {
     const snippetSource = source.trim().replace(/;$/, '');
     if (!snippetSource) throw new Error('The Kotlin expression is empty.');
     const bindings = this.codepadBindings();
-    const bindingSignature = bindings.names.map(name => `${name}:${this.bindings.has(name) ? this.localObjects.get(String(this.bindings.get(name))) || 'object' : 'value'}`).join('|');
+    const bindingSignature = bindings.names.map(name => `${name}:${this.bindings.has(name) ? this.localObjects.get(String(this.bindings.get(name))) || 'object' : bindings.types.find(binding => binding.name === name)?.type || 'dynamic'}`).join('|');
     const cacheKey = `${this.browserGeneration}:${mode}:${snippetSource}:${bindingSignature}`;
     let moduleUrl = this.codepadModules.get(cacheKey);
     if (!moduleUrl) {
-      const compiled = await this.http.compileCodepad(snippetSource, String(this.browserGeneration || ''), bindings.names);
+      const compiled = await this.http.compileCodepad(snippetSource, String(this.browserGeneration || ''), bindings.types.length ? bindings.types : bindings.names);
       moduleUrl = new URL(`/api/session/${this.http.sessionId}/browser/${compiled.entry}`, window.location.origin).href;
       this.codepadModules.set(cacheKey, moduleUrl);
     }
@@ -424,7 +471,7 @@ export class HybridRuntimeClient implements RuntimeClient {
       }
       if (request.mode === 'block') {
         const declaration = simpleCodepadDeclaration(source);
-        if (declaration) { this.localValues.set(declaration.name, this.standaloneExpression(declaration.value)); return { kind: 'unit', display: 'Unit' }; }
+        if (declaration) { const value = this.standaloneExpression(declaration.value); this.localValues.set(declaration.name, value); const type = simpleValueType(declaration.value, value, declaration.explicitType); if (type) this.localValueTypes.set(declaration.name, type); return { kind: 'unit', display: 'Unit' }; }
         const assignment = simpleCodepadAssignment(source);
         if (assignment) { this.localValues.set(assignment.name, this.standaloneExpression(assignment.value)); return { kind: 'unit', display: 'Unit' }; }
       }
@@ -436,6 +483,10 @@ export class HybridRuntimeClient implements RuntimeClient {
       const code = String(request.code || '').replace(/\s+/g, '');
       const localAction = code === 'start()' ? { op: 'run' as const } : code === 'stop()' ? { op: 'pause' as const } : code === 'step()' ? { op: 'act' as const } : code === 'show()' ? { op: 'stage' as const } : code.startsWith('setSpeed(') && code.endsWith(')') ? { op: 'speed' as const, value: Number(code.slice(9, -1)) } : null;
       if (localAction) { const result = await this.local(localAction); return { ...result.value, output: result.output }; }
+      if (request.mode === 'expression') {
+        const collection = this.simpleCollectionExpression(String(request.code || '').trim().replace(/;$/, ''));
+        if (Array.isArray(collection)) return { kind: 'collection', display: `[${collection.join(', ')}]`, type: simpleCollectionType(collection) };
+      }
     }
     if (this.worker && this.ready && request.op === 'create') {
       const klass = this.classes.find(value => value.name === request.className); const constructorIndex = Number(request.constructorIndex); const selectedConstructor = Number.isInteger(constructorIndex) && constructorIndex >= 0 ? klass?.constructors[constructorIndex] : undefined; const constructor = selectedConstructor || klass?.constructors.find(value => value.id === request.constructorId) || klass?.constructors[0];
@@ -478,7 +529,9 @@ export class HybridRuntimeClient implements RuntimeClient {
       }
       if (request.mode === 'expression') {
         const builtin = simpleBuiltin(source, this.bindings, this.localValues);
-        if (builtin !== undefined) return { kind: 'scalar', display: Array.isArray(builtin) ? `[${builtin.map(value => value === null ? 'null' : String(value)).join(', ')}]` : String(builtin) };
+        if (builtin !== undefined) return Array.isArray(builtin)
+          ? { kind: 'collection', display: `[${builtin.map(value => value === null ? 'null' : String(value)).join(', ')}]`, type: simpleCollectionType(builtin) }
+          : { kind: 'scalar', display: String(builtin) };
         // Keep elementary Kotlin expressions on the local fast path.  In
         // particular, arithmetic such as `5 + 3` or `x + 3` must not trigger a
         // compiler round-trip merely because it is not one of the builtin
@@ -488,6 +541,7 @@ export class HybridRuntimeClient implements RuntimeClient {
         try {
           const simple = this.standaloneExpression(source);
           if (simple === null) return { kind: 'null', display: 'null' };
+          if (Array.isArray(simple)) return { kind: 'collection', display: `[${simple.map(value => value === null ? 'null' : String(value)).join(', ')}]`, type: simpleCollectionType(simple) };
           if (typeof simple === 'string' || typeof simple === 'number' || typeof simple === 'boolean') return { kind: 'scalar', display: String(simple) };
         } catch { /* complex expressions still go through Kotlin/JS */ }
       }
@@ -535,7 +589,10 @@ export class HybridRuntimeClient implements RuntimeClient {
           return { kind: 'unit', display: 'Unit' };
         }
         try {
-          this.localValues.set(declaration.name, simpleCodepadValue(declaration.value, this.bindings, this.localValues));
+          const value = this.standaloneExpression(declaration.value);
+          this.localValues.set(declaration.name, value);
+          const type = simpleValueType(declaration.value, value, declaration.explicitType);
+          if (type) this.localValueTypes.set(declaration.name, type);
           return { kind: 'unit', display: 'Unit' };
         } catch { /* The normal call parser may handle a constructor declaration. */ }
         try {
@@ -608,7 +665,9 @@ export class HybridRuntimeClient implements RuntimeClient {
             if (collectionValue !== undefined) {
               if (collectionValue === SIMPLE_UNIT) return { kind: 'unit', display: 'Unit', name: parsed.binding };
               if (parsed.binding) this.localValues.set(parsed.binding, collectionValue);
-              return { kind: collectionValue === null ? 'null' : typeof collectionValue === 'object' ? 'object' : 'scalar', display: Array.isArray(collectionValue) ? `[${collectionValue.join(', ')}]` : String(collectionValue), name: parsed.binding };
+              return Array.isArray(collectionValue)
+                ? { kind: 'collection', display: `[${collectionValue.join(', ')}]`, type: simpleCollectionType(collectionValue), name: parsed.binding }
+                : { kind: collectionValue === null ? 'null' : 'scalar', display: String(collectionValue), name: parsed.binding };
             }
           }
           if (objectId && klass && method && method.typeParameters?.length && parsed.typeArguments.length === 1 && parsed.args.length >= requiredParameters(method.parameters).length) {
@@ -716,7 +775,7 @@ export class HybridRuntimeClient implements RuntimeClient {
     return this.http.execute(request);
   }
   async compile(files: ProjectFile[], revision: number, resources: Resource[] = [], resourceSizes: Record<string, { width: number; height: number }> = {}, resourceAlphaMasks: Record<string, number[]> = {}): Promise<CompileResult> {
-    const result = await this.http.compile(files, revision, resources); this.classes = result.classes; this.localObjects.clear(); this.localValues.clear(); this.bindings.clear(); this.codepadModules.clear(); this.latestStage = null;
+    const result = await this.http.compile(files, revision, resources); this.classes = result.classes; this.localObjects.clear(); this.localValues.clear(); this.localValueTypes.clear(); this.bindings.clear(); this.codepadModules.clear(); this.latestStage = null;
     this.browserResourceSizes = Object.fromEntries(Object.entries(resourceSizes).map(([key, size]) => [key, { ...size, alpha: resourceAlphaMasks[key] }]));
     if (result.browserRuntime) {
       this.browserGeneration = result.generationId;
@@ -733,8 +792,8 @@ export class HybridRuntimeClient implements RuntimeClient {
   async evaluate(code: string, mode: 'expression' | 'block'): Promise<Value> { if (this.worker && this.ready) return this.execute({ op: 'eval', code, mode }); return this.http.evaluate(code, mode); }
   async removeObject(objectId: string): Promise<void> { this.localObjects.delete(objectId); if (this.worker && this.ready) { await this.local({ op: 'remove', objectId }); return; } await this.http.removeObject(objectId); }
   sendInput(text: string): Promise<void> { if (!this.worker) return this.http.sendInput(text); if (!this.inputBuffer) return Promise.reject(new Error('Terminal input requires a cross-origin-isolated browser context.')); const bytes = new TextEncoder().encode(text); const state = new Int32Array(this.inputBuffer, 0, 1); const buffer = new Uint8Array(this.inputBuffer, 4); buffer.fill(0); buffer.set(bytes.subarray(0, buffer.length)); Atomics.store(state, 0, Math.min(bytes.length, buffer.length)); Atomics.notify(state, 0); return Promise.resolve(); }
-  async stop(): Promise<void> { const hadBrowserWorker = Boolean(this.worker); this.worker?.terminate(); this.worker = null; this.ready = null; this.browserReady = false; this.browserWorkerDead = true; this.inputBarrier = Promise.resolve(); this.browserGeneration = null; this.browserModuleUrl = null; this.browserPackageName = ''; this.codepadModules.clear(); this.localObjects.clear(); this.localValues.clear(); this.bindings.clear(); if (!hadBrowserWorker) await this.http.stop(); }
-  async reset(): Promise<void> { if (!this.browserModuleUrl) { await this.stop(); return; } this.worker?.terminate(); this.worker = null; this.ready = null; this.codepadModules.clear(); this.localObjects.clear(); this.localValues.clear(); this.bindings.clear(); this.latestStage = null; this.startBrowserWorker(); await this.ready; }
+  async stop(): Promise<void> { const hadBrowserWorker = Boolean(this.worker); this.worker?.terminate(); this.worker = null; this.ready = null; this.browserReady = false; this.browserWorkerDead = true; this.inputBarrier = Promise.resolve(); this.browserGeneration = null; this.browserModuleUrl = null; this.browserPackageName = ''; this.codepadModules.clear(); this.localObjects.clear(); this.localValues.clear(); this.localValueTypes.clear(); this.bindings.clear(); if (!hadBrowserWorker) await this.http.stop(); }
+  async reset(): Promise<void> { if (!this.browserModuleUrl) { await this.stop(); return; } this.worker?.terminate(); this.worker = null; this.ready = null; this.codepadModules.clear(); this.localObjects.clear(); this.localValues.clear(); this.localValueTypes.clear(); this.bindings.clear(); this.latestStage = null; this.startBrowserWorker(); await this.ready; }
   private postBrowserInput(message: { op: 'key'; key: string; pressed: boolean } | { op: 'click'; x: number; y: number }): Promise<void> {
     if (!this.worker || !this.ready) return Promise.reject(new Error('Browser runtime is not available.'));
     const worker = this.worker;

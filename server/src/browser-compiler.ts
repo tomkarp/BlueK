@@ -212,7 +212,7 @@ export async function compileBrowserProject(root: string, sessionDir: string, fi
     return { ok: true, diagnostics: '', directory: buildDir };
 }
 
-export async function compileBrowserSnippet(root: string, sessionDir: string, source: string, snippetId: string, bindings: string[] = []): Promise<{ ok: boolean; diagnostics: string; entry?: string }> {
+export async function compileBrowserSnippet(root: string, sessionDir: string, source: string, snippetId: string, bindings: Array<string | { name: string; type: string }> = []): Promise<{ ok: boolean; diagnostics: string; entry?: string }> {
     if (/^\s*package\b/m.test(source)) return { ok: false, diagnostics: 'Codepad expressions may not declare a package.' };
     const buildDir = path.join(sessionDir, 'browser', 'codepad', snippetId);
     const projectDir = path.join(buildDir, 'project');
@@ -233,8 +233,9 @@ export async function compileBrowserSnippet(root: string, sessionDir: string, so
     // resolved from the browser runtime, so declaring them again as dynamic
     // codepad bindings creates a Kotlin conflict (`class Actor` vs
     // `val Actor: dynamic`) in snippets that access an Actor property.
-    const declaredBindings = bindings.filter(name => /^[A-Za-z_]\w*$/.test(name) && !frameworkNames.has(name) && !new RegExp(`\\b(?:val|var|fun|class|object)\\s+${name}\\b`).test(source));
-    const bindingDeclarations = declaredBindings.map(name => `external val ${name}: dynamic`).join('\n');
+    const normalizedBindings = bindings.map(binding => typeof binding === 'string' ? { name: binding, type: 'dynamic' } : binding);
+    const declaredBindings = normalizedBindings.filter(binding => /^[A-Za-z_]\w*$/.test(binding.name) && !frameworkNames.has(binding.name) && !new RegExp(`\\b(?:val|var|fun|class|object)\\s+${binding.name}\\b`).test(source));
+    const bindingDeclarations = declaredBindings.map(binding => `external val ${binding.name}: ${binding.type}`).join('\n');
     const bridge = [
         'import kotlin.js.ExperimentalJsExport',
         'import kotlin.js.JsExport',
@@ -259,6 +260,6 @@ export async function compileBrowserSnippet(root: string, sessionDir: string, so
     // Kotlin/JS library output is UMD and publishes its @JsExport functions
     // on the shared global object. Wrap each snippet in a real ES module so
     // cached A -> B -> A evaluations keep their own function reference.
-    await fs.writeFile(path.join(target, entry), `import './${rawEntry}';\nconst bluekEval = globalThis['bluek-browser-runtime']?.bluekEval;\nexport { bluekEval };\n`);
+    await fs.writeFile(path.join(target, entry), `import './kotlin-kotlin-stdlib.js';\nimport './${rawEntry}';\nconst bluekEval = globalThis['bluek-browser-runtime']?.bluekEval;\nexport { bluekEval };\n`);
     return { ok: true, diagnostics: '', entry };
 }
