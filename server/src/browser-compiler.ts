@@ -155,6 +155,10 @@ function bridgeSource(files: ProjectFile[], classes: ClassMeta[]): { source: str
 }
 
 const run = (command: string, args: string[], cwd: string) => new Promise<{ code: number; out: string; err: string }>(resolve => execFile(command, args, { cwd, maxBuffer: 20e6, timeout: 120000 }, (error, stdout, stderr) => resolve({ code: error ? Number(error.code) || 1 : 0, out: stdout, err: stderr })));
+const compilerDiagnostic = (result: { out: string; err: string }) => {
+    const lines = `${result.out}\n${result.err}`.split(/\r?\n/).map(line => line.trim()).filter(line => /^(?:e|w):\s+file:\/\//.test(line));
+    return lines.length ? lines.join('\n') : 'Kotlin/JS compilation failed.';
+};
 
 export async function compileBrowserProject(root: string, sessionDir: string, files: ProjectFile[], classes: ClassMeta[]): Promise<{ ok: boolean; diagnostics: string; directory: string }> {
     const buildDir = path.join(sessionDir, 'browser');
@@ -189,7 +193,7 @@ export async function compileBrowserProject(root: string, sessionDir: string, fi
     const bridge = bridgeSource(files, classes);
     await fs.writeFile(path.join(bridgeDir, 'BlueKBridge.kt'), bridge.source);
     const result = await run(path.join(root, 'jvm', 'gradlew'), ['jsBrowserProductionLibraryDistribution', '--no-daemon', `-PbluekProjectDir=${browserProjectDir}`, `-PbluekBridgeDir=${bridgeDir}`], buildDir);
-    if (result.code) return { ok: false, diagnostics: `${result.out}\n${result.err}`.trim(), directory: buildDir };
+    if (result.code) return { ok: false, diagnostics: compilerDiagnostic(result), directory: buildDir };
     const output = path.join(buildDir, 'build', 'dist', 'js', 'productionLibrary');
     const dist = path.join(buildDir, 'dist');
     await fs.rm(dist, { recursive: true, force: true });
@@ -243,7 +247,7 @@ export async function compileBrowserSnippet(root: string, sessionDir: string, so
     ].join('\n');
     await fs.writeFile(path.join(bridgeDir, 'BlueKSnippet.kt'), bridge);
     const result = await run(path.join(root, 'jvm', 'gradlew'), ['jsBrowserProductionLibraryDistribution', '--no-daemon', `-PbluekProjectDir=${projectDir}`, `-PbluekBridgeDir=${bridgeDir}`], buildDir);
-    if (result.code) return { ok: false, diagnostics: `${result.out}\n${result.err}`.trim() };
+    if (result.code) return { ok: false, diagnostics: compilerDiagnostic(result) };
     const output = path.join(buildDir, 'build', 'dist', 'js', 'productionLibrary');
     const target = path.join(sessionDir, 'browser', 'dist');
     await fs.mkdir(target, { recursive: true });
