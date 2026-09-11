@@ -228,6 +228,10 @@ let simulationTimer = null;
 let renderTimer = null;
 let simulationAccumulator = 0;
 let lastSimulationTime = 0;
+let renderCanvas = null;
+let renderContext = null;
+const resourceData = new Map();
+const resourceBitmaps = new Map();
 const objects = new Map();
 const displayValues = new Map();
 let outputBuffer = '';
@@ -269,8 +273,12 @@ const resolveArguments = (args) => args.map((arg) => arg && typeof arg === 'obje
 const bindingValue = (descriptor) => { if (!descriptor || !descriptor.objectId) return descriptor?.value; const target = objects.get(descriptor.objectId); if (!target) throw new Error('Codepad object binding is no longer available.'); const methods = new Map((descriptor.methods || []).map((method) => [method.name, method])); const properties = new Map((descriptor.properties || []).map((property) => [property.name, property])); return new Proxy(target, { get(object, property) { if (typeof property !== 'string') return object[property]; const method = methods.get(property); if (method) return (...args) => api[method.bridge](object, ...args.map((arg) => arg && arg.__bluekObjectId ? objects.get(arg.__bluekObjectId) : arg)); const field = properties.get(property); if (field?.getter && typeof api[field.getter] === 'function') return api[field.getter](object); return object[property]; }, set(object, property, value) { const field = properties.get(property); if (field?.setter && typeof api[field.setter] === 'function') { api[field.setter](object, value && value.__bluekObjectId ? objects.get(value.__bluekObjectId) : value); return true; } object[property] = value; return true; } }); };
 const bindingValueWithBridges = (descriptor) => { const resolveArgs = args => args.map(arg => arg && arg.__bluekObjectId ? objects.get(arg.__bluekObjectId) : arg); if (descriptor?.runtime) return (...args) => new runtimeApi[descriptor.runtime](...resolveArgs(args)); if (descriptor?.bridge) return (...args) => api[descriptor.bridge](...resolveArgs(args)); if (descriptor?.bridges) return (...args) => { const bridge = descriptor.bridges.find(candidate => candidate.arity === args.length) || descriptor.bridges[0]; if (!bridge || typeof api[bridge.name] !== 'function') throw new Error('Generated Kotlin bridge is missing.'); return api[bridge.name](...resolveArgs(args)); }; return bindingValue(descriptor); };
 const finish = () => { flushStudentOutput(); const output = takeOutput(); self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' }, output }); };
-const stage = () => { const value = runtimeApi?.bluekStage || globalThis.bluekStage; if (typeof value === 'function') self.postMessage({ kind: 'stage', stage: JSON.parse(value()) }); };
-self.addEventListener('message', ({ data }) => { if (data?.op === 'resources') { globalThis.__bluekPendingResourceSizes = data.sizes || {}; runtimeApi?.bluekSetResourceSizes?.(globalThis.__bluekPendingResourceSizes); } });
+const stage = () => { const value = runtimeApi?.bluekStage || globalThis.bluekStage; if (typeof value === 'function') postStage(JSON.parse(value())); };
+const loadRenderResources = (data) => { Object.entries(data || {}).forEach(([path, source]) => { if (resourceData.get(path) === source || resourceBitmaps.has(path)) return; resourceData.set(path, source); fetch(source).then(response => response.blob()).then(blob => createImageBitmap(blob)).then(bitmap => { resourceBitmaps.set(path, bitmap); stage(); }).catch(() => undefined); }); };
+const drawOperation = (context, operation, resources) => { const [name, ...parts] = String(operation).split('|'); const paint = parts.at(-1) || 'rgb(0, 0, 0)'; const values = parts.slice(0, -1).map(Number); context.fillStyle = paint; context.strokeStyle = paint; if (name === 'fill') context.fillRect(0, 0, context.canvas.width, context.canvas.height); else if (name === 'fillRect' && values.length >= 4) context.fillRect(...values); else if (name === 'drawRect' && values.length >= 4) context.strokeRect(...values); else if (name === 'fillOval' && values.length >= 4) { context.beginPath(); context.ellipse(values[0] + values[2] / 2, values[1] + values[3] / 2, values[2] / 2, values[3] / 2, 0, 0, Math.PI * 2); context.fill(); } else if (name === 'drawOval' && values.length >= 4) { context.beginPath(); context.ellipse(values[0] + values[2] / 2, values[1] + values[3] / 2, values[2] / 2, values[3] / 2, 0, 0, Math.PI * 2); context.stroke(); } else if (name === 'drawLine' && values.length >= 4) { context.beginPath(); context.moveTo(values[0], values[1]); context.lineTo(values[2], values[3]); context.stroke(); } else if (name === 'drawString' && parts.length >= 4) { context.fillText(decodeURIComponent(parts[0]), Number(parts[1]), Number(parts[2])); } else if (name === 'drawImage' && parts.length >= 5) { const imagePath = parts[0]; const bitmap = resources.get(imagePath) || resources.get('images/' + imagePath); if (bitmap) context.drawImage(bitmap, Number(parts[1]), Number(parts[2]), Number(parts[3]), Number(parts[4])); } };
+const drawCanvasStage = (snapshot) => { if (!renderContext || !renderCanvas || !snapshot) return; const scale = Math.max(1, Number(snapshot.cellSize) || 1); const width = Math.max(1, Number(snapshot.width) || 1) * scale; const height = Math.max(1, Number(snapshot.height) || 1) * scale; if (renderCanvas.width !== width || renderCanvas.height !== height) { renderCanvas.width = width; renderCanvas.height = height; } renderContext.clearRect(0, 0, width, height); renderContext.fillStyle = '#fff'; renderContext.fillRect(0, 0, width, height); const backgroundBitmap = snapshot.backgroundPath && (resourceBitmaps.get(snapshot.backgroundPath) || resourceBitmaps.get('images/' + snapshot.backgroundPath)); if (backgroundBitmap) renderContext.drawImage(backgroundBitmap, 0, 0, width, height); (snapshot.backgroundOperations || []).forEach(operation => drawOperation(renderContext, operation, resourceBitmaps)); (snapshot.objects || []).forEach(object => { const imageWidth = Number(object.imageWidth) || 30; const imageHeight = Number(object.imageHeight) || 30; const centerX = (Number(object.x) + 0.5) * scale; const centerY = (Number(object.y) + 0.5) * scale; renderContext.save(); renderContext.translate(centerX, centerY); renderContext.rotate((Number(object.rotation) || 0) * Math.PI / 180); renderContext.globalAlpha = Number(object.imageOpacity ?? 1); const bitmap = object.imagePath && (resourceBitmaps.get(object.imagePath) || resourceBitmaps.get('images/' + object.imagePath)); if (bitmap) renderContext.drawImage(bitmap, -imageWidth / 2, -imageHeight / 2, imageWidth, imageHeight); else if (object.imageOperations?.length) { renderContext.translate(-imageWidth / 2, -imageHeight / 2); object.imageOperations.forEach(operation => drawOperation(renderContext, operation, resourceBitmaps)); } else { renderContext.fillStyle = '#f33142'; renderContext.strokeStyle = '#111'; renderContext.lineWidth = 2; renderContext.beginPath(); renderContext.arc(0, 0, Math.min(imageWidth, imageHeight) / 2, 0, Math.PI * 2); renderContext.fill(); renderContext.stroke(); renderContext.fillStyle = '#fff'; renderContext.font = 'bold 16px sans-serif'; renderContext.textAlign = 'center'; renderContext.textBaseline = 'middle'; renderContext.fillText(String(object.type || 'A').slice(0, 1), 0, 0); } renderContext.restore(); }); (snapshot.texts || []).forEach(text => { renderContext.fillStyle = '#fff'; renderContext.font = 'bold 16px sans-serif'; renderContext.strokeStyle = '#000'; renderContext.lineWidth = 3; renderContext.strokeText(String(text.text), Number(text.x) * scale, Number(text.y) * scale); renderContext.fillText(String(text.text), Number(text.x) * scale, Number(text.y) * scale); }); };
+const postStage = (snapshot) => { drawCanvasStage(snapshot); self.postMessage({ kind: 'stage', stage: snapshot }); };
+self.addEventListener('message', ({ data }) => { if (data?.op === 'resources') { globalThis.__bluekPendingResourceSizes = data.sizes || {}; runtimeApi?.bluekSetResourceSizes?.(globalThis.__bluekPendingResourceSizes); loadRenderResources(data.data || {}); } if (data?.op === 'canvas') { renderCanvas = data.canvas; renderContext = renderCanvas?.getContext('2d'); if (renderContext && runtimeApi) { const value = runtimeApi.bluekStage || globalThis.bluekStage; if (typeof value === 'function') drawCanvasStage(JSON.parse(value())); } } });
 self.onmessage = async ({ data }) => {
   if (data?.op === 'resources') return;
   try {
@@ -312,6 +320,8 @@ export class HybridRuntimeClient implements RuntimeClient {
   private browserWorkerDead = false;
   private browserReady = false;
   private browserResourceSizes: Record<string, { width: number; height: number; alpha?: number[] }> = {};
+  private browserResourceData: Record<string, string> = {};
+  private browserCanvasAttached = false;
   private inputBarrier: Promise<void> = Promise.resolve();
   private inputWaiting = false;
   private pendingInput: string | null = null;
@@ -351,6 +361,7 @@ export class HybridRuntimeClient implements RuntimeClient {
     this.inputBuffer = null;
     this.inputWaiting = false;
     this.pendingInput = null;
+    this.browserCanvasAttached = false;
     const runtimeError = (event: ErrorEvent) => {
       if (this.worker !== worker) return;
       this.browserWorkerDead = true;
@@ -362,13 +373,13 @@ export class HybridRuntimeClient implements RuntimeClient {
     this.ready = new Promise((resolve, reject) => {
       const listener = (event: MessageEvent) => {
         if (event.data?.kind === 'input-buffer') this.inputBuffer = event.data.buffer;
-        if (event.data?.kind === 'ready') { this.browserReady = true; worker.postMessage({ op: 'resources', sizes: this.browserResourceSizes }); worker.removeEventListener('message', listener); worker.removeEventListener('error', errorListener); resolve(); }
+        if (event.data?.kind === 'ready') { this.browserReady = true; worker.postMessage({ op: 'resources', sizes: this.browserResourceSizes, data: this.browserResourceData }); worker.removeEventListener('message', listener); worker.removeEventListener('error', errorListener); resolve(); }
         if (event.data?.kind === 'error') { worker.removeEventListener('message', listener); worker.removeEventListener('error', errorListener); reject(new Error(event.data.message)); }
       };
       const errorListener = (event: ErrorEvent) => { worker.removeEventListener('message', listener); const detail = event.error?.stack || event.error?.message || event.message || 'unknown worker error'; reject(new Error(`Browser Kotlin/JS worker failed to load: ${detail}`)); };
       worker.addEventListener('message', listener);
       worker.addEventListener('error', errorListener);
-      worker.postMessage({ op: 'resources', sizes: this.browserResourceSizes });
+      worker.postMessage({ op: 'resources', sizes: this.browserResourceSizes, data: this.browserResourceData });
       worker.postMessage({ op: 'load', url: this.browserModuleUrl, packageName: this.browserPackageName });
     });
   }
@@ -1000,6 +1011,8 @@ export class HybridRuntimeClient implements RuntimeClient {
     }
     this.classes = result.classes; this.localObjects.clear(); this.localValues.clear(); this.localValueMutability.clear(); this.localValueTypes.clear(); this.bindings.clear(); this.codepadModules.clear(); this.latestStage = null;
     this.browserResourceSizes = Object.fromEntries(Object.entries(resourceSizes).map(([key, size]) => [key, { ...size, alpha: resourceAlphaMasks[key] }]));
+    this.browserResourceData = Object.fromEntries(resources.filter(resource => resource.path.startsWith('images/')).map(resource => [resource.path, resource.data]));
+    this.browserCanvasAttached = false;
     if (result.browserRuntime) {
       this.browserGeneration = result.generationId;
       this.browserModuleUrl = new URL(`/api/session/${this.http.sessionId}/browser/${result.browserRuntime.entry}`, window.location.origin).href;
@@ -1039,6 +1052,17 @@ export class HybridRuntimeClient implements RuntimeClient {
     const ready = this.ready;
     if (!ready) throw new Error('Browser runtime did not start after reset.');
     await ready;
+  }
+  attachCanvas(canvas: HTMLCanvasElement): boolean {
+    if (!this.worker || !this.ready || this.browserCanvasAttached || typeof canvas.transferControlToOffscreen !== 'function') return false;
+    const worker = this.worker;
+    const offscreen = canvas.transferControlToOffscreen();
+    this.browserCanvasAttached = true;
+    void this.ready.then(() => {
+      if (this.worker !== worker || this.browserWorkerDead) return;
+      worker.postMessage({ op: 'canvas', canvas: offscreen }, [offscreen]);
+    });
+    return true;
   }
   private postBrowserInput(message: { op: 'key'; key: string; pressed: boolean } | { op: 'click'; x: number; y: number }): Promise<void> {
     if (!this.worker || !this.ready) return Promise.reject(new Error('Browser runtime is not available.'));

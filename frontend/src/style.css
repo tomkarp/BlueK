@@ -107,6 +107,9 @@ footer{flex:0 0 108px}
 .codepad-history{height:auto!important;flex:1 1 auto;min-height:0;overflow:auto}
 .codepad textarea{flex:0 0 38px;height:38px!important;min-height:38px;max-height:38px}
 
+.game-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none}
+.game-stage.canvas-rendering .game-actor,.game-stage.canvas-rendering .game-text{display:none}
+
 /* The separator belongs between the two main panes, so both panes resize together. */
 .workspace{display:grid;grid-template-rows:minmax(180px,var(--upper-pane,2fr)) 21px minmax(170px,1fr) 108px}
 .workspace>.panels{grid-row:1;min-height:0;display:flex;flex:initial}
