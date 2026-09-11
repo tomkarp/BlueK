@@ -195,7 +195,7 @@ self.onmessage = async ({ data }) => {
     if (data.op === 'speed') { const speed = runtimeApi?.bluekSetSpeed || resolve('bluekSetSpeed'); if (typeof speed === 'function') speed(data.value); stage(); finish(); return; }
     if (data.op === 'key') { const key = runtimeApi?.bluekKey || resolve('bluekKey'); if (typeof key === 'function') key(data.key, data.pressed); self.postMessage({ kind: 'input-ack' }); return; }
     if (data.op === 'click') { const click = runtimeApi?.bluekClick || resolve('bluekClick'); if (typeof click === 'function') click(data.x, data.y); self.postMessage({ kind: 'input-ack' }); return; }
-    if (data.op === 'create') { const fn = api[data.functionName] || resolve(data.functionName); if (typeof fn !== 'function') throw new Error('Generated constructor bridge is missing: ' + data.functionName); const object = fn(...resolveArguments(data.args)); const objectId = crypto.randomUUID(); objects.set(objectId, object); displayValues.set(objectId, data.className + '()'); flushStudentOutput(); const output = takeOutput(); self.postMessage({ kind: 'value', value: { kind: 'object', display: data.className + '()', objectId }, objectId, name: data.name, output }); return; }
+    if (data.op === 'create') { const fn = api[data.functionName] || resolve(data.functionName) || runtimeApi?.[data.className] || globalThis[data.className]; if (typeof fn !== 'function') throw new Error('Generated constructor bridge is missing: ' + data.functionName); const args = resolveArguments(data.args); const object = ['Actor', 'World', 'Image'].includes(String(data.className)) && (runtimeApi?.[data.className] === fn || globalThis[data.className] === fn) ? new fn(...args) : fn(...args); const objectId = crypto.randomUUID(); objects.set(objectId, object); displayValues.set(objectId, data.className + '()'); flushStudentOutput(); const output = takeOutput(); self.postMessage({ kind: 'value', value: { kind: 'object', display: data.className + '()', objectId }, objectId, name: data.name, output }); return; }
     if (data.op === 'invoke') { const receiver = data.objectId ? objects.get(data.objectId) : null; if (data.objectId && !receiver) throw new Error('Object handle is no longer available.'); const directName = String(data.methodName || '').replace(/<.*>$/, ''); const genericBridge = data.typeName && ({ getIntersecting: runtimeApi?.bluekActorGetIntersecting || resolve('bluekActorGetIntersecting'), getOneIntersecting: runtimeApi?.bluekActorGetOneIntersecting || resolve('bluekActorGetOneIntersecting'), isTouching: runtimeApi?.bluekActorIsTouching || resolve('bluekActorIsTouching'), removeTouching: runtimeApi?.bluekActorRemoveTouching || resolve('bluekActorRemoveTouching'), getObjects: runtimeApi?.bluekWorldAllObjects || resolve('bluekWorldAllObjects') }[directName]); const bridge = genericBridge || api[data.functionName] || resolve(data.functionName); const fn = typeof bridge === 'function' ? bridge : receiver && directName && typeof receiver[directName] === 'function' ? (target, ...args) => target[directName](...args) : null; if (typeof fn !== 'function') throw new Error('Generated method bridge is missing: ' + data.functionName); const resolvedArgs = resolveArguments(data.args); const value = valueOf(receiver ? fn(receiver, ...(genericBridge ? [data.typeName, ...resolvedArgs] : resolvedArgs)) : fn(...resolvedArgs), data.className); flushStudentOutput(); const output = takeOutput(); self.postMessage({ kind: 'value', value, output }); return; }
     if (data.op === 'get') { const object = objects.get(data.objectId); if (!object) throw new Error('Object handle is no longer available.'); const classKey = String(data.className || '').replace(/[^A-Za-z0-9_]/g, '_'); const stem = String(data.property).charAt(0).toUpperCase() + String(data.property).slice(1); const getter = api['bluekInvoke_' + classKey + '_get' + stem + '_noargs']; const value = typeof getter === 'function' ? getter(object) : object[data.property]; const output = takeOutput(); self.postMessage({ kind: 'value', value: valueOf(value), output }); return; }
     if (data.op === 'set') { const object = objects.get(data.objectId); if (!object) throw new Error('Object handle is no longer available.'); const classKey = String(data.className || '').replace(/[^A-Za-z0-9_]/g, '_'); const stem = String(data.property).charAt(0).toUpperCase() + String(data.property).slice(1); const setterKey = Object.keys(api).find((key) => key.startsWith('bluekInvoke_' + classKey + '_set' + stem + '_')); const setter = setterKey ? api[setterKey] : null; const value = resolveArguments([data.value])[0]; if (typeof setter === 'function') setter(object, value); else object[data.property] = value; finish(); return; }
@@ -417,7 +417,20 @@ export class HybridRuntimeClient implements RuntimeClient {
       if (propertyAssignment) {
         const objectId = this.bindings.get(propertyAssignment.receiver);
         if (objectId && this.localObjects.has(String(objectId))) {
-          const value = parseKotlinArgument(propertyAssignment.value, this.bindings, this.localValues);
+          let value: unknown;
+          try {
+            value = parseKotlinArgument(propertyAssignment.value, this.bindings, this.localValues);
+          } catch {
+            const evaluated = await this.execute({ op: 'eval', code: propertyAssignment.value, mode: 'expression' });
+            if (evaluated.objectId) {
+              this.localObjects.set(String(evaluated.objectId), String(evaluated.display || 'Object').replace(/\(\)$/, ''));
+              value = { __bluekObjectId: evaluated.objectId };
+            } else {
+              const scalar = displayedSimpleValue(evaluated);
+              if (scalar === undefined) throw new Error(`The right-hand side of ${propertyAssignment.property} could not be evaluated.`);
+              value = scalar;
+            }
+          }
           return (await this.local({ op: 'set', objectId: String(objectId), property: propertyAssignment.property, className: String(this.localObjects.get(String(objectId))), value })).value;
         }
       }

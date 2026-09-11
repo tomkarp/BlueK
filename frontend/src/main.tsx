@@ -123,7 +123,7 @@ useEffect(() => { if (!generation || !client) return; let active = true; const t
   useEffect(() => { const output = consoleOutput.current; if (output) output.scrollTop = output.scrollHeight; }, [log]);
   const objectFromResult = (value: any) => ({ objectId: value.objectId, className: value.className || String(value.display || 'Object').replace(/\(\)$/, ''), name: value.name || `object${Date.now()}` });
   const showReturnedObject = (value: any) => { if (value?.objectId) setResultObject(objectFromResult(value)); };
-  const addReturnedObject = (value: any) => { if (!value?.objectId) return; const object = objectFromResult(value); setBench(previous => previous.some(item => item.objectId === object.objectId) ? previous : [...previous, object]); setSelectedObjectId(object.objectId); };
+  const addReturnedObject = (value: any) => { if (value?.kind !== 'object' || !value?.objectId) return; const object = objectFromResult(value); setBench(previous => previous.some(item => item.objectId === object.objectId) ? previous : [...previous, object]); setSelectedObjectId(object.objectId); };
   const getResultObject = () => { if (!resultObject) return; addReturnedObject(resultObject); setResultObject(null); };
   const discardResultObject = (objectId: string) => { if (client && generation) action({ op: 'remove', objectId }).catch(() => undefined); };
   const closeInspection = () => { if (resultInspectionId) discardResultObject(resultInspectionId); setResultInspectionId(''); setInspect(null); };

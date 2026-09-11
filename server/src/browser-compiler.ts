@@ -210,6 +210,12 @@ export async function compileBrowserSnippet(root: string, sessionDir: string, so
     await fs.rm(path.join(buildDir, 'src'), { recursive: true, force: true });
     await fs.mkdir(projectDir, { recursive: true });
     await fs.mkdir(bridgeDir, { recursive: true });
+    // Codepad modules live in the same browser generation as the project.
+    // They must see the fixed BluePlay declarations as well; otherwise a
+    // perfectly valid expression such as `World(10, 10, 1)` is compiled
+    // without a constructor symbol and fails only when the user evaluates it.
+    const apiSource = await fs.readFile(path.join(root, 'browser-runtime-js', 'BluePlayApi.kt'), 'utf8');
+    await fs.writeFile(path.join(projectDir, 'BlueKApi.kt'), apiSource);
     await fs.writeFile(path.join(projectDir, 'BlueKInput.kt'), 'external fun __bluekReadln(): String\nexternal fun __bluekReadlnOrNull(): String?\nexternal fun __bluekPrint(value: Any?, newline: Boolean)\nfun readln(): String = __bluekReadln()\nfun readlnOrNull(): String? = __bluekReadlnOrNull()\nfun readLine(): String? = __bluekReadlnOrNull()\nfun print(value: Any?) = __bluekPrint(value, false)\nfun println(value: Any?) = __bluekPrint(value, true)\n');
     const declaredBindings = bindings.filter(name => /^[A-Za-z_]\w*$/.test(name) && !new RegExp(`\\b(?:val|var|fun|class|object)\\s+${name}\\b`).test(source));
     const bindingDeclarations = declaredBindings.map(name => `external val ${name}: dynamic`).join('\n');
