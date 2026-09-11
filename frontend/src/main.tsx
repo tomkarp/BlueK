@@ -168,7 +168,40 @@ const compile = async () => { runtimeEpoch.current += 1; if (!client || compilin
 
   const beginStageDrag = (event: React.PointerEvent<HTMLDivElement>) => { if ((event.target as HTMLElement).closest('button')) return; const stageElement = document.querySelector('.game-stage'); if (!stageElement) return; const chrome = event.currentTarget; const bounds = stageElement.getBoundingClientRect(); const startX = event.clientX, startY = event.clientY, left = bounds.left, top = bounds.top, pointerId = event.pointerId; const setFromPoint = (clientX: number, clientY: number) => setStagePosition({ left: Math.max(8, left + clientX - startX), top: Math.max(8, top + clientY - startY) }); const move = (next: PointerEvent) => { if (next.pointerId === pointerId) setFromPoint(next.clientX, next.clientY); }; const mouseMove = (next: MouseEvent) => setFromPoint(next.clientX, next.clientY); const stop = (next?: Event) => { if (next && 'pointerId' in next && (next as PointerEvent).pointerId !== pointerId) return; window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', stop); window.removeEventListener('pointercancel', stop); window.removeEventListener('mousemove', mouseMove); window.removeEventListener('mouseup', stop); if (chrome.hasPointerCapture?.(pointerId)) chrome.releasePointerCapture(pointerId); }; try { chrome.setPointerCapture(pointerId); } catch { /* Pointer capture is unavailable in a few embedded browsers. */ } window.addEventListener('pointermove', move); window.addEventListener('pointerup', stop); window.addEventListener('pointercancel', stop); window.addEventListener('mousemove', mouseMove); window.addEventListener('mouseup', stop); event.preventDefault(); };
   const beginTerminalDrag = (event: React.PointerEvent<HTMLDivElement>) => { if ((event.target as HTMLElement).closest('button') || terminalMaximized) return; const terminal = event.currentTarget.closest('.terminal-window') as HTMLElement | null; if (!terminal) return; const bounds = terminal.getBoundingClientRect(); const startX = event.clientX, startY = event.clientY, left = bounds.left, top = bounds.top, pointerId = event.pointerId; const setFromPoint = (clientX: number, clientY: number) => setTerminalPosition({ left: Math.max(8, left + clientX - startX), top: Math.max(8, top + clientY - startY) }); const move = (next: PointerEvent) => { if (next.pointerId === pointerId) setFromPoint(next.clientX, next.clientY); }; const mouseMove = (next: MouseEvent) => setFromPoint(next.clientX, next.clientY); const stop = (next?: Event) => { if (next && 'pointerId' in next && (next as PointerEvent).pointerId !== pointerId) return; window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', stop); window.removeEventListener('pointercancel', stop); window.removeEventListener('mousemove', mouseMove); window.removeEventListener('mouseup', stop); if (event.currentTarget.hasPointerCapture?.(pointerId)) event.currentTarget.releasePointerCapture(pointerId); }; try { event.currentTarget.setPointerCapture(pointerId); } catch { /* Pointer capture is unavailable in a few embedded browsers. */ } window.addEventListener('pointermove', move); window.addEventListener('pointerup', stop); window.addEventListener('pointercancel', stop); window.addEventListener('mousemove', mouseMove); window.addEventListener('mouseup', stop); event.preventDefault(); };
-  const beginPaneResize = (event: React.PointerEvent<HTMLDivElement>) => { const splitter = event.currentTarget; const workspace = splitter.parentElement; if (!workspace) return; const bounds = workspace.getBoundingClientRect(); const pointerId = event.pointerId; const setFromY = (clientY: number) => { const available = Math.max(350, bounds.height - 17 - 108); const height = Math.max(180, Math.min(available - 170, clientY - bounds.top)); setPaneHeight(height); setPaneSplit((height / Math.max(available, 1)) * 100); }; const move = (next: PointerEvent) => { if (next.pointerId !== pointerId) return; setFromY(next.clientY); }; const mouseMove = (next: MouseEvent) => setFromY(next.clientY); const stop = (next?: Event) => { if (next && 'pointerId' in next && (next as PointerEvent).pointerId !== pointerId) return; window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', stop); window.removeEventListener('pointercancel', stop); window.removeEventListener('mousemove', mouseMove); window.removeEventListener('mouseup', stop); if (splitter.hasPointerCapture?.(pointerId)) splitter.releasePointerCapture(pointerId); }; try { splitter.setPointerCapture(pointerId); } catch { /* Pointer capture is unavailable in a few embedded browsers. */ } window.addEventListener('pointermove', move); window.addEventListener('pointerup', stop); window.addEventListener('pointercancel', stop); window.addEventListener('mousemove', mouseMove); window.addEventListener('mouseup', stop); setFromY(event.clientY); event.preventDefault(); };
+  const beginPaneResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    const splitter = event.currentTarget;
+    const workspace = splitter.parentElement;
+    if (!workspace) return;
+    const bounds = workspace.getBoundingClientRect();
+    const available = Math.max(350, bounds.height - 17 - 108);
+    const initialY = event.clientY;
+    const initialHeight = paneHeight ?? (available * paneSplit / 100);
+    const setHeight = (clientY: number) => {
+      const height = Math.max(180, Math.min(available - 170, initialHeight + clientY - initialY));
+      setPaneHeight(height);
+      setPaneSplit((height / Math.max(available, 1)) * 100);
+    };
+    const stop = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', stop);
+      window.removeEventListener('pointercancel', stop);
+      window.removeEventListener('mousemove', mouseMove);
+      window.removeEventListener('mouseup', stop);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    const move = (next: PointerEvent) => setHeight(next.clientY);
+    const mouseMove = (next: MouseEvent) => setHeight(next.clientY);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', stop, { once: false });
+    window.addEventListener('pointercancel', stop);
+    window.addEventListener('mousemove', mouseMove);
+    window.addEventListener('mouseup', stop);
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+    setHeight(event.clientY);
+    event.preventDefault();
+  };
 
   return <div className="bluek" onClick={event => { if ((event.target as HTMLElement).closest('.game-stage')) sendClick(event as unknown as React.MouseEvent<HTMLDivElement>); setMenu(null); }}>
     {stage && stageWindowOpen && <div className={`stage-window-chrome${stageMaximized ? ' maximized' : ''}`} onPointerDown={beginStageDrag}><span>BluePlay – World</span><div><button onClick={event => { event.stopPropagation(); setStageMaximized(value => !value); }}>{stageMaximized ? '❐' : '□'}</button><button onClick={event => { event.stopPropagation(); setStageWindowOpen(false); setStageMaximized(false); }}>×</button></div></div>}
