@@ -194,6 +194,8 @@ const simpleCollectionCall = (receiver: unknown, callable: string, args: unknown
     case 'contains': return collection.some(value => value === args[0]);
     case 'add': if (!Array.isArray(receiver)) return undefined; receiver.push(args[0]); return SIMPLE_UNIT;
     case 'remove': { if (!Array.isArray(receiver)) return undefined; const index = receiver.findIndex(value => value === args[0]); if (index < 0) return false; receiver.splice(index, 1); return true; }
+    case 'removeAt': { if (!Array.isArray(receiver)) return undefined; const index = Number(args[0]); if (!Number.isInteger(index) || index < 0 || index >= receiver.length) throw new Error('Index is out of bounds.'); return receiver.splice(index, 1)[0]; }
+    case 'set': { if (!Array.isArray(receiver)) return undefined; const index = Number(args[0]); if (!Number.isInteger(index) || index < 0 || index >= receiver.length) throw new Error('Index is out of bounds.'); const previous = receiver[index]; receiver[index] = args[1]; return previous; }
     case 'clear': if (!Array.isArray(receiver)) return undefined; receiver.splice(0, receiver.length); return SIMPLE_UNIT;
     case 'get': return collection[Number(args[0])];
     case 'sorted': return [...collection].sort((left, right) => Number(left) - Number(right));
@@ -561,6 +563,17 @@ export class HybridRuntimeClient implements RuntimeClient {
         if (declaration) { const value = this.standaloneExpression(declaration.value); this.localValues.set(declaration.name, value); const type = simpleValueType(declaration.value, value, declaration.explicitType); if (type) this.localValueTypes.set(declaration.name, type); return { kind: 'unit', display: 'Unit' }; }
         const assignment = simpleCodepadAssignment(source);
         if (assignment) { this.localValues.set(assignment.name, this.standaloneExpression(assignment.value)); return { kind: 'unit', display: 'Unit' }; }
+        const indexAssignment = source.match(/^([A-Za-z_]\w*)\[\s*(-?\d+)\s*\]\s*=\s*(.+)$/s);
+        if (indexAssignment && this.localValues.has(indexAssignment[1])) {
+          const receiver = this.localValues.get(indexAssignment[1]);
+          if (Array.isArray(receiver)) {
+            const index = Number(indexAssignment[2]);
+            const normalized = index < 0 ? receiver.length + index : index;
+            if (normalized < 0 || normalized >= receiver.length) throw new Error('Index is out of bounds.');
+            receiver[normalized] = simpleCodepadValue(indexAssignment[3], this.bindings, this.localValues);
+            return { kind: 'unit', display: 'Unit' };
+          }
+        }
       }
       const collection = this.simpleCollectionExpression(source);
       if (Array.isArray(collection)) return { kind: 'collection', display: `[${collection.join(', ')}]`, type: simpleCollectionTypeForSource(source, collection) };
@@ -696,6 +709,17 @@ export class HybridRuntimeClient implements RuntimeClient {
             }
           }
           await this.local({ op: 'set', objectId: String(objectId), property: propertyAssignment.property, className: String(this.localObjects.get(String(objectId))), value });
+          return { kind: 'unit', display: 'Unit' };
+        }
+      }
+      const indexAssignment = request.mode === 'block' ? source.match(/^([A-Za-z_]\w*)\[\s*(-?\d+)\s*\]\s*=\s*(.+)$/s) : null;
+      if (indexAssignment && this.localValues.has(indexAssignment[1])) {
+        const receiver = this.localValues.get(indexAssignment[1]);
+        if (Array.isArray(receiver)) {
+          const index = Number(indexAssignment[2]);
+          const normalized = index < 0 ? receiver.length + index : index;
+          if (normalized < 0 || normalized >= receiver.length) throw new Error('Index is out of bounds.');
+          receiver[normalized] = simpleCodepadValue(indexAssignment[3], this.bindings, this.localValues);
           return { kind: 'unit', display: 'Unit' };
         }
       }
