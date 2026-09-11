@@ -178,6 +178,8 @@ const compile = async () => { runtimeEpoch.current += 1; if (!client || compilin
     const initialHeight = paneHeight ?? (available * paneSplit / 100);
     const setHeight = (clientY: number) => {
       const height = Math.max(180, Math.min(available - 170, initialHeight + clientY - initialY));
+      workspace.style.setProperty('--upper-pane', `${height}px`);
+      workspace.style.setProperty('--pane-split', `${(height / Math.max(available, 1)) * 100}%`);
       setPaneHeight(height);
       setPaneSplit((height / Math.max(available, 1)) * 100);
     };
