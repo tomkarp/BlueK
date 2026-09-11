@@ -193,6 +193,14 @@ footer{flex:0 0 108px}
 .lower .bench-codepad-splitter::after{display:none;content:none}
 .lower .bench-codepad-splitter::before{content:"";display:block;position:absolute;left:50%;top:50%;width:9px;height:96px;transform:translate(-50%,-50%);background:linear-gradient(to right,#8d8d8d,#8d8d8d) 0 0/1px 100% no-repeat,linear-gradient(to right,#8d8d8d,#8d8d8d) 4px 0/1px 100% no-repeat,linear-gradient(to right,#8d8d8d,#8d8d8d) 8px 0/1px 100% no-repeat}
 .lower .bench-codepad-splitter:hover::before,.lower .bench-codepad-splitter:focus-visible::before{background:linear-gradient(to right,#666,#666) 0 0/1px 100% no-repeat,linear-gradient(to right,#666,#666) 4px 0/1px 100% no-repeat,linear-gradient(to right,#666,#666) 8px 0/1px 100% no-repeat}
-.lower .codepad-toggle{position:relative;z-index:2;width:40px;height:92px;margin-left:-14px;border:0;border-radius:0 8px 8px 0;background:#bbb;color:#fff;font:bold 29px/88px Arial,sans-serif;padding:0;overflow:visible;cursor:pointer}
+.lower .codepad-toggle{position:relative;z-index:2;width:40px;height:92px;margin-left:-39px;border:0;border-radius:0 8px 8px 0;background:#bbb;color:#fff;font:bold 29px/88px Arial,sans-serif;padding:0;overflow:visible;cursor:pointer}
 .lower .codepad-toggle::before{display:none;content:none}
 .lower .codepad-toggle:hover{background:#aaa;color:#fff}
+
+/* The arrow is the BlueJ-style control; keep the three-line grip behind it
+   visible at the sides and use a straight chevron rather than a typographic
+   single-guillemet glyph. */
+.lower .bench-codepad-splitter::before{width:54px}
+.lower .codepad-toggle{display:flex;align-items:center;justify-content:center;font-size:0;line-height:1}
+.lower .codepad-toggle::after{content:'>';display:block;font:700 30px/1 Arial,sans-serif;color:#fff}
+.lower.codepad-collapsed .codepad-toggle::after{content:'<'}
