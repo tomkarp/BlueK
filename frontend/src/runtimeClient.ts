@@ -4,7 +4,7 @@ type Resource = { path: string; data: string };
 type Action = { op: string; [key: string]: unknown };
 
 export class HttpRuntimeClient implements RuntimeClient {
-  constructor(public readonly sessionId: string, private readonly onFailure: (message: string) => void = () => undefined) {}
+  constructor(public sessionId: string, private readonly onFailure: (message: string) => void = () => undefined) {}
 
   private async request(path: string, init?: RequestInit): Promise<Response> {
     const response = await fetch(`/api/session/${this.sessionId}${path}`, init);
@@ -311,6 +311,13 @@ export class HybridRuntimeClient implements RuntimeClient {
 
   private readonly onFailure: (message: string) => void;
   constructor(sessionId: string, onFailure?: (message: string) => void, onInputRequest: (output?: string) => void = () => undefined) { this.http = new HttpRuntimeClient(sessionId, onFailure); this.onFailure = onFailure || (() => undefined); this.onInputRequest = onInputRequest; }
+  private async recoverSession(): Promise<void> {
+    const response = await fetch('/api/session', { method: 'POST' });
+    if (!response.ok) throw new Error(`Could not create a new BlueK session (${response.status}).`);
+    const value = await response.json() as { sessionId?: string };
+    if (!value.sessionId) throw new Error('The BlueK server returned no session id.');
+    this.http.sessionId = value.sessionId;
+  }
   private attachStageCallbacks(worker: Worker): void {
     for (const callback of this.stageCallbacks.keys()) {
       const listener = (event: MessageEvent) => { if (event.data?.kind === 'stage') { this.latestStage = event.data.stage; callback({ stage: event.data.stage }); } };
@@ -884,7 +891,15 @@ export class HybridRuntimeClient implements RuntimeClient {
     return this.http.execute(request);
   }
   async compile(files: ProjectFile[], revision: number, resources: Resource[] = [], resourceSizes: Record<string, { width: number; height: number }> = {}, resourceAlphaMasks: Record<string, number[]> = {}): Promise<CompileResult> {
-    const result = await this.http.compile(files, revision, resources); this.classes = result.classes; this.localObjects.clear(); this.localValues.clear(); this.localValueTypes.clear(); this.bindings.clear(); this.codepadModules.clear(); this.latestStage = null;
+    let result: CompileResult;
+    try {
+      result = await this.http.compile(files, revision, resources);
+    } catch (error) {
+      if (!(error instanceof Error) || !/failed \(404\)/.test(error.message)) throw error;
+      await this.recoverSession();
+      result = await this.http.compile(files, revision, resources);
+    }
+    this.classes = result.classes; this.localObjects.clear(); this.localValues.clear(); this.localValueTypes.clear(); this.bindings.clear(); this.codepadModules.clear(); this.latestStage = null;
     this.browserResourceSizes = Object.fromEntries(Object.entries(resourceSizes).map(([key, size]) => [key, { ...size, alpha: resourceAlphaMasks[key] }]));
     if (result.browserRuntime) {
       this.browserGeneration = result.generationId;
