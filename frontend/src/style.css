@@ -143,3 +143,10 @@ footer{flex:0 0 108px}
 .reset-runtime{margin-left:auto;width:32px;height:28px;border:0;background:transparent;color:#777;font-size:27px;line-height:24px;cursor:pointer;border-radius:4px}
 .reset-runtime:hover:not(:disabled){background:#d7d7d7;color:#333}
 .reset-runtime:disabled{opacity:.45;cursor:not-allowed}
+
+/* The status strip is not a console pane. Keep it short and place the
+   activity indicator close to the reset control, as in BlueJ. */
+.workspace{grid-template-rows:minmax(180px,var(--upper-pane,2fr)) 21px minmax(170px,1fr) 32px}
+.workspace>footer.status-bar{height:32px;flex:0 0 32px}
+.status-bar .current-element{flex:0 1 auto}
+.status-bar .activity-bar{margin-left:auto;flex:0 0 240px}
