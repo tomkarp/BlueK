@@ -687,7 +687,12 @@ export class HybridRuntimeClient implements RuntimeClient {
       }
       if (request.mode === 'block') {
         const statements = splitCodepadStatements(source);
-        if (statements.length > 1) {
+        // Keep control-flow blocks together. Splitting `var total = 0` and a
+        // following `for` into separate snippets turns `total` into an
+        // external read-only binding in the second snippet, so Kotlin then
+        // (correctly, for that generated declaration) rejects `total += ...`.
+        const hasControlFlow = /\b(?:for|while|do|if|when|try|catch|finally|return|throw)\b/.test(source) || /[{}]/.test(source);
+        if (statements.length > 1 && !hasControlFlow) {
           let result: any = { kind: 'unit', display: 'Unit' };
           const createdObjects: any[] = [];
           for (const statement of statements) {

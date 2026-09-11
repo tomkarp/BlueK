@@ -9,6 +9,51 @@ const frameworkNames = new Set(['Actor', 'World', 'Image', 'BluePlayFunctions'])
 const kotlinIdentifier = (value: string) => value.replace(/[^A-Za-z0-9_]/g, '_');
 const typeName = (displayName: string) => displayName.trim().replace(/\?$/, '').replace(/^in\s+|^out\s+/, '').trim();
 const packageOf = (source: string) => source.match(/^\s*package\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)/m)?.[1] || '';
+const splitTopLevelStatements = (source: string): string[] => {
+    const result: string[] = [];
+    let start = 0;
+    let round = 0;
+    let curly = 0;
+    let square = 0;
+    let quote = '';
+    let escaped = false;
+    for (let index = 0; index < source.length; index += 1) {
+        const char = source[index];
+        if (quote) {
+            if (escaped) escaped = false;
+            else if (char === '\\') escaped = true;
+            else if (char === quote) quote = '';
+            continue;
+        }
+        if (char === '"' || char === "'") { quote = char; continue; }
+        if (char === '(') round += 1;
+        else if (char === ')') round = Math.max(0, round - 1);
+        else if (char === '{') curly += 1;
+        else if (char === '}') curly = Math.max(0, curly - 1);
+        else if (char === '[') square += 1;
+        else if (char === ']') square = Math.max(0, square - 1);
+        else if ((char === '\n' || char === ';') && round === 0 && curly === 0 && square === 0) {
+            const statement = source.slice(start, index).trim();
+            if (statement) result.push(statement);
+            start = index + 1;
+        }
+    }
+    const last = source.slice(start).trim();
+    if (last) result.push(last);
+    return result;
+};
+const codepadFunctionBody = (source: string): string => {
+    const statements = splitTopLevelStatements(source);
+    const last = statements.at(-1)?.trim() || '';
+    if (!last) return 'return Unit';
+    const isStatement = /^(?:val|var|fun|class|object|typealias|import|package|return|throw|break|continue|for|while|do)\b/.test(last)
+        || /(^|[^=!<>])=($|[^=])/.test(last);
+    const isExpressionBlock = /^(?:if|when|try)\b/.test(last);
+    if (isStatement && !isExpressionBlock) return `${source}\nreturn Unit`;
+    const lastStart = source.lastIndexOf(last);
+    const prefix = lastStart >= 0 ? source.slice(0, lastStart).trimEnd() : '';
+    return `${prefix}${prefix ? '\n' : ''}return ${last}`;
+};
 const browserCompatibleSource = (source: string) => source
     .replace(/@JvmSynthetic\b/g, '')
     .replace(/\bThread\.sleep\s*\(/g, 'bluekSleep(')
@@ -243,7 +288,7 @@ export async function compileBrowserSnippet(root: string, sessionDir: string, so
         '',
         '@OptIn(ExperimentalJsExport::class)',
         '@JsExport',
-        `fun bluekEval(): Any? = run {\n${source}\n}`,
+        `fun bluekEval(): Any? {\n${codepadFunctionBody(source).split('\n').map(line => `    ${line}`).join('\n')}\n}`,
         '',
     ].join('\n');
     await fs.writeFile(path.join(bridgeDir, 'BlueKSnippet.kt'), bridge);
