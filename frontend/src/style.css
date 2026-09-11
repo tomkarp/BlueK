@@ -120,3 +120,5 @@ footer{flex:0 0 108px}
 .pane-splitter::before{display:block;content:"";position:absolute;left:50%;top:4px;width:72px;height:12px;transform:translateX(-50%);border:1px solid #888;border-radius:6px;background:#c4c4c4;box-shadow:inset 0 1px #eee}
 .pane-splitter::after{display:block;content:"";position:absolute;left:50%;top:8px;width:38px;height:4px;transform:translateX(-50%);border-top:1px solid #777;border-bottom:1px solid #777}
 .pane-splitter:hover::before,.pane-splitter:active::before{background:#aaa;border-color:#666}
+.terminal-modal{background:transparent;pointer-events:none}
+.terminal-window{pointer-events:auto}
