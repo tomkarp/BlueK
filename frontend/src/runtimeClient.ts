@@ -475,8 +475,22 @@ export class HybridRuntimeClient implements RuntimeClient {
         const assignment = simpleCodepadAssignment(source);
         if (assignment) { this.localValues.set(assignment.name, this.standaloneExpression(assignment.value)); return { kind: 'unit', display: 'Unit' }; }
       }
+      const collection = this.simpleCollectionExpression(source);
+      if (Array.isArray(collection)) return { kind: 'collection', display: `[${collection.join(', ')}]`, type: simpleCollectionType(collection) };
+      const collectionCall = source.match(/^([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s*\((.*)\)$/s);
+      if (collectionCall && this.localValues.has(collectionCall[1])) {
+        const receiver = this.localValues.get(collectionCall[1]);
+        const args = splitSimpleArguments(collectionCall[3]).map(value => simpleCodepadValue(value, this.bindings, this.localValues));
+        const result = simpleCollectionCall(receiver, collectionCall[2], args);
+        if (result !== undefined) {
+          if (result === SIMPLE_UNIT) return { kind: 'unit', display: 'Unit' };
+          return Array.isArray(result)
+            ? { kind: 'collection', display: `[${result.join(', ')}]`, type: simpleCollectionType(result) }
+            : { kind: 'scalar', display: String(result) };
+        }
+      }
       const value = this.standaloneExpression(source);
-      return value === null ? { kind: 'null', display: 'null' } : { kind: 'scalar', display: String(value) };
+      return Array.isArray(value) ? { kind: 'collection', display: `[${value.join(', ')}]`, type: simpleCollectionType(value) } : value === null ? { kind: 'null', display: 'null' } : { kind: 'scalar', display: String(value) };
     }
     if (this.worker && this.ready && request.op === 'main') { const result = await this.local({ op: 'main' }); return { ...result.value, output: result.output }; }
     if (this.worker && this.ready && request.op === 'eval') {
@@ -486,6 +500,18 @@ export class HybridRuntimeClient implements RuntimeClient {
       if (request.mode === 'expression') {
         const collection = this.simpleCollectionExpression(String(request.code || '').trim().replace(/;$/, ''));
         if (Array.isArray(collection)) return { kind: 'collection', display: `[${collection.join(', ')}]`, type: simpleCollectionType(collection) };
+        const collectionCall = String(request.code || '').trim().replace(/;$/, '').match(/^([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s*\((.*)\)$/s);
+        if (collectionCall && this.localValues.has(collectionCall[1])) {
+          const receiver = this.localValues.get(collectionCall[1]);
+          const args = splitSimpleArguments(collectionCall[3]).map(value => simpleCodepadValue(value, this.bindings, this.localValues));
+          const result = simpleCollectionCall(receiver, collectionCall[2], args);
+          if (result !== undefined) {
+            if (result === SIMPLE_UNIT) return { kind: 'unit', display: 'Unit' };
+            return Array.isArray(result)
+              ? { kind: 'collection', display: `[${result.join(', ')}]`, type: simpleCollectionType(result) }
+              : { kind: 'scalar', display: String(result) };
+          }
+        }
       }
     }
     if (this.worker && this.ready && request.op === 'create') {
@@ -586,6 +612,13 @@ export class HybridRuntimeClient implements RuntimeClient {
           const objectId = this.bindings.get(declaration.value);
           this.bindings.set(declaration.name, objectId);
           this.localValues.delete(declaration.name);
+          return { kind: 'unit', display: 'Unit' };
+        }
+        const collectionExpression = this.simpleCollectionExpression(declaration.value);
+        if (Array.isArray(collectionExpression)) {
+          this.localValues.set(declaration.name, collectionExpression);
+          const type = simpleValueType(declaration.value, collectionExpression, declaration.explicitType);
+          if (type) this.localValueTypes.set(declaration.name, type);
           return { kind: 'unit', display: 'Unit' };
         }
         try {
