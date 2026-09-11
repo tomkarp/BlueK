@@ -186,21 +186,44 @@ footer{flex:0 0 108px}
    while the codepad arrow remains an independent control. */
 .lower{padding-top:0}
 .pane-splitter{background:transparent;border:0}
-.pane-splitter::before{content:"";display:block;position:absolute;left:50%;top:50%;width:96px;height:9px;transform:translate(-50%,-50%);border:0;border-radius:0;background:linear-gradient(#8d8d8d,#8d8d8d) 0 0/100% 1px no-repeat,linear-gradient(#8d8d8d,#8d8d8d) 0 4px/100% 1px no-repeat,linear-gradient(#8d8d8d,#8d8d8d) 0 8px/100% 1px no-repeat}
+.pane-splitter::before{content:"";display:block;position:absolute;left:50%;top:50%;width:96px;height:9px;transform:translate(-50%,-50%);border:0;border-radius:0;box-shadow:none;background:linear-gradient(#8d8d8d,#8d8d8d) 0 0/100% 1px no-repeat,linear-gradient(#8d8d8d,#8d8d8d) 0 4px/100% 1px no-repeat,linear-gradient(#8d8d8d,#8d8d8d) 0 8px/100% 1px no-repeat}
 .pane-splitter::after{display:none;content:none}
-.pane-splitter:hover::before,.pane-splitter:focus-visible::before,.pane-splitter:active::before{background:linear-gradient(#666,#666) 0 0/100% 1px no-repeat,linear-gradient(#666,#666) 0 4px/100% 1px no-repeat,linear-gradient(#666,#666) 0 8px/100% 1px no-repeat}
+.pane-splitter:hover,.pane-splitter:focus-visible,.pane-splitter:active{background:transparent}
+.pane-splitter:hover::before,.pane-splitter:focus-visible::before,.pane-splitter:active::before{background:linear-gradient(#8d8d8d,#8d8d8d) 0 0/100% 1px no-repeat,linear-gradient(#8d8d8d,#8d8d8d) 0 4px/100% 1px no-repeat,linear-gradient(#8d8d8d,#8d8d8d) 0 8px/100% 1px no-repeat}
 .lower .bench-codepad-splitter{width:14px}
 .lower .bench-codepad-splitter::after{display:none;content:none}
 .lower .bench-codepad-splitter::before{content:"";display:block;position:absolute;left:50%;top:50%;width:9px;height:96px;transform:translate(-50%,-50%);background:linear-gradient(to right,#8d8d8d,#8d8d8d) 0 0/1px 100% no-repeat,linear-gradient(to right,#8d8d8d,#8d8d8d) 4px 0/1px 100% no-repeat,linear-gradient(to right,#8d8d8d,#8d8d8d) 8px 0/1px 100% no-repeat}
-.lower .bench-codepad-splitter:hover::before,.lower .bench-codepad-splitter:focus-visible::before{background:linear-gradient(to right,#666,#666) 0 0/1px 100% no-repeat,linear-gradient(to right,#666,#666) 4px 0/1px 100% no-repeat,linear-gradient(to right,#666,#666) 8px 0/1px 100% no-repeat}
-.lower .codepad-toggle{position:relative;z-index:2;width:40px;height:92px;margin-left:-39px;border:0;border-radius:0 8px 8px 0;background:#bbb;color:#fff;font:bold 29px/88px Arial,sans-serif;padding:0;overflow:visible;cursor:pointer}
+.lower .bench-codepad-splitter:hover::before,.lower .bench-codepad-splitter:focus-visible::before{background:linear-gradient(to right,#8d8d8d,#8d8d8d) 0 0/1px 100% no-repeat,linear-gradient(to right,#8d8d8d,#8d8d8d) 4px 0/1px 100% no-repeat,linear-gradient(to right,#8d8d8d,#8d8d8d) 8px 0/1px 100% no-repeat}
+.lower .codepad-toggle{display:none;position:relative;z-index:2;width:40px;height:92px;margin-left:-39px;border:0;border-radius:0 8px 8px 0;background:#bbb;color:#fff;font:bold 29px/88px Arial,sans-serif;padding:0;overflow:visible;cursor:pointer}
 .lower .codepad-toggle::before{display:none;content:none}
 .lower .codepad-toggle:hover{background:#aaa;color:#fff}
 
-/* The arrow is the BlueJ-style control; keep the three-line grip behind it
-   visible at the sides and use a straight chevron rather than a typographic
-   single-guillemet glyph. */
-.lower .bench-codepad-splitter::before{width:54px}
-.lower .codepad-toggle{display:flex;align-items:center;justify-content:center;font-size:0;line-height:1}
-.lower .codepad-toggle::after{content:'>';display:block;font:700 30px/1 Arial,sans-serif;color:#fff}
-.lower.codepad-collapsed .codepad-toggle::after{content:'<'}
+/* The arrow is the BlueJ-style control; keep the three-line grip behind it. */
+.lower .bench-codepad-splitter::before{width:9px}
+.lower{grid-template-columns:minmax(90px,var(--bench-width,60%)) 22px 14px minmax(90px,1fr)}
+.lower .codepad-toggle{display:flex;grid-column:2;align-self:center;justify-self:center;position:relative;left:8px;width:22px;height:46px;margin:0;border:0;border-radius:0;background:transparent;color:transparent;font-size:0;padding:0;cursor:pointer}
+.lower .codepad-toggle::after{content:"";display:block;width:0;height:0;border-top:8px solid transparent;border-bottom:8px solid transparent;border-left:12px solid #aaa}
+.lower .codepad-toggle:hover,.lower .codepad-toggle:focus-visible{background:transparent;color:transparent}
+.lower .codepad-toggle:hover::after,.lower .codepad-toggle:focus-visible::after{border-left-color:#aaa}
+.lower .bench-codepad-splitter{grid-column:3}
+.lower .bench{grid-row:1}
+.lower .bench-codepad-splitter{grid-row:1}
+.lower .codepad-toggle{grid-row:1}
+.lower .codepad{grid-column:4;grid-row:1}
+.lower.codepad-collapsed{grid-template-columns:minmax(90px,1fr) 22px}
+.lower.codepad-collapsed .bench{grid-column:1}
+.lower.codepad-collapsed .codepad-toggle{grid-column:2;position:relative;left:auto;right:auto;top:auto;transform:none}
+.lower.codepad-collapsed .codepad-toggle::after{border-left:0;border-right:12px solid #aaa}
+
+/* Keep the vertical grip narrow; the toggle is an overlaid BlueJ-style
+   control to its left and must not consume a grid column of its own. */
+.lower{grid-template-columns:minmax(90px,var(--bench-width,60%)) 14px minmax(90px,1fr)}
+.lower .bench-codepad-splitter{grid-column:2}
+.lower .codepad-toggle{grid-column:auto;position:absolute;left:calc(var(--bench-width,60%) - 22px);top:50%;transform:translateY(-50%);z-index:2;height:22px;align-items:center;justify-content:center}
+.lower .codepad{grid-column:3}
+.lower.codepad-collapsed{grid-template-columns:minmax(90px,1fr)}
+.lower.codepad-collapsed .codepad-toggle{position:absolute;left:auto;right:8px;top:50%;transform:translateY(-50%);z-index:2}
+
+/* Match the horizontal splitter thickness to the 14px vertical grip. */
+.workspace{grid-template-rows:minmax(90px,var(--upper-pane,2fr)) 14px minmax(90px,1fr) 32px}
+.pane-splitter{height:14px;flex-basis:14px}

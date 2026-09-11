@@ -4,18 +4,16 @@ BlueK ist eine browserbasierte Kotlin-Lernumgebung nach dem Objektbank-Prinzip v
 
 ## Start
 
-Voraussetzungen: Node 22, Java 21 und Kotlin/JVM 2.2.21. Die JVM-Modul-Toolchain ist über den mitgelieferten Gradle-Wrapper auf Gradle 8.14.1 festgelegt; die npm-Abhängigkeiten sind ebenfalls versionsgenau gepinnt.
+Voraussetzungen: Node 22 und Java 21 für die serverseitige Kotlin/JS-Kompilierung. Der mitgelieferte Gradle-Wrapper pinnt die Kotlin-/Browser-Toolchain; die npm-Abhängigkeiten sind ebenfalls versionsgenau gepinnt.
 
 ```sh
 npm install
 npm start
 ```
 
-`npm start` baut Compileradapter und Frontend vor jedem Start reproduzierbar neu, startet den Server im Vordergrund und kann mit `Ctrl+C` beendet werden. Danach `http://localhost:5173` öffnen. Der vollständige Legacy-Regressionslauf ist separat mit `npm run smoke` möglich; der normale Browserbetrieb startet keinen JVM-Ausführungsworker.
+`npm start` baut Compileradapter und Frontend vor jedem Start reproduzierbar neu, startet den Server im Vordergrund und kann mit `Ctrl+C` beendet werden. Danach `http://localhost:5173` öffnen. Der Server kompiliert Kotlin/JS-Module; ausführbarer Schülercode läuft ausschließlich im Browser-Worker.
 
-Der Wrapper-Build des JVM-Moduls lässt sich unabhängig prüfen: `cd jvm && ./gradlew build`.
-
-Browser-Ausführungen laufen in einem eigenen Worker. Bei `Stop` wird dieser Worker beendet; nach einem erneuten `Compile` entsteht eine neue Generation. Für den ausdrücklich markierten JVM-Regressionslauf kann `BLUEK_LEGACY_RUNTIME=1` gesetzt werden.
+Browser-Ausführungen laufen in einem eigenen Worker. Bei `Stop` wird dieser Worker beendet; nach einem erneuten `Compile` entsteht eine neue Generation. Es gibt keinen JVM-Ausführungsfallback.
 
 Projekt- und Medienimporte werden als eine Compile-Anfrage übertragen (maximal 32 MB JSON). Beim erneuten Compile werden nicht mehr importierte Medien aus der temporären Session entfernt.
 
@@ -48,7 +46,7 @@ Enthält ein Projekt eine `BluePlayFunctions.kt`, kompiliert der lokale Adapter 
 - `frontend`: React/TypeScript/Vite, ausschließlich gegen serialisierbare Daten; `HttpRuntimeClient` kapselt den aktuellen HTTP-Transport und implementiert den austauschbaren Runtime-Vertrag.
 - `runtime-contract`: RuntimeClient- und Werttypen.
 - `server`: Sitzungen, temporäre Projektverzeichnisse, Kotlin-Kompilierung, request-id-basierte Worker-Antwortverteilung und Generationenprüfung.
-- `jvm`: Kotlin/JVM-Compileradapter und ausdrücklich markierter Legacy-Regressionsworker; wird im normalen Browserbetrieb nicht zur Ausführung verwendet.
+- `jvm`: Gradle-Wrapper für die Kotlin/JS-Kompilierung; enthält keinen BlueK-Ausführungsworker.
 - `examples`: editierbare Startprojekte. BlueK lädt standardmäßig das kleine BluePlay-Projekt aus `examples/blueplay`; das ursprüngliche Counter/Person-Beispiel bleibt über `/api/examples/basic` verfügbar. Das vollständige KrokoAlarm-Beispiel aus dem BlueJ-Projekt ist über `/api/examples/krokoalarm` als Browser-Testprobe verfügbar.
 
 Benutzercode läuft nie im HTTP-Prozess. Die normale Ausführung läuft im Browser-Worker. Ein Browser-Worker ist jedoch keine Sandbox für untrusted Code; öffentliche oder nicht vertrauenswürdige Ausführung benötigt zusätzliche Browser-/Server-Sicherheitsmaßnahmen und Ressourcenlimits.

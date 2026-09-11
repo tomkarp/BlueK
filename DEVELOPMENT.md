@@ -8,7 +8,7 @@ Diese Datei dient als kurze Übergabenotiz für die Weiterarbeit an BlueK.
 - BlueK ist eine BlueJ-nahe Kotlin-Lernumgebung im Browser.
 - Im normalen Betrieb werden Schülerprogramme lokal im Browser-Worker ausgeführt.
 - Der Server übernimmt Kompilierung, Codeanalyse und die Auslieferung der kompilierten Module.
-- Die JVM-Ausführung ist nur noch für ausdrücklich markierte Legacy-Regressionsläufe vorgesehen.
+- Es gibt keine JVM-Ausführung mehr. Schülercode läuft ausschließlich im Browser-Worker.
 - BluePlay-Projekte und gewöhnliche Kotlin-OOP-Projekte gehören zum selben Projektmodell.
 - BluePlay stellt browserfähige Laufzeitklassen und eine lokale Darstellung der Welt bereit; Schülerklassen bleiben gewöhnlicher Kotlin-Code.
 
@@ -28,7 +28,7 @@ npm run browser-smoke
 npx vite build --config frontend/vite.config.ts
 ```
 
-`npm run smoke` ist der JVM-Referenz- bzw. Legacy-Regressionslauf und nicht der normale Browserbetrieb. Bei parallelen lokalen Instanzen kann beispielsweise `BLUEK_PORT=5175 npm start` verwendet werden.
+`npm run browser-smoke` prüft die Browser-Runtime. Bei parallelen lokalen Instanzen kann beispielsweise `BLUEK_PORT=5175 npm start` verwendet werden.
 
 ## Bereits vorhandene Funktionen
 
@@ -49,7 +49,7 @@ npx vite build --config frontend/vite.config.ts
 - Nicht jedes reale Schülerprojekt und nicht jede BluePlay-Variante ist vollständig im Browser geprüft.
 - Die Metadatenanalyse ist keine vollständige Kotlin-PSI- oder `kotlin-reflect`-Analyse; komplexe Konstrukte können deshalb in Kontextmenüs fehlen.
 - Vollständige Kotlin-Compilerdiagnosen und Codepad-Fallbacks bleiben der maßgebliche Weg für nicht vorbereitete Ausdrücke.
-- Der vollständige JVM-Smoke-Test wurde zuletzt nicht in jedem Lauf bis zum abschließenden Erfolgssignal durchgeführt; Testserver und Ports müssen bei erneuten Läufen sauber beendet werden.
+- Die Browser-Runtime ist der einzige Ausführungspfad; weitere End-to-End-Prüfungen im eingebauten Browser bleiben sinnvoll.
 - Weitere visuelle Prüfungen im eingebauten Browser sind insbesondere für große BluePlay-Projekte, schnelle Eingaben und verschiedene Fenstergrößen sinnvoll.
 
 ## Arbeitsweise für den nächsten Chat
