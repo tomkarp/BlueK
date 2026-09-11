@@ -89,7 +89,7 @@ footer{flex:0 0 108px}
 /* Opening the separate world window must not reflow the BlueJ workbench.
    Cards keep their coordinates whether or not a world is currently shown. */
 .canvas:has(.game-stage) .cards{width:auto;display:block;margin:0;min-height:100%}
-.canvas:has(.game-stage) .classcard{position:absolute;left:var(--card-left)!important;top:var(--card-top)!important;width:210px;height:112px}
+.canvas:has(.game-stage) .classcard{position:absolute;left:var(--card-left)!important;top:var(--card-top)!important;width:210px;height:124px}
 
 /* Final pane polish: the splitter is a real, forgiving drag target and the
    codepad input keeps its own space even when the lower pane is short. */
