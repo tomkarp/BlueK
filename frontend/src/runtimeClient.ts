@@ -135,6 +135,23 @@ const simpleCodepadValue = (source: string, bindings: Map<string, unknown>, valu
   if (builtin !== undefined) return builtin;
   return parseKotlinArgument(source, bindings, values);
 };
+const simpleCollectionCall = (receiver: unknown, callable: string, args: unknown[]): unknown => {
+  if (!Array.isArray(receiver)) return undefined;
+  switch (callable) {
+    case 'sum': return receiver.reduce((sum, value) => sum + Number(value), 0);
+    case 'average': return receiver.length ? receiver.reduce((sum, value) => sum + Number(value), 0) / receiver.length : NaN;
+    case 'count': return receiver.length;
+    case 'first': if (receiver.length) return receiver[0]; throw new Error('Collection is empty.');
+    case 'last': if (receiver.length) return receiver[receiver.length - 1]; throw new Error('Collection is empty.');
+    case 'contains': return receiver.some(value => value === args[0]);
+    case 'joinToString': {
+      const separator = args[0] === undefined ? ', ' : String(args[0]);
+      return receiver.join(separator);
+    }
+    case 'isEmpty': return receiver.length === 0;
+    default: return undefined;
+  }
+};
 const displayedSimpleValue = (value: any): unknown => { if (!value || value.kind === 'unit') return undefined; if (value.kind === 'null') return null; if (value.kind === 'scalar') { if (value.display === 'true') return true; if (value.display === 'false') return false; if (/^-?\d+(?:\.\d+)?$/.test(value.display)) return Number(value.display); return value.display; } return value.display; };
 
 export const browserWorkerSource = `
@@ -573,6 +590,15 @@ export class HybridRuntimeClient implements RuntimeClient {
                 if (parsed.binding) this.localValues.set(parsed.binding, transformed);
                 return { kind: 'scalar', display: transformed, name: parsed.binding };
               }
+            }
+          }
+          if (!objectId && this.localValues.has(parsed.receiver)) {
+            const receiver = this.localValues.get(parsed.receiver);
+            const args = parsed.args.map(value => simpleCodepadValue(value, this.bindings, this.localValues));
+            const collectionValue = simpleCollectionCall(receiver, parsed.callable, args);
+            if (collectionValue !== undefined) {
+              if (parsed.binding) this.localValues.set(parsed.binding, collectionValue);
+              return { kind: collectionValue === null ? 'null' : typeof collectionValue === 'object' ? 'object' : 'scalar', display: Array.isArray(collectionValue) ? `[${collectionValue.join(', ')}]` : String(collectionValue), name: parsed.binding };
             }
           }
           if (objectId && klass && method && method.typeParameters?.length && parsed.typeArguments.length === 1 && parsed.args.length >= requiredParameters(method.parameters).length) {
