@@ -430,8 +430,8 @@ export class HybridRuntimeClient implements RuntimeClient {
     if (range) {
       const start = Number(range[1]);
       const end = Number(range[2]);
-      const step = start <= end ? 1 : -1;
-      return Array.from({ length: Math.abs(end - start) + 1 }, (_value, index) => start + index * step);
+      if (start > end) return [];
+      return Array.from({ length: end - start + 1 }, (_value, index) => start + index);
     }
     const chainedCollection = source.trim().match(/^([\s\S]+)\.(map|filter)\s*\{([\s\S]*)\}\.([A-Za-z_]\w*)\s*\(([^()]*)\)$/);
     if (chainedCollection) {
