@@ -446,6 +446,11 @@ export class HybridRuntimeClient implements RuntimeClient {
       });
       names.push(name);
       values[name] = { objectId: String(objectId), className, methods, properties };
+      // The snippet compiler must be able to type-check arbitrary expressions
+      // against an existing object without importing the project class again.
+      // `dynamic` is intentional here: the worker supplies the live proxy and
+      // the generated bridge keeps the original object identity intact.
+      types.push({ name, type: 'dynamic' });
     }
     for (const klass of this.classes) {
       if (klass.kind === 'functions') {
@@ -454,16 +459,19 @@ export class HybridRuntimeClient implements RuntimeClient {
           const methodKey = `${method.name.replace(/[^A-Za-z0-9_]/g, '_')}_${requiredParameters(method.parameters || []).map(parameter => parameter.type.classifier.replace(/[^A-Za-z0-9_]/g, '_')).join('_') || 'noargs'}`;
           names.push(method.name);
           values[method.name] = { bridge: `bluekCall_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}_${methodKey}` };
+          types.push({ name: method.name, type: 'dynamic' });
         }
       } else if (klass.constructors?.length && !names.includes(klass.name) && !this.localValues.has(klass.name)) {
         if (['Actor', 'World', 'Image'].includes(klass.name)) {
           names.push(klass.name);
           values[klass.name] = { runtime: klass.name };
+          types.push({ name: klass.name, type: 'dynamic' });
           continue;
         }
         const bridges = klass.constructors.map((constructor, index) => ({ name: `bluekCreate_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}${index === 0 ? '' : `_${index}`}`, arity: requiredParameters(constructor.parameters || []).length }));
         names.push(klass.name);
         values[klass.name] = { bridges };
+        types.push({ name: klass.name, type: 'dynamic' });
       }
     }
     for (const [name, value] of this.localValues) { if (!names.includes(name)) { names.push(name); const mutable = this.localValueMutability.get(name) || false; values[name] = { value, mutable }; types.push({ name, type: this.localValueTypes.get(name) || 'dynamic', mutable }); } }
