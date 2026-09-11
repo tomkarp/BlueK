@@ -347,6 +347,8 @@ export class HybridRuntimeClient implements RuntimeClient {
     this.worker = worker;
     this.attachStageCallbacks(worker);
     this.inputBuffer = null;
+    this.inputWaiting = false;
+    this.pendingInput = null;
     const runtimeError = (event: ErrorEvent) => {
       if (this.worker !== worker) return;
       this.browserWorkerDead = true;
