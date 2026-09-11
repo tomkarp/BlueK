@@ -178,3 +178,19 @@ footer{flex:0 0 108px}
 .lower .bench-codepad-splitter{width:14px}
 .lower .bench-codepad-splitter::after{left:4px;width:6px;height:78px;background:#c4c4c4;border:1px solid #999;border-radius:5px;box-shadow:inset 1px 0 #eee}
 .lower .bench-codepad-splitter:hover::after,.lower .bench-codepad-splitter:focus-visible::after{background:#aaa;border-color:#666}
+
+/* Keep splitters visually quiet: the drag affordance is only three lines,
+   while the codepad arrow remains an independent control. */
+.lower{padding-top:0}
+.pane-splitter{background:transparent;border:0}
+.pane-splitter::before{content:"";display:block;position:absolute;left:50%;top:50%;width:48px;height:1px;transform:translate(-50%,-50%);border:0;border-radius:0;background:#8d8d8d;box-shadow:0 -4px #8d8d8d,0 4px #8d8d8d}
+.pane-splitter::after{display:none;content:none}
+.pane-splitter:hover::before,.pane-splitter:focus-visible::before,.pane-splitter:active::before{background:#666;box-shadow:0 -4px #666,0 4px #666}
+.lower .bench-codepad-splitter{width:14px}
+.lower .bench-codepad-splitter::after{display:none;content:none}
+.lower .bench-codepad-splitter::before{content:"";display:block;position:absolute;left:50%;top:50%;width:1px;height:36px;transform:translate(-50%,-50%);border:0;border-radius:0;background:#8d8d8d;box-shadow:-4px 0 #8d8d8d,4px 0 #8d8d8d}
+.lower .bench-codepad-splitter:hover::before,.lower .bench-codepad-splitter:focus-visible::before{background:#666;box-shadow:-4px 0 #666,4px 0 #666}
+.lower .codepad-toggle{position:relative;z-index:2;width:22px;height:46px;margin-left:-4px;border:0;border-radius:0;background:transparent;color:#777;font-size:25px;line-height:40px;padding:0;overflow:visible}
+.lower .codepad-toggle::before{content:"";position:absolute;z-index:-1;left:50%;top:50%;width:1px;height:36px;transform:translate(-50%,-50%);background:#8d8d8d;box-shadow:-4px 0 #8d8d8d,4px 0 #8d8d8d}
+.lower .codepad-toggle:hover{background:transparent;color:#333}
+.lower .codepad-toggle:hover::before{background:#666;box-shadow:-4px 0 #666,4px 0 #666}
