@@ -68,10 +68,10 @@ footer{flex:0 0 108px}
 .argument-objects{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}.argument-objects button{padding:3px 7px;margin:0;border:1px solid #999;border-radius:3px;background:#e7e5e1;font:12px monospace;cursor:pointer}.argument-objects button:hover{background:#ccecf4}
 .popup-group{padding:7px 12px 5px;background:#eee;border-bottom:1px solid #ccc;color:#555;font-size:12px;font-style:italic}
 .cards{position:relative;display:block;min-height:100%;margin:0;touch-action:none}
-.classcard{position:absolute;width:240px;cursor:grab}
+.classcard{position:absolute;width:210px;cursor:grab}
 .classcard.uncompiled{background-image:none}
 .classcard .card-body{flex:1 1 auto;min-height:0;border-radius:0 0 10px 10px}
-.classcard.uncompiled .card-body{background:repeating-linear-gradient(135deg,#f5c889 0 10px,#858585 10px 14px,#f5c889 14px 24px)}
+.classcard.uncompiled .card-body{background:repeating-linear-gradient(135deg,#f5c889 0 13px,#858585 13px 17px,#f5c889 17px 30px)}
 .classcard:active{cursor:grabbing}
 .game-stage{z-index:3}
 .canvas:has(.game-stage) .cards{width:calc(60% - 24px);display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin:0;min-height:0}
@@ -89,7 +89,7 @@ footer{flex:0 0 108px}
 /* Opening the separate world window must not reflow the BlueJ workbench.
    Cards keep their coordinates whether or not a world is currently shown. */
 .canvas:has(.game-stage) .cards{width:auto;display:block;margin:0;min-height:100%}
-.canvas:has(.game-stage) .classcard{position:absolute;left:var(--card-left)!important;top:var(--card-top)!important;width:240px;height:124px}
+.canvas:has(.game-stage) .classcard{position:absolute;left:var(--card-left)!important;top:var(--card-top)!important;width:210px;height:112px}
 
 /* Final pane polish: the splitter is a real, forgiving drag target and the
    codepad input keeps its own space even when the lower pane is short. */
