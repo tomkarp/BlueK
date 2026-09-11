@@ -132,3 +132,14 @@ footer{flex:0 0 108px}
 .pane-splitter:hover::before,.pane-splitter:active::before{background:#aaa;border-color:#666}
 .terminal-modal{background:transparent;pointer-events:none}
 .terminal-window{pointer-events:auto}
+
+/* BlueJ keeps the workbench footer deliberately narrow: selection on the
+   left, activity in the middle, and reset at the far right. */
+.workspace>footer.status-bar{display:flex;align-items:center;gap:12px;min-height:0;height:32px;padding:0 4px;color:#555;font-size:13px}
+.status-bar .current-element{flex:0 1 38%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 5px}
+.activity-bar{flex:1 1 auto;height:8px;max-width:240px;border:1px solid #aaa;border-radius:5px;background:#e2e2e2;overflow:hidden}
+.activity-bar.active::after{content:"";display:block;width:35%;height:100%;background:#168fbd;border-radius:4px;animation:bluek-activity 1s linear infinite}
+@keyframes bluek-activity{from{transform:translateX(-120%)}to{transform:translateX(320%)}}
+.reset-runtime{margin-left:auto;width:32px;height:28px;border:0;background:transparent;color:#777;font-size:27px;line-height:24px;cursor:pointer;border-radius:4px}
+.reset-runtime:hover:not(:disabled){background:#d7d7d7;color:#333}
+.reset-runtime:disabled{opacity:.45;cursor:not-allowed}

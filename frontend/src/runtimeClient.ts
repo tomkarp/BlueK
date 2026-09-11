@@ -582,7 +582,7 @@ export class HybridRuntimeClient implements RuntimeClient {
       }
       if (request.mode === 'block') {
         const declaration = simpleCodepadDeclaration(source);
-        if (declaration) { const value = this.standaloneExpression(declaration.value); this.localValues.set(declaration.name, value); const type = simpleValueType(declaration.value, value, declaration.explicitType); if (type) this.localValueTypes.set(declaration.name, type); return { kind: 'unit', display: 'Unit' }; }
+        if (declaration) { if (this.localValues.has(declaration.name) || this.bindings.has(declaration.name)) return { kind: 'error', display: `Error: ${declaration.name} is already defined` }; const value = this.standaloneExpression(declaration.value); this.localValues.set(declaration.name, value); const type = simpleValueType(declaration.value, value, declaration.explicitType); if (type) this.localValueTypes.set(declaration.name, type); return { kind: 'unit', display: 'Unit' }; }
         const assignment = simpleCodepadAssignment(source);
         if (assignment) { this.localValues.set(assignment.name, this.standaloneExpression(assignment.value)); return { kind: 'unit', display: 'Unit' }; }
         const indexAssignment = source.match(/^([A-Za-z_]\w*)\[\s*(-?\d+)\s*\]\s*=\s*(.+)$/s);
@@ -772,6 +772,7 @@ export class HybridRuntimeClient implements RuntimeClient {
       }
       const declaration = request.mode === 'block' ? simpleCodepadDeclaration(source) : null;
       if (declaration) {
+        if (this.localValues.has(declaration.name) || this.bindings.has(declaration.name)) return { kind: 'error', display: `Error: ${declaration.name} is already defined` };
         if (this.bindings.has(declaration.value)) {
           const objectId = this.bindings.get(declaration.value);
           this.bindings.set(declaration.name, objectId);
