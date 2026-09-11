@@ -150,3 +150,4 @@ footer{flex:0 0 108px}
 .workspace>footer.status-bar{height:32px;flex:0 0 32px}
 .status-bar .current-element{flex:0 1 auto}
 .status-bar .activity-bar{margin-left:auto;flex:0 0 240px}
+.status-bar .reset-runtime{margin-left:0}
