@@ -117,7 +117,11 @@ const topLevelBinary = (source: string): { left: string; operator: string; right
   return null;
 };
 const simpleBuiltin = (source: string, bindings: Map<string, unknown>, values: Map<string, unknown>): unknown => {
-  const match = source.trim().match(/^(maxOf|minOf|abs|listOf|mutableListOf|arrayOf|setOf|mutableSetOf|emptyList|emptySet)\((.*)\)$/s);
+  // Only claim a call when the closing parenthesis is the end of the
+  // expression.  A greedy `.*` also matched the first call in expressions
+  // such as `listOf(1, 2).map { ... }`, preventing those expressions from
+  // reaching the Kotlin/JS compiler fallback.
+  const match = source.trim().match(/^(maxOf|minOf|abs|listOf|mutableListOf|arrayOf|setOf|mutableSetOf|emptyList|emptySet)\(([^()]*)\)$/s);
   if (!match) return undefined;
   const args = splitSimpleArguments(match[2]).map(value => simpleCodepadValue(value, bindings, values));
   switch (match[1]) {
@@ -334,9 +338,10 @@ export class HybridRuntimeClient implements RuntimeClient {
     await this.inputBarrier;
     return new Promise((resolve, reject) => {
       const worker = this.worker!;
+      const timeout = window.setTimeout(() => { cleanup(); reject(new Error('Browser runtime did not answer within 30 seconds.')); }, 30000);
       const onMessage = (event: MessageEvent) => { if (event.data?.kind === 'input-request') { this.onInputRequest(event.data.output); return; } if (event.data?.kind === 'value' || event.data?.kind === 'ready') { cleanup(); resolve(event.data); } else if (event.data?.kind === 'error') { cleanup(); reject(new Error(event.data.message)); } };
       const onError = (event: ErrorEvent) => { cleanup(); reject(new Error(event.message || 'Browser Kotlin/JS worker stopped.')); };
-      const cleanup = () => { worker.removeEventListener('message', onMessage); worker.removeEventListener('error', onError); };
+      const cleanup = () => { window.clearTimeout(timeout); worker.removeEventListener('message', onMessage); worker.removeEventListener('error', onError); };
       worker.addEventListener('message', onMessage);
       worker.addEventListener('error', onError);
       worker.postMessage(request);
@@ -419,6 +424,39 @@ export class HybridRuntimeClient implements RuntimeClient {
     }
   }
   private standaloneExpression(source: string): unknown {
+    const conditional = source.trim().match(/^if\s*\(([^()]*)\)\s+([\s\S]+?)\s+else\s+([\s\S]+)$/);
+    if (conditional) return this.standaloneExpression(conditional[1]) ? this.standaloneExpression(conditional[2]) : this.standaloneExpression(conditional[3]);
+    const range = source.trim().match(/^(-?\d+)\.\.(-?\d+)$/);
+    if (range) {
+      const start = Number(range[1]);
+      const end = Number(range[2]);
+      const step = start <= end ? 1 : -1;
+      return Array.from({ length: Math.abs(end - start) + 1 }, (_value, index) => start + index * step);
+    }
+    const chainedCollection = source.trim().match(/^([\s\S]+)\.(map|filter)\s*\{([\s\S]*)\}\.([A-Za-z_]\w*)\s*\(([^()]*)\)$/);
+    if (chainedCollection) {
+      const receiver = this.standaloneExpression(chainedCollection[1]);
+      if (Array.isArray(receiver)) {
+        const lambda = chainedCollection[3].trim().match(/^(?:([A-Za-z_]\w*)\s*->\s*)?([\s\S]+)$/);
+        if (lambda) {
+          const parameter = lambda[1] || 'it';
+          const previous = this.localValues.get(parameter);
+          const hadPrevious = this.localValues.has(parameter);
+          try {
+            const transformed = receiver[chainedCollection[2] === 'map' ? 'map' : 'filter']((item) => {
+              this.localValues.set(parameter, item);
+              return this.standaloneExpression(lambda[2].trim());
+            });
+            const args = splitSimpleArguments(chainedCollection[5]).map(value => simpleCodepadValue(value, this.bindings, this.localValues));
+            const result = simpleCollectionCall(transformed, chainedCollection[4], args);
+            if (result !== undefined && result !== SIMPLE_UNIT) return result;
+          } finally {
+            if (hadPrevious) this.localValues.set(parameter, previous);
+            else this.localValues.delete(parameter);
+          }
+        }
+      }
+    }
     const collectionExpression = this.simpleCollectionExpression(source);
     if (collectionExpression !== undefined) return collectionExpression;
     const value = simpleBuiltin(source, this.bindings, this.localValues);
