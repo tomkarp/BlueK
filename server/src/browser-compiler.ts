@@ -260,6 +260,6 @@ export async function compileBrowserSnippet(root: string, sessionDir: string, so
     // Kotlin/JS library output is UMD and publishes its @JsExport functions
     // on the shared global object. Wrap each snippet in a real ES module so
     // cached A -> B -> A evaluations keep their own function reference.
-    await fs.writeFile(path.join(target, entry), `import './kotlin-kotlin-stdlib.js';\nawait import('./${rawEntry}');\nconst bluekEval = globalThis['bluek-browser-runtime']?.bluekEval;\nexport { bluekEval };\n`);
+    await fs.writeFile(path.join(target, entry), `await import('./kotlin-kotlin-stdlib.js?codepad=${kotlinIdentifier(snippetId)}');\nawait import('./${rawEntry}');\nconst bluekEval = globalThis['bluek-browser-runtime']?.bluekEval;\nexport { bluekEval };\n`);
     return { ok: true, diagnostics: '', entry };
 }
