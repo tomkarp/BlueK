@@ -83,6 +83,11 @@ footer{flex:0 0 108px}
 /* The world controls follow the measured world element in every window mode. */
 .bluek:has(.stage-window-chrome) .game-controls{position:fixed;right:auto;bottom:auto;left:var(--bluek-controls-left);top:var(--bluek-controls-top);width:var(--bluek-controls-width)}
 
+/* Opening the separate world window must not reflow the BlueJ workbench.
+   Cards keep their coordinates whether or not a world is currently shown. */
+.canvas:has(.game-stage) .cards{width:auto;display:block;margin:0;min-height:100%}
+.canvas:has(.game-stage) .classcard{position:absolute;left:var(--card-left)!important;top:var(--card-top)!important;width:240px;height:124px}
+
 /* Final pane polish: the splitter is a real, forgiving drag target and the
    codepad input keeps its own space even when the lower pane is short. */
 .pane-splitter{height:21px;flex:0 0 21px;margin:0;outline:0;background:#d7d7d7;border-top:1px solid #aaa;border-bottom:1px solid #aaa}
