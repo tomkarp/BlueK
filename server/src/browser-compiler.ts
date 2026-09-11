@@ -258,7 +258,7 @@ export async function compileBrowserProject(root: string, sessionDir: string, fi
     return { ok: true, diagnostics: '', directory: buildDir };
 }
 
-export async function compileBrowserSnippet(root: string, sessionDir: string, source: string, snippetId: string, bindings: Array<string | { name: string; type: string }> = []): Promise<{ ok: boolean; diagnostics: string; entry?: string }> {
+export async function compileBrowserSnippet(root: string, sessionDir: string, source: string, snippetId: string, bindings: Array<string | { name: string; type: string; mutable?: boolean }> = []): Promise<{ ok: boolean; diagnostics: string; entry?: string }> {
     if (/^\s*package\b/m.test(source)) return { ok: false, diagnostics: 'Codepad expressions may not declare a package.' };
     const buildDir = path.join(sessionDir, 'browser', 'codepad', snippetId);
     const projectDir = path.join(buildDir, 'project');
@@ -279,9 +279,14 @@ export async function compileBrowserSnippet(root: string, sessionDir: string, so
     // resolved from the browser runtime, so declaring them again as dynamic
     // codepad bindings creates a Kotlin conflict (`class Actor` vs
     // `val Actor: dynamic`) in snippets that access an Actor property.
-    const normalizedBindings = bindings.map(binding => typeof binding === 'string' ? { name: binding, type: 'dynamic' } : binding);
+    const normalizedBindings = bindings.map(binding => typeof binding === 'string' ? { name: binding, type: 'dynamic', mutable: false } : binding);
     const declaredBindings = normalizedBindings.filter(binding => /^[A-Za-z_]\w*$/.test(binding.name) && !frameworkNames.has(binding.name) && !new RegExp(`\\b(?:val|var|fun|class|object)\\s+${binding.name}\\b`).test(source));
-    const bindingDeclarations = declaredBindings.map(binding => `external val ${binding.name}: ${binding.type}`).join('\n');
+    const bindingDeclarations = declaredBindings.map(binding => {
+        if (!binding.mutable) return `external val ${binding.name}: ${binding.type}`;
+        const holder = `__bluekBinding_${binding.name}`;
+        const type = binding.type === 'dynamic' ? 'dynamic' : binding.type;
+        return `external val ${holder}: dynamic\nvar ${binding.name}: ${type}\n    get() = ${holder}.value as ${type}\n    set(value) { ${holder}.value = value }`;
+    }).join('\n');
     const bridge = [
         'import kotlin.js.ExperimentalJsExport',
         'import kotlin.js.JsExport',

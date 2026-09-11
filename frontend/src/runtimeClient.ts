@@ -27,7 +27,7 @@ export class HttpRuntimeClient implements RuntimeClient {
     return response.json();
   }
 
-  async compileCodepad(source: string, generationId: string, bindings: Array<string | { name: string; type: string }> = []): Promise<{ entry: string }> {
+  async compileCodepad(source: string, generationId: string, bindings: Array<string | { name: string; type: string; mutable?: boolean }> = []): Promise<{ entry: string }> {
     const response = await this.request('/codepad', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ source, generationId, bindings }) });
     return response.json();
   }
@@ -96,6 +96,11 @@ const simpleCodepadProperty = (code: string): { receiver: string; property: stri
 const simpleCodepadPropertyAssignment = (code: string): { receiver: string; property: string; value: string } | null => { const match = code.trim().replace(/;$/, '').match(/^([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s*=\s*(.+)$/s); return match ? { receiver: match[1], property: match[2], value: match[3].trim() } : null; };
 const simpleCodepadDeclaration = (code: string): { mutable: boolean; name: string; explicitType?: string; value: string } | null => { const match = code.trim().replace(/;$/, '').match(/^(val|var)\s+([A-Za-z_]\w*)(?:\s*:\s*([^=]+?))?\s*=\s*(.+)$/s); return match ? { mutable: match[1] === 'var', name: match[2], explicitType: match[3]?.trim(), value: match[4].trim() } : null; };
 const simpleCodepadAssignment = (code: string): { name: string; value: string } | null => { const match = code.trim().replace(/;$/, '').match(/^([A-Za-z_]\w*)\s*=\s*(.+)$/s); return match ? { name: match[1], value: match[2].trim() } : null; };
+const simpleCodepadForLoop = (code: string): { variable: string; start: number; end: number; descending: boolean; target: string; operator: '+=' | '-='; value: string } | null => {
+  const match = code.trim().match(/^for\s*\(\s*([A-Za-z_]\w*)\s+in\s+(-?\d+)\s*(\.\.|downTo|until)\s*(-?\d+)\s*\)\s*\{\s*([A-Za-z_]\w*)\s*(\+=|-=)\s*([^{}]+?)\s*\}\s*$/s);
+  if (!match || (match[3] === 'until' && Number(match[2]) >= Number(match[4]))) return match ? { variable: match[1], start: Number(match[2]), end: Number(match[4]), descending: false, target: match[5], operator: match[6] as '+=' | '-=', value: match[7].trim() } : null;
+  return { variable: match[1], start: Number(match[2]), end: Number(match[4]), descending: match[3] === 'downTo', target: match[5], operator: match[6] as '+=' | '-=', value: match[7].trim() };
+};
 const simpleCodepadIdentifier = (code: string) => code.trim().replace(/;$/, '').match(/^[A-Za-z_]\w*$/)?.[0] || null;
 const requiredParameters = (parameters: any[] = []) => parameters.filter(parameter => !parameter.hasDefault);
 const simpleCallableMatches = (args: unknown[], parameters: any[] = []) => args.length >= requiredParameters(parameters).length && args.length <= parameters.length && simpleArgumentsMatch(args, parameters.slice(0, args.length));
@@ -270,7 +275,7 @@ self.onmessage = async ({ data }) => {
     if (data.op === 'load') { await import(new URL('kotlin-kotlin-stdlib.js', data.url).href); runtimeApi = await import(new URL('bluek-runtime.js', data.url).href); const moduleValue = await import(data.url); const exported = globalThis['bluek-browser-runtime'] || moduleValue.default || moduleValue; api = data.packageName ? (exported[data.packageName] || data.packageName.split('.').reduce((v, p) => v?.[p], exported)) : exported; if (!api || typeof api !== 'object') api = exported; if (inputBuffer) self.postMessage({ kind: 'input-buffer', buffer: inputBuffer }); self.postMessage({ kind: 'ready' }); return; }
     if (!api) throw new Error('Browser Kotlin runtime is not loaded.');
     if (data.op === 'main') { const start = api.bluekStart || resolve('bluekStart'); if (!start) throw new Error('This project has no parameterless main().'); start(); stage(); flushStudentOutput(); const output = takeOutput(); self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' }, output }); return; }
-    if (data.op === 'codepad') { const previous = new Map(); Object.entries(data.bindings || {}).forEach(([name, descriptor]) => { previous.set(name, Object.prototype.hasOwnProperty.call(globalThis, name) ? globalThis[name] : undefined); globalThis[name] = bindingValueWithBridges(descriptor); }); try { const moduleValue = await import(data.url); const exported = globalThis['bluek-browser-runtime'] || moduleValue.default || moduleValue; const evaluate = moduleValue.bluekEval || exported?.bluekEval; if (typeof evaluate !== 'function') throw new Error('Codepad compiler bridge is missing.'); const value = valueOf(evaluate()); flushStudentOutput(); const output = takeOutput(); stage(); self.postMessage({ kind: 'value', value, output }); } finally { Object.entries(data.bindings || {}).forEach(([name]) => { const old = previous.get(name); if (old === undefined) delete globalThis[name]; else globalThis[name] = old; }); } return; }
+    if (data.op === 'codepad') { const previous = new Map(); Object.entries(data.bindings || {}).forEach(([name, descriptor]) => { const targetName = descriptor?.mutable ? '__bluekBinding_' + name : name; previous.set(targetName, Object.prototype.hasOwnProperty.call(globalThis, targetName) ? globalThis[targetName] : undefined); globalThis[targetName] = descriptor?.mutable ? { value: bindingValueWithBridges(descriptor) } : bindingValueWithBridges(descriptor); }); try { const moduleValue = await import(data.url); const exported = globalThis['bluek-browser-runtime'] || moduleValue.default || moduleValue; const evaluate = moduleValue.bluekEval || exported?.bluekEval; if (typeof evaluate !== 'function') throw new Error('Codepad compiler bridge is missing.'); const value = valueOf(evaluate()); const updatedBindings = {}; Object.entries(data.bindings || {}).forEach(([name, descriptor]) => { const targetName = descriptor?.mutable ? '__bluekBinding_' + name : name; if (descriptor?.mutable && Object.prototype.hasOwnProperty.call(globalThis, targetName)) updatedBindings[name] = globalThis[targetName]?.value; }); flushStudentOutput(); const output = takeOutput(); stage(); self.postMessage({ kind: 'value', value, output, updatedBindings }); } finally { Object.entries(data.bindings || {}).forEach(([name, descriptor]) => { const targetName = descriptor?.mutable ? '__bluekBinding_' + name : name; const old = previous.get(targetName); if (old === undefined) delete globalThis[targetName]; else globalThis[targetName] = old; }); } return; }
     if (data.op === 'run') { const run = runtimeApi?.bluekRun || runtimeApi?.start || api.bluekRun || resolve('bluekRun') || resolve('start'); if (typeof run !== 'function') throw new Error('Browser BluePlay runtime is missing its run bridge.'); run(); clearTimeout(simulationTimer); clearInterval(renderTimer); const tick = runtimeApi?.bluekStep || resolve('bluekStep'); const isRunning = runtimeApi?.bluekIsRunning || resolve('bluekIsRunning'); const stopTimers = () => { clearTimeout(simulationTimer); clearInterval(renderTimer); simulationTimer = null; renderTimer = null; }; const simulate = () => { if (typeof tick === 'function') tick(); if (typeof isRunning === 'function' && !isRunning()) { stopTimers(); stage(); return; } simulationTimer = setTimeout(simulate, Math.max(1, 100 - Number(runtimeApi?.getSpeed?.() || resolve('getSpeed')?.() || 50))); }; simulationTimer = setTimeout(simulate, 0); renderTimer = setInterval(stage, 16); stage(); self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' } }); return; }
     if (data.op === 'stage') { stage(); finish(); return; }
     if (data.op === 'write') { appendOutputText(String(data.text) + (data.newline ? '\\n' : '')); finish(); return; }
@@ -296,6 +301,7 @@ export class HybridRuntimeClient implements RuntimeClient {
   private classes: ClassMeta[] = [];
   private readonly bindings = new Map<string, unknown>();
   private readonly localValues = new Map<string, unknown>();
+  private readonly localValueMutability = new Map<string, boolean>();
   private readonly localValueTypes = new Map<string, string>();
   private readonly localObjects = new Map<string, unknown>();
   private browserGeneration: string | null = null;
@@ -384,10 +390,10 @@ export class HybridRuntimeClient implements RuntimeClient {
     const scalar = displayedSimpleValue(value);
     if (scalar !== undefined) this.localValues.set(name, scalar);
   }
-  private codepadBindings(): { names: string[]; values: Record<string, unknown>; types: Array<{ name: string; type: string }> } {
+  private codepadBindings(): { names: string[]; values: Record<string, unknown>; types: Array<{ name: string; type: string; mutable?: boolean }> } {
     const values: Record<string, unknown> = {};
     const names: string[] = [];
-    const types: Array<{ name: string; type: string }> = [];
+    const types: Array<{ name: string; type: string; mutable?: boolean }> = [];
     for (const [name, objectId] of this.bindings) {
       const className = this.localObjects.get(String(objectId));
       const klass = className ? this.classes.find(value => value.name === className) : undefined;
@@ -425,7 +431,7 @@ export class HybridRuntimeClient implements RuntimeClient {
         values[klass.name] = { bridges };
       }
     }
-    for (const [name, value] of this.localValues) { if (!names.includes(name)) { names.push(name); values[name] = { value }; types.push({ name, type: this.localValueTypes.get(name) || 'dynamic' }); } }
+    for (const [name, value] of this.localValues) { if (!names.includes(name)) { names.push(name); const mutable = this.localValueMutability.get(name) || false; values[name] = { value, mutable }; types.push({ name, type: this.localValueTypes.get(name) || 'dynamic', mutable }); } }
     return { names, values, types };
   }
   private simpleCollectionExpression(source: string): unknown {
@@ -554,6 +560,7 @@ export class HybridRuntimeClient implements RuntimeClient {
       this.codepadModules.set(cacheKey, moduleUrl);
     }
     const result = await this.local({ op: 'codepad', url: moduleUrl, bindings: this.codepadBindings().values });
+    for (const [name, value] of Object.entries(result.updatedBindings || {})) if (this.localValues.has(name)) this.localValues.set(name, value);
     return { ...result.value, output: result.output };
   }
   async execute(request: Action): Promise<Value & { output?: string; stage?: unknown; name?: string }> {
@@ -686,6 +693,19 @@ export class HybridRuntimeClient implements RuntimeClient {
         } catch { /* complex expressions still go through Kotlin/JS */ }
       }
       if (request.mode === 'block') {
+        const simpleLoop = simpleCodepadForLoop(source);
+        if (simpleLoop && this.localValues.has(simpleLoop.target)) {
+          let current = Number(this.localValues.get(simpleLoop.target));
+          const step = simpleLoop.descending ? -1 : 1;
+          const last = simpleLoop.descending ? simpleLoop.end : simpleLoop.end - (source.includes(' until ') ? 1 : 0);
+          for (let index = simpleLoop.start; simpleLoop.descending ? index >= last : index <= last; index += step) {
+            const operand = simpleLoop.value === simpleLoop.variable ? index : Number(simpleLoop.value);
+            if (!Number.isFinite(operand)) break;
+            current = simpleLoop.operator === '+=' ? current + operand : current - operand;
+          }
+          this.localValues.set(simpleLoop.target, current);
+          return { kind: 'unit', display: 'Unit' };
+        }
         const statements = splitCodepadStatements(source);
         // Keep control-flow blocks together. Splitting `var total = 0` and a
         // following `for` into separate snippets turns `total` into an
@@ -747,6 +767,7 @@ export class HybridRuntimeClient implements RuntimeClient {
         const collectionExpression = this.simpleCollectionExpression(declaration.value);
         if (Array.isArray(collectionExpression)) {
           this.localValues.set(declaration.name, collectionExpression);
+          this.localValueMutability.set(declaration.name, declaration.mutable);
           const type = simpleValueType(declaration.value, collectionExpression, declaration.explicitType);
           if (type) this.localValueTypes.set(declaration.name, type);
           return { kind: 'unit', display: 'Unit' };
@@ -754,6 +775,7 @@ export class HybridRuntimeClient implements RuntimeClient {
         try {
           const value = this.standaloneExpression(declaration.value);
           this.localValues.set(declaration.name, value);
+          this.localValueMutability.set(declaration.name, declaration.mutable);
           const type = simpleValueType(declaration.value, value, declaration.explicitType);
           if (type) this.localValueTypes.set(declaration.name, type);
           return { kind: 'unit', display: 'Unit' };
@@ -946,7 +968,7 @@ export class HybridRuntimeClient implements RuntimeClient {
       await this.recoverSession();
       result = await this.http.compile(files, revision, resources);
     }
-    this.classes = result.classes; this.localObjects.clear(); this.localValues.clear(); this.localValueTypes.clear(); this.bindings.clear(); this.codepadModules.clear(); this.latestStage = null;
+    this.classes = result.classes; this.localObjects.clear(); this.localValues.clear(); this.localValueMutability.clear(); this.localValueTypes.clear(); this.bindings.clear(); this.codepadModules.clear(); this.latestStage = null;
     this.browserResourceSizes = Object.fromEntries(Object.entries(resourceSizes).map(([key, size]) => [key, { ...size, alpha: resourceAlphaMasks[key] }]));
     if (result.browserRuntime) {
       this.browserGeneration = result.generationId;
@@ -963,8 +985,8 @@ export class HybridRuntimeClient implements RuntimeClient {
   async evaluate(code: string, mode: 'expression' | 'block'): Promise<Value> { if (this.worker && this.ready) return this.execute({ op: 'eval', code, mode }); return this.http.evaluate(code, mode); }
   async removeObject(objectId: string): Promise<void> { this.localObjects.delete(objectId); if (this.worker && this.ready) { await this.local({ op: 'remove', objectId }); return; } await this.http.removeObject(objectId); }
   sendInput(text: string): Promise<void> { if (!this.worker) return this.http.sendInput(text); if (!this.inputBuffer) return Promise.reject(new Error('Terminal input requires a cross-origin-isolated browser context.')); const bytes = new TextEncoder().encode(text); const state = new Int32Array(this.inputBuffer, 0, 1); const buffer = new Uint8Array(this.inputBuffer, 4); buffer.fill(0); buffer.set(bytes.subarray(0, buffer.length)); Atomics.store(state, 0, Math.min(bytes.length, buffer.length)); Atomics.notify(state, 0); return Promise.resolve(); }
-  async stop(): Promise<void> { const hadBrowserWorker = Boolean(this.worker); this.worker?.terminate(); this.worker = null; this.ready = null; this.browserReady = false; this.browserWorkerDead = true; this.inputBarrier = Promise.resolve(); this.browserGeneration = null; this.browserModuleUrl = null; this.browserPackageName = ''; this.codepadModules.clear(); this.localObjects.clear(); this.localValues.clear(); this.localValueTypes.clear(); this.bindings.clear(); if (!hadBrowserWorker) await this.http.stop(); }
-  async reset(): Promise<void> { if (!this.browserModuleUrl) { await this.stop(); return; } this.worker?.terminate(); this.worker = null; this.ready = null; this.codepadModules.clear(); this.localObjects.clear(); this.localValues.clear(); this.localValueTypes.clear(); this.bindings.clear(); this.latestStage = null; this.startBrowserWorker(); await this.ready; }
+  async stop(): Promise<void> { const hadBrowserWorker = Boolean(this.worker); this.worker?.terminate(); this.worker = null; this.ready = null; this.browserReady = false; this.browserWorkerDead = true; this.inputBarrier = Promise.resolve(); this.browserGeneration = null; this.browserModuleUrl = null; this.browserPackageName = ''; this.codepadModules.clear(); this.localObjects.clear(); this.localValues.clear(); this.localValueMutability.clear(); this.localValueTypes.clear(); this.bindings.clear(); if (!hadBrowserWorker) await this.http.stop(); }
+  async reset(): Promise<void> { if (!this.browserModuleUrl) { await this.stop(); return; } this.worker?.terminate(); this.worker = null; this.ready = null; this.codepadModules.clear(); this.localObjects.clear(); this.localValues.clear(); this.localValueMutability.clear(); this.localValueTypes.clear(); this.bindings.clear(); this.latestStage = null; this.startBrowserWorker(); await this.ready; }
   private postBrowserInput(message: { op: 'key'; key: string; pressed: boolean } | { op: 'click'; x: number; y: number }): Promise<void> {
     if (!this.worker || !this.ready) return Promise.reject(new Error('Browser runtime is not available.'));
     const worker = this.worker;
