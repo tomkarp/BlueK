@@ -400,6 +400,17 @@ export class HybridRuntimeClient implements RuntimeClient {
       if (request.mode === 'expression') {
         const builtin = simpleBuiltin(source, this.bindings, this.localValues);
         if (builtin !== undefined) return { kind: 'scalar', display: Array.isArray(builtin) ? `[${builtin.map(value => value === null ? 'null' : String(value)).join(', ')}]` : String(builtin) };
+        // Keep elementary Kotlin expressions on the local fast path.  In
+        // particular, arithmetic such as `5 + 3` or `x + 3` must not trigger a
+        // compiler round-trip merely because it is not one of the builtin
+        // collection/string helpers.  If the expression is not representable
+        // by the small evaluator it throws and continues to the real
+        // Kotlin/JS snippet compiler below.
+        try {
+          const simple = this.standaloneExpression(source);
+          if (simple === null) return { kind: 'null', display: 'null' };
+          if (typeof simple === 'string' || typeof simple === 'number' || typeof simple === 'boolean') return { kind: 'scalar', display: String(simple) };
+        } catch { /* complex expressions still go through Kotlin/JS */ }
       }
       if (request.mode === 'block') {
         const statements = splitCodepadStatements(source);
