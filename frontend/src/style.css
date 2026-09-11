@@ -66,3 +66,17 @@ footer{flex:0 0 108px}
 .game-actor{will-change:left,top,transform}
  .codepad-history{height:154px;overflow:auto;padding:4px 8px;background:#faf9f4;border:1px solid #ddd;border-radius:5px 5px 0 0;font:16px monospace;white-space:pre-wrap}.codepad-entry{padding:3px 0;border-bottom:1px solid #eee}.codepad textarea{height:36px;border-radius:0 0 7px 7px;padding:6px 8px}
 .codepad-result{color:#168b22;font:18px monospace;padding:3px 0 4px 28px}.codepad-error{color:#a11;padding:3px 0 4px 28px;white-space:pre-wrap}
+
+/* Final pane polish: the splitter is a real, forgiving drag target and the
+   codepad input keeps its own space even when the lower pane is short. */
+.pane-splitter{height:21px;flex:0 0 21px;margin:0;outline:0;background:#d7d7d7;border-top:1px solid #aaa;border-bottom:1px solid #aaa}
+.pane-splitter::before{top:5px;width:72px;height:11px;background:#c4c4c4;border:1px solid #999;box-shadow:inset 0 1px #eee}
+.pane-splitter::after{top:9px;width:38px;height:4px;border-top:1px solid #777;border-bottom:1px solid #777}
+.pane-splitter:hover,.pane-splitter:focus-visible{background:#c8c8c8}
+.pane-splitter:hover::before,.pane-splitter:focus-visible::before,.pane-splitter:active::before{background:#aaa;border-color:#666}
+.card-header{display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:0;flex:0 0 auto;border-bottom:2px solid #333}
+.classcard .card-header small{height:auto;padding:7px 6px 0;font-size:16px;line-height:18px}
+.classcard .card-header strong{border:0;padding:2px 8px 7px;line-height:28px}
+.classcard:not(:has(.card-header small)) .card-header strong{padding-top:8px;padding-bottom:8px}
+.codepad-history{height:auto!important;flex:1 1 auto;min-height:0;overflow:auto}
+.codepad textarea{flex:0 0 38px;height:38px!important;min-height:38px;max-height:38px}
