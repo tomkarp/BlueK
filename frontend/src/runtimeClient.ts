@@ -660,6 +660,13 @@ export class HybridRuntimeClient implements RuntimeClient {
     }
     if (this.worker && this.ready && request.op === 'eval') {
       const source = String(request.code || '').trim().replace(/;$/, '');
+      const storedIdentifier = simpleCodepadIdentifier(source);
+      if (request.mode === 'expression' && storedIdentifier && this.localValues.has(storedIdentifier)) {
+        const stored = this.localValues.get(storedIdentifier);
+        return Array.isArray(stored)
+          ? { kind: 'collection', display: `[${stored.join(', ')}]`, type: this.localValueTypes.get(storedIdentifier) || simpleCollectionType(stored) }
+          : stored === null ? { kind: 'null', display: 'null' } : { kind: 'scalar', display: String(stored) };
+      }
       const outputCall = source.match(/^(print|println)\((.*)\)$/s);
       if (outputCall) {
         const argument = outputCall[2].trim();
