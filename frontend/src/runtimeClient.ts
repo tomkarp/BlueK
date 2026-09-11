@@ -347,6 +347,21 @@ export class HybridRuntimeClient implements RuntimeClient {
       default: throw new Error(`Unsupported simple expression: ${source}`);
     }
   }
+  private async runBrowserSnippet(source: string, mode: 'expression' | 'block'): Promise<any> {
+    const snippetSource = source.trim().replace(/;$/, '');
+    if (!snippetSource) throw new Error('The Kotlin expression is empty.');
+    const bindings = this.codepadBindings();
+    const bindingSignature = bindings.names.map(name => `${name}:${this.bindings.has(name) ? this.localObjects.get(String(this.bindings.get(name))) || 'object' : 'value'}`).join('|');
+    const cacheKey = `${this.browserGeneration}:${mode}:${snippetSource}:${bindingSignature}`;
+    let moduleUrl = this.codepadModules.get(cacheKey);
+    if (!moduleUrl) {
+      const compiled = await this.http.compileCodepad(snippetSource, String(this.browserGeneration || ''), bindings.names);
+      moduleUrl = new URL(`/api/session/${this.http.sessionId}/browser/${compiled.entry}`, window.location.origin).href;
+      this.codepadModules.set(cacheKey, moduleUrl);
+    }
+    const result = await this.local({ op: 'codepad', url: moduleUrl, bindings: this.codepadBindings().values });
+    return { ...result.value, output: result.output };
+  }
   async execute(request: Action): Promise<Value & { output?: string; stage?: unknown; name?: string }> {
     if (request.op === 'reset' && this.worker && this.ready) { await this.reset(); return { kind: 'unit', display: 'Unit' }; }
     if (!this.worker && request.op === 'eval') {
@@ -378,6 +393,15 @@ export class HybridRuntimeClient implements RuntimeClient {
         const result = await this.local({ op: 'create', functionName, args, className: klass.name, name: String(request.name || klass.name.toLowerCase()) });
         if (result.objectId) this.localObjects.set(result.objectId, klass.name); if (result.name) this.bindings.set(result.name, result.objectId); return { ...result.value, output: result.output };
       }
+      const args = JSON.parse(String(request.args || '[]')) as string[];
+      const typeArguments = JSON.parse(String(request.typeArguments || '[]')) as TypeRef[];
+      const typeSuffix = typeArguments.length ? `<${typeArguments.map(type => type.classifier).join(', ')}>` : '';
+      const result = await this.runBrowserSnippet(`${String(request.className)}${typeSuffix}(${args.join(', ')})`, 'expression');
+      if (result.objectId) {
+        this.localObjects.set(String(result.objectId), String(request.className));
+        if (request.name) this.bindings.set(String(request.name), result.objectId);
+      }
+      return { ...result, name: request.name };
     }
     if (this.worker && this.ready && request.op === 'eval') {
       const source = String(request.code || '').trim().replace(/;$/, '');
@@ -597,21 +621,7 @@ export class HybridRuntimeClient implements RuntimeClient {
           if (result !== undefined) return { kind: 'scalar', display: String(result) };
         }
       }
-      const snippetSource = String(request.code || '').trim().replace(/;$/, '');
-      if (snippetSource) {
-        const bindingSignature = this.codepadBindings().names.map(name => `${name}:${this.bindings.has(name) ? this.localObjects.get(String(this.bindings.get(name))) || 'object' : 'value'}`).join('|');
-        const cacheKey = `${this.browserGeneration}:${request.mode}:${snippetSource}:${bindingSignature}`;
-        let moduleUrl = this.codepadModules.get(cacheKey);
-        if (!moduleUrl) {
-          const codepadBindings = this.codepadBindings();
-          const compiled = await this.http.compileCodepad(snippetSource, String(this.browserGeneration || ''), codepadBindings.names);
-          moduleUrl = new URL(`/api/session/${this.http.sessionId}/browser/${compiled.entry}`, window.location.origin).href;
-          this.codepadModules.set(cacheKey, moduleUrl);
-        }
-        const result = await this.local({ op: 'codepad', url: moduleUrl, bindings: this.codepadBindings().values });
-        return { ...result.value, output: result.output };
-      }
-      throw new Error('This Codepad expression is not prepared for local Kotlin/JS execution yet.');
+      return this.runBrowserSnippet(String(request.code || ''), request.mode === 'block' ? 'block' : 'expression');
     }
     if (this.worker && this.ready && request.op === 'invoke') {
       const object = this.localObjects.has(String(request.objectId)); const localClassName = this.localObjects.get(String(request.objectId)); const klass = this.classes.find(value => value.name === localClassName);
@@ -621,6 +631,12 @@ export class HybridRuntimeClient implements RuntimeClient {
         const typeName = genericMatch?.[2].split(',')[0].trim(); if (method.typeParameters?.length) { if (!typeName) throw new Error('A Kotlin type argument is required for this method.'); const result = await this.local({ op: 'invoke', functionName: `bluekGeneric_${methodName}`, methodName, typeName, objectId: String(request.objectId), args, className: method.returnType.classifier }); return { ...result.value, output: result.output }; }
         const methodKey = `${method.name.replace(/[^A-Za-z0-9_]/g, '_')}_${requiredParameters(method.parameters).map(parameter => parameter.type.classifier.replace(/[^A-Za-z0-9_]/g, '_')).join('_') || 'noargs'}`; const functionName = `bluekInvoke_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}_${methodKey}`;
         const result = await this.local({ op: 'invoke', functionName, methodName, objectId: String(request.objectId), args, className: method.returnType.classifier }); return { ...result.value, output: result.output };
+      }
+      const receiverName = [...this.bindings.entries()].find(([, objectId]) => String(objectId) === String(request.objectId))?.[0];
+      if (receiverName) {
+        const args = JSON.parse(String(request.args || '[]')) as string[];
+        const methodName = String(request.name || request.callableId || '').replace(/<.*>$/, '').trim();
+        if (methodName) return this.runBrowserSnippet(`${receiverName}.${methodName}(${args.join(', ')})`, 'expression');
       }
     }
     if (this.worker && this.ready && request.op === 'inspect') {
@@ -648,7 +664,7 @@ export class HybridRuntimeClient implements RuntimeClient {
   createObject(classId: string, constructorId: string, typeArguments: TypeRef[], args: string[], name: string): Promise<Value> { return this.execute({ op: 'create', className: classId, constructorId, typeArguments: JSON.stringify(typeArguments), args: JSON.stringify(args), name }); }
   invokeMethod(objectId: string, callableId: string, typeArguments: TypeRef[], args: string[]): Promise<Value> { return this.execute({ op: 'invoke', objectId, name: callableId, typeArguments: JSON.stringify(typeArguments), args: JSON.stringify(args) }); }
   async inspectObject(objectId: string): Promise<unknown> { if (this.worker && this.ready) return (await this.local({ op: 'inspect', objectId })).value; return this.http.inspectObject(objectId); }
-  async evaluate(code: string, mode: 'expression' | 'block'): Promise<Value> { if (this.worker && this.ready) throw new Error('This expression is not prepared for local Kotlin/JS execution yet.'); return this.http.evaluate(code, mode); }
+  async evaluate(code: string, mode: 'expression' | 'block'): Promise<Value> { if (this.worker && this.ready) return this.execute({ op: 'eval', code, mode }); return this.http.evaluate(code, mode); }
   async removeObject(objectId: string): Promise<void> { this.localObjects.delete(objectId); if (this.worker && this.ready) { await this.local({ op: 'remove', objectId }); return; } await this.http.removeObject(objectId); }
   sendInput(text: string): Promise<void> { if (!this.worker) return this.http.sendInput(text); if (!this.inputBuffer) return Promise.reject(new Error('Terminal input requires a cross-origin-isolated browser context.')); const bytes = new TextEncoder().encode(text); const state = new Int32Array(this.inputBuffer, 0, 1); const buffer = new Uint8Array(this.inputBuffer, 4); buffer.fill(0); buffer.set(bytes.subarray(0, buffer.length)); Atomics.store(state, 0, Math.min(bytes.length, buffer.length)); Atomics.notify(state, 0); return Promise.resolve(); }
   async stop(): Promise<void> { const hadBrowserWorker = Boolean(this.worker); this.worker?.terminate(); this.worker = null; this.ready = null; this.browserReady = false; this.browserWorkerDead = true; this.inputBarrier = Promise.resolve(); this.browserGeneration = null; this.browserModuleUrl = null; this.browserPackageName = ''; this.codepadModules.clear(); this.localObjects.clear(); this.localValues.clear(); this.bindings.clear(); if (!hadBrowserWorker) await this.http.stop(); }
