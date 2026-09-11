@@ -1021,6 +1021,13 @@ export class HybridRuntimeClient implements RuntimeClient {
     if (this.worker && this.ready && request.op === 'inspect') {
       return (await this.local({ op: 'inspect', objectId: String(request.objectId), className: String(this.localObjects.get(String(request.objectId)) || '') })).value;
     }
+    if (this.worker && this.ready && request.op === 'set') {
+      const objectId = String(request.objectId); const className = String(this.localObjects.get(objectId) || ''); const klass = this.classes.find(value => value.name === className); const property = klass?.properties?.find(value => value.name === request.property);
+      if (!property?.mutable) throw new Error('This property is read-only.');
+      const value = parseKotlinArgument(String(request.value || ''), this.bindings, this.localValues);
+      if (!simpleArgumentsMatch([value], [{ type: property.type }])) throw new Error(`The value does not match the type ${property.type.displayName}.`);
+      return (await this.local({ op: 'set', objectId, className, property: String(request.property), value })).value;
+    }
     if (this.worker && this.ready && request.op === 'remove') {
       this.localObjects.delete(String(request.objectId));
       return (await this.local({ op: 'remove', objectId: String(request.objectId) })).value;

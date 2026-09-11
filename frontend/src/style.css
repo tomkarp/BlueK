@@ -272,6 +272,12 @@ footer{flex:0 0 108px}
 .project-choice-list button:hover,.project-choice-list button:focus-visible{background:#08a6d2;color:#fff;outline:0}
 .project-choice-list strong{font-size:15px}
 .project-choice-list span{font-size:12px;color:inherit}
+.inspect-row{grid-template-columns:minmax(100px,1fr) minmax(120px,1fr) auto}
+.inspect-row output{grid-column:2}
+.inspect-row input{grid-column:2;width:100%;min-width:0;padding:7px;border:1px solid #888;font:16px monospace}
+.inspect-row.editable output{cursor:text}
+.inspect-edit,.inspect-save{grid-column:3!important;width:34px;height:32px;margin:0!important;padding:4px!important;border:1px solid #aaa;border-radius:4px;background:#fff;color:#555;cursor:pointer}
+.inspect-edit:hover,.inspect-save:hover{background:#d8f1f7;color:#087c9d}
 .compiling-overlay{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:rgba(35,38,40,.58);cursor:wait}
 .compiling-message{display:flex;align-items:center;gap:12px;min-width:220px;padding:18px 24px;border:1px solid #777;border-radius:8px;background:#f5f4f1;box-shadow:0 5px 18px #222;color:#333;font-size:18px;font-weight:bold}
 .compiling-message small{display:block;margin-left:4px;color:#666;font-size:12px;font-weight:normal}
