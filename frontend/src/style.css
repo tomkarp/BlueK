@@ -10,6 +10,15 @@
 
 /* Keep the project canvas usable at laptop and narrow browser widths. */
 .canvas{overflow:auto}
+
+/* The terminal behaves like the separate BlueJ terminal window while staying
+   inside the browser viewport. */
+.terminal-window.maximized{position:fixed;inset:4vh 4vw;width:auto;height:auto;margin:0}
+.terminal-window.maximized pre{min-height:0}
+.terminal-header{cursor:grab;user-select:none}
+.terminal-header:active{cursor:grabbing}
+.terminal-header>div{display:flex;gap:4px}
+.terminal-header button{min-width:28px;padding:2px 7px}
 .bluek:has(.stage-window-chrome) .game-controls{top:calc(var(--bluek-stage-top,72px) + var(--bluek-stage-height,262px) + 8px)}
 .bluek:has(.stage-window-chrome.maximized) .game-controls{top:calc(8vh + 30px + var(--bluek-stage-height,262px) + 8px)}
 .bluek:has(.stage-window-chrome) .game-controls{top:var(--bluek-controls-top);left:var(--bluek-controls-left);width:var(--bluek-controls-width)}
