@@ -318,6 +318,7 @@ export class HybridRuntimeClient implements RuntimeClient {
   private readonly codepadModules = new Map<string, string>();
 
   private readonly onFailure: (message: string) => void;
+  private readonly pendingLocalRejectors = new Set<(error: Error) => void>();
   constructor(sessionId: string, onFailure?: (message: string) => void, onInputRequest: (output?: string) => void = () => undefined) { this.http = new HttpRuntimeClient(sessionId, onFailure); this.onFailure = onFailure || (() => undefined); this.onInputRequest = onInputRequest; }
   private async recoverSession(): Promise<void> {
     const response = await fetch('/api/session', { method: 'POST' });
@@ -335,6 +336,7 @@ export class HybridRuntimeClient implements RuntimeClient {
   }
   private startBrowserWorker(): void {
     if (!this.browserModuleUrl) throw new Error('Browser runtime is not available.');
+    this.cancelPendingLocal('Browser Kotlin/JS worker replaced.');
     this.worker?.terminate();
     this.browserWorkerDead = false;
     this.browserReady = false;
@@ -364,6 +366,11 @@ export class HybridRuntimeClient implements RuntimeClient {
       worker.postMessage({ op: 'load', url: this.browserModuleUrl, packageName: this.browserPackageName });
     });
   }
+  private cancelPendingLocal(message: string): void {
+    const error = new Error(message);
+    for (const reject of [...this.pendingLocalRejectors]) reject(error);
+    this.pendingLocalRejectors.clear();
+  }
   private async local(request: BrowserAction): Promise<any> {
     if (!this.worker || !this.ready) throw new Error('Browser runtime is not available.');
     await this.ready;
@@ -373,7 +380,9 @@ export class HybridRuntimeClient implements RuntimeClient {
       const timeout = window.setTimeout(() => { cleanup(); reject(new Error('Browser runtime did not answer within 30 seconds.')); }, 30000);
       const onMessage = (event: MessageEvent) => { if (event.data?.kind === 'input-request') { this.onInputRequest(event.data.output); return; } if (event.data?.kind === 'value' || event.data?.kind === 'ready') { cleanup(); resolve(event.data); } else if (event.data?.kind === 'error') { cleanup(); reject(new Error(event.data.message)); } };
       const onError = (event: ErrorEvent) => { cleanup(); reject(new Error(event.message || 'Browser Kotlin/JS worker stopped.')); };
-      const cleanup = () => { window.clearTimeout(timeout); worker.removeEventListener('message', onMessage); worker.removeEventListener('error', onError); };
+      const cleanup = () => { window.clearTimeout(timeout); worker.removeEventListener('message', onMessage); worker.removeEventListener('error', onError); this.pendingLocalRejectors.delete(rejectPending); };
+      const rejectPending = (error: Error) => { cleanup(); reject(error); };
+      this.pendingLocalRejectors.add(rejectPending);
       worker.addEventListener('message', onMessage);
       worker.addEventListener('error', onError);
       worker.postMessage(request);
@@ -1000,9 +1009,10 @@ export class HybridRuntimeClient implements RuntimeClient {
   async evaluate(code: string, mode: 'expression' | 'block'): Promise<Value> { if (this.worker && this.ready) return this.execute({ op: 'eval', code, mode }); return this.http.evaluate(code, mode); }
   async removeObject(objectId: string): Promise<void> { this.localObjects.delete(objectId); if (this.worker && this.ready) { await this.local({ op: 'remove', objectId }); return; } await this.http.removeObject(objectId); }
   sendInput(text: string): Promise<void> { if (!this.worker) return this.http.sendInput(text); if (!this.inputBuffer) return Promise.reject(new Error('Terminal input requires a cross-origin-isolated browser context.')); const bytes = new TextEncoder().encode(text); const state = new Int32Array(this.inputBuffer, 0, 1); const buffer = new Uint8Array(this.inputBuffer, 4); buffer.fill(0); buffer.set(bytes.subarray(0, buffer.length)); Atomics.store(state, 0, Math.min(bytes.length, buffer.length)); Atomics.notify(state, 0); return Promise.resolve(); }
-  async stop(): Promise<void> { const hadBrowserWorker = Boolean(this.worker); this.worker?.terminate(); this.worker = null; this.ready = null; this.browserReady = false; this.browserWorkerDead = true; this.inputBarrier = Promise.resolve(); this.browserGeneration = null; this.browserModuleUrl = null; this.browserPackageName = ''; this.codepadModules.clear(); this.localObjects.clear(); this.localValues.clear(); this.localValueMutability.clear(); this.localValueTypes.clear(); this.bindings.clear(); if (!hadBrowserWorker) await this.http.stop(); }
+  async stop(): Promise<void> { const hadBrowserWorker = Boolean(this.worker); this.cancelPendingLocal('Browser Kotlin/JS worker stopped.'); this.worker?.terminate(); this.worker = null; this.ready = null; this.browserReady = false; this.browserWorkerDead = true; this.inputBarrier = Promise.resolve(); this.browserGeneration = null; this.browserModuleUrl = null; this.browserPackageName = ''; this.codepadModules.clear(); this.localObjects.clear(); this.localValues.clear(); this.localValueMutability.clear(); this.localValueTypes.clear(); this.bindings.clear(); if (!hadBrowserWorker) await this.http.stop(); }
   async reset(): Promise<void> {
     if (!this.browserModuleUrl) { await this.stop(); return; }
+    this.cancelPendingLocal('Browser Kotlin/JS worker reset.');
     this.worker?.terminate();
     this.worker = null;
     this.ready = null;
