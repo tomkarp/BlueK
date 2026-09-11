@@ -87,3 +87,4 @@ footer{flex:0 0 108px}
 .workspace>.pane-splitter{grid-row:2}
 .workspace>.lower{grid-row:3;min-height:0}
 .workspace>footer{grid-row:4;min-height:0}
+.canvas{overflow:auto}
