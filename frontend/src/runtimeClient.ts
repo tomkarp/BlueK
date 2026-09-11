@@ -493,6 +493,16 @@ export class HybridRuntimeClient implements RuntimeClient {
     const value = simpleBuiltin(source, this.bindings, this.localValues);
     if (value !== undefined) return value;
     const trimmed = stripExpressionParentheses(source);
+    const indexAccess = trimmed.match(/^(.+)\[\s*(-?\d+)\s*\]$/s);
+    if (indexAccess) {
+      const receiver = this.standaloneExpression(indexAccess[1]);
+      const index = Number(indexAccess[2]);
+      if (typeof receiver === 'string' || Array.isArray(receiver)) {
+        const normalized = index < 0 ? receiver.length + index : index;
+        if (normalized < 0 || normalized >= receiver.length) throw new Error('Index is out of bounds.');
+        return receiver[normalized];
+      }
+    }
     if (trimmed.startsWith('!') && trimmed.length > 1) return !Boolean(this.standaloneExpression(trimmed.slice(1)));
     const property = trimmed.match(/^(.+)\.(length|size|isEmpty)$/s);
     if (property) {
