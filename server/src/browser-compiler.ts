@@ -82,6 +82,7 @@ function bridgeSource(files: ProjectFile[], classes: ClassMeta[]): { source: str
         'import kotlin.js.ExperimentalJsExport',
         'import kotlin.js.JsExport',
         ...[...imports].map(value => `import ${value}`),
+        ...(mainPackage ? [`import ${mainPackage}.main`] : []),
         '',
         '@OptIn(ExperimentalJsExport::class)',
         '@JsExport',
@@ -95,7 +96,6 @@ function bridgeSource(files: ProjectFile[], classes: ClassMeta[]): { source: str
         '@JsExport',
         'fun bluekStage(): String = bluekStageJson()',
     ];
-    if (mainPackage) lines.push(`import ${mainPackage}.main`);
     if (mainFile) {
         lines.push('', '@OptIn(ExperimentalJsExport::class)', '@JsExport', 'fun bluekStart() { main() }');
     }
