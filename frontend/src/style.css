@@ -272,6 +272,11 @@ footer{flex:0 0 108px}
 .project-choice-list button:hover,.project-choice-list button:focus-visible{background:#08a6d2;color:#fff;outline:0}
 .project-choice-list strong{font-size:15px}
 .project-choice-list span{font-size:12px;color:inherit}
+.compiling-overlay{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:rgba(35,38,40,.58);cursor:wait}
+.compiling-message{display:flex;align-items:center;gap:12px;min-width:220px;padding:18px 24px;border:1px solid #777;border-radius:8px;background:#f5f4f1;box-shadow:0 5px 18px #222;color:#333;font-size:18px;font-weight:bold}
+.compiling-message small{display:block;margin-left:4px;color:#666;font-size:12px;font-weight:normal}
+.compiling-spinner{width:18px;height:18px;border:3px solid #bbb;border-top-color:#078fb9;border-radius:50%;animation:bluek-spin .8s linear infinite}
+@keyframes bluek-spin{to{transform:rotate(360deg)}}
 
 /* BlueJ-style class-card context menu. */
 .popup{width:210px;background:#fff;border:1px solid #aaa;box-shadow:2px 4px 12px #777}
