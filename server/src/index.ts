@@ -60,7 +60,7 @@ const readExampleResources = async (name: string) => {
     }
     return resources;
 };
-app.get('/api/examples', asyncRoute(async (_: any, r: any) => r.json({ files: await readExample('blueplay'), resources: await readExampleResources('blueplay') })));
+app.get('/api/examples', asyncRoute(async (_: any, r: any) => r.json({ files: [], resources: [] })));
 app.get('/api/examples/:name', asyncRoute(async (req: any, r: any) => {
     if (!['basic', 'blueplay', 'blueplay-stress', 'blueplay-input', 'krokoalarm', 'student-smoke'].includes(req.params.name)) return r.sendStatus(404);
     r.json({ files: await readExample(req.params.name), resources: await readExampleResources(req.params.name) });

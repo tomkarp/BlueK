@@ -235,6 +235,17 @@ footer{flex:0 0 108px}
 .sidebar button:nth-of-type(4)::before{content:"";position:absolute;left:50%;top:49%;width:48px;border-top:2px solid #222;transform:translate(-38px,-50%)}
 .sidebar button:nth-of-type(4)::after{content:"▷";position:absolute;left:50%;top:50%;color:#222;background:transparent;font:32px/1 Arial,sans-serif;transform:translate(3px,-50%)}
 .sidebar button:nth-of-type(4).active-tool{background:linear-gradient(#f8f8f8,#d7d7d7);border-color:#aaa;box-shadow:0 1px 2px #aaa}
+
+/* Project actions live in a compact top row; the workbench sidebar keeps
+   only actions that operate directly on the class diagram. */
+.toolbar{height:58px;display:flex;align-items:center;gap:10px;padding:8px 16px;background:#d7d9da;border-bottom:1px solid #aaa;overflow:auto}
+.toolbar button,.toolbar label{height:40px;display:inline-flex;align-items:center;justify-content:center;position:relative;border:1px solid #aaa;border-radius:5px;background:linear-gradient(#f8f8f8,#d7d7d7);box-shadow:0 1px 2px #aaa;padding:0 14px;color:#222;font-size:14px;white-space:nowrap;cursor:pointer}
+.toolbar button:disabled{cursor:not-allowed;opacity:.55}
+.toolbar label{overflow:hidden}
+.toolbar input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+.toolbar-status{margin-left:auto;color:#555;white-space:nowrap;font-size:13px}
+.sidebar .resource-button,.sidebar button:nth-of-type(3){display:none}
+.body{height:calc(100% - 58px)}
 .lower .bench-codepad-splitter{grid-column:2}
 .lower .codepad-toggle{grid-column:auto;position:absolute;left:calc(var(--bench-width,60%) - 22px);top:50%;transform:translateY(-50%);z-index:2;height:22px;align-items:center;justify-content:center}
 .lower .codepad{grid-column:3}
@@ -244,3 +255,11 @@ footer{flex:0 0 108px}
 /* Match the horizontal splitter thickness to the 14px vertical grip. */
 .workspace{grid-template-rows:minmax(90px,var(--upper-pane,2fr)) 14px minmax(90px,1fr) 32px}
 .pane-splitter{height:14px;flex-basis:14px}
+
+.new-class-dialog{min-width:min(520px,85vw)}
+.new-class-dialog fieldset{border:1px solid #aaa;margin:8px 0 18px;padding:10px 14px}
+.new-class-dialog legend{padding:0 6px;color:#555}
+.new-class-option{display:flex!important;align-items:center;gap:8px;margin:9px 0!important;cursor:pointer}
+.new-class-option input{display:inline-block!important;width:auto!important;margin:0!important}
+.new-class-dialog > label > input{display:block;width:100%;margin-top:6px}
+.dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
