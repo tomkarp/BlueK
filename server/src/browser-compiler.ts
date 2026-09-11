@@ -161,8 +161,12 @@ function bridgeSource(files: ProjectFile[], classes: ClassMeta[]): { source: str
             const suffix = constructorIndex === 0 ? '' : `_${constructorIndex}`;
             lines.push('', '@OptIn(ExperimentalJsExport::class)', '@JsExport', `fun bluekCreate_${className}${suffix}(${parameters.join(', ')}): ${classType} = ${classType}(${parameters.map((_, index) => `arg${index}`).join(', ')})`);
         });
+        // Use the class metadata here instead of reparsing the source. This
+        // keeps the inspector in sync with properties whose type is inferred,
+        // such as `var alter = 0`, as well as properties with custom getters.
         const source = files.find(file => file.fileName.replace(/\.kt$/, '') === klass.name)?.source || '';
-        const fieldNames = [...source.matchAll(/\b(?:val|var)\s+(\w+)\s*:/g)].map(match => match[1]);
+        const inferredNames = [...source.matchAll(/\b(?:val|var)\s+(\w+)\s*(?::\s*[^=\n;,)]+)?\s*=|\b(?:val|var)\s+(\w+)\s*:/g)].map(match => match[1] || match[2]);
+        const fieldNames = [...new Set([...(klass.properties || []).map(property => property.name), ...inferredNames])];
         const fieldJson = JSON.stringify(fieldNames).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
         lines.push('', '@OptIn(ExperimentalJsExport::class)', '@JsExport', `fun bluekInspectNames_${className}(): String = "${fieldJson}"`);
         for (const method of klass.methods.filter(value => value.visibility === 'public' && !value.typeParameters?.length && !(value.inheritedFrom && frameworkNames.has(value.declaringType)) && !value.parameters.some(parameter => parameter.type.displayName.startsWith('List') || /\([^)]*\)\s*->/.test(parameter.type.displayName)))) {
