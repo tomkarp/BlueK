@@ -156,7 +156,7 @@ function bridgeSource(files: ProjectFile[], classes: ClassMeta[]): { source: str
 
 const run = (command: string, args: string[], cwd: string) => new Promise<{ code: number; out: string; err: string }>(resolve => execFile(command, args, { cwd, maxBuffer: 20e6, timeout: 120000 }, (error, stdout, stderr) => resolve({ code: error ? Number(error.code) || 1 : 0, out: stdout, err: stderr })));
 const compilerDiagnostic = (result: { out: string; err: string }) => {
-    const lines = `${result.out}\n${result.err}`.split(/\r?\n/).map(line => line.trim()).filter(line => /^(?:e|w):\s+file:\/\//.test(line));
+    const lines = `${result.out}\n${result.err}`.split(/\r?\n/).map(line => line.trim()).filter(line => /^(?:e|w):\s+file:\/\//.test(line)).map(line => line.replace(/file:\/\/.*\/(?:project|bridge)\/([^/:]+):(\d+):(\d+)/, (_match, file, lineNumber, column) => `${file === 'BlueKSnippet.kt' ? 'Codepad' : file}:${lineNumber}:${column}`));
     return lines.length ? lines.join('\n') : 'Kotlin/JS compilation failed.';
 };
 
