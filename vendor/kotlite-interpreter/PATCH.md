@@ -10,6 +10,9 @@ It is kept as a source dependency so BlueK can apply small, reviewable
 browser-session fixes without replacing Kotlite with a separate interpreter.
 The upstream MIT license is included in `LICENSE`.
 
+The fork also reports secondary constructors explicitly as unsupported instead
+of exposing the parser's generic unexpected-token error.
+
 BlueK adds `ClassInstance.readBackingPropertyByDeclaredName`, a passive
 inspection hook that reads a backing field without invoking a student-defined
 getter. This is needed to display ordinary fields and properties with only a

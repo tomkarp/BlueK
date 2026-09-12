@@ -2436,6 +2436,9 @@ open class Parser(protected val lexer: Lexer) {
                 "val", "var" -> return propertyDeclaration(modifiers ?: emptySet())
                 "fun" -> return functionDeclaration(modifiers ?: emptySet(), isProcessBody = !isInterface)
                 "class", "interface" -> return classDeclaration(modifiers ?: emptySet())
+                "constructor" -> throw UnsupportedOperationException(
+                    "Secondary constructors are not supported by this Kotlite build."
+                )
                 in ACCEPTED_MODIFIERS -> {
                     if (modifiers == null) {
                         modifiers = modifiers()

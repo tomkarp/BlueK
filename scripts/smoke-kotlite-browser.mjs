@@ -153,5 +153,7 @@ const visibilityManifest = JSON.parse(visibilitySession.manifest());
 if (visibilityManifest.classes[0].properties[0].visibility !== 'private') throw new Error('Private property visibility was lost in the Kotlite manifest.');
 const protectedError = JSON.parse(visibilitySession.load('<visibility>', 'class Protected { protected fun hidden() {} }'));
 if (protectedError.kind !== 'error' || !protectedError.display.includes('protected')) throw new Error('Unsupported protected visibility did not produce a clear error.');
+const secondaryConstructorError = JSON.parse(visibilitySession.evaluate('<visibility>', 'class Secondary { constructor(value: Int) {} }'));
+if (secondaryConstructorError.kind !== 'error' || !secondaryConstructorError.display.includes('Secondary constructors are not supported')) throw new Error('Secondary constructors did not produce a clear local error.');
 
 console.log('Kotlite browser session smoke test passed.');
