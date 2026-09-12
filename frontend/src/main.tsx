@@ -274,7 +274,7 @@ useEffect(() => { if (!generation || !client) return; let active = true; const t
     if (choice !== 'empty') {
       const path = choice === 'blueplay-empty' ? './examples/blueplay-empty.bluek.json' : './examples/blueplay.bluek.json';
       try {
-        const response = await fetch(path);
+        const response = await fetch(path, { cache: 'no-store' });
         if (!response.ok) throw new Error(`Could not load ${choice} project.`);
         const payload = await response.json();
         project = {

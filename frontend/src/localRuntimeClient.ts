@@ -62,6 +62,22 @@ const sourceFileAtLine = (files: ProjectFile[], line: number) => {
   }
   return selected;
 };
+const sourceLocationInFiles = (files: ProjectFile[], combinedLine: number, combinedColumn: number) => {
+  let line = 1;
+  for (const file of files) {
+    const headerLines = 1;
+    const sourceLines = String(file.source || '').split('\n').length;
+    const firstSourceLine = line + headerLines;
+    const lastSourceLine = firstSourceLine + sourceLines - 1;
+    if (combinedLine >= firstSourceLine && combinedLine <= lastSourceLine) {
+      return { fileName: file.fileName, line: combinedLine - firstSourceLine + 1, column: combinedColumn };
+    }
+    // The two separator newlines share the final line break when a source
+    // ends in a newline, so the next header starts after one extra line.
+    line += headerLines + sourceLines + 1;
+  }
+  return { fileName: sourceFileAtLine(files, combinedLine), line: combinedLine, column: combinedColumn };
+};
 
 export class LocalRuntimeClient implements RuntimeClient {
   private worker: Worker | null = null;
@@ -103,7 +119,7 @@ export class LocalRuntimeClient implements RuntimeClient {
   }
   private request(op: string, data: Record<string, unknown> = {}): Promise<any> { this.start(); const id = this.nextId++; return new Promise((resolve, reject) => { this.pending.set(id, { resolve, reject }); this.worker!.postMessage({ id, op, ...data }); }); }
   private stageOf(response: any) { return response?.stage?.stage || response?.stage; }
-  async compile(files: ProjectFile[], revision: number, ..._unused: unknown[]): Promise<CompileResult> { this.stopWorker('Kotlite worker replaced by a new compilation.'); this.classes = metadata(files); const response = await this.request('compile', { files }); if (response.kind === 'error') { const location = sourceLocation(String(response.display || 'Kotlite compilation failed.')); return { generationId: '', sourceRevision: revision, classes: [], diagnostics: [{ fileName: sourceFileAtLine(files, location.line), line: location.line, column: location.column, severity: 'error', message: response.display }] }; } this.classes = Array.isArray(response.classes) ? addInheritedMembers(response.classes) : this.classes; this.generationId = crypto.randomUUID(); return { generationId: this.generationId, sourceRevision: revision, classes: this.classes, diagnostics: [] }; }
+  async compile(files: ProjectFile[], revision: number, ..._unused: unknown[]): Promise<CompileResult> { this.stopWorker('Kotlite worker replaced by a new compilation.'); this.classes = metadata(files); const response = await this.request('compile', { files }); if (response.kind === 'error') { const location = sourceLocation(String(response.display || 'Kotlite compilation failed.')); const mapped = sourceLocationInFiles(files, location.line, location.column); return { generationId: '', sourceRevision: revision, classes: [], diagnostics: [{ fileName: mapped.fileName, line: mapped.line, column: mapped.column, severity: 'error', message: response.display }] }; } this.classes = Array.isArray(response.classes) ? addInheritedMembers(response.classes) : this.classes; this.generationId = crypto.randomUUID(); return { generationId: this.generationId, sourceRevision: revision, classes: this.classes, diagnostics: [] }; }
   private publish(response: any) {
     if (!response?.stage) return;
     // Worker responses wrap the serialized snapshot as { stage: { stage: ... } }.

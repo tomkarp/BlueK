@@ -10,7 +10,7 @@ const apiReady = fetch(bundleUrl)
 let session: any;
 const getSession = async () => session || (session = (await apiReady).bluekCreateKotliteSession());
 
-self.onmessage = async event => {
+const handleRequest = async (event: MessageEvent) => {
   const request = event.data || {};
   try {
     const api = await apiReady;
@@ -52,4 +52,12 @@ self.onmessage = async event => {
   } catch (error) {
     self.postMessage({ id: request.id, response: { kind: 'error', display: error instanceof Error ? error.message : String(error) } });
   }
+};
+
+// The interpreter and its object graph are intentionally single-threaded.
+// Queue messages so a simulation tick cannot race a user action such as
+// pause, stop, inspection, or a Codepad evaluation.
+let requestQueue = Promise.resolve();
+self.onmessage = event => {
+  requestQueue = requestQueue.then(() => handleRequest(event), () => handleRequest(event));
 };
