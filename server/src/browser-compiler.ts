@@ -311,7 +311,7 @@ export const classesFromManifest = (manifest: SymbolManifest): ClassMeta[] => ma
     typeParameters: declaration.typeParameters,
 }));
 
-export async function compileBrowserProject(root: string, sessionDir: string, files: ProjectFile[], classes: ClassMeta[]): Promise<{ ok: boolean; diagnostics: string; directory: string; manifest?: SymbolManifest }> {
+export async function compileBrowserProject(root: string, sessionDir: string, files: ProjectFile[]): Promise<{ ok: boolean; diagnostics: string; directory: string; manifest?: SymbolManifest }> {
     const buildDir = path.join(sessionDir, 'browser');
     const bridgeDir = path.join(buildDir, 'bridge');
     // Keep Gradle's build directory between generations. Kotlin/JS compilation is

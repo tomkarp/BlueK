@@ -129,14 +129,11 @@ app.post('/api/session/:id/compile',asyncRoute(async(req:any,r:any)=>{
     }
     s.resourcePaths=[...nextResources];
     const ruleDiagnostics=projectRuleDiagnostics(files); const gid=randomUUID();
-    const classes=addCompanionMethods(enrichMethods(addPropertyMethods(finalizeMeta(metaImproved(files),files),files)),files);
     let browserRuntime: {entry:string;packageName:string}|undefined; let browserDiagnostics=''; let manifest:SymbolManifest|undefined;
-    if(!ruleDiagnostics.length){const browser=await compileBrowserProject(root,s.dir,files,classes); if(browser.ok){browserRuntime={entry:'bluek-browser-runtime.js',packageName:packageNameForBrowser(files)};manifest=browser.manifest;s.files=files;s.generation=gid;} else browserDiagnostics=browser.diagnostics;}
+    if(!ruleDiagnostics.length){const browser=await compileBrowserProject(root,s.dir,files); if(browser.ok){browserRuntime={entry:'bluek-browser-runtime.js',packageName:packageNameForBrowser(files)};manifest=browser.manifest;s.files=files;s.generation=gid;} else browserDiagnostics=browser.diagnostics;}
     const diagnostics=ruleDiagnostics.length?ruleDiagnostics:browserDiagnostics?[{fileName:'browser-runtime',line:1,column:1,message:`Browser Kotlin/JS compilation failed:\n${browserDiagnostics}`,severity:'error'}]:[];
     const manifestClasses=manifest?classesFromManifest(manifest):[];
-    const manifestNames=new Set(manifestClasses.map(value=>value.name));
-    const functionClasses=classes.filter(value=>value.kind==='functions'&&!manifestNames.has(value.name));
-    const compilerClasses=manifestClasses.length?[...manifestClasses,...functionClasses]:classes;
+    const compilerClasses=manifest ? manifestClasses : addCompanionMethods(enrichMethods(addPropertyMethods(finalizeMeta(metaImproved(files),files),files)),files);
     r.json({generationId:gid,sourceRevision:req.body.revision||1,classes:compilerClasses,manifest,diagnostics,browserRuntime,browserRuntimeError:browserDiagnostics||undefined});
 }));
 app.get('/api/session/:id/status',asyncRoute(async(req:any,r:any)=>{const s=sessions.get(req.params.id);if(!s)return r.sendStatus(404);r.json({workerAlive:false,generationId:s.generation||null,available:false,error:'BlueK runs project code only in the browser worker.'})}));
