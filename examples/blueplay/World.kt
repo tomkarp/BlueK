@@ -25,6 +25,8 @@ open class World(val width: Int, val height: Int, val cellSize: Int = 1) {
         if (actors.count { it == actor } == 0) {
             actors.add(actor)
         }
+        actor.worldWidth = width
+        actor.worldHeight = height
         actor.x = x
         actor.y = y
     }
