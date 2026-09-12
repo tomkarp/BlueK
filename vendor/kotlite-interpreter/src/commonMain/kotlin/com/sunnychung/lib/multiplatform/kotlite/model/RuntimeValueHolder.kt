@@ -39,7 +39,7 @@ class RuntimeValueHolder(override val type: DataType, val isMutable: Boolean, va
 /**
  * For class members with custom accessors
  */
-class RuntimeValueDelegate(override val type: DataType, val reader: ((Interpreter?) -> RuntimeValue)?, val writer: ((Interpreter?, RuntimeValue) -> Unit)?) : RuntimeValueAccessor {
+class RuntimeValueDelegate(override val type: DataType, val reader: ((Interpreter?) -> RuntimeValue)?, val writer: ((Interpreter?, RuntimeValue) -> Unit)?, val backing: RuntimeValueAccessor? = null) : RuntimeValueAccessor {
     override fun assign(interpreter: Interpreter?, value: RuntimeValue) {
         if (writer == null) throw RuntimeException("Setter is not defined")
         writer!!(interpreter, value)

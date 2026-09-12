@@ -92,4 +92,24 @@ expectOk(JSON.parse(personSession.evaluate('<codepad>', 'p.sprechen()')), 'perso
 if (personSession.takeOutput() !== 'Hi, ich bin Otto und 42 Jahre alt\n') throw new Error('Separated Person inputs did not preserve object state.');
 if (JSON.parse(personSession.evaluate('<codepad>', 'p.constructions')).display !== '1') throw new Error('Separated inputs reconstructed the Person object.');
 
+const fieldSession = api.bluekCreateKotliteSession();
+expectOk(JSON.parse(fieldSession.load('<field>', `
+    class FieldPerson(val name: String) {
+        var age = 0
+        set(value) { if (value >= 0) { field = value } else { field = 0 } }
+        val remaining: Int
+            get() = 150 - age
+        fun speak() { println("Hi, ich bin $name und $age Jahre alt und habe noch $remaining Jahre") }
+    }
+`)), 'field accessor load');
+expectOk(JSON.parse(fieldSession.evaluate('<codepad>', 'val fp = FieldPerson("Otto")')), 'field accessor construction');
+expectOk(JSON.parse(fieldSession.evaluate('<codepad>', 'fp.age = 42')), 'field accessor setter');
+const remaining = JSON.parse(fieldSession.evaluate('<codepad>', 'fp.remaining'));
+if (remaining.display !== '108') throw new Error('Implicit field getter did not return the backing-field based value.');
+expectOk(JSON.parse(fieldSession.evaluate('<codepad>', 'fp.speak()')), 'field accessor method');
+if (fieldSession.takeOutput() !== 'Hi, ich bin Otto und 42 Jahre alt und habe noch 108 Jahre\n') throw new Error('Implicit field accessor state was not preserved.');
+expectOk(JSON.parse(fieldSession.evaluate('<codepad>', 'fp.age = -1')), 'field accessor validation');
+const clampedAge = JSON.parse(fieldSession.evaluate('<codepad>', 'fp.age'));
+if (clampedAge.display !== '0') throw new Error('Implicit field setter did not enforce its branch.');
+
 console.log('Kotlite browser session smoke test passed.');

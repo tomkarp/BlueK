@@ -82,6 +82,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.PropertyAccessorsNode
 import com.sunnychung.lib.multiplatform.kotlite.model.PropertyDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ReturnNode
 import com.sunnychung.lib.multiplatform.kotlite.model.RuntimeValue
+import com.sunnychung.lib.multiplatform.kotlite.model.RuntimeValueAccessor
 import com.sunnychung.lib.multiplatform.kotlite.model.ScopeType
 import com.sunnychung.lib.multiplatform.kotlite.model.ScriptNode
 import com.sunnychung.lib.multiplatform.kotlite.model.SourcePosition
@@ -681,6 +682,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         extraSymbols: SymbolTable? = null,
         replaceArguments: Map<Int, RuntimeValue> = emptyMap(),
         subject: RuntimeValue? = null,
+        extraScopePropertyHolders: Map<String, RuntimeValueAccessor> = emptyMap(),
     ): FunctionCallResult {
         // TODO optimize to remove most loops
         val isVararg =
@@ -705,7 +707,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             callArguments
         }
 
-        return evalFunctionCall(callArguments, callNode.typeArguments.toTypedArray(), callNode.position, functionNode, extraScopeParameters, extraTypeResolutions, extraSymbols, replaceArguments, subject)
+        return evalFunctionCall(callArguments, callNode.typeArguments.toTypedArray(), callNode.position, functionNode, extraScopeParameters, extraTypeResolutions, extraSymbols, replaceArguments, subject, extraScopePropertyHolders)
     }
 
     fun evalFunctionCall(
@@ -717,7 +719,8 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         extraTypeResolutions: List<TypeParameterNode>,
         extraSymbols: SymbolTable? = null,
         replaceArguments: Map<Int, RuntimeValue> = emptyMap(),
-        subject: RuntimeValue? = null
+        subject: RuntimeValue? = null,
+        extraScopePropertyHolders: Map<String, RuntimeValueAccessor> = emptyMap()
     ): FunctionCallResult {
         val isVararg = functionNode.valueParameters.firstOrNull()?.modifiers?.contains(FunctionValueParameterModifier.vararg) ?: false
         if (!isVararg && arguments.size != functionNode.valueParameters.size) {
@@ -796,6 +799,9 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             extraScopeParameters.forEach {
                 symbolTable.declareProperty(callPosition, it.key, TypeNode(callPosition, it.value.type().name, null, false), false) // TODO change to use DataType directly
                 symbolTable.assign(it.key, it.value)
+            }
+            extraScopePropertyHolders.forEach { (name, holder) ->
+                symbolTable.putPropertyHolder(name, true, holder)
             }
             functionNode.typeParameters.forEach {
                 symbolTable.declareTypeAlias(callPosition, it.name, it.typeUpperBound)
@@ -1045,7 +1051,8 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                         properties += it.transformedRefName!!
                         val value = it.initialValue?.eval() as RuntimeValue?
                         value?.let { value ->
-                            instance.assign(name = it.transformedRefName!!, value = value)
+                            if (it.accessors != null) instance.assignBacking(it.name, this@Interpreter, value)
+                            else instance.assign(name = it.transformedRefName!!, value = value)
                         }
                     }
 
@@ -1084,12 +1091,13 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
 //        return evalClassMemberAnyFunctionCall(subject, function)
 //    }
 
-    fun FunctionCallNode.evalClassMemberAnyFunctionCall(subject: RuntimeValue, function: FunctionDeclarationNode, replaceArguments: Map<Int, RuntimeValue> = emptyMap()): RuntimeValue {
+    fun FunctionCallNode.evalClassMemberAnyFunctionCall(subject: RuntimeValue, function: FunctionDeclarationNode, replaceArguments: Map<Int, RuntimeValue> = emptyMap(), extraScopePropertyHolders: Map<String, RuntimeValueAccessor> = emptyMap()): RuntimeValue {
         return evalClassMemberAnyFunctionCall(position, subject, function.receiver, function) { typeResolutions ->
             evalFunctionCall(
                 callNode = this.copy(function = function),
                 functionNode = function,
                 extraScopeParameters = emptyMap(),
+                extraScopePropertyHolders = extraScopePropertyHolders,
                 extraTypeResolutions = typeResolutions /* type arguments */,
                 replaceArguments = replaceArguments,
                 subject = subject,
@@ -1097,7 +1105,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
-    fun evalClassMemberAnyFunctionCall(position: SourcePosition, subject: RuntimeValue, function: CallableNode, arguments: Array<RuntimeValue?>, typeArguments: Array<TypeNode> = emptyArray()): RuntimeValue {
+    fun evalClassMemberAnyFunctionCall(position: SourcePosition, subject: RuntimeValue, function: CallableNode, arguments: Array<RuntimeValue?>, typeArguments: Array<TypeNode> = emptyArray(), extraScopePropertyHolders: Map<String, RuntimeValueAccessor> = emptyMap()): RuntimeValue {
         return evalClassMemberAnyFunctionCall(position, subject, subject.type().toTypeNode(), function) { typeResolutions ->
             evalFunctionCall(
                 arguments = arguments,
@@ -1105,6 +1113,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 callPosition = position,
                 functionNode = function,
                 extraScopeParameters = emptyMap(),
+                extraScopePropertyHolders = extraScopePropertyHolders,
                 extraTypeResolutions = typeResolutions,
                 subject = subject,
             )

@@ -157,6 +157,10 @@ open class ClassDefinition(
     private val memberPropertyCustomAccessors: Map<String, PropertyAccessorsNode> = mutableMapOf()
     private val memberTransformedNameToPropertyName: Map<String, String> = mutableMapOf()
     private val memberPropertyNameToTransformedName: Map<String, String> = mutableMapOf()
+    private val privateMemberProperties: Set<String> = rawMemberProperties
+        .filter { PropertyModifier.private in it.modifiers }
+        .map { it.name }
+        .toSet()
 
     private fun findIndex(): Int {
         if (superClass == null) return 0
@@ -514,12 +518,26 @@ open class ClassDefinition(
     fun findMemberPropertyCustomAccessor(declaredName: String, inThisClassOnly: Boolean = false): PropertyAccessorsNode? =
         findMemberPropertyCustomAccessorWithIndex(declaredName, inThisClassOnly)?.first
 
+    fun findMemberPropertyOwnerName(declaredName: String): String? =
+        when {
+            memberPropertyTypes.containsKey(declaredName) -> fullQualifiedName
+            else -> superClass?.findMemberPropertyOwnerName(declaredName)
+        }
+
+    fun isPrivateMemberProperty(declaredName: String): Boolean =
+        findMemberPropertyOwnerName(declaredName)?.let { owner ->
+            owner == fullQualifiedName && declaredName in privateMemberProperties
+                || superClass?.isPrivateMemberProperty(declaredName) == true
+        } ?: false
+
     fun findMemberPropertyTransformedName(declaredName: String, inThisClassOnly: Boolean = false): String? =
         memberPropertyNameToTransformedName[declaredName] ?:
             Unit.takeIf { !inThisClassOnly }?.let { superClass?.findMemberPropertyTransformedName(declaredName, inThisClassOnly) }
 
     fun findMemberPropertyDeclaredName(transformedName: String, inThisClassOnly: Boolean = false): String? =
-        memberTransformedNameToPropertyName[transformedName] ?:
+        memberTransformedNameToPropertyName[transformedName]
+            ?: transformedName.takeIf { memberPropertyTypes.containsKey(it) }
+            ?: transformedName.substringBeforeLast('/').takeIf { memberPropertyTypes.containsKey(it) } ?:
             Unit.takeIf { !inThisClassOnly }?.let { superClass?.findMemberPropertyDeclaredName(transformedName, inThisClassOnly) }
 
     /**

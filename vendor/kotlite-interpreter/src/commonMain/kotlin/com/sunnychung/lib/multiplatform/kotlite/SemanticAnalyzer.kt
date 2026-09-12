@@ -359,6 +359,15 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         return scope.scopeLevel
     }
 
+    fun currentClassName(): String? {
+        var scope: SymbolTable? = currentScope
+        while (scope != null) {
+            if (scope.scopeType == ScopeType.Class) return scope.scopeName
+            scope = scope.parentScope
+        }
+        return null
+    }
+
     fun checkPropertyReadAccessAndGetScopeLevelAndTransformedName(accessNode: ASTNode, name: String): Pair<Int, String> {
         if (!currentScope.hasProperty(name)) {
             throw SemanticException(accessNode.position, "Property `$name` is not declared")
@@ -690,8 +699,8 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 //            throw SemanticException("Custom setter is currently not supported")
 //        }
         if (isVisitInitialValue && accessors != null) {
-            accessors.getter?.visit(modifier = modifier)
-            accessors.setter?.visit(modifier = modifier)
+            accessors.getter?.visit(modifier = modifier, isPropertyAccessor = true, propertyAccessorType = accessors.type)
+            accessors.setter?.visit(modifier = modifier, isPropertyAccessor = true, propertyAccessorType = accessors.type)
         }
         if (initialValue != null) {
             val valueType = initialValue.type().toDataType()
@@ -708,11 +717,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             throw SemanticException(position, "Type cannot be inferred for property `$name`")
         }
         currentScope.declareProperty(position = position, name = name, type = type, isMutable = isMutable)
-        if (initialValue != null) {
-            if (accessors != null) {
-                throw SemanticException(position, "Property `$name` with an initial value cannot have custom accessors")
-            }
-
+        if (initialValue != null && accessors == null) {
             currentScope.assign(name, SemanticDummyRuntimeValue(currentScope.getPropertyType(name).first.type))
         }
 //        transformedRefName = "$name/${scopeLevel}"
@@ -767,7 +772,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         currentScope = currentScope.parentScope!! as SemanticAnalyzerSymbolTable
     }
 
-    fun FunctionDeclarationNode.visit(modifier: Modifier = Modifier(), isClassMemberFunction: Boolean = false) {
+    fun FunctionDeclarationNode.visit(modifier: Modifier = Modifier(), isClassMemberFunction: Boolean = false, isPropertyAccessor: Boolean = false, propertyAccessorType: TypeNode? = null) {
         val previousScope = currentScope
         var additionalScopeCount = 0
         var variantsOfThis = mutableListOf<FunctionDeclarationNode>()
@@ -841,6 +846,11 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             scopeType = ScopeType.ExtraWrap,
         )
         ++additionalScopeCount
+
+        if (isPropertyAccessor) {
+            currentScope.declareProperty(position, "field", propertyAccessorType!!, true)
+            currentScope.registerTransformedSymbol(position, IdentifierClassifier.Property, "field", "field")
+        }
 
         typeParameters.forEach {
             currentScope.declareTypeAlias(position, it.name, it.typeUpperBound)
@@ -1011,7 +1021,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     currentScope.declareTypeAliasResolution(position, it.name, typeNode.arguments!![index])
                 }
             }
-            clazz.getAllMemberPropertiesExcludingCustomAccessors().forEach {
+            clazz.getAllMemberProperties().forEach {
                 currentScope.declareProperty(
                     position = position,
                     name = it.key,
@@ -1751,6 +1761,9 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 .first
             if (lookupType == IdentifierClassifier.Property) {
                 clazz.findMemberPropertyWithoutAccessor(memberName)?.let { property ->
+                    if (clazz.isPrivateMemberProperty(memberName) && currentClassName() != clazz.findMemberPropertyOwnerName(memberName)) {
+                        throw SemanticException(position, "Private property `$memberName` cannot be accessed here")
+                    }
                     if (isCheckWriteAccess && !property.isMutable) {
                         throw SemanticException(position, "val `$memberName` cannot be reassigned")
                     }
@@ -1758,11 +1771,14 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     return subjectType
                 }
                 clazz.findMemberPropertyCustomAccessor(memberName)?.let { accessor ->
+                    if (clazz.isPrivateMemberProperty(memberName) && currentClassName() != clazz.findMemberPropertyOwnerName(memberName)) {
+                        throw SemanticException(position, "Private property `$memberName` cannot be accessed here")
+                    }
                     if (isCheckWriteAccess) {
-                        if (accessor.setter == null) {
+                        if (accessor.setter == null && accessor.getter == null) {
                             throw SemanticException(position, "Setter for `$memberName` is not declared")
                         }
-                    } else if (accessor.getter == null) {
+                    } else if (accessor.getter == null && accessor.setter == null) {
                         throw SemanticException(position, "Getter for `$memberName` is not declared")
                     }
                     memberType = NavigationNode.MemberType.Direct

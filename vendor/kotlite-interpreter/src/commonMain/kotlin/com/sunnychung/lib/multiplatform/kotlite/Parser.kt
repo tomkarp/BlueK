@@ -69,7 +69,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.WhenSubjectNode
 import com.sunnychung.lib.multiplatform.kotlite.model.WhileNode
 
 val ACCEPTED_MODIFIERS = setOf(
-    "open", "override", "operator", "vararg", "enum", "abstract", "infix", "nullaware"
+    "open", "override", "private", "operator", "vararg", "enum", "abstract", "infix", "nullaware"
 )
 
 /**
@@ -1683,10 +1683,20 @@ open class Parser(protected val lexer: Lexer) {
         return name to type
     }
 
+    private fun inferredAccessorType(initialValue: ASTNode?): TypeNode = when (initialValue) {
+        is IntegerNode -> TypeNode(initialValue.position, "Int", null, false)
+        is DoubleNode -> TypeNode(initialValue.position, "Double", null, false)
+        is LongNode -> TypeNode(initialValue.position, "Long", null, false)
+        is BooleanNode -> TypeNode(initialValue.position, "Boolean", null, false)
+        is StringLiteralNode -> TypeNode(initialValue.position, "String", null, false)
+        else -> throw RuntimeException("Type is needed if a custom accessor has no inferable initial value")
+    }
+
     fun Set<String>.toPropertyModifiers() = this.map {
         when (it) {
             "open" -> PropertyModifier.open
             "override" -> PropertyModifier.override
+            "private" -> PropertyModifier.private
             else -> throw ParseException("Modifier `$it` cannot be applied to properties")
         }
     }.toSet()
@@ -1747,34 +1757,30 @@ open class Parser(protected val lexer: Lexer) {
         }
 
         val nextToken = currentTokenExcludingNL()
-        val accessors = when (nextToken.value.takeIf { initialValue == null && nextToken.type == TokenType.Identifier }) {
+        val accessors = when (nextToken.value.takeIf { nextToken.type == TokenType.Identifier }) {
             "get" -> {
                 repeatedNL()
-                if (type == null) { // TODO make type infer possible
-                    throw RuntimeException("Type is needed if there is custom accessor")
-                }
-                val getter = getter(type, isProcessBody)
+                val accessorType = type ?: inferredAccessorType(initialValue)
+                val getter = getter(accessorType, isProcessBody)
                 val next = nextNonNLSemiToken()
                 val setter = if (next.type == TokenType.Identifier && next.value == "set") {
                     repeatedNL()
                     if (isSemi()) semi()
-                    setter(type, isProcessBody)
+                    setter(accessorType, isProcessBody)
                 } else null
-                PropertyAccessorsNode(nextToken.position, type, getter, setter)
+                PropertyAccessorsNode(nextToken.position, accessorType, getter, setter)
             }
             "set" -> {
                 repeatedNL()
-                if (type == null) { // TODO make type infer possible
-                    throw RuntimeException("Type is needed if there is custom accessor")
-                }
-                val setter = setter(type, isProcessBody)
+                val accessorType = type ?: inferredAccessorType(initialValue)
+                val setter = setter(accessorType, isProcessBody)
                 val next = nextNonNLSemiToken()
                 val getter = if (next.type == TokenType.Identifier && next.value == "get") {
                     repeatedNL()
                     if (isSemi()) semi()
-                    getter(type, isProcessBody)
+                    getter(accessorType, isProcessBody)
                 } else null
-                PropertyAccessorsNode(nextToken.position, type, getter, setter)
+                PropertyAccessorsNode(nextToken.position, accessorType, getter, setter)
             }
             else -> null
         }
@@ -2083,6 +2089,7 @@ open class Parser(protected val lexer: Lexer) {
             "vararg" -> /*FunctionValueParameterModifier.vararg*/ throw UnsupportedOperationException("vararg in class primary constructor is not supported")
             "open" -> PropertyModifier.open
             "override" -> PropertyModifier.override
+            "private" -> PropertyModifier.private
             else -> throw ParseException("Modifier `$it` cannot be applied to class parameter")
         }
     }

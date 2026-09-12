@@ -45,22 +45,23 @@ open class ClassInstance(
         }
 
         clazz.getDeclaredPropertyAccessorsInThisClass().forEach {
+            val backing = RuntimeValueHolder(clazz.findMemberProperty(it.key)!!.type.resolveTypeParameter(), true, null)
             memberPropertyValues[it.key] = RuntimeValueDelegate(
                 type = clazz.findMemberProperty(it.key)!!.type.resolveTypeParameter(),
                 reader = { interpreter ->
                     with(interpreter!!) {
-                        val function = it.value.getter!!
+                        val function = it.value.getter ?: return@with backing.read(this)
                         FunctionCallNode(
                             function,
                             emptyList(),
                             emptyList(),
                             SourcePosition("", 1, 1)
-                        ).evalClassMemberAnyFunctionCall(this@ClassInstance, function)
+                        ).evalClassMemberAnyFunctionCall(this@ClassInstance, function, extraScopePropertyHolders = mapOf("field" to backing))
                     }
                 },
                 writer = { interpreter, value ->
                     with(interpreter!!) {
-                        val function = it.value.setter!!
+                        val function = it.value.setter ?: return@with backing.assign(this, value)
                         FunctionCallNode(
                             function,
                             listOf(
@@ -72,9 +73,10 @@ open class ClassInstance(
                             ),
                             emptyList(),
                             SourcePosition("", 1, 1)
-                        ).evalClassMemberAnyFunctionCall(this@ClassInstance, function)
+                        ).evalClassMemberAnyFunctionCall(this@ClassInstance, function, extraScopePropertyHolders = mapOf("field" to backing))
                     }
-                }
+                },
+                backing = backing,
             )
         }
 
@@ -83,10 +85,20 @@ open class ClassInstance(
         hasInitialized = true
     }
 
+    internal fun assignBacking(name: String, interpreter: Interpreter, value: RuntimeValue) {
+        (memberPropertyValues[name] as? RuntimeValueDelegate)?.backing?.assign(interpreter, value)
+            ?: throw RuntimeException("Property $name has no backing field")
+    }
+
     fun assign(interpreter: Interpreter? = null, name: String, value: RuntimeValue): Pair<Boolean, FunctionDeclarationNode?> {
-        val name = clazz!!.findMemberPropertyDeclaredName(name, inThisClassOnly = true)
+        val name = resolveRuntimeMemberName(name)
             ?: return parentInstance?.assign(interpreter = interpreter, name = name, value = value)
             ?: throw RuntimeException("Property $name is not defined in class ${clazz!!.fullQualifiedName}")
+
+        (memberPropertyValues[name] as? RuntimeValueDelegate)?.let {
+            it.assign(interpreter, value)
+            return true to null
+        }
 
         // TODO remove
         val customAccessor = clazz!!.findMemberPropertyCustomAccessor(name, inThisClassOnly = true)
@@ -113,9 +125,11 @@ open class ClassInstance(
      * Return value must be either FunctionDeclarationNode (if custom getter is defined) or RuntimeValue
      */
     fun read(interpreter: Interpreter? = null, name: String): Any {
-        val name = clazz!!.findMemberPropertyDeclaredName(name, inThisClassOnly = true)
+        val name = resolveRuntimeMemberName(name)
             ?: return parentInstance?.read(interpreter = interpreter, name = name)
             ?: throw RuntimeException("Property $name is not defined in class ${clazz!!.fullQualifiedName}")
+
+        (memberPropertyValues[name] as? RuntimeValueDelegate)?.let { return it.read(interpreter) }
 
         // TODO remove
         val customAccessor = clazz!!.findMemberPropertyCustomAccessor(name, inThisClassOnly = true)
@@ -131,12 +145,16 @@ open class ClassInstance(
     }
 
     fun getPropertyHolder(name: String): RuntimeValueAccessor? {
-        val name = clazz!!.findMemberPropertyDeclaredName(name, inThisClassOnly = true)
+        val name = resolveRuntimeMemberName(name)
             ?: return parentInstance?.getPropertyHolder(name)
             ?: throw RuntimeException("Property $name is not declared in class ${clazz!!.fullQualifiedName}")
 
         return memberPropertyValues[name]
     }
+
+    private fun resolveRuntimeMemberName(name: String): String? =
+        memberPropertyValues.keys.firstOrNull { it == name || name.substringBeforeLast('/') == it }
+            ?: clazz!!.findMemberPropertyDeclaredName(name, inThisClassOnly = true)
 
     fun findPropertyByDeclaredName(declaredName: String, interpreter: Interpreter? = null): RuntimeValue {
         return memberPropertyValues[declaredName]?.read(interpreter)

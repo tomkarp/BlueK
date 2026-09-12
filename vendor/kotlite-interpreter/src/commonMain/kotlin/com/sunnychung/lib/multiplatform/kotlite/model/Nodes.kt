@@ -222,7 +222,7 @@ enum class ClassModifier {
 }
 
 enum class PropertyModifier {
-    open, override
+    open, override, private
 }
 
 data class FunctionValueParameterNode(override val position: SourcePosition, val name: String, val declaredType: TypeNode?, val defaultValue: ASTNode?, val modifiers: Set<FunctionValueParameterModifier>, @ModifyByAnalyzer var transformedRefName: String? = null) : ASTNode {
