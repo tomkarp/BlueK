@@ -10,6 +10,9 @@ const sources = await Promise.all(files.map(file => readFile(new URL(`../example
 const staticProject = JSON.parse(await readFile(new URL('../frontend/public/examples/blueplay.bluek.json', import.meta.url), 'utf8'));
 const figureResource = staticProject.resources?.find(resource => resource.path === 'images/figure.png');
 if (!figureResource?.data?.startsWith('data:image/png;base64,')) throw new Error('The bundled BluePlay example image is missing from the static project asset.');
+for (let index = 0; index < files.length; index += 1) {
+  if (staticProject.files?.find(file => file.fileName === files[index])?.source !== sources[index]) throw new Error(`The bundled BluePlay template is stale for ${files[index]}.`);
+}
 const expectOk = (json, label) => {
   if (json.kind === 'error') throw new Error(`${label}: ${json.display}`);
   return json;
