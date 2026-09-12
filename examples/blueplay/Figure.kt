@@ -8,8 +8,7 @@ class Figure : Actor() {
     }
 
     override fun act() {
-        // Explicit receiver is required by the current Kotlite superclass
-        // member lookup for this first browser-only BluePlay example.
-        this.move(1)
+        // An inherited method can be called like ordinary Kotlin code.
+        move(1)
     }
 }

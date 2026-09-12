@@ -30,7 +30,7 @@
       "fileName": "Figure.kt",
       "kind": "class",
       "revision": 1,
-      "source": "/**\n * A simple figure that slowly walks to the right.\n */\nclass Figure : Actor() {\n\n    init {\n        this.setImage(\"figure.png\")\n    }\n\n    override fun act() {\n        // Explicit receiver is required by the current Kotlite superclass\n        // member lookup for this first browser-only BluePlay example.\n        this.move(1)\n    }\n}\n"
+      "source": "/**\n * A simple figure that slowly walks to the right.\n */\nclass Figure : Actor() {\n\n    init {\n        this.setImage(\"figure.png\")\n    }\n\n    override fun act() {\n        // An inherited method can be called like ordinary Kotlin code.\n        move(1)\n    }\n}\n"
     },
     {
       "fileName": "MyWorld.kt",
