@@ -89,6 +89,13 @@ evaluate('val alias = first', 'alias');
 evaluate('alias.increment()', 'increment through alias');
 evaluate('first.value', 'identity check');
 if (evaluate('first.value', 'dispatch').display !== '2') throw new Error('Object identity or dynamic dispatch failed.');
+const inheritedCallSession = api.bluekCreateKotliteSession();
+expectOk(JSON.parse(inheritedCallSession.load('<implicit receiver>', `
+    open class Base { var value = 0; fun increment() { value += 1 } }
+    class Derived : Base() { fun run() { increment() } }
+`)), 'implicit inherited method load');
+expectOk(JSON.parse(inheritedCallSession.evaluate('<implicit receiver>', 'val derived = Derived(); derived.run()')), 'implicit inherited method call');
+if (JSON.parse(inheritedCallSession.evaluate('<implicit receiver>', 'derived.value')).display !== '1') throw new Error('An inherited method required an unnecessary explicit this receiver.');
 evaluate('val second = Child(10)', 'construct second');
 if (evaluate('second.value', 'separate state').display !== '10') throw new Error('Instances do not keep separate state.');
 evaluate('val immutable = 1', 'val declaration');

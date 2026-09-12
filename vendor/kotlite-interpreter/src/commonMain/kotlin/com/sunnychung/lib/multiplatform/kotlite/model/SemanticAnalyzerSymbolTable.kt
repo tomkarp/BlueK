@@ -55,6 +55,19 @@ class SemanticAnalyzerSymbolTable(
 
     override fun functionNameTransform(name: String, function: FunctionDeclarationNode) = function.toSignature(this)
 
+    /** Resolve an unqualified call against the implicit receiver of a class member. */
+    private fun implicitReceiverType(currentSymbolTable: SymbolTable): DataType? {
+        var scope: SymbolTable? = currentSymbolTable
+        while (scope != null) {
+            if (scope.scopeType == ScopeType.Class) {
+                val clazz = findClass(scope.scopeName)?.first ?: return null
+                return assertToDataType(TypeNode(SourcePosition.NONE, clazz.fullQualifiedName, null, false))
+            }
+            scope = scope.parentScope
+        }
+        return null
+    }
+
     fun findFunctionsByOriginalName(originalName: String, isThisScopeOnly: Boolean = false): List<Pair<FunctionDeclarationNode, SymbolTable>> {
         return functionDeclarations.filter { it.value.name == originalName }
             .map { it.value to this } +
@@ -84,6 +97,17 @@ class SemanticAnalyzerSymbolTable(
                     scope = this
                 )
             }.let { thisScopeCandidates += it }
+            // Kotlin resolves inherited unqualified member calls through
+            // `this`. The original lookup only considered methods declared
+            // directly in the current class in this receiver-less branch.
+            implicitReceiverType(currentSymbolTable)?.let { receiver ->
+                val clazz = (receiver as? ObjectType)?.clazz
+                if (clazz != null) {
+                    findAllMatchingCallables(currentSymbolTable, originalName, clazz, receiver, arguments, modifierFilter)
+                        .filter { it.type == CallableType.ClassMemberFunction }
+                        .let { thisScopeCandidates += it }
+                }
+            }
             findClass(originalName, isThisScopeOnly = true)?.let {
                 thisScopeCandidates += FindCallableResult(
                     transformedName = it.first.fullQualifiedName,

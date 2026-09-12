@@ -556,6 +556,13 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                             return evalFunctionCall(functionNode, replaceArguments = replaceArguments)
                         }
                     }
+                    CallableType.ClassMemberFunction -> {
+                        val instance = callStack.currentSymbolTable().read("this") as? ClassInstance
+                            ?: throw RuntimeException("Implicit receiver `this` is not available")
+                        val functionNode = instance.clazz!!.findMemberFunctionByTransformedName(functionRefName!!)
+                            ?: throw RuntimeException("Function `$directName` not found on implicit receiver")
+                        return evalClassMemberAnyFunctionCall(instance, functionNode, replaceArguments = replaceArguments)
+                    }
                     CallableType.Constructor -> {
                         val classDefinition = callStack.currentSymbolTable().findClass(functionRefName!!)?.first
                         if (classDefinition != null) {

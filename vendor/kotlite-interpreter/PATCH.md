@@ -13,6 +13,11 @@ The upstream MIT license is included in `LICENSE`.
 The fork also reports secondary constructors explicitly as unsupported instead
 of exposing the parser's generic unexpected-token error.
 
+It also resolves unqualified calls to inherited member methods through the
+implicit `this` receiver. This keeps ordinary Kotlin spelling such as
+`move(1)` working inside subclass methods; the upstream resolver required an
+explicit `this.move(1)` in that case.
+
 BlueK adds `ClassInstance.readBackingPropertyByDeclaredName`, a passive
 inspection hook that reads a backing field without invoking a student-defined
 getter. This is needed to display ordinary fields and properties with only a
