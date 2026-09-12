@@ -399,6 +399,9 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 val obj = subject as ClassInstance
 //                    obj.assign((subject.member as ClassMemberReferenceNode).transformedRefName!!, value)
                 // before type resolution is implemented in SemanticAnalyzer, reflect from clazz as a slower alternative
+                if (obj.clazz!!.isPrivateMemberProperty((this.member as ClassMemberReferenceNode).name) && !callStack.isInsideClassCode()) {
+                    throw RuntimeException("Private property `${(this.member as ClassMemberReferenceNode).name}` cannot be accessed here")
+                }
                 obj.assign(interpreter = this@Interpreter, name = obj.clazz!!.findMemberPropertyTransformedName((this.member as ClassMemberReferenceNode).name)!!, value = value)/*?.also {
                     FunctionCallNode(
                         it,
@@ -1443,6 +1446,9 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             throw EvaluateNullPointerException(callStack.currentSymbolTable(), callStack.getStacktrace(position))
         }
         obj as? ClassInstance ?: throw RuntimeException("Cannot access member `${member.name}` for type `${obj.type().nameWithNullable}`")
+        if (obj.clazz!!.isPrivateMemberProperty(member.name) && !callStack.isInsideClassCode()) {
+            throw RuntimeException("Private property `${member.name}` cannot be accessed here")
+        }
         // before type resolution is implemented in SemanticAnalyzer, reflect from clazz as a slower alternative
         return when (val r = obj.read(interpreter = this@Interpreter, name = obj.clazz!!.findMemberPropertyTransformedName(member.name)!!)) {
             is RuntimeValue -> r

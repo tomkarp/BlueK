@@ -76,4 +76,11 @@ class CallStack {
     }
 
     fun currentSymbolTable() = activationRecords.last().symbolTable
+
+    /** Whether evaluation currently runs inside student class code. */
+    internal fun isInsideClassCode(): Boolean = activationRecords.any {
+        it.scopeType == ScopeType.Class ||
+            it.scopeType == ScopeType.ClassInitializer ||
+            it.scopeType == ScopeType.ClassMemberFunction
+    }
 }
