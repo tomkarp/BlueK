@@ -20,7 +20,7 @@ open class Actor {
         } else newY
     }
     fun getRotation(): Int = rotation
-    fun setRotation(degrees: Int) { rotation = degrees }
+    fun setRotation(degrees: Int) { rotation = ((degrees % 360) + 360) % 360 }
     fun turnTowards(targetX: Int, targetY: Int) { rotation = bluekHeading(x, y, targetX, targetY) }
     fun distanceTo(other: Actor): Int = bluekDistance(x, y, other.x, other.y)
     fun intersects(other: Actor): Boolean {
@@ -44,7 +44,7 @@ open class Actor {
     fun move(distance: Int) {
         setLocation(x + bluekMoveDeltaX(rotation, distance), y + bluekMoveDeltaY(rotation, distance))
     }
-    fun turn(degrees: Int) { rotation += degrees }
+    fun turn(degrees: Int) { setRotation(rotation + degrees) }
     val isAtEdge: Boolean get() = worldWidth > 0 && worldHeight > 0 && (x <= 0 || y <= 0 || x >= worldWidth - 1 || y >= worldHeight - 1)
     val isClicked: Boolean get() = bluekIsActorClicked(x, y)
 }
