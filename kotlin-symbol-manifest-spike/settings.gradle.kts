@@ -12,4 +12,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "bluek-kotlin-symbol-manifest-spike"
-include(":processor", ":sample")
+include(":processor", ":sample", ":js-sample")

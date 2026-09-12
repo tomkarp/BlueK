@@ -14,6 +14,7 @@ kotlin-symbol-manifest-spike/.gradle/
 kotlin-symbol-manifest-spike/build/
 kotlin-symbol-manifest-spike/processor/build/
 kotlin-symbol-manifest-spike/sample/build/
+kotlin-symbol-manifest-spike/js-sample/build/
 .DS_Store
 .bluek-server.pid
 .bluek-server.log
