@@ -52,6 +52,8 @@ if (colorStage.stage.backgroundColor !== 'rgb(12,34,56)') throw new Error('BlueP
 if (evaluate('callbackWorld.getObjects().size', 'world object list').display !== '0') throw new Error('BluePlay World object list API failed.');
 evaluate('val collisionA = Figure(); val collisionB = Figure(); collisionA.setLocation(6, 6); collisionB.setLocation(6, 6)', 'actor collision setup');
 if (evaluate('collisionA.intersects(collisionB)', 'actor intersection').display !== 'true' || evaluate('collisionA.isTouching(collisionB)', 'actor touching').display !== 'true') throw new Error('BluePlay actor collision API failed.');
+evaluate('val scaledA = Figure(); val scaledB = Figure(); val scaledImage = Image(); scaledImage.scale(10, 10); scaledA.image = scaledImage; scaledB.image = scaledImage; scaledA.setLocation(12, 12); scaledB.setLocation(13, 12)', 'actor overlap setup');
+if (evaluate('scaledA.intersects(scaledB)', 'actor bounding-box overlap').display !== 'true') throw new Error('BluePlay collision detection did not account for image dimensions.');
 evaluate('val autoWorld = MyWorld(); val autoActor = Figure(); autoWorld.addObject(autoActor, 2, 3)', 'automatic add repaint');
 const addedStage = JSON.parse(session.takeStage());
 if (addedStage.stage.objects.length !== 1 || addedStage.stage.objects[0].x !== 2) throw new Error('Adding an Actor did not update the browser stage.');

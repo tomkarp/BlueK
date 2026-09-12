@@ -90,6 +90,7 @@ open class World(val width: Int, val height: Int, val cellSize: Int = 1) {
         }
         actor.worldWidth = width
         actor.worldHeight = height
+        actor.worldCellSize = cellSize
         actor.setLocation(x, y)
         show()
     }

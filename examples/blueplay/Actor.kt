@@ -5,6 +5,7 @@ open class Actor {
     var image: Image? = null
     var worldWidth = 0
     var worldHeight = 0
+    var worldCellSize = 1
     fun setImage(path: String) { image = Image(path) }
     fun setImage(newImage: Image) { image = newImage }
     fun getImage(): Image? = image
@@ -22,7 +23,22 @@ open class Actor {
     fun setRotation(degrees: Int) { rotation = degrees }
     fun turnTowards(targetX: Int, targetY: Int) { rotation = bluekHeading(x, y, targetX, targetY) }
     fun distanceTo(other: Actor): Int = bluekDistance(x, y, other.x, other.y)
-    fun intersects(other: Actor): Boolean = x == other.x && y == other.y
+    fun intersects(other: Actor): Boolean {
+        val firstImage = image
+        val secondImage = other.image
+        val firstWidth = firstImage?.width ?: 30
+        val firstHeight = firstImage?.height ?: 30
+        val secondWidth = secondImage?.width ?: 30
+        val secondHeight = secondImage?.height ?: 30
+        val firstCenterX = x * worldCellSize + worldCellSize / 2
+        val firstCenterY = y * worldCellSize + worldCellSize / 2
+        val secondCenterX = other.x * other.worldCellSize + other.worldCellSize / 2
+        val secondCenterY = other.y * other.worldCellSize + other.worldCellSize / 2
+        return (firstCenterX - secondCenterX) * 2 < firstWidth + secondWidth &&
+            (firstCenterY - secondCenterY) * 2 < firstHeight + secondHeight &&
+            (secondCenterX - firstCenterX) * 2 < firstWidth + secondWidth &&
+            (secondCenterY - firstCenterY) * 2 < firstHeight + secondHeight
+    }
     fun isTouching(other: Actor): Boolean = intersects(other)
     open fun act() {}
     fun move(distance: Int) {
