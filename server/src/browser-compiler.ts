@@ -153,7 +153,8 @@ function bridgeSource(files: ProjectFile[], classes: ClassMeta[]): { source: str
             const [name, bound] = value.split(':', 2).map(part => part.trim());
             if (name) typeBindings.set(name, bound ? kotlinType(bound, new Map(), knownTypes) : 'Any?');
         }
-        const classType = klass.typeParameters?.length ? `${klass.name}<${klass.typeParameters.map(value => typeBindings.get(value.split(':', 2)[0].trim()) || 'Any?').join(', ')}>` : klass.name;
+        const classReference = klass.qualifiedName || klass.name;
+        const classType = klass.typeParameters?.length ? `${classReference}<${klass.typeParameters.map(value => typeBindings.get(value.split(':', 2)[0].trim()) || 'Any?').join(', ')}>` : classReference;
         klass.constructors.forEach((constructor, constructorIndex) => {
             const constructorParameters = requiredParameters(constructor.parameters || []);
             const unsupportedConstructor = constructorParameters.some(parameter => unsupportedBridgeType(parameter.type.displayName));
@@ -230,6 +231,7 @@ const manifestTypeDisplay = (value: unknown): string => {
 export const classesFromManifest = (manifest: SymbolManifest): ClassMeta[] => manifest.classes.map(declaration => ({
     id: declaration.name,
     name: declaration.name,
+    qualifiedName: declaration.qualifiedName || declaration.name,
     kind: declaration.kind,
     constructors: declaration.constructors.map((constructor, constructorIndex) => ({
         id: declaration.name + '::constructor::' + constructorIndex,

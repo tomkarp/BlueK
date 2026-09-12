@@ -33,8 +33,7 @@ private class ManifestProcessor(
         generated = true
 
         val classes = resolver.getAllFiles()
-            .flatMap { it.declarations }
-            .filterIsInstance<KSClassDeclaration>()
+            .flatMap { file -> file.declarations.filterIsInstance<KSClassDeclaration>().flatMap(::nestedClasses) }
             .filter { it.packageName.asString() != "kotlin" }
             .filter { it.qualifiedName?.asString()?.startsWith("de.tomkarp.bluek.runtime") != true }
             .sortedBy { it.qualifiedName?.asString() }
@@ -73,11 +72,12 @@ private class ManifestProcessor(
     }
 
     private fun StringBuilder.appendClass(declaration: KSClassDeclaration) {
-        val kind = when (declaration.classKind.name.lowercase()) {
-            "interface" -> "interface"
-            "enum_class" -> "enum"
-            "object" -> "object"
-            "annotation_class" -> "annotation"
+        val kind = when {
+            Modifier.ABSTRACT in declaration.modifiers -> "abstract"
+            declaration.classKind.name.lowercase() == "interface" -> "interface"
+            declaration.classKind.name.lowercase() == "enum_class" -> "enum"
+            declaration.classKind.name.lowercase() == "object" -> "object"
+            declaration.classKind.name.lowercase() == "annotation_class" -> "annotation"
             else -> "class"
         }
         append("{\"name\":")
@@ -263,6 +263,11 @@ private class ManifestProcessor(
 
     private fun KSDeclaration.isPublic(): Boolean =
         Modifier.PRIVATE !in modifiers && Modifier.PROTECTED !in modifiers && Modifier.INTERNAL !in modifiers
+
+    private fun nestedClasses(declaration: KSClassDeclaration): Sequence<KSClassDeclaration> =
+        sequenceOf(declaration) + declaration.declarations
+            .filterIsInstance<KSClassDeclaration>()
+            .flatMap(::nestedClasses)
 
     private fun StringBuilder.appendJson(value: String) {
         append('"')

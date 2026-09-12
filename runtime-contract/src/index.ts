@@ -2,13 +2,14 @@ export type FileKind='class'|'functions';
 export interface ProjectFile{id:string;fileName:string;kind:FileKind;source:string;revision:number}
 export interface TypeRef{classifier:string;arguments:TypeRef[];nullable:boolean;displayName:string;projection?:'in'|'out'|'star'}
 export interface CallableMeta{id:string;name:string;declaringType:string;parameters:{name:string;type:TypeRef;hasDefault:boolean}[];returnType:TypeRef;visibility:string;inheritedFrom?:string;typeParameters?:string[]}
-export interface ClassMeta{id:string;name:string;kind:string;constructors:{id:string;parameters:any[]}[];methods:CallableMeta[];properties:any[];supertypes:TypeRef[];typeParameters:string[]}
+export interface ClassMeta{id:string;name:string;qualifiedName?:string;kind:string;constructors:{id:string;parameters:any[]}[];methods:CallableMeta[];properties:any[];supertypes:TypeRef[];typeParameters:string[]}
 export interface ManifestConstructor{ id:string; parameters:{name:string; type:TypeRef; hasDefault:boolean}[] }
 export interface ManifestProperty{ id:string; name:string; type:TypeRef; mutable:boolean; visibility:string; getter?:boolean; setter?:boolean; getterId?:string; setterId?:string; generated?:boolean }
 export interface ManifestCallable extends CallableMeta{ generated?:boolean; companion?:boolean }
 export interface ManifestClass{
     id:string;
     name:string;
+    qualifiedName?:string;
     kind:'class'|'abstract'|'interface'|'object'|'enum'|'annotation'|'functions';
     modifiers:string[];
     typeParameters:string[];
