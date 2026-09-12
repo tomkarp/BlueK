@@ -1,23 +1,30 @@
 open class World(val width: Int, val height: Int, val cellSize: Int = 1) {
-    var actor: Actor? = null
+    private val actors = mutableListOf<Actor>()
     var backgroundColor = "rgb(255,255,255)"
     var running = false
     var speed = 50
     fun actorType(actor: Actor): String = "Actor"
     fun render() {
-        var objects = "[]"
-        actor?.let { current -> objects = "[{\"type\":\"${actorType(current)}\",\"x\":${current.x},\"y\":${current.y},\"rotation\":${current.rotation}}]" }
+        var objects = "["
+        var first = true
+        for (current in actors) {
+            if (!first) objects += ","
+            first = false
+            objects += "{\"type\":\"${actorType(current)}\",\"x\":${current.x},\"y\":${current.y},\"rotation\":${current.rotation}}"
+        }
+        objects += "]"
         bluekStageUpdate("{\"stage\":{\"width\":$width,\"height\":$height,\"cellSize\":$cellSize,\"backgroundColor\":\"$backgroundColor\",\"speed\":$speed,\"running\":$running,\"objects\":$objects}}")
     }
     fun show() { render() }
     open fun act() {}
-    fun tick() { act(); actor?.act() }
+    fun tick() { act(); for (current in actors) current.act() }
     fun addObject(actor: Actor, x: Int, y: Int) {
-        this.actor = actor
+        if (actors.count { it == actor } == 0) actors.add(actor)
         actor.x = x
         actor.y = y
     }
-    fun removeObject(actor: Actor) { if (this.actor == actor) this.actor = null }
-    val numberOfObjects: Int get() = if (actor == null) 0 else 1
+    fun removeObject(actor: Actor) { if (actors.count { it == actor } > 0) actors.remove(actor) }
+    fun allObjects(): List<Actor> = actors
+    val numberOfObjects: Int get() = actors.size
     val isClicked: Boolean get() = bluekIsWorldClicked()
 }

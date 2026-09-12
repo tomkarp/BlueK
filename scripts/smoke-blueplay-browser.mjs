@@ -27,6 +27,12 @@ if (runningStage.stage.running !== true) throw new Error('BluePlay start() did n
 evaluate('stop()', 'stop');
 const stoppedStage = JSON.parse(session.takeStage());
 if (stoppedStage.stage.running !== false) throw new Error('BluePlay stop() did not clear running state.');
+evaluate('val secondWorld = MyWorld(); val firstActor = Figure(); val secondActor = Figure(); secondWorld.addObject(firstActor, 3, 4); secondWorld.addObject(secondActor, 20, 30); showWorld(secondWorld)', 'multiple actor setup');
+const twoActorStage = JSON.parse(session.takeStage());
+if (twoActorStage.stage.objects.length !== 2 || twoActorStage.stage.objects[0].x !== 3 || twoActorStage.stage.objects[1].x !== 20) throw new Error('BluePlay did not retain multiple actor instances and positions.');
+evaluate('step()', 'multiple actor step');
+const twoActorMovedStage = JSON.parse(session.takeStage());
+if (twoActorMovedStage.stage.objects[0].x !== 4 || twoActorMovedStage.stage.objects[1].x !== 21) throw new Error('BluePlay did not dispatch act() to every actor.');
 evaluate('val clickedActor = Figure(); val clickedWorld = MyWorld(); clickedWorld.addObject(clickedActor, 7, 9)', 'click setup');
 expectOk(JSON.parse(session.setClick(7, 9)), 'actor click');
 if (evaluate('clickedActor.isClicked', 'actor click query').display !== 'true') throw new Error('BluePlay actor click was not delivered to the student object.');
