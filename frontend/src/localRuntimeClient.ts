@@ -54,7 +54,7 @@ export class LocalRuntimeClient implements RuntimeClient {
     const methodName = methodParts.length >= 3 ? methodParts[methodParts.length - 2] : rawMethod;
     const response = await this.request(request.op === 'eval' ? 'eval' : request.op, { code: request.code, filename: request.filename, className: request.className, args: request.args ? JSON.parse(request.args).join(', ') : '', name: request.name, objectId: request.objectId, methodName, generationId: request.generationId, mode: request.mode });
     this.publish(response);
-    if (request.op === 'eval' && /\bstop\s*\(/.test(request.code || '') || !response?.stage?.running) this.stopSimulation();
+    if (request.op === 'eval' && (/\bstop\s*\(/.test(request.code || '') || response?.stage?.running === false)) this.stopSimulation();
     if (request.op === 'eval' && /\bstart\s*\(/.test(request.code || '') && response?.stage?.running) this.scheduleSimulation();
     return response;
   }
