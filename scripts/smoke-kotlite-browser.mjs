@@ -26,6 +26,17 @@ if (evaluate('bench.value', 'bench binding').display !== '5') throw new Error('B
 evaluate('bench.increment()', 'bench mutation');
 if (expectOk(JSON.parse(session.invoke(benchObject.objectId, 'increment', '')), 'host invoke').display !== 'Unit') throw new Error('Host method invocation failed.');
 if (evaluate('bench.value', 'host mutation visibility').display !== '9') throw new Error('Host mutation is not visible in the codepad.');
+expectOk(JSON.parse(session.load('<accessors>', `
+    class Meter {
+        var raw = 0
+        var value: Int
+            get() = raw
+            set(newValue) { raw = newValue }
+    }
+`)), 'custom accessors load');
+evaluate('val meter = Meter()', 'accessor construction');
+evaluate('meter.value = 42', 'custom setter');
+if (evaluate('meter.value', 'custom getter').display !== '42') throw new Error('Custom property getter/setter did not preserve the value.');
 evaluate('val first = Child(0)', 'construct first');
 evaluate('val alias = first', 'alias');
 evaluate('alias.increment()', 'increment through alias');
