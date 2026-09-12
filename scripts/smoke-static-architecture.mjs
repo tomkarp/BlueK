@@ -38,6 +38,13 @@ if (!worker.includes('fetch(bundleUrl)')) {
 
 await access(new URL('frontend/public/kotlite/bluek-kotlite-browser.js', root));
 await access(new URL('frontend/dist/kotlite/bluek-kotlite-browser.js', root));
+const distIndex = await read('frontend/dist/index.html');
+if (/(?:src|href)=["']https?:\/\//i.test(distIndex)) {
+  throw new Error('The production HTML contains an external runtime asset.');
+}
+if (!distIndex.includes('/assets/')) {
+  throw new Error('The production HTML does not reference local bundled assets.');
+}
 
 const packageJson = JSON.parse(await read('package.json'));
 if (Object.keys(packageJson.dependencies || {}).some(name => /express|koa|fastify|ws|socket\.io|axios/i.test(name))) {
