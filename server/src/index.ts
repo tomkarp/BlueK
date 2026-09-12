@@ -140,15 +140,18 @@ app.post('/api/session/:id/codepad',asyncRoute(async(req:any,r:any)=>{const s=se
 app.use((error:any,_req:any,res:any,_next:any)=>{console.error(error);if(!res.headersSent)res.status(500).json({message:'BlueK server error'})});
 app.use(express.static(path.join(root,'frontend/dist')));
 const port=Number(process.env.BLUEK_PORT||process.env.PORT||5173);
-const ipv4Server=app.listen(port,'127.0.0.1',()=>console.log(`BlueK: http://localhost:${port}`));
+const host=process.env.BLUEK_HOST||'127.0.0.1';
+const ipv4Server=app.listen(port,host,()=>console.log(`BlueK: http://localhost:${port}`));
 ipv4Server.on('error',(error:any)=>{console.error(`BlueK could not listen on IPv4 port ${port}: ${error.message}`);process.exitCode=1;});
-const ipv6Server=app.listen({port,host:'::1',ipv6Only:true});
-ipv6Server.on('error',(error:any)=>{
-    // IPv4 is the authoritative local listener. IPv6 may already be held by
-    // another local process or be unavailable on the host; neither case
-    // should crash an otherwise healthy BlueK server.
-    if(error?.code!=='EADDRINUSE'&&error?.code!=='EAFNOSUPPORT')console.error(`BlueK IPv6 listener unavailable: ${error.message}`);
-});
+if(host==='127.0.0.1'){
+    const ipv6Server=app.listen({port,host:'::1',ipv6Only:true});
+    ipv6Server.on('error',(error:any)=>{
+        // IPv4 is the authoritative local listener. IPv6 may already be held by
+        // another local process or be unavailable on the host; neither case
+        // should crash an otherwise healthy BlueK server.
+        if(error?.code!=='EADDRINUSE'&&error?.code!=='EAFNOSUPPORT')console.error(`BlueK IPv6 listener unavailable: ${error.message}`);
+    });
+}
 
 function maskKotlinNonCode(source:string):string{let result='';let lineComment=false;let blockDepth=0;let quote='';let escaped=false;for(let i=0;i<source.length;i++){const char=source[i],next=source[i+1];if(lineComment){result+=char==='\n'?'\n':' ';if(char==='\n')lineComment=false;continue}if(blockDepth){if(char==='/'&&next==='*'){result+='  ';i++;blockDepth++;continue}if(char==='*'&&next==='/'){result+='  ';i++;blockDepth--;continue}result+=char==='\n'?'\n':' ';continue}if(quote){if(quote==='"""'){if(source.slice(i,i+3)==='"""'){result+='   ';i+=2;quote=''}else result+=char==='\n'?'\n':' ';continue}result+=char==='\n'?'\n':' ';if(escaped)escaped=false;else if(char==='\\')escaped=true;else if(char===quote)quote='';continue}if(char==='/'&&next==='/'){result+='  ';i++;lineComment=true;continue}if(char==='/'&&next==='*'){result+='  ';i++;blockDepth=1;continue}if(char==='"'&&source.slice(i,i+3)==='"""'){result+='   ';i+=2;quote='"""';continue}if(char==='"'||char==="'"){result+=' ';quote=char;continue}result+=char}return result}
 

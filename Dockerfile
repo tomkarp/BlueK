@@ -5,6 +5,7 @@ FROM eclipse-temurin:21-jdk-jammy
 ENV DEBIAN_FRONTEND=noninteractive \
     NODE_ENV=production \
     PORT=5173 \
+    BLUEK_HOST=0.0.0.0 \
     GRADLE_USER_HOME=/var/cache/bluek/gradle
 
 RUN apt-get update \
