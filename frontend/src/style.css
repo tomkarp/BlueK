@@ -82,7 +82,7 @@ footer{flex:0 0 108px}
 .game-actor{will-change:left,top,transform}
 .bluek:has(.stage-window-chrome.maximized) .game-controls{right:auto;bottom:auto;left:var(--bluek-controls-left);top:var(--bluek-controls-top);width:var(--bluek-controls-width)}
  .codepad-history{height:154px;overflow:auto;padding:4px 8px;background:#faf9f4;border:1px solid #ddd;border-radius:5px 5px 0 0;font:16px monospace;white-space:pre-wrap}.codepad-entry{padding:3px 0;border-bottom:1px solid #eee}.codepad textarea{height:36px;border-radius:0 0 7px 7px;padding:6px 8px}
-.codepad-result{color:#168b22;font:18px monospace;padding:3px 0 4px 28px}.codepad-error{color:#a11;padding:3px 0 4px 28px;white-space:pre-wrap}
+.codepad-result{color:#168b22;font:18px monospace;padding:3px 0 4px 28px}.codepad-object-result{display:block;margin:3px 0 4px 28px;padding:2px 6px;border:0;border-radius:3px;background:#b21f2d;color:#fff;font:18px monospace;cursor:pointer}.codepad-object-result:hover{background:#8f1723}.codepad-error{color:#a11;padding:3px 0 4px 28px;white-space:pre-wrap}
 
 /* The world controls follow the measured world element in every window mode. */
 .bluek:has(.stage-window-chrome) .game-controls{position:fixed;right:auto;bottom:auto;left:var(--bluek-controls-left);top:var(--bluek-controls-top);width:var(--bluek-controls-width)}
