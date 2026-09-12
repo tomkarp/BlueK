@@ -54,6 +54,7 @@ class KotliteSession {
     private var analyzedScript: ScriptNode? = null
     private var stageSnapshot = ""
     private val pendingSounds = mutableListOf<String>()
+    private val inputLines = mutableListOf<String>()
     private val keysDown = linkedSetOf<String>()
     private var clickX: Int? = null
     private var clickY: Int? = null
@@ -65,6 +66,37 @@ class KotliteSession {
     private fun resetInterpreter() {
         environment = ExecutionEnvironment()
         AllStdLibModules { text -> output.append(text) }.modules.forEach(environment::install)
+        fun readBufferedLine(currentInterpreter: Interpreter, nullable: Boolean): RuntimeValue {
+            if (inputLines.isEmpty()) {
+                if (nullable) return NullValue
+                throw RuntimeException("No buffered console input is available. Enter a line in the BlueK Terminal first.")
+            }
+            return StringValue(inputLines.removeAt(0), currentInterpreter.symbolTable())
+        }
+        environment.registerFunction(CustomFunctionDefinition(
+            position = SourcePosition.BUILTIN,
+            receiverType = null,
+            functionName = "readln",
+            returnType = "String",
+            parameterTypes = emptyList(),
+            executable = { currentInterpreter, _, _, _ -> readBufferedLine(currentInterpreter, false) }
+        ))
+        environment.registerFunction(CustomFunctionDefinition(
+            position = SourcePosition.BUILTIN,
+            receiverType = null,
+            functionName = "readLine",
+            returnType = "String?",
+            parameterTypes = emptyList(),
+            executable = { currentInterpreter, _, _, _ -> readBufferedLine(currentInterpreter, true) }
+        ))
+        environment.registerFunction(CustomFunctionDefinition(
+            position = SourcePosition.BUILTIN,
+            receiverType = null,
+            functionName = "readlnOrNull",
+            returnType = "String?",
+            parameterTypes = emptyList(),
+            executable = { currentInterpreter, _, _, _ -> readBufferedLine(currentInterpreter, true) }
+        ))
         environment.registerFunction(CustomFunctionDefinition(
             position = SourcePosition.BUILTIN,
             receiverType = null,
@@ -181,8 +213,7 @@ class KotliteSession {
         Parser(Lexer(filename = filename, code = source)).script()
 
     private fun unsupportedInput(source: String): String? {
-        val call = Regex("\\b(readlnOrNull|readln|readLine)\\s*\\(").find(source) ?: return null
-        return "${call.groupValues[1]} is not supported in BlueK's local browser runtime."
+        return null
     }
 
     fun load(filename: String, source: String): String = try {
@@ -403,6 +434,7 @@ class KotliteSession {
         nextHandle = 1
         stageSnapshot = ""
         pendingSounds.clear()
+        inputLines.clear()
         keysDown.clear()
         clickX = null
         clickY = null
@@ -435,6 +467,11 @@ class KotliteSession {
     fun setClick(x: Int, y: Int): String {
         clickX = x
         clickY = y
+        return result("value", UnitValue)
+    }
+
+    fun enqueueInput(line: String): String {
+        inputLines += line
         return result("value", UnitValue)
     }
 

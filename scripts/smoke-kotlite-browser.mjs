@@ -161,8 +161,13 @@ if (JSON.parse(nullabilitySession.evaluate('<nullability>', 'maybe.label()')).di
 expectOk(JSON.parse(nullabilitySession.evaluate('<nullability>', 'maybe.name = "Ada"')), 'nullable property assignment');
 if (JSON.parse(nullabilitySession.evaluate('<nullability>', 'maybe.label()')).display !== 'ADA') throw new Error('Safe-call or Elvis evaluation failed for a non-null value.');
 
-const inputError = JSON.parse(nullabilitySession.evaluate('<nullability>', 'readln()'));
-if (inputError.kind !== 'error' || !inputError.display.includes('readln is not supported')) throw new Error('Unsupported console input did not produce a clear local-runtime error.');
+const inputSession = api.bluekCreateKotliteSession();
+if (JSON.parse(inputSession.enqueueInput('Ada')).kind === 'error') throw new Error('Buffered console input could not be queued.');
+if (JSON.parse(inputSession.evaluate('<input>', 'readln()')).display !== 'Ada') throw new Error('readln did not consume buffered local console input.');
+if (JSON.parse(inputSession.evaluate('<input>', 'readLine()')).display !== 'null') throw new Error('readLine did not return null at local input end.');
+if (JSON.parse(inputSession.evaluate('<input>', 'readlnOrNull()')).display !== 'null') throw new Error('readlnOrNull did not return null at local input end.');
+const inputError = JSON.parse(inputSession.evaluate('<input>', 'readln()'));
+if (inputError.kind !== 'error' || !inputError.display.includes('No buffered console input')) throw new Error('Empty readln did not produce a clear local-runtime error.');
 
 const languageSession = api.bluekCreateKotliteSession();
 if (JSON.parse(languageSession.evaluate('<language>', 'var n = 0; while (n < 3) { n += 1 }; n')).display !== '3') throw new Error('While-loop evaluation failed.');

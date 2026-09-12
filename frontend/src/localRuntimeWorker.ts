@@ -37,6 +37,7 @@ const handleRequest = async (event: MessageEvent) => {
     }
     if (request.op === 'key') response = JSON.parse(activeSession.setKey(request.key || '', Boolean(request.pressed)));
     else if (request.op === 'click') response = JSON.parse(activeSession.setClick(Number(request.x) || 0, Number(request.y) || 0));
+    else if (request.op === 'input') response = JSON.parse(activeSession.enqueueInput(String(request.text || '')));
     else if (request.op === 'eval') response = JSON.parse(activeSession.evaluate(request.filename || '<Codepad>', request.code || ''));
     else if (request.op === 'main') response = JSON.parse(activeSession.evaluate(request.filename || '<Main>', 'main()'));
     else if (request.op === 'create') response = JSON.parse(activeSession.create(request.className, request.args || '', request.name || 'object'));
