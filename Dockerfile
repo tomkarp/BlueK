@@ -18,10 +18,11 @@ COPY --from=node /usr/local/ /usr/local/
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --include=dev
 
 COPY . .
 RUN npm run build \
+    && npm prune --omit=dev \
     && mkdir -p /var/cache/bluek/gradle \
     && ./jvm/gradlew --version \
     && useradd --system --uid 10001 --create-home --home-dir /home/bluek bluek \
