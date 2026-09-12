@@ -88,12 +88,14 @@ open class World(val width: Int, val height: Int, val cellSize: Int = 1) {
         actor.worldHeight = height
         actor.x = x
         actor.y = y
+        show()
     }
     fun getObjects(): List<Actor> = actors
     fun removeObject(actor: Actor) {
         if (actors.count { it == actor } > 0) {
             actors.remove(actor)
         }
+        show()
     }
     fun allObjects(): List<Actor> = actors
     fun getObjectsAt(x: Int, y: Int): List<Actor> = actors.filter { it.x == x && it.y == y }
