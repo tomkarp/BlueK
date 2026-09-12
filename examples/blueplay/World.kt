@@ -86,8 +86,7 @@ open class World(val width: Int, val height: Int, val cellSize: Int = 1) {
         }
         actor.worldWidth = width
         actor.worldHeight = height
-        actor.x = x
-        actor.y = y
+        actor.setLocation(x, y)
         show()
     }
     fun getObjects(): List<Actor> = actors

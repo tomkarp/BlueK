@@ -54,6 +54,9 @@ if (evaluate('collisionA.intersects(collisionB)', 'actor intersection').display 
 evaluate('val autoWorld = MyWorld(); val autoActor = Figure(); autoWorld.addObject(autoActor, 2, 3)', 'automatic add repaint');
 const addedStage = JSON.parse(session.takeStage());
 if (addedStage.stage.objects.length !== 1 || addedStage.stage.objects[0].x !== 2) throw new Error('Adding an Actor did not update the browser stage.');
+evaluate('autoWorld.addObject(autoActor, -4, 99)', 'clamped actor insertion');
+const clampedInsertionStage = JSON.parse(session.takeStage());
+if (clampedInsertionStage.stage.objects.some(object => object.x < 0 || object.x >= clampedInsertionStage.stage.width || object.y < 0 || object.y >= clampedInsertionStage.stage.height)) throw new Error('Adding an Actor outside the world bypassed position clamping.');
 evaluate('autoWorld.removeObject(autoActor)', 'automatic remove repaint');
 const removedStage = JSON.parse(session.takeStage());
 if (removedStage.stage.objects.length !== 0) throw new Error('Removing an Actor did not update the browser stage.');
