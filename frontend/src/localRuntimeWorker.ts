@@ -27,6 +27,7 @@ self.onmessage = async event => {
     }
     if (request.op === 'key') response = JSON.parse(activeSession.setKey(request.key || '', Boolean(request.pressed)));
     else if (request.op === 'eval') response = JSON.parse(activeSession.evaluate(request.filename || '<Codepad>', request.code || ''));
+    else if (request.op === 'main') response = JSON.parse(activeSession.evaluate(request.filename || '<Main>', 'main()'));
     else if (request.op === 'create') response = JSON.parse(activeSession.create(request.className, request.args || '', request.name || 'object'));
     else if (request.op === 'invoke') response = JSON.parse(activeSession.invoke(request.objectId, request.methodName, request.args || ''));
     else if (request.op === 'inspect') response = JSON.parse(activeSession.inspect(request.objectId));

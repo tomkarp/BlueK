@@ -54,7 +54,9 @@ export class LocalRuntimeClient implements RuntimeClient {
     };
     worker.onerror = event => {
       if (epoch !== this.workerEpoch || worker !== this.worker) return;
-      this.onFailure(event.message || 'Kotlite worker stopped.');
+      const message = event.message || 'Kotlite worker stopped.';
+      this.onFailure(message);
+      this.stopWorker(message);
     };
   }
   private request(op: string, data: Record<string, unknown> = {}): Promise<any> { this.start(); const id = this.nextId++; return new Promise((resolve, reject) => { this.pending.set(id, { resolve, reject }); this.worker!.postMessage({ id, op, ...data }); }); }
