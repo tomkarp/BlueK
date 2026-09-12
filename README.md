@@ -30,11 +30,12 @@ docker run -d --name bluek --restart unless-stopped \
   -p 127.0.0.1:5173:5173 \
   -e NODE_ENV=production \
   -e PORT=5173 \
+  -e GRADLE_OPTS=-Dorg.gradle.workers.max=2 \
   -e GRADLE_USER_HOME=/var/cache/bluek/gradle \
   -v bluek-gradle-cache:/var/cache/bluek/gradle \
   --memory=2g \
   --cpus=2 \
-  --pids-limit=128 \
+  --pids-limit=512 \
   --tmpfs /tmp:size=2g \
   bluek:latest
 ```

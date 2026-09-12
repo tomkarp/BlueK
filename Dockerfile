@@ -6,6 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     NODE_ENV=production \
     PORT=5173 \
     BLUEK_HOST=0.0.0.0 \
+    GRADLE_OPTS=-Dorg.gradle.workers.max=2 \
     GRADLE_USER_HOME=/var/cache/bluek/gradle
 
 RUN apt-get update \
