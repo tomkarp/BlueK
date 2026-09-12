@@ -88,6 +88,10 @@ if (evaluate('second.value', 'separate state').display !== '10') throw new Error
 evaluate('val immutable = 1', 'val declaration');
 const invalid = JSON.parse(session.evaluate('<smoke>', 'immutable = 2'));
 if (invalid.kind !== 'error') throw new Error('val reassignment was not rejected.');
+if (JSON.parse(session.remove(benchObject.objectId)).kind === 'error') throw new Error('Removing a valid object handle failed.');
+if (JSON.parse(session.inspect(benchObject.objectId)).kind !== 'error' || JSON.parse(session.invoke(benchObject.objectId, 'increment', '')).kind !== 'error') throw new Error('A removed object handle remained usable.');
+expectOk(JSON.parse(session.reset()), 'runtime reset');
+if (JSON.parse(session.evaluate('<smoke>', 'first.value')).kind !== 'error') throw new Error('Runtime reset retained an old codepad binding.');
 
 const personSession = api.bluekCreateKotliteSession();
 expectOk(JSON.parse(personSession.load('<person project>', `
