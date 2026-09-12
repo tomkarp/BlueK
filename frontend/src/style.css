@@ -233,8 +233,10 @@ footer{flex:0 0 108px}
    labelled action. Keep the accessible label in the DOM, but show the line
    and hollow triangle as the visual control. */
 .sidebar button:nth-of-type(4){font-size:0;padding:0;position:relative}
-.sidebar button:nth-of-type(4)::before{content:"";position:absolute;left:50%;top:49%;width:48px;border-top:2px solid #222;transform:translate(-38px,-50%)}
-.sidebar button:nth-of-type(4)::after{content:"▷";position:absolute;left:50%;top:50%;color:#222;background:transparent;font:32px/1 Arial,sans-serif;transform:translate(3px,-50%)}
+.sidebar button:nth-of-type(4) .inheritance-icon{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.sidebar button:nth-of-type(4) .inheritance-icon svg{width:58px;height:28px;overflow:visible}
+.sidebar button:nth-of-type(4) .inheritance-icon line{stroke:#222;stroke-width:2}
+.sidebar button:nth-of-type(4) .inheritance-icon path{fill:#fafafa;stroke:#222;stroke-width:2;stroke-linejoin:miter}
 .sidebar button:nth-of-type(4).active-tool{background:linear-gradient(#f8f8f8,#d7d7d7);border-color:#aaa;box-shadow:0 1px 2px #aaa}
 
 /* Project actions live in a compact top row; the workbench sidebar keeps
