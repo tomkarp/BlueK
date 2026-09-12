@@ -22,7 +22,16 @@ self.onmessage = async event => {
       const files = request.files || [];
       const source = files.map((file: any) => `// BlueK file: ${file.fileName}\n${file.source}`).join('\n\n');
       response = JSON.parse(session.load('<BlueK project>', source));
-      if (response.kind !== 'error') response.classes = JSON.parse(session.manifest()).classes || [];
+      if (response.kind !== 'error') {
+        const manifest = JSON.parse(session.manifest());
+        const functionMeta = manifest.functions || [];
+        const functionCards = files.filter((file: any) => file.kind === 'functions').map((file: any) => {
+          const names = [...String(file.source || '').matchAll(/\bfun\s+([A-Za-z_]\w*)/g)].map(match => match[1]);
+          const methods = functionMeta.filter((method: any) => names.includes(method.name)).map((method: any, index: number) => ({ ...method, id: `${file.fileName}.${method.name}.${index}`, declaringType: file.fileName }));
+          return { id: file.fileName, name: file.fileName.replace(/\.kt$/, ''), kind: 'functions', modifiers: [], typeParameters: [], supertypes: [], constructors: [], properties: [], methods };
+        });
+        response.classes = [...(manifest.classes || []), ...functionCards];
+      }
       self.postMessage({ id: request.id, response: response || { kind: 'loaded', display: 'Unit' } });
       return;
     }
