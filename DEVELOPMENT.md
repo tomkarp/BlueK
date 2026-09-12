@@ -25,7 +25,7 @@ npm run browser-smoke
 npm run build
 ```
 
-Der Smoke-Test deckt Objektidentität, Alias-Verhalten, getrennte Instanzen, Vererbung, dynamischen Dispatch, Host-Aufrufe, BluePlay-Schritte und Klick-Rückrufe sowie Typ- und `val`-Fehler ab. Die Produktions-GUI wurde zusätzlich über einen statischen lokalen Server geöffnet und mit Compile, `main()`, Act, Run und Pause geprüft. Der gemeinsame Objektwelt-Ablauf wurde ebenfalls direkt geprüft: `Figure` und `World` wurden über Klassenkarten erzeugt, `world1.addObject(figure1, 5, 6)` im Codepad ausgeführt und `Act` bewegte denselben Actor sichtbar weiter.
+Der Smoke-Test deckt Objektidentität, Alias-Verhalten, getrennte Instanzen, Vererbung, dynamischen Dispatch, Host-Aufrufe, private Property-Zugriffe, Handle-Verlust nach `remove`/`reset`, BluePlay-Schritte und Klick-Rückrufe sowie Typ- und `val`-Fehler ab. Die Produktions-GUI wurde zusätzlich über einen statischen lokalen Server geöffnet und mit Compile, `main()`, Act, Run und Pause geprüft. Der gemeinsame Objektwelt-Ablauf wurde ebenfalls direkt geprüft: `Figure` und `World` wurden über Klassenkarten erzeugt, `world1.addObject(figure1, 5, 6)` im Codepad ausgeführt und `Act` bewegte denselben Actor sichtbar weiter.
 
 ## Bekannte Grenzen
 
