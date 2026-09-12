@@ -121,7 +121,13 @@ class KotliteSession {
     private fun parse(filename: String, source: String): ScriptNode =
         Parser(Lexer(filename = filename, code = source)).script()
 
+    private fun unsupportedInput(source: String): String? {
+        val call = Regex("\\b(readlnOrNull|readln|readLine)\\s*\\(").find(source) ?: return null
+        return "${call.groupValues[1]} is not supported in BlueK's local browser runtime."
+    }
+
     fun load(filename: String, source: String): String = try {
+        unsupportedInput(source)?.let { return errorMessage(it) }
         val previous = parse("<BlueK project>", analysisSource)
         val combined = parse("<BlueK project>", analysisSource + "\n" + source)
         SemanticAnalyzer(combined, environment).analyze()
@@ -197,6 +203,7 @@ class KotliteSession {
     }
 
     fun evaluate(filename: String, source: String): String = try {
+        unsupportedInput(source)?.let { return errorMessage(it) }
         val previous = parse("<BlueK project>", analysisSource)
         val combined = parse("<BlueK project>", analysisSource + "\n" + source)
         SemanticAnalyzer(combined, environment).analyze()

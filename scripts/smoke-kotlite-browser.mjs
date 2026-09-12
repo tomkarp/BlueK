@@ -128,4 +128,7 @@ if (JSON.parse(nullabilitySession.evaluate('<nullability>', 'maybe.label()')).di
 expectOk(JSON.parse(nullabilitySession.evaluate('<nullability>', 'maybe.name = "Ada"')), 'nullable property assignment');
 if (JSON.parse(nullabilitySession.evaluate('<nullability>', 'maybe.label()')).display !== 'ADA') throw new Error('Safe-call or Elvis evaluation failed for a non-null value.');
 
+const inputError = JSON.parse(nullabilitySession.evaluate('<nullability>', 'readln()'));
+if (inputError.kind !== 'error' || !inputError.display.includes('readln is not supported')) throw new Error('Unsupported console input did not produce a clear local-runtime error.');
+
 console.log('Kotlite browser session smoke test passed.');
