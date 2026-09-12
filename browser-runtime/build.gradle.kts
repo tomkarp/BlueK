@@ -26,6 +26,15 @@ kotlin {
     }
 }
 
+// The project and bridge sources are generated outside the Gradle project for
+// every BlueK compile.  The manifest pass must therefore be explicitly
+// rerunnable; otherwise Gradle can keep stale constructor/property metadata.
+if (providers.gradleProperty("bluekForceRebuild").isPresent) {
+    tasks.matching { it.name == "jsBrowserProductionLibraryDistribution" }.configureEach {
+        outputs.upToDateWhen { false }
+    }
+}
+
 dependencies {
     add("kspJs", project(":manifest-processor"))
 }
