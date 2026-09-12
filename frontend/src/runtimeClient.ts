@@ -279,7 +279,7 @@ const valueOf = (value, className = '') => {
 const resolve = (path) => path.split('.').filter(Boolean).reduce((current, part) => current?.[part], api);
 const flushStudentOutput = () => { const flush = api?.bluekFlushOutput || resolve('bluekFlushOutput'); if (typeof flush !== 'function') return; flushingOutput = true; try { flush(); } finally { flushingOutput = false; } };
 const resolveArguments = (args) => args.map((arg) => arg && typeof arg === 'object' && arg.__bluekObjectId ? objects.get(arg.__bluekObjectId) : arg);
-const bindingValue = (descriptor) => { if (!descriptor || !descriptor.objectId) return descriptor?.value; const target = objects.get(descriptor.objectId); if (!target) throw new Error('Codepad object binding is no longer available.'); const methods = new Map((descriptor.methods || []).map((method) => [method.name, method])); const properties = new Map((descriptor.properties || []).map((property) => [property.name, property])); return new Proxy(target, { get(object, property) { if (typeof property !== 'string') return object[property]; const method = methods.get(property); if (method) return (...args) => api[method.bridge](object, ...args.map((arg) => arg && arg.__bluekObjectId ? objects.get(arg.__bluekObjectId) : arg)); const field = properties.get(property); if (field?.getter && typeof api[field.getter] === 'function') return api[field.getter](object); return object[property]; }, set(object, property, value) { const field = properties.get(property); if (field?.setter && typeof api[field.setter] === 'function') { api[field.setter](object, value && value.__bluekObjectId ? objects.get(value.__bluekObjectId) : value); return true; } object[property] = value; return true; } }); };
+const bindingValue = (descriptor) => { if (!descriptor || !descriptor.objectId) return descriptor?.value; const target = objects.get(descriptor.objectId); if (!target) throw new Error('Codepad object binding is no longer available.'); const methods = new Map((descriptor.methods || []).map((method) => [method.name, method])); const properties = new Map((descriptor.properties || []).map((property) => [property.name, property])); return new Proxy(target, { get(object, property) { if (typeof property !== 'string') return object[property]; const method = methods.get(property); if (method) return (...args) => { const bridged = api[method.bridge]; const resolvedArgs = args.map((arg) => arg && arg.__bluekObjectId ? objects.get(arg.__bluekObjectId) : arg); if (typeof bridged === 'function') return bridged(object, ...resolvedArgs); const direct = object[property]; if (typeof direct === 'function') return direct.apply(object, resolvedArgs); throw new Error('The Kotlin method ' + property + ' is not available in this runtime.'); }; const field = properties.get(property); if (field?.getter && typeof api[field.getter] === 'function') return api[field.getter](object); return object[property]; }, set(object, property, value) { const field = properties.get(property); if (field?.setter && typeof api[field.setter] === 'function') { api[field.setter](object, value && value.__bluekObjectId ? objects.get(value) : value); return true; } object[property] = value; return true; } }); };
 const bindingValueWithBridges = (descriptor) => { const resolveArgs = args => args.map(arg => arg && arg.__bluekObjectId ? objects.get(arg.__bluekObjectId) : arg); if (descriptor?.runtime) return (...args) => new runtimeApi[descriptor.runtime](...resolveArgs(args)); if (descriptor?.bridge) return (...args) => api[descriptor.bridge](...resolveArgs(args)); if (descriptor?.bridges) return (...args) => { const bridge = descriptor.bridges.find(candidate => candidate.arity === args.length) || descriptor.bridges[0]; if (!bridge || typeof api[bridge.name] !== 'function') throw new Error('Generated Kotlin bridge is missing.'); return api[bridge.name](...resolveArgs(args)); }; return bindingValue(descriptor); };
 const finish = () => { flushStudentOutput(); const output = takeOutput(); self.postMessage({ kind: 'value', value: { kind: 'unit', display: 'Unit' }, output }); };
 const stage = () => { const value = runtimeApi?.bluekStage || globalThis.bluekStage; if (typeof value === 'function') postStage(JSON.parse(value())); };
@@ -880,8 +880,19 @@ export class HybridRuntimeClient implements RuntimeClient {
         if (objectId && this.localObjects.has(String(objectId))) return (await this.local({ op: 'get', objectId: String(objectId), property: property.property, className: String(this.localObjects.get(String(objectId))) })).value;
       }
       {
-        const scalarProperty = source.match(/^(.+)\.(length|size|isEmpty)$/s);
+        const scalarProperty = source.match(/^(.+)\.(length|size|isEmpty|isNotEmpty)$/s);
         if (scalarProperty) {
+          const worldObjectsProperty = source.match(/^([A-Za-z_]\w*)\.allObjects\(\)\.(size|isEmpty|isNotEmpty)$/);
+          if (worldObjectsProperty) {
+            const objectId = this.bindings.get(worldObjectsProperty[1]);
+            const className = objectId ? this.localObjects.get(String(objectId)) : undefined;
+            if (objectId && className) {
+              const result = await this.local({ op: 'get', objectId: String(objectId), property: 'numberOfObjects', className: String(className) });
+              const count = Number(displayedSimpleValue(result.value));
+              const value = worldObjectsProperty[2] === 'size' ? count : worldObjectsProperty[2] === 'isEmpty' ? count === 0 : count !== 0;
+              return { kind: 'scalar', display: String(value) };
+            }
+          }
           const builtinValue = simpleBuiltin(scalarProperty[1], this.bindings, this.localValues);
           const storedValue = this.localValues.get(scalarProperty[1].trim());
           let value: unknown = builtinValue !== undefined ? builtinValue : storedValue;
@@ -932,12 +943,20 @@ export class HybridRuntimeClient implements RuntimeClient {
             return parsed.binding ? { ...result.value, name: parsed.binding, output: result.output } : { ...result.value, output: result.output };
           }
           if (objectId && klass && method && !method.typeParameters?.length && parsed.args.length >= requiredParameters(method.parameters).length) {
-            const args = parsed.args.map(value => parseKotlinArgument(value, this.bindings, this.localValues));
-            if (!simpleArgumentsMatch(args, requiredParameters(method.parameters))) throw new Error('The local arguments do not match the Kotlin method types; compile the expression first.');
-            const methodKey = `${method.name.replace(/[^A-Za-z0-9_]/g, '_')}_${requiredParameters(method.parameters).map(parameter => parameter.type.classifier.replace(/[^A-Za-z0-9_]/g, '_')).join('_') || 'noargs'}`;
-            const result = await this.local({ op: 'invoke', functionName: `bluekInvoke_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}_${methodKey}`, methodName: method.name, objectId: String(objectId), args, className: method.returnType.classifier });
-            this.rememberCodepadBinding(parsed.binding, result);
-            return parsed.binding ? { ...result.value, name: parsed.binding, output: result.output } : { ...result.value, output: result.output };
+            try {
+              const args = parsed.args.map(value => parseKotlinArgument(value, this.bindings, this.localValues));
+              if (!simpleArgumentsMatch(args, requiredParameters(method.parameters))) throw new Error('The local arguments do not match the Kotlin method types; compile the expression first.');
+              const methodKey = `${method.name.replace(/[^A-Za-z0-9_]/g, '_')}_${requiredParameters(method.parameters).map(parameter => parameter.type.classifier.replace(/[^A-Za-z0-9_]/g, '_')).join('_') || 'noargs'}`;
+              const result = await this.local({ op: 'invoke', functionName: `bluekInvoke_${klass.name.replace(/[^A-Za-z0-9_]/g, '_')}_${methodKey}`, methodName: method.name, objectId: String(objectId), args, className: method.returnType.classifier });
+              this.rememberCodepadBinding(parsed.binding, result);
+              return parsed.binding ? { ...result.value, name: parsed.binding, output: result.output } : { ...result.value, output: result.output };
+            } catch (error) {
+              if (error instanceof Error && /local arguments do not match/.test(error.message)) throw error;
+              // Complex arguments such as `welt.allObjects()[0]` cannot be
+              // represented by the object-handle fast path. Let Kotlin/JS
+              // compile the complete expression so normal Kotlin calls keep
+              // working in the Codepad.
+            }
           }
         } else {
           const klass = this.classes.find(value => value.name === parsed.callable);
