@@ -118,4 +118,12 @@ expectOk(JSON.parse(fieldSession.evaluate('<codepad>', 'fp.age = -1')), 'field a
 const clampedAge = JSON.parse(fieldSession.evaluate('<codepad>', 'fp.age'));
 if (clampedAge.display !== '0') throw new Error('Implicit field setter did not enforce its branch.');
 
+const nullabilitySession = api.bluekCreateKotliteSession();
+const nullabilitySource = 'class MaybeName { var name: String? = null; fun label(): String { return name?.uppercase() ?: "unbenannt" } }';
+expectOk(JSON.parse(nullabilitySession.load('<nullability>', nullabilitySource)), 'safe call and Elvis load');
+expectOk(JSON.parse(nullabilitySession.evaluate('<nullability>', 'val maybe = MaybeName()')), 'safe call construction');
+if (JSON.parse(nullabilitySession.evaluate('<nullability>', 'maybe.label()')).display !== 'unbenannt') throw new Error('Safe-call or Elvis evaluation failed for null.');
+expectOk(JSON.parse(nullabilitySession.evaluate('<nullability>', 'maybe.name = "Ada"')), 'nullable property assignment');
+if (JSON.parse(nullabilitySession.evaluate('<nullability>', 'maybe.label()')).display !== 'ADA') throw new Error('Safe-call or Elvis evaluation failed for a non-null value.');
+
 console.log('Kotlite browser session smoke test passed.');
