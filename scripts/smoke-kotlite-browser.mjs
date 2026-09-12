@@ -110,6 +110,11 @@ if (personSession.takeOutput() !== '') throw new Error('A separated mutation rep
 expectOk(JSON.parse(personSession.evaluate('<codepad>', 'p.sprechen()')), 'person method call');
 if (personSession.takeOutput() !== 'Hi, ich bin Otto und 42 Jahre alt\n') throw new Error('Separated Person inputs did not preserve object state.');
 if (JSON.parse(personSession.evaluate('<codepad>', 'p.constructions')).display !== '1') throw new Error('Separated inputs reconstructed the Person object.');
+const failedPersonInput = JSON.parse(personSession.evaluate('<codepad>', 'p.alter = "not an Int"'));
+if (failedPersonInput.kind !== 'error') throw new Error('An invalid follow-up input was not rejected.');
+if (personSession.takeOutput() !== '') throw new Error('A failed follow-up input produced an unexpected side effect.');
+expectOk(JSON.parse(personSession.evaluate('<codepad>', 'p.sprechen()')), 'method after failed input');
+if (personSession.takeOutput() !== 'Hi, ich bin Otto und 42 Jahre alt\n') throw new Error('A failed follow-up input damaged the existing object session.');
 
 const fieldSession = api.bluekCreateKotliteSession();
 expectOk(JSON.parse(fieldSession.load('<field>', `
