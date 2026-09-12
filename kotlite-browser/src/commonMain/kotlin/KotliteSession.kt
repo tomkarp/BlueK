@@ -45,6 +45,7 @@ class KotliteSession {
     private val computedPropertyNames = linkedMapOf<String, MutableSet<String>>()
     private var nextHandle = 1
     private var analysisSource = ""
+    private var analyzedScript: ScriptNode? = null
     private var stageSnapshot = ""
     private val pendingSounds = mutableListOf<String>()
     private val keysDown = linkedSetOf<String>()
@@ -124,6 +125,7 @@ class KotliteSession {
         val previous = parse("<BlueK project>", analysisSource)
         val combined = parse("<BlueK project>", analysisSource + "\n" + source)
         SemanticAnalyzer(combined, environment).analyze()
+        analyzedScript = combined
         // Definitions are installed once. Evaluating the complete project here
         // would repeat top-level constructors and other side effects.
         interpreter.run {
@@ -140,7 +142,7 @@ class KotliteSession {
 
     /** Metadata for the GUI, derived from the same AST Kotlite analyzes. */
     fun manifest(): String = try {
-        val script = parse("<BlueK project>", analysisSource)
+        val script = analyzedScript ?: parse("<BlueK project>", analysisSource)
         val classes = script.nodes.filterIsInstance<ClassDeclarationNode>()
         val functions = script.nodes.filterIsInstance<FunctionDeclarationNode>()
         val classJson = classes.joinToString(",", "[", "]") { declaration ->
@@ -193,6 +195,7 @@ class KotliteSession {
         val previous = parse("<BlueK project>", analysisSource)
         val combined = parse("<BlueK project>", analysisSource + "\n" + source)
         SemanticAnalyzer(combined, environment).analyze()
+        analyzedScript = combined
         val value = interpreter.run {
             combined.nodes.drop(previous.nodes.size).fold(UnitValue as RuntimeValue) { _, node ->
                 (node.eval() as? RuntimeValue) ?: UnitValue
@@ -272,6 +275,7 @@ class KotliteSession {
         handles.clear()
         bindingNames.clear()
         analysisSource = ""
+        analyzedScript = null
         propertyNames.clear()
         computedPropertyNames.clear()
         nextHandle = 1
