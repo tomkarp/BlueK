@@ -19,6 +19,28 @@ Projekt- und Medienimporte werden als eine Compile-Anfrage übertragen (maximal 
 
 Der Server verwendet standardmäßig Port `5173`; für parallele lokale Instanzen kann `BLUEK_PORT=5175 npm start` verwendet werden.
 
+## Betrieb mit Docker
+
+BlueK kann als einzelner Docker-Container betrieben werden; Docker Compose ist dafür nicht erforderlich. Das Image enthält Node.js 22 und Java 21. Nach dem Bauen wird nur der lokale Host-Port `5173` veröffentlicht, sodass ein Reverse-Proxy wie Caddy davor geschaltet werden kann:
+
+```sh
+docker build -t bluek:latest .
+docker volume create bluek-gradle-cache
+docker run -d --name bluek --restart unless-stopped \
+  -p 127.0.0.1:5173:5173 \
+  -e NODE_ENV=production \
+  -e PORT=5173 \
+  -e GRADLE_USER_HOME=/var/cache/bluek/gradle \
+  -v bluek-gradle-cache:/var/cache/bluek/gradle \
+  --memory=2g \
+  --cpus=2 \
+  --pids-limit=128 \
+  --tmpfs /tmp:size=2g \
+  bluek:latest
+```
+
+Der Container kann mit `docker logs -f bluek` beobachtet und mit `docker stop bluek` beendet werden. Für ein Update werden das Repository aktualisiert, das Image neu gebaut und der Container neu erstellt. Der Gradle-Cache bleibt dabei im Docker-Volume erhalten.
+
 ## Bedienung
 
 - `Compile` kompiliert alle Projektdateien gemeinsam und startet eine neue Runtime-Generation.
