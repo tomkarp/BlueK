@@ -1,0 +1,12 @@
+.git
+.github
+node_modules
+frontend/dist
+server/dist
+**/.gradle
+**/build
+**/kotlin-js-store
+.bluek-server.pid
+.bluek-server.log
+README.md
+DEVELOPMENT.md
