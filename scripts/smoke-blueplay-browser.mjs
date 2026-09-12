@@ -33,6 +33,10 @@ if (twoActorStage.stage.objects.length !== 2 || twoActorStage.stage.objects[0].x
 evaluate('step()', 'multiple actor step');
 const twoActorMovedStage = JSON.parse(session.takeStage());
 if (twoActorMovedStage.stage.objects[0].x !== 4 || twoActorMovedStage.stage.objects[1].x !== 21) throw new Error('BluePlay did not dispatch act() to every actor.');
+evaluate('firstActor.setImage("hero.png"); secondWorld.background = Image("sky.png"); playSound("step.wav"); showWorld(secondWorld)', 'media bridge');
+const mediaStage = JSON.parse(session.takeStage());
+if (mediaStage.stage.objects[0].imagePath !== 'hero.png' || mediaStage.stage.backgroundPath !== 'sky.png') throw new Error('BluePlay media paths did not reach the browser stage.');
+if (!mediaStage.stage.sounds || mediaStage.stage.sounds[0] !== 'step.wav') throw new Error('BluePlay sound event did not reach the browser stage.');
 evaluate('val clickedActor = Figure(); val clickedWorld = MyWorld(); clickedWorld.addObject(clickedActor, 7, 9)', 'click setup');
 expectOk(JSON.parse(session.setClick(7, 9)), 'actor click');
 if (evaluate('clickedActor.isClicked', 'actor click query').display !== 'true') throw new Error('BluePlay actor click was not delivered to the student object.');

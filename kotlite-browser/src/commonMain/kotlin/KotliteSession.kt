@@ -42,6 +42,7 @@ class KotliteSession {
     private var nextHandle = 1
     private var analysisSource = ""
     private var stageSnapshot = ""
+    private val pendingSounds = mutableListOf<String>()
     private val keysDown = linkedSetOf<String>()
     private var clickX: Int? = null
     private var clickY: Int? = null
@@ -61,6 +62,17 @@ class KotliteSession {
             parameterTypes = listOf(CustomFunctionParameter("snapshot", "String")),
             executable = { _, _, args, _ ->
                 stageSnapshot = (args[0] as StringValue).value
+                UnitValue
+            }
+        ))
+        environment.registerFunction(CustomFunctionDefinition(
+            position = SourcePosition.BUILTIN,
+            receiverType = null,
+            functionName = "bluekPlaySound",
+            returnType = "Unit",
+            parameterTypes = listOf(CustomFunctionParameter("fileName", "String")),
+            executable = { _, _, args, _ ->
+                pendingSounds += (args[0] as StringValue).value
                 UnitValue
             }
         ))
@@ -209,6 +221,7 @@ class KotliteSession {
         computedPropertyNames.clear()
         nextHandle = 1
         stageSnapshot = ""
+        pendingSounds.clear()
         keysDown.clear()
         clickX = null
         clickY = null
@@ -224,8 +237,12 @@ class KotliteSession {
     }
 
     fun takeStage(): String {
-        val snapshot = stageSnapshot
+        val snapshot = if (stageSnapshot.isNotEmpty() && pendingSounds.isNotEmpty()) {
+            val sounds = pendingSounds.joinToString(",", "[", "]") { "\"${escape(it)}\"" }
+            stageSnapshot.removeSuffix("}}") + ",\"sounds\":$sounds}}"
+        } else stageSnapshot
         stageSnapshot = ""
+        pendingSounds.clear()
         return snapshot
     }
 
