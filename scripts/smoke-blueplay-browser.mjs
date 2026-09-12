@@ -7,6 +7,9 @@ const api = globalThis['bluek-kotlite-browser'];
 const session = api.bluekCreateKotliteSession();
 const files = ['Image.kt', 'Actor.kt', 'World.kt', 'BluePlayFunctions.kt', 'Figure.kt', 'MyWorld.kt', 'Main.kt'];
 const sources = await Promise.all(files.map(file => readFile(new URL(`../examples/blueplay/${file}`, import.meta.url), 'utf8')));
+const staticProject = JSON.parse(await readFile(new URL('../frontend/public/examples/blueplay.bluek.json', import.meta.url), 'utf8'));
+const figureResource = staticProject.resources?.find(resource => resource.path === 'images/figure.png');
+if (!figureResource?.data?.startsWith('data:image/png;base64,')) throw new Error('The bundled BluePlay example image is missing from the static project asset.');
 const expectOk = (json, label) => {
   if (json.kind === 'error') throw new Error(`${label}: ${json.display}`);
   return json;
