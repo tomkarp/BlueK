@@ -17,6 +17,10 @@ type ResourceModel = { path: string; data: string };
 type CodepadEntry = { code: string; result?: string; resultObject?: ObjectModel; error?: string };
 const svgEscape = (value: string) => value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[character] || character));
 const decodeDrawingText = (value: string) => { try { return decodeURIComponent(value); } catch { return value; } };
+const decodeDrawingValue = (value: string) => decodeDrawingText(value).replace(/\\n/g, '\n').replace(/\\p/g, '|');
+const decodeNestedImage = (value: string) => {
+  try { return JSON.parse(decodeDrawingText(value).replace(/\\"/g, '"')); } catch { return null; }
+};
 let currentDrawingResources: ResourceModel[] = [];
 
 const backgroundDataUrl = (operations: string[] = [], width: number, height: number, resources: ResourceModel[] = []) => {
@@ -35,7 +39,7 @@ const backgroundDataUrl = (operations: string[] = [], width: number, height: num
     if (name === 'fillOval' && values.length >= 4) return `<ellipse cx="${Number(values[0]) + Number(values[2]) / 2}" cy="${Number(values[1]) + Number(values[3]) / 2}" rx="${Number(values[2]) / 2}" ry="${Number(values[3]) / 2}" fill="${paint}"/>`;
     if (name === 'drawOval' && values.length >= 4) return `<ellipse cx="${Number(values[0]) + Number(values[2]) / 2}" cy="${Number(values[1]) + Number(values[3]) / 2}" rx="${Number(values[2]) / 2}" ry="${Number(values[3]) / 2}" fill="none" stroke="${paint}"/>`;
     if (name === 'drawLine' && values.length >= 4) return `<line x1="${values[0]}" y1="${values[1]}" x2="${values[2]}" y2="${values[3]}" stroke="${paint}"/>`;
-    if (name === 'drawString' && values.length >= 3) return `<text x="${values[1]}" y="${values[2]}" fill="${paint}">${svgEscape(decodeDrawingText(values[0]))}</text>`;
+    if (name === 'drawString' && values.length >= 3) return `<text x="${values[1]}" y="${values[2]}" fill="${paint}">${svgEscape(decodeDrawingValue(values[0]))}</text>`;
     return '';
   }).join('');
   if (!elements) return undefined;
@@ -58,7 +62,7 @@ const drawnImageDataUrl = (operations: string[] | null = [], width: number, heig
     if (name === 'fillOval' && values.length >= 4) return `<ellipse cx="${Number(values[0]) + Number(values[2]) / 2}" cy="${Number(values[1]) + Number(values[3]) / 2}" rx="${Number(values[2]) / 2}" ry="${Number(values[3]) / 2}" fill="${paint}"/>`;
     if (name === 'drawOval' && values.length >= 4) return `<ellipse cx="${Number(values[0]) + Number(values[2]) / 2}" cy="${Number(values[1]) + Number(values[3]) / 2}" rx="${Number(values[2]) / 2}" ry="${Number(values[3]) / 2}" fill="none" stroke="${paint}"/>`;
     if (name === 'drawLine' && values.length >= 4) return `<line x1="${values[0]}" y1="${values[1]}" x2="${values[2]}" y2="${values[3]}" stroke="${paint}"/>`;
-    if (name === 'drawString' && values.length >= 3) return `<text x="${values[1]}" y="${values[2]}" fill="${paint}">${svgEscape(decodeDrawingText(values[0]))}</text>`;
+    if (name === 'drawString' && values.length >= 3) return `<text x="${values[1]}" y="${values[2]}" fill="${paint}">${svgEscape(decodeDrawingValue(values[0]))}</text>`;
     return '';
   }).join('');
   if (!elements) return undefined;
@@ -68,7 +72,8 @@ const emptyImageDataUrl = (width: number, height: number) => `data:image/svg+xml
 const renderImageElement = (fileName: string, x: string, y: string, imageWidth: string, imageHeight: string, resources: ResourceModel[]) => {
   if (fileName.startsWith('__bluek:')) {
     try {
-      const nested = JSON.parse(decodeURIComponent(fileName.slice('__bluek:'.length)));
+      const nested = decodeNestedImage(fileName.slice('__bluek:'.length));
+      if (!nested) return '';
       const href = drawnImageDataUrl(nested.operations || [], Number(nested.width) || Number(imageWidth) || 1, Number(nested.height) || Number(imageHeight) || 1, resources);
       return `<image href="${href}" x="${x}" y="${y}" width="${imageWidth}" height="${imageHeight}"/>`;
     } catch { return ''; }

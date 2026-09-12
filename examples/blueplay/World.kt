@@ -28,8 +28,12 @@ open class World(val width: Int, val height: Int, val cellSize: Int = 1) {
         for (current in actors) {
             if (!first) objects += ","
             first = false
-            val imagePath = current.image.path
-            objects += "{\"type\":\"${actorType(current)}\",\"x\":${current.x},\"y\":${current.y},\"rotation\":${current.rotation},\"imagePath\":\"${bluekEscape(imagePath)}\"}"
+            val imagePath = current.image?.path ?: ""
+            val imageOperations = current.image?.drawingJson() ?: "[]"
+            val imageWidth = current.image?.width ?: 30
+            val imageHeight = current.image?.height ?: 30
+            val imageOpacity = current.image?.transparency?.toString() ?: "255"
+            objects += "{\"type\":\"${actorType(current)}\",\"x\":${current.x},\"y\":${current.y},\"rotation\":${current.rotation},\"imagePath\":\"${bluekEscape(imagePath)}\",\"imageOperations\":$imageOperations,\"imageWidth\":$imageWidth,\"imageHeight\":$imageHeight,\"imageOpacity\":${imageOpacity.toDouble() / 255.0}}"
         }
         objects += "]"
         val backgroundPath = background.path
@@ -43,7 +47,7 @@ open class World(val width: Int, val height: Int, val cellSize: Int = 1) {
             textIndex += 1
         }
         texts += "]"
-        bluekStageUpdate("{\"stage\":{\"width\":${width},\"height\":${height},\"cellSize\":${cellSize},\"backgroundColor\":\"${bluekEscape(backgroundColor)}\",\"backgroundPath\":\"${bluekEscape(backgroundPath)}\",\"speed\":${speed},\"running\":${running},\"objects\":${objects},\"texts\":${texts}}}")
+        bluekStageUpdate("{\"stage\":{\"width\":${width},\"height\":${height},\"cellSize\":${cellSize},\"backgroundColor\":\"${bluekEscape(backgroundColor)}\",\"backgroundPath\":\"${bluekEscape(backgroundPath)}\",\"backgroundOperations\":${background.drawingJson()},\"speed\":${speed},\"running\":${running},\"objects\":${objects},\"texts\":${texts}}}")
     }
     fun show() { render() }
     fun getWidth(): Int = width
