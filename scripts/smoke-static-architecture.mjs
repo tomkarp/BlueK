@@ -1,0 +1,47 @@
+import { access, readFile } from 'node:fs/promises';
+
+const root = new URL('..', import.meta.url);
+const read = path => readFile(new URL(path, root), 'utf8');
+
+const runtimeSources = [
+  ['frontend/src/localRuntimeClient.ts', await read('frontend/src/localRuntimeClient.ts')],
+  ['frontend/src/localRuntimeWorker.ts', await read('frontend/src/localRuntimeWorker.ts')],
+  ['frontend/src/main.tsx', await read('frontend/src/main.tsx')],
+];
+
+const forbidden = [
+  ['HttpRuntimeClient', 'HTTP runtime client'],
+  ['WebSocket', 'WebSocket transport'],
+  ['XMLHttpRequest', 'XHR transport'],
+  ['ws://', 'WebSocket URL'],
+  ['wss://', 'secure WebSocket URL'],
+  ['fetch("http', 'external HTTP runtime fetch'],
+  ["fetch('http", 'external HTTP runtime fetch'],
+  ['/api/', 'application-server API path'],
+];
+
+for (const [fileName, source] of runtimeSources) {
+  for (const [needle, description] of forbidden) {
+    if (source.includes(needle)) {
+      throw new Error(`${description} found in ${fileName}.`);
+    }
+  }
+}
+
+const worker = runtimeSources.find(([fileName]) => fileName.endsWith('localRuntimeWorker.ts'))[1];
+if (!worker.includes("new URL('../kotlite/bluek-kotlite-browser.js', import.meta.url)")) {
+  throw new Error('The browser worker does not point at the bundled Kotlite asset.');
+}
+if (!worker.includes('fetch(bundleUrl)')) {
+  throw new Error('The browser worker does not load its bundled static asset.');
+}
+
+await access(new URL('frontend/public/kotlite/bluek-kotlite-browser.js', root));
+await access(new URL('frontend/dist/kotlite/bluek-kotlite-browser.js', root));
+
+const packageJson = JSON.parse(await read('package.json'));
+if (Object.keys(packageJson.dependencies || {}).some(name => /express|koa|fastify|ws|socket\.io|axios/i.test(name))) {
+  throw new Error('A backend/runtime transport dependency is still declared.');
+}
+
+console.log('Static browser architecture smoke test passed.');
