@@ -232,7 +232,11 @@ class KotliteSession {
             }
             declaration.declarations.filterIsInstance<PropertyDeclarationNode>().forEach { property ->
                 if (property.name !in names) names += property.name
-                if (property.accessors != null) computedPropertyNames.getOrPut(declaration.name) { linkedSetOf() } += property.name
+                // A custom setter does not make a property computed: its
+                // default getter still reads the backing field. Only an
+                // explicitly declared getter must stay unevaluated during
+                // inspection.
+                if (property.accessors?.getter != null) computedPropertyNames.getOrPut(declaration.name) { linkedSetOf() } += property.name
             }
             declaration.superInvocations.orEmpty().mapNotNull(::superName).mapNotNull(byName::get).forEach { parent ->
                 propertyNames[parent.name].orEmpty().forEach { inherited ->
@@ -284,8 +288,9 @@ class KotliteSession {
             if (name in computedPropertyNames[value.type().name].orEmpty()) {
                 "{\"name\":\"${escape(name)}\",\"value\":\"<computed>\"}"
             } else {
-                val member = value.findPropertyByDeclaredName(name)
-                "{\"name\":\"${escape(name)}\",\"value\":\"${escape(member.convertToString())}\"}"
+                val member = value.readBackingPropertyByDeclaredName(name)
+                val display = member?.convertToString() ?: "<uninitialized>"
+                "{\"name\":\"${escape(name)}\",\"value\":\"${escape(display)}\"}"
             }
         }
         return "{\"kind\":\"inspect\",\"objectId\":\"${escape(objectId)}\",\"className\":\"${escape(value.type().name)}\",\"fields\":$fields}"

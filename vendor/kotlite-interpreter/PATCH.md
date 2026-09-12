@@ -9,3 +9,8 @@ The corresponding fork is https://github.com/tomkarp/kotlite.
 It is kept as a source dependency so BlueK can apply small, reviewable
 browser-session fixes without replacing Kotlite with a separate interpreter.
 The upstream MIT license is included in `LICENSE`.
+
+BlueK adds `ClassInstance.readBackingPropertyByDeclaredName`, a passive
+inspection hook that reads a backing field without invoking a student-defined
+getter. This is needed to display ordinary fields and properties with only a
+custom setter in the BlueK object inspector.

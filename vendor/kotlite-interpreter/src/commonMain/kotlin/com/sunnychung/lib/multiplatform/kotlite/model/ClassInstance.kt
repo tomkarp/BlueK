@@ -162,6 +162,17 @@ open class ClassInstance(
             ?: throw RuntimeException("Property $declaredName is not declared in class ${clazz!!.fullQualifiedName}")
     }
 
+    /**
+     * Reads a property's backing field without invoking a custom getter.
+     * Hosts such as BlueK use this for a passive object inspector.
+     */
+    fun readBackingPropertyByDeclaredName(declaredName: String): RuntimeValue? {
+        val name = resolveRuntimeMemberName(declaredName)
+            ?: return parentInstance?.readBackingPropertyByDeclaredName(declaredName)
+        val accessor = memberPropertyValues[name] ?: return parentInstance?.readBackingPropertyByDeclaredName(declaredName)
+        return (accessor as? RuntimeValueDelegate)?.backing?.read(null) ?: accessor.read(null)
+    }
+
     internal fun getAllMemberProperties(): Map<String, RuntimeValueAccessor> {
         return memberPropertyValues merge (parentInstance?.getAllMemberProperties() ?: emptyMap())
     }

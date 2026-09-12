@@ -67,6 +67,17 @@ session.takeOutput();
 const inspection = expectOk(JSON.parse(session.inspect(inspected.objectId)), 'inspection');
 if (!inspection.fields.some(field => field.name === 'value' && field.value === '<computed>')) throw new Error('Computed property was not marked during inspection.');
 if (session.takeOutput() !== '') throw new Error('Inspecting an object invoked a custom getter.');
+expectOk(JSON.parse(session.load('<setter inspection>', `
+    class SetterOnly {
+        var value = 7
+            set(next) {
+                field = next
+            }
+    }
+`)), 'setter-only inspection load');
+const setterOnly = expectOk(JSON.parse(session.create('SetterOnly', '', 'setterOnly')), 'setter-only construction');
+const setterInspection = expectOk(JSON.parse(session.inspect(setterOnly.objectId)), 'setter-only inspection');
+if (!setterInspection.fields.some(field => field.name === 'value' && field.value === '7')) throw new Error('Inspecting a property with only a custom setter lost its backing-field value.');
 evaluate('val first = Child(0)', 'construct first');
 evaluate('val alias = first', 'alias');
 evaluate('alias.increment()', 'increment through alias');
