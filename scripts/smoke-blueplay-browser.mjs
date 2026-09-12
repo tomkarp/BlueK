@@ -84,6 +84,21 @@ evaluate('val painted = Image(); painted.scale(40, 50); painted.setColor(12, 34,
 const drawnStage = JSON.parse(session.takeStage());
 const drawnActor = drawnStage.stage.objects.find(object => object.imageOperations?.length);
 if (!drawnActor || !drawnActor.imageOperations.some(operation => operation.startsWith('fillRect|1|2|3|4|rgb(12,34,56)')) || !drawnActor.imageOperations.some(operation => operation.startsWith('drawLine|0|0|5|6|rgb(12,34,56)')) || !drawnActor.imageOperations.some(operation => operation.startsWith('drawString|A\\pB|2|3|rgb(12,34,56)')) || !drawnActor.imageOperations.some(operation => operation.startsWith('drawImage|__bluek:'))) throw new Error('BluePlay Image drawing operations did not reach the browser stage.');
+const nestedOperation = drawnActor.imageOperations.find(operation => operation.startsWith('drawImage|__bluek:'));
+const nestedPayload = nestedOperation?.match(/^drawImage\|__bluek:(.*)\|8\|9\|40\|50$/)?.[1];
+if (!nestedPayload) throw new Error('Nested BluePlay image operation could not be isolated.');
+let nestedImage;
+try {
+  let decoded = '';
+  for (let index = 0; index < nestedPayload.length; index += 1) {
+    const character = nestedPayload[index];
+    if (character !== '\\' || index + 1 >= nestedPayload.length) { decoded += character; continue; }
+    const escaped = nestedPayload[++index];
+    decoded += escaped === '\\' ? '\\' : escaped === '"' ? '"' : escaped === 'p' ? '|' : escaped === 'n' ? '\n' : `\\${escaped}`;
+  }
+  nestedImage = JSON.parse(decoded);
+} catch { nestedImage = null; }
+if (!nestedImage?.operations?.some(operation => operation.startsWith('drawString|A\\pB|2|3|rgb(12,34,56)'))) throw new Error('Nested BluePlay image escaping could not be decoded for browser rendering.');
 if (drawnActor.imageWidth !== 40 || drawnActor.imageHeight !== 50 || drawnActor.imageOpacity !== 128 / 255 || !drawnStage.stage.backgroundOperations?.length) throw new Error('BluePlay Image scale, transparency or background drawing state was lost.');
 evaluate('val clickedActor = Figure(); val clickedWorld = MyWorld(); clickedWorld.addObject(clickedActor, 7, 9)', 'click setup');
 expectOk(JSON.parse(session.setClick(7, 9)), 'actor click');

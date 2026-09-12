@@ -18,8 +18,18 @@ type CodepadEntry = { code: string; result?: string; resultObject?: ObjectModel;
 const svgEscape = (value: string) => value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[character] || character));
 const decodeDrawingText = (value: string) => { try { return decodeURIComponent(value); } catch { return value; } };
 const decodeDrawingValue = (value: string) => decodeDrawingText(value).replace(/\\n/g, '\n').replace(/\\p/g, '|');
+const decodeDrawingTransport = (value: string) => {
+  let decoded = '';
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (character !== '\\' || index + 1 >= value.length) { decoded += character; continue; }
+    const escaped = value[++index];
+    decoded += escaped === '\\' ? '\\' : escaped === '"' ? '"' : escaped === 'p' ? '|' : escaped === 'n' ? '\n' : `\\${escaped}`;
+  }
+  return decoded;
+};
 const decodeNestedImage = (value: string) => {
-  try { return JSON.parse(decodeDrawingText(value).replace(/\\"/g, '"').replace(/\\p/g, '|').replace(/\\n/g, '\n')); } catch { return null; }
+  try { return JSON.parse(decodeDrawingTransport(decodeDrawingText(value))); } catch { return null; }
 };
 let currentDrawingResources: ResourceModel[] = [];
 
