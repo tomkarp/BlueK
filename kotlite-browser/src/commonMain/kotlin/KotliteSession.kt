@@ -134,7 +134,7 @@ class KotliteSession {
                 .forEach { it.eval() }
         }
         analysisSource += "\n" + source
-        recordPropertyNames(source)
+        recordPropertyNames()
         result("loaded", UnitValue)
     } catch (error: Throwable) {
         error(error)
@@ -207,23 +207,37 @@ class KotliteSession {
             }
         }
         analysisSource += "\n" + source
+        recordPropertyNames()
         result("value", value)
     } catch (error: Throwable) {
         error(error)
     }
 
-    private fun recordPropertyNames(source: String) {
-        parse("<BlueK project>", source).nodes.filterIsInstance<ClassDeclarationNode>().forEach { declaration ->
-            declaration.declarations.filterIsInstance<PropertyDeclarationNode>()
-                .filter { it.accessors != null }
-                .forEach { computedPropertyNames.getOrPut(declaration.name) { linkedSetOf() } += it.name }
-        }
-        Regex("""(?:class|object)\s+([A-Za-z_]\w*)[^\{]*\{([\s\S]*)\}""").findAll(source).forEach { match ->
-            val names = propertyNames.getOrPut(match.groupValues[1]) { mutableListOf() }
-            Regex("""\b(?:val|var)\s+([A-Za-z_]\w*)""").findAll(match.groupValues[2]).forEach {
-                if (it.groupValues[1] !in names) names += it.groupValues[1]
+    private fun recordPropertyNames() {
+        val declarations = analyzedScript?.nodes?.filterIsInstance<ClassDeclarationNode>().orEmpty()
+        val byName = declarations.associateBy { it.name }
+        fun record(declaration: ClassDeclarationNode, visiting: MutableSet<String>) {
+            if (!visiting.add(declaration.name)) return
+            declaration.superInvocations.orEmpty().mapNotNull(::superName).mapNotNull(byName::get).forEach { record(it, visiting) }
+            val names = propertyNames.getOrPut(declaration.name) { mutableListOf() }
+            declaration.primaryConstructor?.parameters.orEmpty().filter { it.isProperty }.forEach { parameter ->
+                if (parameter.parameter.name !in names) names += parameter.parameter.name
             }
+            declaration.declarations.filterIsInstance<PropertyDeclarationNode>().forEach { property ->
+                if (property.name !in names) names += property.name
+                if (property.accessors != null) computedPropertyNames.getOrPut(declaration.name) { linkedSetOf() } += property.name
+            }
+            declaration.superInvocations.orEmpty().mapNotNull(::superName).mapNotNull(byName::get).forEach { parent ->
+                propertyNames[parent.name].orEmpty().forEach { inherited ->
+                    if (inherited !in names) names += inherited
+                }
+                computedPropertyNames[parent.name].orEmpty().forEach { computed ->
+                    computedPropertyNames.getOrPut(declaration.name) { linkedSetOf() } += computed
+                }
+            }
+            visiting.remove(declaration.name)
         }
+        declarations.forEach { record(it, linkedSetOf()) }
     }
 
     fun create(className: String, argumentsSource: String, requestedName: String): String {

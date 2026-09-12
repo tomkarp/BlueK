@@ -39,6 +39,8 @@ if (counterMeta?.methods[0]?.parameters[0]?.name !== 'step' || !counterMeta.meth
 if (childMeta?.supertypes?.[0]?.classifier !== 'Counter') throw new Error('Kotlite manifest lost superclass metadata.');
 const benchObject = expectOk(JSON.parse(session.create('Child', '5', 'bench')), 'bench construction');
 if (evaluate('bench.value', 'bench binding').display !== '5') throw new Error('Bench object is not available in the codepad.');
+const inheritedInspection = expectOk(JSON.parse(session.inspect(benchObject.objectId)), 'inherited inspection');
+if (!inheritedInspection.fields.some(field => field.name === 'value')) throw new Error('Primary-constructor properties were not exposed to inspection.');
 evaluate('bench.increment()', 'bench mutation');
 if (expectOk(JSON.parse(session.invoke(benchObject.objectId, 'increment', '')), 'host invoke').display !== 'Unit') throw new Error('Host method invocation failed.');
 if (evaluate('bench.value', 'host mutation visibility').display !== '9') throw new Error('Host mutation is not visible in the codepad.');
