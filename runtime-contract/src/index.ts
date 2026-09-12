@@ -3,7 +3,22 @@ export interface ProjectFile{id:string;fileName:string;kind:FileKind;source:stri
 export interface TypeRef{classifier:string;arguments:TypeRef[];nullable:boolean;displayName:string;projection?:'in'|'out'|'star'}
 export interface CallableMeta{id:string;name:string;declaringType:string;parameters:{name:string;type:TypeRef;hasDefault:boolean}[];returnType:TypeRef;visibility:string;inheritedFrom?:string;typeParameters?:string[]}
 export interface ClassMeta{id:string;name:string;kind:string;constructors:{id:string;parameters:any[]}[];methods:CallableMeta[];properties:any[];supertypes:TypeRef[];typeParameters:string[]}
-export interface CompileResult{generationId:string;sourceRevision:number;classes:ClassMeta[];diagnostics:any[];browserRuntime?:{entry:string;packageName:string};browserRuntimeError?:string}
+export interface ManifestConstructor{ id:string; parameters:{name:string; type:TypeRef; hasDefault:boolean}[] }
+export interface ManifestProperty{ id:string; name:string; type:TypeRef; mutable:boolean; visibility:string; getterId?:string; setterId?:string; generated?:boolean }
+export interface ManifestCallable extends CallableMeta{ generated?:boolean; companion?:boolean }
+export interface ManifestClass{
+    id:string;
+    name:string;
+    kind:'class'|'abstract'|'interface'|'object'|'enum'|'annotation'|'functions';
+    modifiers:string[];
+    typeParameters:string[];
+    supertypes:TypeRef[];
+    constructors:ManifestConstructor[];
+    properties:ManifestProperty[];
+    methods:ManifestCallable[];
+}
+export interface SymbolManifest{ version:1; classes:ManifestClass[] }
+export interface CompileResult{generationId:string;sourceRevision:number;classes:ClassMeta[];manifest?:SymbolManifest;diagnostics:any[];browserRuntime?:{entry:string;packageName:string};browserRuntimeError?:string}
 export interface RuntimeStatus{workerAlive:boolean;generationId:string|null;available:boolean;error:string|null}
 export interface RuntimeClient{compile(files:ProjectFile[],revision:number):Promise<CompileResult>;createObject(classId:string,constructorId:string,typeArguments:TypeRef[],args:string[],name:string):Promise<Value>;invokeMethod(objectId:string,callableId:string,typeArguments:TypeRef[],args:string[]):Promise<Value>;inspectObject(objectId:string):Promise<unknown>;evaluate(code:string,mode:'expression'|'block'):Promise<Value>;removeObject(objectId:string):Promise<void>;sendInput(text:string):Promise<void>;status():Promise<RuntimeStatus>;stop():Promise<void>;reset():Promise<void>}
 export type Value={kind:'unit'|'null'|'scalar'|'object';display:string;objectId?:string};
