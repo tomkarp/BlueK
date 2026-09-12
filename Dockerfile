@@ -1,4 +1,6 @@
-FROM node:22-bookworm
+FROM node:22-bookworm AS node
+
+FROM eclipse-temurin:21-jdk-bookworm
 
 ENV DEBIAN_FRONTEND=noninteractive \
     NODE_ENV=production \
@@ -6,8 +8,12 @@ ENV DEBIAN_FRONTEND=noninteractive \
     GRADLE_USER_HOME=/var/cache/bluek/gradle
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends openjdk-21-jdk-headless ca-certificates unzip \
+    && apt-get install -y --no-install-recommends ca-certificates unzip \
     && rm -rf /var/lib/apt/lists/*
+
+# Reuse the official multi-architecture Node.js image while keeping Java 21
+# as the base runtime for the Kotlin/JS compiler.
+COPY --from=node /usr/local/ /usr/local/
 
 WORKDIR /app
 
