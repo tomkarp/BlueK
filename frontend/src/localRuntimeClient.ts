@@ -102,6 +102,7 @@ export class LocalRuntimeClient implements RuntimeClient {
     };
   }
   private request(op: string, data: Record<string, unknown> = {}): Promise<any> { this.start(); const id = this.nextId++; return new Promise((resolve, reject) => { this.pending.set(id, { resolve, reject }); this.worker!.postMessage({ id, op, ...data }); }); }
+  private stageOf(response: any) { return response?.stage?.stage || response?.stage; }
   async compile(files: ProjectFile[], revision: number, ..._unused: unknown[]): Promise<CompileResult> { this.stopWorker('Kotlite worker replaced by a new compilation.'); this.classes = metadata(files); const response = await this.request('compile', { files }); if (response.kind === 'error') { const location = sourceLocation(String(response.display || 'Kotlite compilation failed.')); return { generationId: '', sourceRevision: revision, classes: [], diagnostics: [{ fileName: sourceFileAtLine(files, location.line), line: location.line, column: location.column, severity: 'error', message: response.display }] }; } this.classes = Array.isArray(response.classes) ? addInheritedMembers(response.classes) : this.classes; this.generationId = crypto.randomUUID(); return { generationId: this.generationId, sourceRevision: revision, classes: this.classes, diagnostics: [] }; }
   private publish(response: any) {
     if (!response?.stage) return;
@@ -120,7 +121,8 @@ export class LocalRuntimeClient implements RuntimeClient {
       try {
         const response = await this.request('eval', { code: 'step()', filename: '<BluePlay>', mode: 'expression' });
         this.publish(response);
-        if (response?.kind !== 'error' && response?.stage?.running) this.simulationTimer = window.setTimeout(tick, Math.max(16, 110 - Number(response.stage.speed || 50)));
+        const stage = this.stageOf(response);
+        if (response?.kind !== 'error' && stage?.running) this.simulationTimer = window.setTimeout(tick, Math.max(16, 110 - Number(stage.speed || 50)));
       } catch { this.stopSimulation(); }
     };
     this.simulationTimer = window.setTimeout(tick, 0);
@@ -131,8 +133,9 @@ export class LocalRuntimeClient implements RuntimeClient {
     const methodName = methodParts.length >= 3 ? methodParts[methodParts.length - 2] : rawMethod;
     const response = await this.request(request.op === 'eval' ? 'eval' : request.op, { code: request.code, filename: request.filename, className: request.className, args: request.args ? JSON.parse(request.args).join(', ') : '', name: request.name, objectId: request.objectId, methodName, generationId: request.generationId, mode: request.mode });
     this.publish(response);
-    if (request.op === 'eval' && (/\bstop\s*\(/.test(request.code || '') || response?.stage?.running === false)) this.stopSimulation();
-    if (request.op === 'eval' && /\bstart\s*\(/.test(request.code || '') && response?.stage?.running) this.scheduleSimulation();
+    const stage = this.stageOf(response);
+    if (request.op === 'eval' && (/\bstop\s*\(/.test(request.code || '') || stage?.running === false)) this.stopSimulation();
+    if (request.op === 'eval' && /\bstart\s*\(/.test(request.code || '') && stage?.running) this.scheduleSimulation();
     return response;
   }
   async createObject(classId: string, _constructorId: string, _typeArguments: TypeRef[], args: string[], name: string): Promise<Value> { return this.execute({ op: 'create', className: classId, args: JSON.stringify(args), name }); }
