@@ -13,6 +13,8 @@ import com.google.devtools.ksp.symbol.KSDeclaration
 import com.google.devtools.ksp.symbol.KSFunctionDeclaration
 import com.google.devtools.ksp.symbol.KSPropertyDeclaration
 import com.google.devtools.ksp.symbol.KSValueParameter
+import com.google.devtools.ksp.symbol.KSType
+import com.google.devtools.ksp.symbol.KSTypeArgument
 import com.google.devtools.ksp.symbol.Modifier
 
 class ManifestProcessorProvider : SymbolProcessorProvider {
@@ -92,7 +94,7 @@ private class ManifestProcessor(
         append("],\"supertypes\":[")
         declaration.superTypes.forEachIndexed { index, supertype ->
             if (index > 0) append(',')
-            appendJson(supertype.resolve().declaration.qualifiedName?.asString() ?: supertype.toString())
+            appendType(supertype)
         }
         append("],\"properties\":[")
         declaration.getAllProperties()
@@ -138,7 +140,7 @@ private class ManifestProcessor(
         append(",\"mutable\":")
         append(property.isMutable)
         append(",\"type\":")
-        appendJson(property.type.resolve().declaration.qualifiedName?.asString() ?: property.type.toString())
+        appendType(property.type)
         append(",\"getter\":")
         append(property.getter != null)
         append(",\"setter\":")
@@ -163,7 +165,7 @@ private class ManifestProcessor(
             appendParameter(parameter)
         }
         append("],\"returnType\":")
-        appendJson(function.returnType?.resolve()?.declaration?.qualifiedName?.asString() ?: "kotlin.Unit")
+        appendType(function.returnType)
         append(",\"declaringType\":")
         appendJson(owner ?: function.parentDeclaration?.qualifiedName?.asString() ?: "")
         append(",\"generated\":")
@@ -184,8 +186,79 @@ private class ManifestProcessor(
         append(",\"hasDefault\":")
         append(parameter.hasDefault)
         append(",\"type\":")
-        appendJson(parameter.type.resolve().declaration.qualifiedName?.asString() ?: parameter.type.toString())
+        appendType(parameter.type)
         append('}')
+    }
+
+    private fun StringBuilder.appendType(reference: com.google.devtools.ksp.symbol.KSTypeReference?) {
+        if (reference == null) {
+            appendTypeValue("kotlin.Unit", false, emptyList(), null)
+            return
+        }
+        val type = reference.resolve()
+        appendTypeValue(
+            type.declaration.qualifiedName?.asString() ?: type.declaration.simpleName.asString(),
+            type.nullability.name == "NULLABLE",
+            type.arguments,
+            type,
+        )
+    }
+
+    private fun StringBuilder.appendTypeValue(classifier: String, nullable: Boolean, arguments: List<KSTypeArgument>, type: KSType?, projection: String? = null) {
+        append("{\"classifier\":")
+        appendJson(classifier)
+        append(",\"arguments\":[")
+        arguments.forEachIndexed { index, argument ->
+            if (index > 0) append(',')
+            appendTypeArgument(argument)
+        }
+        append("],\"nullable\":")
+        append(nullable)
+        append(",\"displayName\":")
+        appendJson(type?.let(::displayName) ?: classifier + if (nullable) "?" else "")
+        if (projection != null) {
+            append(",\"projection\":")
+            appendJson(projection)
+        }
+        append('}')
+    }
+
+    private fun StringBuilder.appendTypeArgument(argument: KSTypeArgument) {
+        val variance = argument.variance.name
+        if (variance == "STAR") {
+            append("{\"classifier\":\"*\",\"arguments\":[],\"nullable\":false,\"displayName\":\"*\",\"projection\":\"star\"}")
+            return
+        }
+        val type = argument.type?.resolve()
+        if (type == null) {
+            appendTypeValue("kotlin.Any", true, emptyList(), null)
+            return
+        }
+        val projection = when (variance) {
+            "COVARIANT" -> "out"
+            "CONTRAVARIANT" -> "in"
+            else -> null
+        }
+        appendTypeValue(
+            type.declaration.qualifiedName?.asString() ?: type.declaration.simpleName.asString(),
+            type.nullability.name == "NULLABLE",
+            type.arguments,
+            type,
+            projection,
+        )
+    }
+
+    private fun displayName(type: KSType): String {
+        val classifier = type.declaration.qualifiedName?.asString() ?: type.declaration.simpleName.asString()
+        val arguments = type.arguments.joinToString(", ") { argument ->
+            when (argument.variance.name) {
+                "STAR" -> "*"
+                "COVARIANT" -> "out ${argument.type?.resolve()?.let(::displayName) ?: "kotlin.Any?"}"
+                "CONTRAVARIANT" -> "in ${argument.type?.resolve()?.let(::displayName) ?: "kotlin.Any?"}"
+                else -> argument.type?.resolve()?.let(::displayName) ?: "kotlin.Any?"
+            }
+        }
+        return classifier + (if (arguments.isEmpty()) "" else "<$arguments>") + (if (type.nullability.name == "NULLABLE") "?" else "")
     }
 
     private fun KSDeclaration.isPublic(): Boolean =
