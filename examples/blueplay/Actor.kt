@@ -42,11 +42,7 @@ open class Actor {
     fun isTouching(other: Actor): Boolean = intersects(other)
     open fun act() {}
     fun move(distance: Int) {
-        val normalized = ((rotation % 360) + 360) % 360
-        if (normalized == 90) setLocation(x, y + distance)
-        else if (normalized == 180) setLocation(x - distance, y)
-        else if (normalized == 270) setLocation(x, y - distance)
-        else setLocation(x + distance, y)
+        setLocation(x + bluekMoveDeltaX(rotation, distance), y + bluekMoveDeltaY(rotation, distance))
     }
     fun turn(degrees: Int) { rotation += degrees }
     val isAtEdge: Boolean get() = worldWidth > 0 && worldHeight > 0 && (x <= 0 || y <= 0 || x >= worldWidth - 1 || y >= worldHeight - 1)

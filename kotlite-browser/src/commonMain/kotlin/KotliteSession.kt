@@ -26,7 +26,9 @@ import com.sunnychung.lib.multiplatform.kotlite.model.NavigationNode
 import com.sunnychung.lib.multiplatform.kotlite.stdlib.AllStdLibModules
 import kotlin.math.PI
 import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.math.roundToInt
+import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.js.ExperimentalJsExport
 import kotlin.js.JsExport
@@ -144,6 +146,32 @@ class KotliteSession {
                 val dx = ((args[2] as IntValue).value - (args[0] as IntValue).value).toDouble()
                 val dy = ((args[3] as IntValue).value - (args[1] as IntValue).value).toDouble()
                 IntValue(sqrt(dx * dx + dy * dy).roundToInt(), interpreter.symbolTable())
+            }
+        ))
+        environment.registerFunction(CustomFunctionDefinition(
+            position = SourcePosition.BUILTIN,
+            receiverType = null,
+            functionName = "bluekMoveDeltaX",
+            returnType = "Int",
+            parameterTypes = listOf(CustomFunctionParameter("rotation", "Int"), CustomFunctionParameter("distance", "Int")),
+            executable = { interpreter, _, args, _ ->
+                val rotation = (args[0] as IntValue).value
+                val distance = (args[1] as IntValue).value
+                val radians = rotation.toDouble() * PI / 180.0
+                IntValue((cos(radians) * distance).roundToInt(), interpreter.symbolTable())
+            }
+        ))
+        environment.registerFunction(CustomFunctionDefinition(
+            position = SourcePosition.BUILTIN,
+            receiverType = null,
+            functionName = "bluekMoveDeltaY",
+            returnType = "Int",
+            parameterTypes = listOf(CustomFunctionParameter("rotation", "Int"), CustomFunctionParameter("distance", "Int")),
+            executable = { interpreter, _, args, _ ->
+                val rotation = (args[0] as IntValue).value
+                val distance = (args[1] as IntValue).value
+                val radians = rotation.toDouble() * PI / 180.0
+                IntValue((sin(radians) * distance).roundToInt(), interpreter.symbolTable())
             }
         ))
         interpreter = KotliteInterpreter("<BlueK>", "", environment)
