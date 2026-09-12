@@ -10,3 +10,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "bluek-browser-runtime"
+include(":manifest-processor")

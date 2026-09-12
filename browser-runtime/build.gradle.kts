@@ -2,6 +2,7 @@ import org.gradle.api.file.DuplicatesStrategy
 
 plugins {
     kotlin("multiplatform") version "2.2.21"
+    id("com.google.devtools.ksp") version "2.2.21-2.0.4"
 }
 
 val bluekProjectDir = providers.gradleProperty("bluekProjectDir").map { file(it) }
@@ -23,6 +24,10 @@ kotlin {
             kotlin.srcDir(bluekBridgeDir)
         }
     }
+}
+
+dependencies {
+    add("kspJs", project(":manifest-processor"))
 }
 
 tasks.matching { it.name == "jsBrowserProductionLibraryDistribution" }.configureEach {

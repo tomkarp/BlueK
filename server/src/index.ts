@@ -1,4 +1,4 @@
-import express from 'express'; import {promises as fs} from 'node:fs'; import path from 'node:path'; import os from 'node:os'; import {randomUUID} from 'node:crypto'; import type {ProjectFile,ClassMeta,TypeRef} from '../../runtime-contract/src/index.js'; import {compileBrowserProject,compileBrowserSnippet} from './browser-compiler.js';
+import express from 'express'; import {promises as fs} from 'node:fs'; import path from 'node:path'; import os from 'node:os'; import {randomUUID} from 'node:crypto'; import type {ProjectFile,ClassMeta,TypeRef,SymbolManifest} from '../../runtime-contract/src/index.js'; import {compileBrowserProject,compileBrowserSnippet} from './browser-compiler.js';
 const root=process.cwd(); const app=express(); app.use(express.json({limit:'32mb'})); type S={dir:string;generation?:string;files:ProjectFile[];resourcePaths:string[];lastActivity:number}; const sessions=new Map<string,S>(); const SESSION_IDLE_MS=30*60*1000;
 app.use((_req,res,next)=>{res.setHeader('Cross-Origin-Opener-Policy','same-origin');res.setHeader('Cross-Origin-Embedder-Policy','require-corp');next();});
 let shuttingDown=false;
@@ -130,10 +130,10 @@ app.post('/api/session/:id/compile',asyncRoute(async(req:any,r:any)=>{
     s.resourcePaths=[...nextResources];
     const ruleDiagnostics=projectRuleDiagnostics(files); const gid=randomUUID();
     const classes=addCompanionMethods(enrichMethods(addPropertyMethods(finalizeMeta(metaImproved(files),files),files)),files);
-    let browserRuntime: {entry:string;packageName:string}|undefined; let browserDiagnostics='';
-    if(!ruleDiagnostics.length){const browser=await compileBrowserProject(root,s.dir,files,classes); if(browser.ok){browserRuntime={entry:'bluek-browser-runtime.js',packageName:packageNameForBrowser(files)};s.files=files;s.generation=gid;} else browserDiagnostics=browser.diagnostics;}
+    let browserRuntime: {entry:string;packageName:string}|undefined; let browserDiagnostics=''; let manifest:SymbolManifest|undefined;
+    if(!ruleDiagnostics.length){const browser=await compileBrowserProject(root,s.dir,files,classes); if(browser.ok){browserRuntime={entry:'bluek-browser-runtime.js',packageName:packageNameForBrowser(files)};manifest=browser.manifest;s.files=files;s.generation=gid;} else browserDiagnostics=browser.diagnostics;}
     const diagnostics=ruleDiagnostics.length?ruleDiagnostics:browserDiagnostics?[{fileName:'browser-runtime',line:1,column:1,message:`Browser Kotlin/JS compilation failed:\n${browserDiagnostics}`,severity:'error'}]:[];
-    r.json({generationId:gid,sourceRevision:req.body.revision||1,classes,diagnostics,browserRuntime,browserRuntimeError:browserDiagnostics||undefined});
+    r.json({generationId:gid,sourceRevision:req.body.revision||1,classes,manifest,diagnostics,browserRuntime,browserRuntimeError:browserDiagnostics||undefined});
 }));
 app.get('/api/session/:id/status',asyncRoute(async(req:any,r:any)=>{const s=sessions.get(req.params.id);if(!s)return r.sendStatus(404);r.json({workerAlive:false,generationId:s.generation||null,available:false,error:'BlueK runs project code only in the browser worker.'})}));
 app.post('/api/session/:id/close',asyncRoute(async(req:any,r:any)=>{const s=sessions.get(req.params.id);if(!s)return r.sendStatus(404);await closeSession(req.params.id,s);r.sendStatus(204)}));

@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { ClassMeta, ProjectFile } from '../../runtime-contract/src/index.js';
+import type { ClassMeta, ProjectFile, SymbolManifest } from '../../runtime-contract/src/index.js';
 
 const browserPackage = 'de.tomkarp.bluek.bridge';
 const frameworkNames = new Set(['Actor', 'World', 'Image', 'BluePlayFunctions']);
@@ -208,7 +208,7 @@ const compilerDiagnostic = (result: { out: string; err: string }) => {
     return lines.length ? lines.join('\n') : 'Kotlin/JS compilation failed.';
 };
 
-export async function compileBrowserProject(root: string, sessionDir: string, files: ProjectFile[], classes: ClassMeta[]): Promise<{ ok: boolean; diagnostics: string; directory: string }> {
+export async function compileBrowserProject(root: string, sessionDir: string, files: ProjectFile[], classes: ClassMeta[]): Promise<{ ok: boolean; diagnostics: string; directory: string; manifest?: SymbolManifest }> {
     const buildDir = path.join(sessionDir, 'browser');
     const bridgeDir = path.join(buildDir, 'bridge');
     // Keep Gradle's build directory between generations. Kotlin/JS compilation is
@@ -246,6 +246,14 @@ export async function compileBrowserProject(root: string, sessionDir: string, fi
     const dist = path.join(buildDir, 'dist');
     await fs.rm(dist, { recursive: true, force: true });
     await fs.cp(output, dist, { recursive: true });
+    const generatedManifest = path.join(buildDir, 'build', 'generated', 'ksp', 'js', 'jsMain', 'resources', 'de', 'tomkarp', 'bluek', 'generated', 'bluek-symbol-manifest.json');
+    let manifest: SymbolManifest | undefined;
+    try {
+        manifest = JSON.parse(await fs.readFile(generatedManifest, 'utf8')) as SymbolManifest;
+        await fs.copyFile(generatedManifest, path.join(dist, 'bluek-symbol-manifest.json'));
+    } catch {
+        return { ok: false, diagnostics: 'Kotlin/JS compilation succeeded, but BlueK could not read the generated symbol manifest.', directory: buildDir };
+    }
     const compiledModule = path.join(dist, 'bluek-browser-runtime.js');
     await fs.rename(compiledModule, path.join(dist, 'student.js'));
     await fs.copyFile(path.join(root, 'browser-runtime-js', 'bluek-browser-runtime.js'), path.join(dist, 'bluek-runtime.js'));
@@ -257,7 +265,7 @@ export async function compileBrowserProject(root: string, sessionDir: string, fi
         'Object.assign(globalThis, runtime, student);',
         '',
     ].join('\n'));
-    return { ok: true, diagnostics: '', directory: buildDir };
+    return { ok: true, diagnostics: '', directory: buildDir, manifest };
 }
 
 export async function compileBrowserSnippet(root: string, sessionDir: string, source: string, snippetId: string, bindings: Array<string | { name: string; type: string; mutable?: boolean }> = []): Promise<{ ok: boolean; diagnostics: string; entry?: string }> {

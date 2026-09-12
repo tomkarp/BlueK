@@ -10,6 +10,8 @@ kotlin-js-spike/build/
 kotlin-js-spike/kotlin-js-store/
 browser-runtime/.gradle/
 browser-runtime/build/
+browser-runtime/manifest-processor/.gradle/
+browser-runtime/manifest-processor/build/
 kotlin-symbol-manifest-spike/.gradle/
 kotlin-symbol-manifest-spike/build/
 kotlin-symbol-manifest-spike/processor/build/
