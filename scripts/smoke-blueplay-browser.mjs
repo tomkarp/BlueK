@@ -56,6 +56,8 @@ if (JSON.parse(session.evaluate('<BluePlay smoke>', 'keyFigure.x')).display !== 
 if (JSON.parse(session.evaluate('<BluePlay smoke>', 'keyFigure.isAtEdge')).display !== 'false') throw new Error('BluePlay incorrectly reported an interior Actor at the edge.');
 evaluate('keyFigure.x = 0', 'edge setup');
 if (JSON.parse(session.evaluate('<BluePlay smoke>', 'keyFigure.isAtEdge')).display !== 'true') throw new Error('BluePlay did not report an Actor at the world edge.');
+evaluate('keyFigure.move(-2)', 'edge clamping');
+if (JSON.parse(session.evaluate('<BluePlay smoke>', 'keyFigure.x')).display !== '0') throw new Error('BluePlay allowed an Actor to move outside the world.');
 evaluate('firstActor.setImage("hero.png"); secondWorld.background = Image("sky.png"); playSound("step.wav"); showWorld(secondWorld)', 'media bridge');
 const mediaStage = JSON.parse(session.takeStage());
 if (mediaStage.stage.objects[0].imagePath !== 'hero.png' || mediaStage.stage.backgroundPath !== 'sky.png') throw new Error('BluePlay media paths did not reach the browser stage.');

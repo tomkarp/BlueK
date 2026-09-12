@@ -10,7 +10,14 @@ open class Actor {
     fun getImage(): Image = image
     fun getX(): Int = x
     fun getY(): Int = y
-    fun setLocation(newX: Int, newY: Int) { x = newX; y = newY }
+    fun setLocation(newX: Int, newY: Int) {
+        x = if (worldWidth > 0) {
+            if (newX < 0) 0 else if (newX >= worldWidth) worldWidth - 1 else newX
+        } else newX
+        y = if (worldHeight > 0) {
+            if (newY < 0) 0 else if (newY >= worldHeight) worldHeight - 1 else newY
+        } else newY
+    }
     fun getRotation(): Int = rotation
     fun setRotation(degrees: Int) { rotation = degrees }
     fun intersects(other: Actor): Boolean = x == other.x && y == other.y
@@ -18,10 +25,10 @@ open class Actor {
     open fun act() {}
     fun move(distance: Int) {
         val normalized = ((rotation % 360) + 360) % 360
-        if (normalized == 90) y += distance
-        else if (normalized == 180) x -= distance
-        else if (normalized == 270) y -= distance
-        else x += distance
+        if (normalized == 90) setLocation(x, y + distance)
+        else if (normalized == 180) setLocation(x - distance, y)
+        else if (normalized == 270) setLocation(x, y - distance)
+        else setLocation(x + distance, y)
     }
     fun turn(degrees: Int) { rotation += degrees }
     val isAtEdge: Boolean get() = worldWidth > 0 && worldHeight > 0 && (x <= 0 || y <= 0 || x >= worldWidth - 1 || y >= worldHeight - 1)
