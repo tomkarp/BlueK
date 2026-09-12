@@ -345,7 +345,7 @@ export async function compileBrowserProject(root: string, sessionDir: string, fi
         await fs.writeFile(path.join(browserProjectDir, fileName), `${prefix}fun readln(): String = bluekReadln()\nfun readlnOrNull(): String? = bluekReadlnOrNull()\nfun readLine(): String? = bluekReadlnOrNull()\nobject bluekSystemErr { fun print(value: Any?) = kotlin.io.print(value); fun println(value: Any?) = kotlin.io.println(value); fun flush() {} }\n`);
     }
     const gradleArgs = ['jsBrowserProductionLibraryDistribution', '-PbluekProjectDir=' + browserProjectDir, '-PbluekBridgeDir=' + bridgeDir];
-    const metadataPass = await run(path.join(root, 'jvm', 'gradlew'), [...gradleArgs, '-PbluekForceRebuild=true'], buildDir);
+    const metadataPass = await run(path.join(root, 'jvm', 'gradlew'), [...gradleArgs, '--rerun-tasks', '-PbluekForceRebuild=true'], buildDir);
     if (metadataPass.code) return { ok: false, diagnostics: compilerDiagnostic(metadataPass), directory: buildDir };
     const generatedManifest = path.join(buildDir, 'build', 'generated', 'ksp', 'js', 'jsMain', 'resources', 'de', 'tomkarp', 'bluek', 'generated', 'bluek-symbol-manifest.json');
     let manifest: SymbolManifest | undefined;
