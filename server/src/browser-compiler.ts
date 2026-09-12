@@ -344,7 +344,7 @@ export async function compileBrowserProject(root: string, sessionDir: string, fi
         const fileName = `BlueKInput${pkg ? `_${kotlinIdentifier(pkg)}` : ''}.kt`;
         await fs.writeFile(path.join(browserProjectDir, fileName), `${prefix}fun readln(): String = bluekReadln()\nfun readlnOrNull(): String? = bluekReadlnOrNull()\nfun readLine(): String? = bluekReadlnOrNull()\nobject bluekSystemErr { fun print(value: Any?) = kotlin.io.print(value); fun println(value: Any?) = kotlin.io.println(value); fun flush() {} }\n`);
     }
-    const gradleArgs = ['jsBrowserProductionLibraryDistribution', '--no-daemon', '-PbluekProjectDir=' + browserProjectDir, '-PbluekBridgeDir=' + bridgeDir];
+    const gradleArgs = ['jsBrowserProductionLibraryDistribution', '-PbluekProjectDir=' + browserProjectDir, '-PbluekBridgeDir=' + bridgeDir];
     const metadataPass = await run(path.join(root, 'jvm', 'gradlew'), gradleArgs, buildDir);
     if (metadataPass.code) return { ok: false, diagnostics: compilerDiagnostic(metadataPass), directory: buildDir };
     const generatedManifest = path.join(buildDir, 'build', 'generated', 'ksp', 'js', 'jsMain', 'resources', 'de', 'tomkarp', 'bluek', 'generated', 'bluek-symbol-manifest.json');
@@ -425,7 +425,7 @@ export async function compileBrowserSnippet(root: string, sessionDir: string, so
         '',
     ].join('\n');
     await fs.writeFile(path.join(bridgeDir, 'BlueKSnippet.kt'), bridge);
-    const result = await run(path.join(root, 'jvm', 'gradlew'), ['jsBrowserProductionLibraryDistribution', '--no-daemon', `-PbluekProjectDir=${projectDir}`, `-PbluekBridgeDir=${bridgeDir}`], buildDir);
+    const result = await run(path.join(root, 'jvm', 'gradlew'), ['jsBrowserProductionLibraryDistribution', `-PbluekProjectDir=${projectDir}`, `-PbluekBridgeDir=${bridgeDir}`], buildDir);
     if (result.code) return { ok: false, diagnostics: compilerDiagnostic(result) };
     const output = path.join(buildDir, 'build', 'dist', 'js', 'productionLibrary');
     const target = path.join(sessionDir, 'browser', 'dist');

@@ -29,7 +29,3 @@ kotlin {
 dependencies {
     add("kspJs", project(":manifest-processor"))
 }
-
-tasks.matching { it.name == "jsBrowserProductionLibraryDistribution" }.configureEach {
-    outputs.upToDateWhen { false }
-}
