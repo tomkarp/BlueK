@@ -19,7 +19,7 @@ const svgEscape = (value: string) => value.replace(/[&<>"']/g, character => ({ '
 const decodeDrawingText = (value: string) => { try { return decodeURIComponent(value); } catch { return value; } };
 const decodeDrawingValue = (value: string) => decodeDrawingText(value).replace(/\\n/g, '\n').replace(/\\p/g, '|');
 const decodeNestedImage = (value: string) => {
-  try { return JSON.parse(decodeDrawingText(value).replace(/\\"/g, '"')); } catch { return null; }
+  try { return JSON.parse(decodeDrawingText(value).replace(/\\"/g, '"').replace(/\\p/g, '|').replace(/\\n/g, '\n')); } catch { return null; }
 };
 let currentDrawingResources: ResourceModel[] = [];
 

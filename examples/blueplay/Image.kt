@@ -49,7 +49,7 @@ class Image(val path: String = "") {
         var index = 0
         while (index < nested.length) {
             val character = nested.substring(index, index + 1)
-            encoded += if (character == "\\") "\\\\" else if (character == "\"") "\\\"" else if (character == "\n") "\\n" else character
+            encoded += if (character == "\\") "\\\\" else if (character == "\"") "\\\"" else if (character == "|") "\\p" else if (character == "\n") "\\n" else character
             index += 1
         }
         drawingOperations.add("drawImage|__bluek:$encoded|$x|$y|${image.width}|${image.height}")
