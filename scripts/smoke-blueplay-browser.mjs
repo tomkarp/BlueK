@@ -66,6 +66,8 @@ if (clampedInsertionStage.stage.objects.some(object => object.x < 0 || object.x 
 evaluate('autoWorld.removeObject(autoActor)', 'automatic remove repaint');
 const removedStage = JSON.parse(session.takeStage());
 if (removedStage.stage.objects.length !== 0) throw new Error('Removing an Actor did not update the browser stage.');
+evaluate('autoActor.setLocation(99, 88)', 'detached actor movement');
+if (evaluate('autoActor.x', 'detached actor x').display !== '99' || evaluate('autoActor.y', 'detached actor y').display !== '88') throw new Error('Removing an Actor left stale world-boundary clamping behind.');
 evaluate('class KeyFigure : Actor() { override fun act() { if (isKeyDown(\"left\")) this.move(-2) } }; val keyWorld = MyWorld(); val keyFigure = KeyFigure(); keyWorld.addObject(keyFigure, 10, 10); showWorld(keyWorld)', 'keyboard setup');
 expectOk(JSON.parse(session.setKey('left', true)), 'key down');
 evaluate('step()', 'keyboard step');
