@@ -25,8 +25,8 @@ npm run browser-smoke
 npm run build
 ```
 
-Der Smoke-Test deckt Objektidentität, Alias-Verhalten, getrennte Instanzen, Vererbung, dynamischen Dispatch, Host-Aufrufe sowie Typ- und `val`-Fehler ab. Die Produktions-GUI wurde zusätzlich über einen statischen lokalen Server geöffnet und mit Compile sowie drei getrennten Codepad-Eingaben geprüft.
+Der Smoke-Test deckt Objektidentität, Alias-Verhalten, getrennte Instanzen, Vererbung, dynamischen Dispatch, Host-Aufrufe, BluePlay-Schritte und Klick-Rückrufe sowie Typ- und `val`-Fehler ab. Die Produktions-GUI wurde zusätzlich über einen statischen lokalen Server geöffnet und mit Compile, `main()`, Act, Run und Pause geprüft.
 
 ## Bekannte Grenzen
 
-Die vorhandene GUI bleibt die Basis. In diesem Versuch sind Kotlite-Ausführung, Codepad und Objektbank lokal angebunden. Die Klassenkarten-Metadaten sind noch eine begrenzte Quelltextableitung, die Konsoleneingabe ist nicht unterstützt, und die bestehende BluePlay-Darstellung ist noch nicht mit einer Kotlite-Host-Bridge verbunden. Siehe [README.md](README.md).
+Die vorhandene GUI bleibt die Basis. In diesem Versuch sind Kotlite-Ausführung, Codepad, Objektbank und der erste BluePlay-Durchstich lokal angebunden. Die Klassenkarten-Metadaten sind noch eine begrenzte Quelltextableitung, `readln` ist nicht unterstützt, und BluePlay bietet noch keine vollständige API-/Medienparität. Siehe [README.md](README.md).

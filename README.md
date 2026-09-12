@@ -24,7 +24,7 @@ Es gibt keinen Anwendungsserver, keine HTTP-/WebSocket-Runtime, keine serverseit
 
 - `frontend/src/main.tsx` enthält die bestehende GUI.
 - `frontend/src/localRuntimeClient.ts` erhält den Runtime-Vertrag als lokalen Adapter.
-- `frontend/src/localRuntimeWorker.ts` lädt ausschließlich das statische Kotlite-Asset und verwaltet Worker-Nachrichten.
+- `frontend/src/localRuntimeWorker.ts` lädt ausschließlich das statische Kotlite-Asset und verwaltet Worker-Nachrichten einschließlich Tastatur- und Mausklick-Ereignissen.
 - `kotlite-browser` baut die `KotliteSession` als Kotlin/JS-Browserbundle.
 - `runtime-contract` enthält die weiterhin sinnvolle GUI-/Runtime-Schnittstelle.
 - `examples` enthält lokale Projektdateien und Medien.
@@ -51,7 +51,7 @@ Der Smoke-Test prüft getrennte Sitzungsaktionen, Objekt-Handles, Alias-Identit�
 
 ## Bewusste Grenzen dieses Architekturversuchs
 
-Die Klassenkarten-Metadaten werden derzeit aus den Projektdateien für die vorhandene GUI abgeleitet; Kotlites AST-/Semantikanalyse ist die autoritative Ausführungsprüfung. Die Konsoleneingabe (`readln`) ist im lokalen Adapter noch nicht verfügbar. BluePlay ist für eine erste browserlokale Welt mit `World`, `Actor`, `act`, `show`, `start`, `stop`, `step`, Geschwindigkeit und Tastaturzustand angeschlossen. Das Beispiel ist über `?example=blueplay` ladbar; Medien und die vollständige BluePlay-API sind noch nicht portiert.
+Die Klassenkarten-Metadaten werden derzeit aus den Projektdateien für die vorhandene GUI abgeleitet; Kotlites AST-/Semantikanalyse ist die autoritative Ausführungsprüfung. Die blockierende Konsoleneingabe (`readln`) ist im lokalen Adapter noch nicht verfügbar. BluePlay ist für eine erste browserlokale Welt mit `World`, `Actor`, `act`, `show`, `start`, `stop`, `step`, Geschwindigkeit, Tastaturzustand sowie `Actor.isClicked`/`World.isClicked` angeschlossen. Das Beispiel ist über `?example=blueplay` ladbar; Medien und die vollständige BluePlay-API sind noch nicht portiert.
 
 Kotlites dokumentierte Sprachgrenzen gelten weiterhin, unter anderem bei Teilen von Sichtbarkeiten, Packages/Imports, sekundären Konstruktoren und Teilen der Standardbibliothek. Einfache benutzerdefinierte Getter und Setter für Klassen-Properties werden vom eingebundenen Interpreter unterstützt; Property-Typ und ein separates Speicherfeld sind dafür erforderlich. In BlueK ist dafür ein gepinnter Quellstand des eigenen Kotlite-Forks eingebunden; der Patch hält eingebaute Erweiterungsfunktionen auch nach mehreren Analyseläufen einer dauerhaften Sitzung auflösbar. Grundlegende Listenoperationen wie Indexzugriff, `size`, `count { ... }` und `MutableList.add` sind damit inkrementell nutzbar; der parameterlose Aufruf `count()` ist in der aktuellen Kotlite-Stdlib noch nicht vorhanden. Nicht unterstützter oder fehlerhafter Code wird lokal als Fehler zurückgegeben und nicht an einen Backend-Fallback weitergereicht.
 
