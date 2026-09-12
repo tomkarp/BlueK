@@ -41,6 +41,7 @@ const handleRequest = async (event: MessageEvent) => {
     else if (request.op === 'main') response = JSON.parse(activeSession.evaluate(request.filename || '<Main>', 'main()'));
     else if (request.op === 'create') response = JSON.parse(activeSession.create(request.className, request.args || '', request.name || 'object'));
     else if (request.op === 'invoke') response = JSON.parse(activeSession.invoke(request.objectId, request.methodName, request.args || ''));
+    else if (request.op === 'set') response = JSON.parse(activeSession.set(request.objectId, request.property, request.value || 'null'));
     else if (request.op === 'inspect') response = JSON.parse(activeSession.inspect(request.objectId));
     else if (request.op === 'remove') response = JSON.parse(activeSession.remove(request.objectId));
     else if (request.op === 'reset') response = JSON.parse(activeSession.reset());

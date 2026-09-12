@@ -246,9 +246,33 @@ class KotliteSession {
         }
         analysisSource += "\n" + source
         recordPropertyNames()
-        result("value", value)
+        val objectId = if (value is ClassInstance) registerExpressionObject(value) else null
+        result("value", value, objectId)
     } catch (error: Throwable) {
         error(error)
+    }
+
+    /** Keep an object returned by a Codepad expression addressable by the GUI. */
+    private fun registerExpressionObject(value: ClassInstance): String {
+        val binding = "__bluek_expression_${nextHandle++}"
+        // Keep semantic analysis aware of the binding without evaluating the
+        // expression a second time. The declaration is intentionally added
+        // without an initializer; the already evaluated object is assigned
+        // directly above.
+        analysisSource += "\nval $binding: ${value.type().toTypeNode().descriptiveName()}"
+        val script = parse("<BlueK project>", analysisSource)
+        SemanticAnalyzer(script, environment).analyze()
+        val declaration = script.nodes.filterIsInstance<PropertyDeclarationNode>()
+            .last { it.name == binding }
+        val transformedBinding = declaration.transformedRefName
+            ?: error("Kotlite did not assign a runtime name to the expression binding")
+        interpreter.symbolTable().declareProperty(SourcePosition.BUILTIN, transformedBinding, value.type().toTypeNode(), false)
+        interpreter.symbolTable().assign(transformedBinding, value)
+        analyzedScript = script
+        val id = "object-${nextHandle++}"
+        handles[id] = value
+        bindingNames[id] = binding
+        return id
     }
 
     private fun recordPropertyNames() {
@@ -305,6 +329,14 @@ class KotliteSession {
         val binding = bindingNames[objectId]
             ?: return errorMessage("Object handle is no longer available.")
         return evaluate("<BlueK method call>", "$binding.$methodName($argumentsSource)")
+    }
+
+    fun set(objectId: String, propertyName: String, valueSource: String): String {
+        handles[objectId] ?: return errorMessage("Object handle is no longer available.")
+        val binding = bindingNames[objectId]
+            ?: return errorMessage("Object handle is no longer available.")
+        if (!propertyName.matches(Regex("[A-Za-z_]\\w*"))) return errorMessage("Invalid property name.")
+        return evaluate("<BlueK inspector>", "$binding.$propertyName = $valueSource")
     }
 
     fun inspect(objectId: String): String {

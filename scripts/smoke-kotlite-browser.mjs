@@ -44,6 +44,12 @@ if (!inheritedInspection.fields.some(field => field.name === 'value')) throw new
 evaluate('bench.increment()', 'bench mutation');
 if (expectOk(JSON.parse(session.invoke(benchObject.objectId, 'increment', '')), 'host invoke').display !== 'Unit') throw new Error('Host method invocation failed.');
 if (evaluate('bench.value', 'host mutation visibility').display !== '9') throw new Error('Host mutation is not visible in the codepad.');
+expectOk(JSON.parse(session.set(benchObject.objectId, 'value', '17')), 'inspector setter');
+if (evaluate('bench.value', 'inspector mutation visibility').display !== '17') throw new Error('Inspector mutation is not visible in the codepad.');
+const expressionObject = expectOk(JSON.parse(session.evaluate('<smoke>', 'Child(6)')), 'object expression result');
+if (!expressionObject.objectId || expressionObject.className !== 'Child') throw new Error('A Codepad object expression did not receive a runtime handle.');
+expectOk(JSON.parse(session.set(expressionObject.objectId, 'value', '7')), 'expression object setter');
+if (JSON.parse(session.inspect(expressionObject.objectId)).kind === 'error' || JSON.parse(session.invoke(expressionObject.objectId, 'increment', '')).kind === 'error') throw new Error('A Codepad expression object handle could not be inspected or invoked.');
 expectOk(JSON.parse(session.load('<accessors>', `
     class Meter {
         var raw = 0
