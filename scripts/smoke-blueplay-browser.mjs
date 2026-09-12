@@ -39,6 +39,12 @@ evaluate('callbackWorld.showText("Hallo \\"BlueK\\"", 2, 3); callbackWorld.setBa
 const decoratedStage = JSON.parse(session.takeStage());
 if (decoratedStage.stage.backgroundPath !== 'sky.png' || decoratedStage.stage.texts[0].text !== 'Hallo "BlueK"' || decoratedStage.stage.texts[0].x !== 2) throw new Error('BluePlay text or background state did not reach the browser stage.');
 if (evaluate('callbackWorld.getObjectsAt(0, 0).size', 'world object lookup').display !== '0') throw new Error('BluePlay getObjectsAt returned an actor at the wrong position.');
+evaluate('val apiFigure = Figure(); apiFigure.setLocation(4, 5); apiFigure.setRotation(90); apiFigure.move(2)', 'actor convenience API');
+if (evaluate('apiFigure.getX()', 'actor x accessor').display !== '4' || evaluate('apiFigure.getY()', 'actor y accessor').display !== '7' || evaluate('apiFigure.getRotation()', 'actor rotation accessor').display !== '90') throw new Error('BluePlay Actor location or rotation API failed.');
+if (evaluate('callbackWorld.getWidth()', 'world width accessor').display !== '40' || evaluate('callbackWorld.getHeight()', 'world height accessor').display !== '30') throw new Error('BluePlay World dimension API failed.');
+evaluate('callbackWorld.setBackground(12, 34, 56)', 'world color background');
+const colorStage = JSON.parse(session.takeStage());
+if (colorStage.stage.backgroundColor !== 'rgb(12,34,56)') throw new Error('BluePlay color background API failed.');
 evaluate('class KeyFigure : Actor() { override fun act() { if (isKeyDown(\"left\")) this.move(-2) } }; val keyWorld = MyWorld(); val keyFigure = KeyFigure(); keyWorld.addObject(keyFigure, 10, 10); showWorld(keyWorld)', 'keyboard setup');
 expectOk(JSON.parse(session.setKey('left', true)), 'key down');
 evaluate('step()', 'keyboard step');

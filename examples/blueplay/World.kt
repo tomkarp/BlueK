@@ -46,7 +46,15 @@ open class World(val width: Int, val height: Int, val cellSize: Int = 1) {
         bluekStageUpdate("{\"stage\":{\"width\":${width},\"height\":${height},\"cellSize\":${cellSize},\"backgroundColor\":\"${bluekEscape(backgroundColor)}\",\"backgroundPath\":\"${bluekEscape(backgroundPath)}\",\"speed\":${speed},\"running\":${running},\"objects\":${objects},\"texts\":${texts}}}")
     }
     fun show() { render() }
+    fun getWidth(): Int = width
+    fun getHeight(): Int = height
+    fun getCellSize(): Int = cellSize
     fun setBackground(fileName: String) { background = Image(fileName); show() }
+    fun setBackground(red: Int, green: Int, blue: Int) {
+        backgroundColor = "rgb(${red},${green},${blue})"
+        background = Image("")
+        show()
+    }
     fun showText(text: String, x: Int, y: Int) {
         var index = 0
         while (index < textValues.size) {
