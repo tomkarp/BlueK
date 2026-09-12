@@ -48,4 +48,26 @@ evaluate('val immutable = 1', 'val declaration');
 const invalid = JSON.parse(session.evaluate('<smoke>', 'immutable = 2'));
 if (invalid.kind !== 'error') throw new Error('val reassignment was not rejected.');
 
+const personSession = api.bluekCreateKotliteSession();
+expectOk(JSON.parse(personSession.load('<person project>', `
+    class Person(val name: String) {
+        var alter = 0
+        var constructions = 0
+        init {
+            constructions = constructions + 1
+            println("constructed")
+        }
+        fun sprechen() {
+            println("Hi, ich bin $name und $alter Jahre alt")
+        }
+    }
+`)), 'person load');
+expectOk(JSON.parse(personSession.evaluate('<codepad>', 'val p = Person("Otto")')), 'person construction');
+if (personSession.takeOutput() !== 'constructed\n') throw new Error('Constructor side effect was not emitted exactly once.');
+expectOk(JSON.parse(personSession.evaluate('<codepad>', 'p.alter = 42')), 'person mutation');
+if (personSession.takeOutput() !== '') throw new Error('A separated mutation repeated an earlier side effect.');
+expectOk(JSON.parse(personSession.evaluate('<codepad>', 'p.sprechen()')), 'person method call');
+if (personSession.takeOutput() !== 'Hi, ich bin Otto und 42 Jahre alt\n') throw new Error('Separated Person inputs did not preserve object state.');
+if (JSON.parse(personSession.evaluate('<codepad>', 'p.constructions')).display !== '1') throw new Error('Separated inputs reconstructed the Person object.');
+
 console.log('Kotlite browser session smoke test passed.');
