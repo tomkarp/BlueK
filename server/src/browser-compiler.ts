@@ -204,10 +204,13 @@ function bridgeSource(files: ProjectFile[], classes: ClassMeta[]): { source: str
     return { source: `${lines.join('\n')}\n`, packageName: bridgePackage };
 }
 
-const run = (command: string, args: string[], cwd: string) => new Promise<{ code: number; out: string; err: string }>(resolve => execFile(command, args, { cwd, maxBuffer: 20e6, timeout: 120000 }, (error, stdout, stderr) => resolve({ code: error ? Number(error.code) || 1 : 0, out: stdout, err: stderr })));
-const compilerDiagnostic = (result: { out: string; err: string }) => {
+const run = (command: string, args: string[], cwd: string) => new Promise<{ code: number; out: string; err: string; timedOut: boolean }>(resolve => execFile(command, args, { cwd, maxBuffer: 20e6, timeout: 600000 }, (error, stdout, stderr) => resolve({ code: error ? Number(error.code) || 1 : 0, out: stdout, err: stderr, timedOut: error?.killed === true })));
+const compilerDiagnostic = (result: { out: string; err: string; timedOut?: boolean }) => {
     const lines = `${result.out}\n${result.err}`.split(/\r?\n/).map(line => line.trim()).filter(line => /^(?:e|w):\s+file:\/\//.test(line)).map(line => line.replace(/file:\/\/.*\/(?:project|bridge)\/([^/:]+):(\d+):(\d+)/, (_match, file, lineNumber, column) => `${file === 'BlueKSnippet.kt' ? 'Codepad' : file}:${lineNumber}:${column}`));
-    return lines.length ? lines.join('\n') : 'Kotlin/JS compilation failed.';
+    if (lines.length) return lines.join('\n');
+    const raw = `${result.out}\n${result.err}`.trim();
+    if (result.timedOut) return `Kotlin/JS compilation timed out after 10 minutes.${raw ? `\n${raw.slice(-4000)}` : ''}`;
+    return raw ? raw.slice(-4000) : 'Kotlin/JS compilation failed.';
 };
 
 const simpleManifestType = (displayName: string): string => {
