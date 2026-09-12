@@ -131,4 +131,16 @@ if (JSON.parse(nullabilitySession.evaluate('<nullability>', 'maybe.label()')).di
 const inputError = JSON.parse(nullabilitySession.evaluate('<nullability>', 'readln()'));
 if (inputError.kind !== 'error' || !inputError.display.includes('readln is not supported')) throw new Error('Unsupported console input did not produce a clear local-runtime error.');
 
+const languageSession = api.bluekCreateKotliteSession();
+if (JSON.parse(languageSession.evaluate('<language>', 'var n = 0; while (n < 3) { n += 1 }; n')).display !== '3') throw new Error('While-loop evaluation failed.');
+if (JSON.parse(languageSession.evaluate('<language>', 'var total = 0; for (i in 1..3) { total += i }; total')).display !== '6') throw new Error('For-loop evaluation failed.');
+const typeError = JSON.parse(languageSession.evaluate('<language>', 'val number: Int = "wrong"'));
+if (typeError.kind !== 'error' || !typeError.display.includes('Expected type is `Int`')) throw new Error('A basic type mismatch was not rejected.');
+const visibilitySession = api.bluekCreateKotliteSession();
+if (JSON.parse(visibilitySession.load('<visibility>', 'class Secret { private var hidden = 1 }')).kind === 'error') throw new Error('Private property syntax unexpectedly failed.');
+const visibilityManifest = JSON.parse(visibilitySession.manifest());
+if (visibilityManifest.classes[0].properties[0].visibility !== 'private') throw new Error('Private property visibility was lost in the Kotlite manifest.');
+const protectedError = JSON.parse(visibilitySession.load('<visibility>', 'class Protected { protected fun hidden() {} }'));
+if (protectedError.kind !== 'error' || !protectedError.display.includes('protected')) throw new Error('Unsupported protected visibility did not produce a clear error.');
+
 console.log('Kotlite browser session smoke test passed.');
