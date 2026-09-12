@@ -25,14 +25,40 @@ export class LocalRuntimeClient implements RuntimeClient {
   private worker: Worker | null = null;
   private pending = new Map<number, Pending>();
   private nextId = 1;
+  private workerEpoch = 0;
   private generationId: string | null = null;
   private classes: ClassMeta[] = [];
   private stageListeners = new Set<(value: any) => void>();
   private simulationTimer: number | null = null;
   constructor(private readonly onFailure: (message: string) => void = () => undefined, private readonly onOutput: (output?: string) => void = () => undefined) {}
-  private start() { if (this.worker) return; this.worker = new Worker(new URL('./localRuntimeWorker.ts', import.meta.url), { type: 'module' }); this.worker.onmessage = event => { const pending = this.pending.get(event.data.id); if (!pending) return; this.pending.delete(event.data.id); pending.resolve(event.data.response); }; this.worker.onerror = event => { this.onFailure(event.message || 'Kotlite worker stopped.'); }; }
+  private stopWorker(reason = 'Kotlite worker stopped.') {
+    this.stopSimulation();
+    const worker = this.worker;
+    this.worker = null;
+    this.workerEpoch += 1;
+    worker?.terminate();
+    for (const pending of this.pending.values()) pending.reject(new Error(reason));
+    this.pending.clear();
+  }
+  private start() {
+    if (this.worker) return;
+    const epoch = ++this.workerEpoch;
+    const worker = new Worker(new URL('./localRuntimeWorker.ts', import.meta.url), { type: 'module' });
+    this.worker = worker;
+    worker.onmessage = event => {
+      if (epoch !== this.workerEpoch || worker !== this.worker) return;
+      const pending = this.pending.get(event.data.id);
+      if (!pending) return;
+      this.pending.delete(event.data.id);
+      pending.resolve(event.data.response);
+    };
+    worker.onerror = event => {
+      if (epoch !== this.workerEpoch || worker !== this.worker) return;
+      this.onFailure(event.message || 'Kotlite worker stopped.');
+    };
+  }
   private request(op: string, data: Record<string, unknown> = {}): Promise<any> { this.start(); const id = this.nextId++; return new Promise((resolve, reject) => { this.pending.set(id, { resolve, reject }); this.worker!.postMessage({ id, op, ...data }); }); }
-  async compile(files: ProjectFile[], revision: number, ..._unused: unknown[]): Promise<CompileResult> { this.worker?.terminate(); this.worker = null; this.classes = metadata(files); const response = await this.request('compile', { files }); if (response.kind === 'error') return { generationId: '', sourceRevision: revision, classes: [], diagnostics: [{ fileName: '<Kotlite>', line: 1, column: 1, severity: 'error', message: response.display }] }; this.generationId = crypto.randomUUID(); return { generationId: this.generationId, sourceRevision: revision, classes: this.classes, diagnostics: [] }; }
+  async compile(files: ProjectFile[], revision: number, ..._unused: unknown[]): Promise<CompileResult> { this.stopWorker('Kotlite worker replaced by a new compilation.'); this.classes = metadata(files); const response = await this.request('compile', { files }); if (response.kind === 'error') return { generationId: '', sourceRevision: revision, classes: [], diagnostics: [{ fileName: '<Kotlite>', line: 1, column: 1, severity: 'error', message: response.display }] }; this.generationId = crypto.randomUUID(); return { generationId: this.generationId, sourceRevision: revision, classes: this.classes, diagnostics: [] }; }
   private publish(response: any) { if (response?.stage) this.stageListeners.forEach(listener => listener(response)); }
   private stopSimulation() { if (this.simulationTimer !== null) { window.clearTimeout(this.simulationTimer); this.simulationTimer = null; } }
   private scheduleSimulation() {
@@ -67,7 +93,7 @@ export class LocalRuntimeClient implements RuntimeClient {
   async sendKey(key: string, pressed: boolean): Promise<void> { await this.execute({ op: 'key', key, pressed }); }
   async sendClick(_x: number, _y: number): Promise<void> {}
   async status(): Promise<RuntimeStatus> { return { workerAlive: Boolean(this.worker), generationId: this.generationId, available: Boolean(this.worker), error: null }; }
-  async stop(): Promise<void> { this.stopSimulation(); this.worker?.terminate(); this.worker = null; this.generationId = null; for (const pending of this.pending.values()) pending.reject(new Error('Kotlite worker stopped.')); this.pending.clear(); }
+  async stop(): Promise<void> { this.stopWorker(); this.generationId = null; }
   async reset(): Promise<void> { await this.request('reset'); }
   stageStream(onStage: (value: any) => void): () => void { this.stageListeners.add(onStage); return () => this.stageListeners.delete(onStage); }
   events(): Promise<any[]> { return Promise.resolve([]); }
