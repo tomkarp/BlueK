@@ -13,6 +13,16 @@ const expectOk = (json, label) => {
 };
 const evaluate = (source, label) => expectOk(JSON.parse(session.evaluate('<smoke>', source)), label);
 
+const collectionsSession = api.bluekCreateKotliteSession();
+const collectionsEvaluate = (source, label) => expectOk(JSON.parse(collectionsSession.evaluate('<collections>', source)), label);
+collectionsEvaluate('val numbers = listOf(1, 2)', 'immutable list construction');
+if (collectionsEvaluate('numbers[0]', 'list index access').display !== '1') throw new Error('List index access failed in an incremental session.');
+if (collectionsEvaluate('numbers.size', 'list size').display !== '2') throw new Error('List size failed in an incremental session.');
+if (collectionsEvaluate('numbers.count { it > 1 }', 'list predicate count').display !== '1') throw new Error('List predicate count failed in an incremental session.');
+collectionsEvaluate('val mutableNumbers = mutableListOf(1, 2)', 'mutable list construction');
+if (collectionsEvaluate('mutableNumbers.add(3)', 'mutable list add').display !== 'true') throw new Error('Mutable list add failed in an incremental session.');
+if (collectionsEvaluate('mutableNumbers[2]', 'mutable list index access').display !== '3') throw new Error('Mutable list mutation was not retained.');
+
 expectOk(JSON.parse(session.load('<project>', `
     open class Counter(var value: Int) {
         open fun increment() { value = value + 1 }

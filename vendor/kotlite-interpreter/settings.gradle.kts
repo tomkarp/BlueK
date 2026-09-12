@@ -11,6 +11,4 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "bluek-kotlite-browser"
-
-includeBuild("../vendor/kotlite-interpreter")
+rootProject.name = "kotlite-interpreter"
