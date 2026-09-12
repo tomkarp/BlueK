@@ -158,6 +158,7 @@ function KotlinEditor({ source, onChange }: { source: string; onChange: (value: 
       ],
     });
     const view = new EditorView({ state, parent: host.current });
+    view.focus();
     return () => view.destroy();
   }, []);
   return <div ref={host} className="kotlin-editor" aria-label="Kotlin source editor" />;
