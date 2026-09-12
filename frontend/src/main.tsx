@@ -274,13 +274,17 @@ useEffect(() => { if (!generation || !client) return; let active = true; const t
         { fileName: 'Main.kt', kind: 'functions', source: 'fun main() {\n}\n' }
       ];
       project.files = [...frameworkFiles, ...userFiles].map((file: any, index: number) => ({ ...file, id: `project-${Date.now()}-${index}`, revision: 1 }));
-      if (choice === 'blueplay-template') {
+      if (choice === 'blueplay-template' || choice === 'blueplay-demo') {
         initialCardPositions = {
           'BluePlayFunctions.kt': { x: 30, y: 32 },
           'World.kt': { x: 310, y: 32 },
           'Actor.kt': { x: 590, y: 32 },
           'Image.kt': { x: 870, y: 32 },
           'Main.kt': { x: 30, y: 202 },
+          ...(choice === 'blueplay-demo' ? {
+            'MyWorld.kt': { x: 310, y: 202 },
+            'Figure.kt': { x: 590, y: 202 },
+          } : {}),
         };
       }
     }
