@@ -24,6 +24,10 @@ import com.sunnychung.lib.multiplatform.kotlite.model.TypeNode
 import com.sunnychung.lib.multiplatform.kotlite.model.VariableReferenceNode
 import com.sunnychung.lib.multiplatform.kotlite.model.NavigationNode
 import com.sunnychung.lib.multiplatform.kotlite.stdlib.AllStdLibModules
+import kotlin.math.PI
+import kotlin.math.atan2
+import kotlin.math.roundToInt
+import kotlin.math.sqrt
 import kotlin.js.ExperimentalJsExport
 import kotlin.js.JsExport
 
@@ -113,6 +117,33 @@ class KotliteSession {
             parameterTypes = listOf(CustomFunctionParameter("key", "String")),
             executable = { interpreter, _, args, _ ->
                 BooleanValue(keysDown.contains((args[0] as StringValue).value.lowercase()), interpreter.symbolTable())
+            }
+        ))
+        environment.registerFunction(CustomFunctionDefinition(
+            position = SourcePosition.BUILTIN,
+            receiverType = null,
+            functionName = "bluekHeading",
+            returnType = "Int",
+            parameterTypes = listOf(CustomFunctionParameter("fromX", "Int"), CustomFunctionParameter("fromY", "Int"), CustomFunctionParameter("toX", "Int"), CustomFunctionParameter("toY", "Int")),
+            executable = { interpreter, _, args, _ ->
+                val fromX = (args[0] as IntValue).value
+                val fromY = (args[1] as IntValue).value
+                val toX = (args[2] as IntValue).value
+                val toY = (args[3] as IntValue).value
+                val angle = if (fromX == toX && fromY == toY) 0 else (atan2((toY - fromY).toDouble(), (toX - fromX).toDouble()) * 180.0 / PI).roundToInt()
+                IntValue((angle + 360) % 360, interpreter.symbolTable())
+            }
+        ))
+        environment.registerFunction(CustomFunctionDefinition(
+            position = SourcePosition.BUILTIN,
+            receiverType = null,
+            functionName = "bluekDistance",
+            returnType = "Int",
+            parameterTypes = listOf(CustomFunctionParameter("firstX", "Int"), CustomFunctionParameter("firstY", "Int"), CustomFunctionParameter("secondX", "Int"), CustomFunctionParameter("secondY", "Int")),
+            executable = { interpreter, _, args, _ ->
+                val dx = ((args[2] as IntValue).value - (args[0] as IntValue).value).toDouble()
+                val dy = ((args[3] as IntValue).value - (args[1] as IntValue).value).toDouble()
+                IntValue(sqrt(dx * dx + dy * dy).roundToInt(), interpreter.symbolTable())
             }
         ))
         interpreter = KotliteInterpreter("<BlueK>", "", environment)

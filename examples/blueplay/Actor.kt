@@ -20,6 +20,8 @@ open class Actor {
     }
     fun getRotation(): Int = rotation
     fun setRotation(degrees: Int) { rotation = degrees }
+    fun turnTowards(targetX: Int, targetY: Int) { rotation = bluekHeading(x, y, targetX, targetY) }
+    fun distanceTo(other: Actor): Int = bluekDistance(x, y, other.x, other.y)
     fun intersects(other: Actor): Boolean = x == other.x && y == other.y
     fun isTouching(other: Actor): Boolean = intersects(other)
     open fun act() {}

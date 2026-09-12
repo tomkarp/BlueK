@@ -44,6 +44,7 @@ if (decoratedStage.stage.backgroundPath !== 'sky.png' || decoratedStage.stage.te
 if (evaluate('callbackWorld.getObjectsAt(0, 0).size', 'world object lookup').display !== '0') throw new Error('BluePlay getObjectsAt returned an actor at the wrong position.');
 evaluate('val apiFigure = Figure(); apiFigure.setLocation(4, 5); apiFigure.setRotation(90); apiFigure.move(2)', 'actor convenience API');
 if (evaluate('apiFigure.getX()', 'actor x accessor').display !== '4' || evaluate('apiFigure.getY()', 'actor y accessor').display !== '7' || evaluate('apiFigure.getRotation()', 'actor rotation accessor').display !== '90') throw new Error('BluePlay Actor location or rotation API failed.');
+if (evaluate('val distanceTarget = Figure(); distanceTarget.setLocation(7, 11); apiFigure.turnTowards(4, 20); apiFigure.getRotation()', 'actor heading API').display !== '90' || evaluate('apiFigure.distanceTo(distanceTarget)', 'actor distance API').display !== '5') throw new Error('BluePlay Actor heading or distance API failed.');
 if (evaluate('callbackWorld.getWidth()', 'world width accessor').display !== '40' || evaluate('callbackWorld.getHeight()', 'world height accessor').display !== '30') throw new Error('BluePlay World dimension API failed.');
 evaluate('callbackWorld.setBackground(12, 34, 56)', 'world color background');
 const colorStage = JSON.parse(session.takeStage());
