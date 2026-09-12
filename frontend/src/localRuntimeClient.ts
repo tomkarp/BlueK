@@ -27,15 +27,36 @@ export class LocalRuntimeClient implements RuntimeClient {
   private nextId = 1;
   private generationId: string | null = null;
   private classes: ClassMeta[] = [];
+  private stageListeners = new Set<(value: any) => void>();
+  private simulationTimer: number | null = null;
   constructor(private readonly onFailure: (message: string) => void = () => undefined, private readonly onOutput: (output?: string) => void = () => undefined) {}
   private start() { if (this.worker) return; this.worker = new Worker(new URL('./localRuntimeWorker.ts', import.meta.url), { type: 'module' }); this.worker.onmessage = event => { const pending = this.pending.get(event.data.id); if (!pending) return; this.pending.delete(event.data.id); pending.resolve(event.data.response); }; this.worker.onerror = event => { this.onFailure(event.message || 'Kotlite worker stopped.'); }; }
   private request(op: string, data: Record<string, unknown> = {}): Promise<any> { this.start(); const id = this.nextId++; return new Promise((resolve, reject) => { this.pending.set(id, { resolve, reject }); this.worker!.postMessage({ id, op, ...data }); }); }
   async compile(files: ProjectFile[], revision: number, ..._unused: unknown[]): Promise<CompileResult> { this.worker?.terminate(); this.worker = null; this.classes = metadata(files); const response = await this.request('compile', { files }); if (response.kind === 'error') return { generationId: '', sourceRevision: revision, classes: [], diagnostics: [{ fileName: '<Kotlite>', line: 1, column: 1, severity: 'error', message: response.display }] }; this.generationId = crypto.randomUUID(); return { generationId: this.generationId, sourceRevision: revision, classes: this.classes, diagnostics: [] }; }
+  private publish(response: any) { if (response?.stage) this.stageListeners.forEach(listener => listener(response)); }
+  private stopSimulation() { if (this.simulationTimer !== null) { window.clearTimeout(this.simulationTimer); this.simulationTimer = null; } }
+  private scheduleSimulation() {
+    if (this.simulationTimer !== null || !this.worker) return;
+    const tick = async () => {
+      this.simulationTimer = null;
+      if (!this.worker) return;
+      try {
+        const response = await this.request('eval', { code: 'step()', filename: '<BluePlay>', mode: 'expression' });
+        this.publish(response);
+        if (response?.kind !== 'error' && response?.stage?.running) this.simulationTimer = window.setTimeout(tick, Math.max(16, 110 - Number(response.stage.speed || 50)));
+      } catch { this.stopSimulation(); }
+    };
+    this.simulationTimer = window.setTimeout(tick, 0);
+  }
   async execute(request: any): Promise<any> {
     const rawMethod = String(request.name || request.callableId || '').replace(/<.*>$/, '');
     const methodParts = rawMethod.split('.');
     const methodName = methodParts.length >= 3 ? methodParts[methodParts.length - 2] : rawMethod;
-    return this.request(request.op === 'eval' ? 'eval' : request.op, { code: request.code, filename: request.filename, className: request.className, args: request.args ? JSON.parse(request.args).join(', ') : '', name: request.name, objectId: request.objectId, methodName, generationId: request.generationId });
+    const response = await this.request(request.op === 'eval' ? 'eval' : request.op, { code: request.code, filename: request.filename, className: request.className, args: request.args ? JSON.parse(request.args).join(', ') : '', name: request.name, objectId: request.objectId, methodName, generationId: request.generationId, mode: request.mode });
+    this.publish(response);
+    if (request.op === 'eval' && /\bstop\s*\(/.test(request.code || '') || !response?.stage?.running) this.stopSimulation();
+    if (request.op === 'eval' && /\bstart\s*\(/.test(request.code || '') && response?.stage?.running) this.scheduleSimulation();
+    return response;
   }
   async createObject(classId: string, _constructorId: string, _typeArguments: TypeRef[], args: string[], name: string): Promise<Value> { return this.execute({ op: 'create', className: classId, args: JSON.stringify(args), name }); }
   async invokeMethod(objectId: string, callableId: string, _typeArguments: TypeRef[], args: string[]): Promise<Value> { return this.execute({ op: 'invoke', objectId, name: callableId, args: JSON.stringify(args) }); }
@@ -43,12 +64,12 @@ export class LocalRuntimeClient implements RuntimeClient {
   async evaluate(code: string, mode: 'expression' | 'block'): Promise<Value> { return this.execute({ op: 'eval', code, mode }); }
   async removeObject(objectId: string): Promise<void> { await this.execute({ op: 'remove', objectId }); }
   async sendInput(_text: string): Promise<void> { throw new Error('Kotlite console input is not yet supported in the local adapter.'); }
-  async sendKey(_key: string, _pressed: boolean): Promise<void> {}
+  async sendKey(key: string, pressed: boolean): Promise<void> { await this.execute({ op: 'key', key, pressed }); }
   async sendClick(_x: number, _y: number): Promise<void> {}
   async status(): Promise<RuntimeStatus> { return { workerAlive: Boolean(this.worker), generationId: this.generationId, available: Boolean(this.worker), error: null }; }
-  async stop(): Promise<void> { this.worker?.terminate(); this.worker = null; this.generationId = null; for (const pending of this.pending.values()) pending.reject(new Error('Kotlite worker stopped.')); this.pending.clear(); }
+  async stop(): Promise<void> { this.stopSimulation(); this.worker?.terminate(); this.worker = null; this.generationId = null; for (const pending of this.pending.values()) pending.reject(new Error('Kotlite worker stopped.')); this.pending.clear(); }
   async reset(): Promise<void> { await this.request('reset'); }
-  stageStream(_onStage: (value: any) => void): () => void { return () => undefined; }
+  stageStream(onStage: (value: any) => void): () => void { this.stageListeners.add(onStage); return () => this.stageListeners.delete(onStage); }
   events(): Promise<any[]> { return Promise.resolve([]); }
   attachCanvas(_canvas: HTMLCanvasElement): boolean { return false; }
 }

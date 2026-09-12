@@ -3,12 +3,9 @@
  */
 class Figure : Actor() {
 
-    init {
-        image = Image("figure.png")
-    }
-
     override fun act() {
-        move(1)
+        // Explicit receiver is required by the current Kotlite superclass
+        // member lookup for this first browser-only BluePlay example.
+        this.move(1)
     }
 }
-

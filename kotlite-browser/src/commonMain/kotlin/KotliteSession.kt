@@ -6,11 +6,17 @@ import com.sunnychung.lib.multiplatform.kotlite.extension.fullClassName
 import com.sunnychung.lib.multiplatform.kotlite.lexer.Lexer
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassInstance
+import com.sunnychung.lib.multiplatform.kotlite.model.BooleanValue
+import com.sunnychung.lib.multiplatform.kotlite.model.CustomFunctionDefinition
+import com.sunnychung.lib.multiplatform.kotlite.model.CustomFunctionParameter
 import com.sunnychung.lib.multiplatform.kotlite.model.ExecutionEnvironment
 import com.sunnychung.lib.multiplatform.kotlite.model.FunctionDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.model.NullValue
+import com.sunnychung.lib.multiplatform.kotlite.model.PropertyDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.model.RuntimeValue
 import com.sunnychung.lib.multiplatform.kotlite.model.ScriptNode
+import com.sunnychung.lib.multiplatform.kotlite.model.SourcePosition
+import com.sunnychung.lib.multiplatform.kotlite.model.StringValue
 import com.sunnychung.lib.multiplatform.kotlite.model.UnitValue
 import com.sunnychung.lib.multiplatform.kotlite.stdlib.AllStdLibModules
 import kotlin.js.ExperimentalJsExport
@@ -33,6 +39,8 @@ class KotliteSession {
     private val propertyNames = linkedMapOf<String, MutableList<String>>()
     private var nextHandle = 1
     private var analysisSource = ""
+    private var stageSnapshot = ""
+    private val keysDown = linkedSetOf<String>()
 
     init {
         resetInterpreter()
@@ -41,6 +49,27 @@ class KotliteSession {
     private fun resetInterpreter() {
         environment = ExecutionEnvironment()
         AllStdLibModules { text -> output.append(text) }.modules.forEach(environment::install)
+        environment.registerFunction(CustomFunctionDefinition(
+            position = SourcePosition.BUILTIN,
+            receiverType = null,
+            functionName = "bluekStageUpdate",
+            returnType = "Unit",
+            parameterTypes = listOf(CustomFunctionParameter("snapshot", "String")),
+            executable = { _, _, args, _ ->
+                stageSnapshot = (args[0] as StringValue).value
+                UnitValue
+            }
+        ))
+        environment.registerFunction(CustomFunctionDefinition(
+            position = SourcePosition.BUILTIN,
+            receiverType = null,
+            functionName = "bluekIsKeyDown",
+            returnType = "Boolean",
+            parameterTypes = listOf(CustomFunctionParameter("key", "String")),
+            executable = { interpreter, _, args, _ ->
+                BooleanValue(keysDown.contains((args[0] as StringValue).value.lowercase()), interpreter.symbolTable())
+            }
+        ))
         interpreter = KotliteInterpreter("<BlueK>", "", environment)
     }
 
@@ -55,7 +84,7 @@ class KotliteSession {
         // would repeat top-level constructors and other side effects.
         interpreter.run {
             combined.nodes.drop(previous.nodes.size)
-                .filter { it is ClassDeclarationNode || it is FunctionDeclarationNode }
+                .filter { it is ClassDeclarationNode || it is FunctionDeclarationNode || (it is PropertyDeclarationNode && it.initialValue == null) }
                 .forEach { it.eval() }
         }
         analysisSource += "\n" + source
@@ -140,6 +169,8 @@ class KotliteSession {
         analysisSource = ""
         propertyNames.clear()
         nextHandle = 1
+        stageSnapshot = ""
+        keysDown.clear()
         resetInterpreter()
         output.clear()
         return result("reset", UnitValue)
@@ -149,6 +180,17 @@ class KotliteSession {
         val text = output.toString()
         output.clear()
         return text
+    }
+
+    fun takeStage(): String {
+        val snapshot = stageSnapshot
+        stageSnapshot = ""
+        return snapshot
+    }
+
+    fun setKey(key: String, pressed: Boolean): String {
+        if (pressed) keysDown += key.lowercase() else keysDown -= key.lowercase()
+        return result("value", UnitValue)
     }
 
     private fun result(kind: String, value: RuntimeValue, objectId: String? = null, name: String? = null): String {

@@ -5,6 +5,6 @@
  */
 fun main() {
     val world = MyWorld()
-    world.show()
+    world.addObject(Figure(), 100, 200)
+    showWorld(world)
 }
-
