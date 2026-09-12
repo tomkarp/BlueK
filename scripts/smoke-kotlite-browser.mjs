@@ -37,6 +37,18 @@ expectOk(JSON.parse(session.load('<accessors>', `
 evaluate('val meter = Meter()', 'accessor construction');
 evaluate('meter.value = 42', 'custom setter');
 if (evaluate('meter.value', 'custom getter').display !== '42') throw new Error('Custom property getter/setter did not preserve the value.');
+expectOk(JSON.parse(session.load('<inspection>', `
+    class Audited {
+        var raw = 7
+        var value: Int
+            get() { println("getter-called"); return raw }
+    }
+`)), 'inspection accessor load');
+const inspected = expectOk(JSON.parse(session.create('Audited', '', 'audited')), 'inspection construction');
+session.takeOutput();
+const inspection = expectOk(JSON.parse(session.inspect(inspected.objectId)), 'inspection');
+if (!inspection.fields.some(field => field.name === 'value' && field.value === '<computed>')) throw new Error('Computed property was not marked during inspection.');
+if (session.takeOutput() !== '') throw new Error('Inspecting an object invoked a custom getter.');
 evaluate('val first = Child(0)', 'construct first');
 evaluate('val alias = first', 'alias');
 evaluate('alias.increment()', 'increment through alias');

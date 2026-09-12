@@ -37,6 +37,7 @@ class KotliteSession {
     private val handles = linkedMapOf<String, RuntimeValue>()
     private val bindingNames = linkedMapOf<String, String>()
     private val propertyNames = linkedMapOf<String, MutableList<String>>()
+    private val computedPropertyNames = linkedMapOf<String, MutableSet<String>>()
     private var nextHandle = 1
     private var analysisSource = ""
     private var stageSnapshot = ""
@@ -110,6 +111,11 @@ class KotliteSession {
     }
 
     private fun recordPropertyNames(source: String) {
+        parse("<BlueK project>", source).nodes.filterIsInstance<ClassDeclarationNode>().forEach { declaration ->
+            declaration.declarations.filterIsInstance<PropertyDeclarationNode>()
+                .filter { it.accessors != null }
+                .forEach { computedPropertyNames.getOrPut(declaration.name) { linkedSetOf() } += it.name }
+        }
         Regex("""(?:class|object)\s+([A-Za-z_]\w*)[^\{]*\{([\s\S]*)\}""").findAll(source).forEach { match ->
             val names = propertyNames.getOrPut(match.groupValues[1]) { mutableListOf() }
             Regex("""\b(?:val|var)\s+([A-Za-z_]\w*)""").findAll(match.groupValues[2]).forEach {
@@ -146,13 +152,18 @@ class KotliteSession {
     fun inspect(objectId: String): String {
         val value = handles[objectId] ?: return errorMessage("Object handle is no longer available.")
         if (value !is ClassInstance) return result("value", value)
-        // Reading a declared slot is safe: it does not call arbitrary methods
-        // or computed getters. Kotlite deliberately keeps its complete member
-        // map internal, so the names are collected from the source declarations
-        // while loading the project.
+        // Kotlite deliberately keeps its complete member map internal, so the
+        // names are collected from the source declarations while loading the
+        // project. Computed properties are reported without reading them: a
+        // getter may contain arbitrary student code and must not run during
+        // inspection.
         val fields = propertyNames[value.type().name].orEmpty().joinToString(",", "[", "]") { name ->
-            val member = value.findPropertyByDeclaredName(name)
-            "{\"name\":\"${escape(name)}\",\"value\":\"${escape(member.convertToString())}\"}"
+            if (name in computedPropertyNames[value.type().name].orEmpty()) {
+                "{\"name\":\"${escape(name)}\",\"value\":\"<computed>\"}"
+            } else {
+                val member = value.findPropertyByDeclaredName(name)
+                "{\"name\":\"${escape(name)}\",\"value\":\"${escape(member.convertToString())}\"}"
+            }
         }
         return "{\"kind\":\"inspect\",\"objectId\":\"${escape(objectId)}\",\"className\":\"${escape(value.type().name)}\",\"fields\":$fields}"
     }
@@ -168,6 +179,7 @@ class KotliteSession {
         bindingNames.clear()
         analysisSource = ""
         propertyNames.clear()
+        computedPropertyNames.clear()
         nextHandle = 1
         stageSnapshot = ""
         keysDown.clear()
