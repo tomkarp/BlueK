@@ -46,6 +46,22 @@ const addInheritedMembers = (classes: ClassMeta[]) => {
   };
   return classes.map(visit);
 };
+const sourceLocation = (display: string) => {
+  const match = display.match(/(?:<BlueK project>|<Kotlite>|<[^>]+>):(\d+):(\d+)/) || display.match(/line\s+(\d+)\s+col\s+(\d+)/i);
+  return match ? { line: Number(match[1]), column: Number(match[2]) } : { line: 1, column: 1 };
+};
+const sourceFileAtLine = (files: ProjectFile[], line: number) => {
+  let currentLine = 1;
+  let selected = files[0]?.fileName || '<Kotlite>';
+  for (const file of files) {
+    selected = file.fileName;
+    const fileStart = currentLine + 1;
+    const fileEnd = fileStart + String(file.source || '').split('\n').length - 1;
+    if (line >= fileStart && line <= fileEnd) return selected;
+    currentLine = fileEnd + 2;
+  }
+  return selected;
+};
 
 export class LocalRuntimeClient implements RuntimeClient {
   private worker: Worker | null = null;
@@ -86,7 +102,7 @@ export class LocalRuntimeClient implements RuntimeClient {
     };
   }
   private request(op: string, data: Record<string, unknown> = {}): Promise<any> { this.start(); const id = this.nextId++; return new Promise((resolve, reject) => { this.pending.set(id, { resolve, reject }); this.worker!.postMessage({ id, op, ...data }); }); }
-  async compile(files: ProjectFile[], revision: number, ..._unused: unknown[]): Promise<CompileResult> { this.stopWorker('Kotlite worker replaced by a new compilation.'); this.classes = metadata(files); const response = await this.request('compile', { files }); if (response.kind === 'error') return { generationId: '', sourceRevision: revision, classes: [], diagnostics: [{ fileName: '<Kotlite>', line: 1, column: 1, severity: 'error', message: response.display }] }; this.classes = Array.isArray(response.classes) ? addInheritedMembers(response.classes) : this.classes; this.generationId = crypto.randomUUID(); return { generationId: this.generationId, sourceRevision: revision, classes: this.classes, diagnostics: [] }; }
+  async compile(files: ProjectFile[], revision: number, ..._unused: unknown[]): Promise<CompileResult> { this.stopWorker('Kotlite worker replaced by a new compilation.'); this.classes = metadata(files); const response = await this.request('compile', { files }); if (response.kind === 'error') { const location = sourceLocation(String(response.display || 'Kotlite compilation failed.')); return { generationId: '', sourceRevision: revision, classes: [], diagnostics: [{ fileName: sourceFileAtLine(files, location.line), line: location.line, column: location.column, severity: 'error', message: response.display }] }; } this.classes = Array.isArray(response.classes) ? addInheritedMembers(response.classes) : this.classes; this.generationId = crypto.randomUUID(); return { generationId: this.generationId, sourceRevision: revision, classes: this.classes, diagnostics: [] }; }
   private publish(response: any) { if (response?.stage) this.stageListeners.forEach(listener => listener(response)); }
   private stopSimulation() { if (this.simulationTimer !== null) { window.clearTimeout(this.simulationTimer); this.simulationTimer = null; } }
   private scheduleSimulation() {
