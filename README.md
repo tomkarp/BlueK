@@ -22,6 +22,8 @@ Es gibt keinen Anwendungsserver, keine HTTP-/WebSocket-Runtime, keine serverseit
 
 ## Lokale Architektur
 
+Die Klassenkarten-Metadaten für Klassen, Properties, Konstruktoren und Methoden stammen aus dem von Kotlite analysierten AST. Der Browser-Adapter ergänzt nur geerbte Mitglieder für die vorhandene GUI und ordnet Top-Level-Funktionen ihren Dateikarten zu.
+
 - `frontend/src/main.tsx` enthält die bestehende GUI.
 - `frontend/src/localRuntimeClient.ts` erhält den Runtime-Vertrag als lokalen Adapter und übernimmt das von Kotlite erzeugte AST-Manifest für Klassenkarten, Konstruktor- und Methoden-Dialoge.
 - `frontend/src/localRuntimeWorker.ts` lädt ausschließlich das statische Kotlite-Asset und verwaltet Worker-Nachrichten einschließlich Tastatur- und Mausklick-Ereignissen.
@@ -42,6 +44,8 @@ Objekte bleiben echte Kotlite-Instanzen. Die Objektbank speichert nur zusätzlic
 `Compile` analysiert alle Kotlin-Dateien gemeinsam und aktualisiert die Klassenkarten. Über den Konstruktor-Dialog der Klassenkarten lassen sich Objekte erzeugen; Rechtsklick auf ein Objekt bietet Methoden, Inspektion und Entfernen. Codepad-Eingaben werden einzeln ausgeführt, und Variablen aus früheren Eingaben bleiben bis zum Reset verfügbar. Projektdateien und Medien werden lokal geöffnet, gespeichert und eingebettet.
 
 ## Tests
+
+Die Tests umfassen außerdem `init`-Blöcke ohne Wiederholung sowie Safe-Call/Elvis-Ausdrücke mit nullbaren und später gesetzten Werten.
 
 ```sh
 npm run browser-smoke
