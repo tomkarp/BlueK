@@ -4,7 +4,7 @@ export interface TypeRef{classifier:string;arguments:TypeRef[];nullable:boolean;
 export interface CallableMeta{id:string;name:string;declaringType:string;parameters:{name:string;type:TypeRef;hasDefault:boolean}[];returnType:TypeRef;visibility:string;inheritedFrom?:string;typeParameters?:string[]}
 export interface ClassMeta{id:string;name:string;kind:string;constructors:{id:string;parameters:any[]}[];methods:CallableMeta[];properties:any[];supertypes:TypeRef[];typeParameters:string[]}
 export interface ManifestConstructor{ id:string; parameters:{name:string; type:TypeRef; hasDefault:boolean}[] }
-export interface ManifestProperty{ id:string; name:string; type:TypeRef; mutable:boolean; visibility:string; getterId?:string; setterId?:string; generated?:boolean }
+export interface ManifestProperty{ id:string; name:string; type:TypeRef; mutable:boolean; visibility:string; getter?:boolean; setter?:boolean; getterId?:string; setterId?:string; generated?:boolean }
 export interface ManifestCallable extends CallableMeta{ generated?:boolean; companion?:boolean }
 export interface ManifestClass{
     id:string;

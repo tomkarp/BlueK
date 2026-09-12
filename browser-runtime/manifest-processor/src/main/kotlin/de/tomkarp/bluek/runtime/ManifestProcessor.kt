@@ -36,12 +36,26 @@ private class ManifestProcessor(
             .filter { it.packageName.asString() != "kotlin" }
             .filter { it.qualifiedName?.asString()?.startsWith("de.tomkarp.bluek.runtime") != true }
             .sortedBy { it.qualifiedName?.asString() }
+        val functionOwners = resolver.getAllFiles()
+            .mapNotNull { file ->
+                val functions = file.declarations.filterIsInstance<KSFunctionDeclaration>().filter { it.isPublic() }.toList()
+                val owner = file.fileName.removeSuffix(".kt")
+                if (functions.isEmpty() || owner.startsWith("BlueKApi") || owner.startsWith("BlueKInput")) null else owner to functions
+            }
+            .sortedBy { it.first }
 
         val manifest = buildString {
             append("{\"version\":1,\"classes\":[")
-            classes.forEachIndexed { index, declaration ->
+            var index = 0
+            classes.forEach { declaration ->
                 if (index > 0) append(',')
                 appendClass(declaration)
+                index++
+            }
+            functionOwners.forEach { (owner, functions) ->
+                if (index > 0) append(',')
+                appendFunctionOwner(owner, functions)
+                index++
             }
             append("]}")
         }
@@ -105,6 +119,19 @@ private class ManifestProcessor(
         append("]}")
     }
 
+    private fun StringBuilder.appendFunctionOwner(owner: String, functions: List<KSFunctionDeclaration>) {
+        append("{\"name\":")
+        appendJson(owner)
+        append(",\"qualifiedName\":")
+        appendJson(owner)
+        append(",\"kind\":\"functions\",\"modifiers\":[],\"supertypes\":[],\"properties\":[],\"methods\":[")
+        functions.sortedWith(compareBy({ it.simpleName.asString() }, { it.parameters.size })).forEachIndexed { index, function ->
+            if (index > 0) append(',')
+            appendFunction(function, owner)
+        }
+        append("],\"constructors\":[]}")
+    }
+
     private fun StringBuilder.appendProperty(property: KSPropertyDeclaration) {
         append("{\"name\":")
         appendJson(property.simpleName.asString())
@@ -121,9 +148,15 @@ private class ManifestProcessor(
         append('}')
     }
 
-    private fun StringBuilder.appendFunction(function: KSFunctionDeclaration) {
+    private fun StringBuilder.appendFunction(function: KSFunctionDeclaration, owner: String? = null) {
         append("{\"name\":")
         appendJson(function.simpleName.asString())
+        append(",\"typeParameters\":[")
+        function.typeParameters.forEachIndexed { index, parameter ->
+            if (index > 0) append(',')
+            appendJson(parameter.name.asString())
+        }
+        append(']')
         append(",\"parameters\":[")
         function.parameters.forEachIndexed { index, parameter ->
             if (index > 0) append(',')
@@ -132,7 +165,7 @@ private class ManifestProcessor(
         append("],\"returnType\":")
         appendJson(function.returnType?.resolve()?.declaration?.qualifiedName?.asString() ?: "kotlin.Unit")
         append(",\"declaringType\":")
-        appendJson(function.parentDeclaration?.qualifiedName?.asString() ?: "")
+        appendJson(owner ?: function.parentDeclaration?.qualifiedName?.asString() ?: "")
         append(",\"generated\":")
         append(function.origin.name != "KOTLIN")
         append('}')
@@ -148,6 +181,8 @@ private class ManifestProcessor(
     private fun StringBuilder.appendParameter(parameter: KSValueParameter) {
         append("{\"name\":")
         appendJson(parameter.name?.asString() ?: "parameter")
+        append(",\"hasDefault\":")
+        append(parameter.hasDefault)
         append(",\"type\":")
         appendJson(parameter.type.resolve().declaration.qualifiedName?.asString() ?: parameter.type.toString())
         append('}')
