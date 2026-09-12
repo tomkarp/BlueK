@@ -1,59 +1,32 @@
 # BlueK – Entwicklungsstand
 
-Diese Datei dient als kurze Übergabenotiz für die Weiterarbeit an BlueK.
+Der Architekturversuch läuft auf dem Branch `codex/architecture-experiment`.
 
-## Aktueller Arbeitsstand
-
-- Aktiver Entwicklungszweig: `kotlin-js-blueplay-runtime`
-- BlueK ist eine BlueJ-nahe Kotlin-Lernumgebung im Browser.
-- Im normalen Betrieb werden Schülerprogramme lokal im Browser-Worker ausgeführt.
-- Der Server übernimmt Kompilierung, Codeanalyse und die Auslieferung der kompilierten Module.
-- Es gibt keine JVM-Ausführung mehr. Schülercode läuft ausschließlich im Browser-Worker.
-- BluePlay-Projekte und gewöhnliche Kotlin-OOP-Projekte gehören zum selben Projektmodell.
-- BluePlay stellt browserfähige Laufzeitklassen und eine lokale Darstellung der Welt bereit; Schülerklassen bleiben gewöhnlicher Kotlin-Code.
-
-## Start und Prüfungen
+## Entwicklung
 
 ```sh
 npm install
-npm start
+npm run build
+npm run dev
 ```
 
-Die Anwendung ist anschließend unter [http://localhost:5173](http://localhost:5173) erreichbar.
+Der Build erzeugt zuerst den gebündelten Kotlite-Interpreter und danach die statische Vite-Anwendung. Für einen Produktionscheck genügt ein statischer Server:
 
-Wichtige Prüfungen:
+```sh
+python3 -m http.server 4173 --directory frontend/dist
+```
+
+Der einzige Runtime-Ausführungspfad ist der Browser-Worker. Die langlebige Kotlite-Sitzung erhält Objektidentität und Codepad-Bindings über getrennte Eingaben hinweg; Compile, Reset und Stop beginnen mit einer neuen Sitzung beziehungsweise einem neuen Worker.
+
+## Prüfungen
 
 ```sh
 npm run browser-smoke
-npx vite build --config frontend/vite.config.ts
+npm run build
 ```
 
-`npm run browser-smoke` prüft die Browser-Runtime. Bei parallelen lokalen Instanzen kann beispielsweise `BLUEK_PORT=5175 npm start` verwendet werden.
+Der Smoke-Test deckt Objektidentität, Alias-Verhalten, getrennte Instanzen, Vererbung, dynamischen Dispatch, Host-Aufrufe sowie Typ- und `val`-Fehler ab. Die Produktions-GUI wurde zusätzlich über einen statischen lokalen Server geöffnet und mit Compile sowie drei getrennten Codepad-Eingaben geprüft.
 
-## Bereits vorhandene Funktionen
+## Bekannte Grenzen
 
-- BlueJ-ähnliche Klassen- und Funktionskarten mit gespeicherten Positionen.
-- Schraffierte Karten für nicht kompilierte Klassen und Funktionen.
-- Objektbank mit persistenten Objekt-Handles innerhalb einer Runtime-Generation.
-- Konstruktor- und Methodenaufrufe mit Kotlin-Syntax, einschließlich parameterloser Aufrufe.
-- BlueJ-ähnliches Codepad mit einer Eingabezeile, Enter-Ausführung und Eingabe-History über Pfeil hoch/runter.
-- Rückgabewerte werden mit Kotlin-Typnotation angezeigt, `Unit` wird nicht als Ergebnis ausgegeben.
-- Codepad-Variablen und Bench-Objekte können in späteren Eingaben wiederverwendet werden.
-- Reset leert die aktuelle Runtime, Objektbank und sichtbare Codepad-Historie, behält aber die History zum erneuten Eingeben.
-- BluePlay-Welt mit lokaler Darstellung, Actor-Objekten, Maus-/Tastaturereignissen und separatem verschiebbarem Weltfenster.
-- Oberer Arbeitsbereich, Objektbank und Codepad besitzen verstellbare Bereiche sowie Ein-/Ausklappfunktionen.
-- Der Browserbetrieb verwendet nicht den früheren JVM-Bild- bzw. Snapshot-Transport als Ausführungsweg.
-
-## Bekannte offene Punkte
-
-- Nicht jedes reale Schülerprojekt und nicht jede BluePlay-Variante ist vollständig im Browser geprüft.
-- Die Metadatenanalyse ist keine vollständige Kotlin-PSI- oder `kotlin-reflect`-Analyse; komplexe Konstrukte können deshalb in Kontextmenüs fehlen.
-- Vollständige Kotlin-Compilerdiagnosen und Codepad-Fallbacks bleiben der maßgebliche Weg für nicht vorbereitete Ausdrücke.
-- Die Browser-Runtime ist der einzige Ausführungspfad; weitere End-to-End-Prüfungen im eingebauten Browser bleiben sinnvoll.
-- Weitere visuelle Prüfungen im eingebauten Browser sind insbesondere für große BluePlay-Projekte, schnelle Eingaben und verschiedene Fenstergrößen sinnvoll.
-
-## Arbeitsweise für den nächsten Chat
-
-Der übergeordnete Umbauauftrag gilt nicht als autonom weiterzuverfolgendes Ziel. Neue Änderungen sollen sich an den jeweils konkret gemeldeten Problemen orientieren. Bei relevanten Änderungen sind Zwischen-Commits sinnvoll; vor Änderungen sollten Branch und Arbeitsbaum geprüft werden.
-
-Die ausführlichere Beschreibung von Bedienung, Architektur, Beispielen und bisherigen Nachweisen steht in [README.md](README.md).
+Die vorhandene GUI bleibt die Basis. In diesem Versuch sind Kotlite-Ausführung, Codepad und Objektbank lokal angebunden. Die Klassenkarten-Metadaten sind noch eine begrenzte Quelltextableitung, die Konsoleneingabe ist nicht unterstützt, und die bestehende BluePlay-Darstellung ist noch nicht mit einer Kotlite-Host-Bridge verbunden. Siehe [README.md](README.md).

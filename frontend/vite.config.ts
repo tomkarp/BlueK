@@ -1,1 +1,1 @@
-import {defineConfig} from 'vite'; import react from '@vitejs/plugin-react'; import path from 'node:path'; export default defineConfig({root: path.resolve(process.cwd(),'frontend'), plugins:[react()]});
+import {defineConfig} from 'vite'; import react from '@vitejs/plugin-react'; import path from 'node:path'; export default defineConfig({root: path.resolve(process.cwd(),'frontend'), base: process.env.GITHUB_ACTIONS ? '/BlueK/' : '/', plugins:[react()]});
