@@ -20,6 +20,32 @@ const metadata = (files: ProjectFile[]): ClassMeta[] => files.flatMap(file => {
   if (file.kind === 'functions' || (!classes.length && /\bfun\s+/.test(source))) classes.push({ id: file.fileName, name: file.fileName.replace(/\.kt$/, ''), kind: 'functions', constructors: [], methods: [...source.matchAll(/\bfun\s+([A-Za-z_]\w*)\s*\([^)]*\)\s*(?::\s*([^\s{=]+))?/g)].map((method, index) => ({ id: `${file.fileName}.${method[1]}.${index}`, name: method[1], declaringType: file.fileName, parameters: [], returnType: emptyType(method[2] || 'Unit'), visibility: 'public' })), properties: [], supertypes: [], typeParameters: [] });
   return classes;
 });
+const addInheritedMembers = (classes: ClassMeta[]) => {
+  const byName = new Map(classes.map(value => [value.name, value]));
+  const visiting = new Set<string>();
+  const enriched = new Map<string, ClassMeta>();
+  const visit = (classMeta: ClassMeta): ClassMeta => {
+    const existing = enriched.get(classMeta.name);
+    if (existing) return existing;
+    if (visiting.has(classMeta.name)) return classMeta;
+    visiting.add(classMeta.name);
+    const inheritedMethods: any[] = [], inheritedProperties: any[] = [];
+    for (const supertype of classMeta.supertypes || []) {
+      const parent = byName.get(supertype.classifier);
+      if (!parent) continue;
+      const parentMeta = visit(parent);
+      inheritedMethods.push(...(parentMeta.methods || []).map(method => ({ ...method, inheritedFrom: method.inheritedFrom || parentMeta.name })));
+      inheritedProperties.push(...(parentMeta.properties || []).map(property => ({ ...property, inheritedFrom: property.inheritedFrom || parentMeta.name })));
+    }
+    const methodKeys = new Set((classMeta.methods || []).map(method => `${method.name}(${(method.parameters || []).length})`));
+    const propertyNames = new Set((classMeta.properties || []).map(property => property.name));
+    const result = { ...classMeta, methods: [...(classMeta.methods || []), ...inheritedMethods.filter(method => !methodKeys.has(`${method.name}(${(method.parameters || []).length})`))], properties: [...(classMeta.properties || []), ...inheritedProperties.filter(property => !propertyNames.has(property.name))] };
+    visiting.delete(classMeta.name);
+    enriched.set(classMeta.name, result);
+    return result;
+  };
+  return classes.map(visit);
+};
 
 export class LocalRuntimeClient implements RuntimeClient {
   private worker: Worker | null = null;
@@ -60,7 +86,7 @@ export class LocalRuntimeClient implements RuntimeClient {
     };
   }
   private request(op: string, data: Record<string, unknown> = {}): Promise<any> { this.start(); const id = this.nextId++; return new Promise((resolve, reject) => { this.pending.set(id, { resolve, reject }); this.worker!.postMessage({ id, op, ...data }); }); }
-  async compile(files: ProjectFile[], revision: number, ..._unused: unknown[]): Promise<CompileResult> { this.stopWorker('Kotlite worker replaced by a new compilation.'); this.classes = metadata(files); const response = await this.request('compile', { files }); if (response.kind === 'error') return { generationId: '', sourceRevision: revision, classes: [], diagnostics: [{ fileName: '<Kotlite>', line: 1, column: 1, severity: 'error', message: response.display }] }; this.generationId = crypto.randomUUID(); return { generationId: this.generationId, sourceRevision: revision, classes: this.classes, diagnostics: [] }; }
+  async compile(files: ProjectFile[], revision: number, ..._unused: unknown[]): Promise<CompileResult> { this.stopWorker('Kotlite worker replaced by a new compilation.'); this.classes = metadata(files); const response = await this.request('compile', { files }); if (response.kind === 'error') return { generationId: '', sourceRevision: revision, classes: [], diagnostics: [{ fileName: '<Kotlite>', line: 1, column: 1, severity: 'error', message: response.display }] }; this.classes = Array.isArray(response.classes) ? addInheritedMembers(response.classes) : this.classes; this.generationId = crypto.randomUUID(); return { generationId: this.generationId, sourceRevision: revision, classes: this.classes, diagnostics: [] }; }
   private publish(response: any) { if (response?.stage) this.stageListeners.forEach(listener => listener(response)); }
   private stopSimulation() { if (this.simulationTimer !== null) { window.clearTimeout(this.simulationTimer); this.simulationTimer = null; } }
   private scheduleSimulation() {

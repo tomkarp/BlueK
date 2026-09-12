@@ -22,6 +22,7 @@ self.onmessage = async event => {
       const files = request.files || [];
       const source = files.map((file: any) => `// BlueK file: ${file.fileName}\n${file.source}`).join('\n\n');
       response = JSON.parse(session.load('<BlueK project>', source));
+      if (response.kind !== 'error') response.classes = JSON.parse(session.manifest()).classes || [];
       self.postMessage({ id: request.id, response: response || { kind: 'loaded', display: 'Unit' } });
       return;
     }

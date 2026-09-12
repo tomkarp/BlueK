@@ -1,6 +1,6 @@
 # BlueK – Entwicklungsstand
 
-Der Architekturversuch läuft auf dem Branch `codex/architecture-experiment`.
+Der Architekturversuch läuft auf dem Branch `main`.
 
 ## Entwicklung
 

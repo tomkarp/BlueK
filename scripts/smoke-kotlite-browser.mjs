@@ -25,12 +25,18 @@ if (collectionsEvaluate('mutableNumbers[2]', 'mutable list index access').displa
 
 expectOk(JSON.parse(session.load('<project>', `
     open class Counter(var value: Int) {
-        open fun increment() { value = value + 1 }
+        open fun increment(step: Int = 1) { value = value + step }
     }
     class Child(value: Int) : Counter(value) {
-        override fun increment() { super.increment(); value = value + 1 }
+        override fun increment(step: Int = 1) { super.increment(step); value = value + 1 }
     }
 `)), 'load');
+const manifest = JSON.parse(session.manifest());
+const counterMeta = manifest.classes.find(value => value.name === 'Counter');
+const childMeta = manifest.classes.find(value => value.name === 'Child');
+if (counterMeta?.constructors[0]?.parameters[0]?.name !== 'value') throw new Error('Kotlite manifest lost the constructor parameter.');
+if (counterMeta?.methods[0]?.parameters[0]?.name !== 'step' || !counterMeta.methods[0].parameters[0].hasDefault) throw new Error('Kotlite manifest lost method parameter metadata.');
+if (childMeta?.supertypes?.[0]?.classifier !== 'Counter') throw new Error('Kotlite manifest lost superclass metadata.');
 const benchObject = expectOk(JSON.parse(session.create('Child', '5', 'bench')), 'bench construction');
 if (evaluate('bench.value', 'bench binding').display !== '5') throw new Error('Bench object is not available in the codepad.');
 evaluate('bench.increment()', 'bench mutation');

@@ -23,7 +23,7 @@ Es gibt keinen Anwendungsserver, keine HTTP-/WebSocket-Runtime, keine serverseit
 ## Lokale Architektur
 
 - `frontend/src/main.tsx` enthält die bestehende GUI.
-- `frontend/src/localRuntimeClient.ts` erhält den Runtime-Vertrag als lokalen Adapter.
+- `frontend/src/localRuntimeClient.ts` erhält den Runtime-Vertrag als lokalen Adapter und übernimmt das von Kotlite erzeugte AST-Manifest für Klassenkarten, Konstruktor- und Methoden-Dialoge.
 - `frontend/src/localRuntimeWorker.ts` lädt ausschließlich das statische Kotlite-Asset und verwaltet Worker-Nachrichten einschließlich Tastatur- und Mausklick-Ereignissen.
 - `kotlite-browser` baut die `KotliteSession` als Kotlin/JS-Browserbundle.
 - `runtime-contract` enthält die weiterhin sinnvolle GUI-/Runtime-Schnittstelle.

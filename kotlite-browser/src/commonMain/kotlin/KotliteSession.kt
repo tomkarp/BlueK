@@ -6,6 +6,7 @@ import com.sunnychung.lib.multiplatform.kotlite.extension.fullClassName
 import com.sunnychung.lib.multiplatform.kotlite.lexer.Lexer
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassInstance
+import com.sunnychung.lib.multiplatform.kotlite.model.FunctionCallNode
 import com.sunnychung.lib.multiplatform.kotlite.model.BooleanValue
 import com.sunnychung.lib.multiplatform.kotlite.model.CustomFunctionDefinition
 import com.sunnychung.lib.multiplatform.kotlite.model.CustomFunctionParameter
@@ -19,6 +20,9 @@ import com.sunnychung.lib.multiplatform.kotlite.model.ScriptNode
 import com.sunnychung.lib.multiplatform.kotlite.model.SourcePosition
 import com.sunnychung.lib.multiplatform.kotlite.model.StringValue
 import com.sunnychung.lib.multiplatform.kotlite.model.UnitValue
+import com.sunnychung.lib.multiplatform.kotlite.model.TypeNode
+import com.sunnychung.lib.multiplatform.kotlite.model.VariableReferenceNode
+import com.sunnychung.lib.multiplatform.kotlite.model.NavigationNode
 import com.sunnychung.lib.multiplatform.kotlite.stdlib.AllStdLibModules
 import kotlin.js.ExperimentalJsExport
 import kotlin.js.JsExport
@@ -132,6 +136,57 @@ class KotliteSession {
         result("loaded", UnitValue)
     } catch (error: Throwable) {
         error(error)
+    }
+
+    /** Metadata for the GUI, derived from the same AST Kotlite analyzes. */
+    fun manifest(): String = try {
+        val script = parse("<BlueK project>", analysisSource)
+        val classes = script.nodes.filterIsInstance<ClassDeclarationNode>()
+        val functions = script.nodes.filterIsInstance<FunctionDeclarationNode>()
+        val classJson = classes.joinToString(",", "[", "]") { declaration ->
+            val constructors = if (declaration.isInterface) "[]" else {
+                val parameters = declaration.primaryConstructor?.parameters.orEmpty().joinToString(",", "[", "]") { parameterJson(it.parameter) }
+                "[{\"id\":\"${escape(declaration.name)}.constructor\",\"parameters\":$parameters}]"
+            }
+            val primaryProperties = declaration.primaryConstructor?.parameters.orEmpty().filter { it.isProperty }.map { parameter ->
+                jsonProperty(declaration.name, parameter.parameter.name, parameter.parameter.type, parameter.isMutable, parameter.modifiers.any { it.name == "private" }, false, false)
+            }
+            val bodyProperties = declaration.declarations.filterIsInstance<PropertyDeclarationNode>().map { property ->
+                jsonProperty(declaration.name, property.name, property.type, property.isMutable, property.modifiers.any { it.name == "private" }, property.accessors?.getter != null, property.accessors?.setter != null)
+            }
+            val properties = (primaryProperties + bodyProperties).distinctBy { it.substringBefore("\",\"name\":") }.joinToString(",", "[", "]")
+            val methods = declaration.declarations.filterIsInstance<FunctionDeclarationNode>().mapIndexed { index, function -> jsonFunction(declaration.name, function, index) }.joinToString(",", "[", "]")
+            val supers = declaration.superInvocations.orEmpty().mapNotNull(::superName).joinToString(",", "[", "]") { jsonTypeName(it) }
+            val kind = if (declaration.isInterface) "interface" else if (declaration.modifiers.any { it.name == "abstract" }) "abstract" else "class"
+            val typeParameters = declaration.typeParameters.joinToString(",", "[", "]") { parameter -> "\"${escape(parameter.name)}\"" }
+            "{\"id\":\"${escape(declaration.name)}\",\"name\":\"${escape(declaration.name)}\",\"kind\":\"$kind\",\"modifiers\":${declaration.modifiers.joinToString(",", "[", "]") { modifier -> "\"${modifier.name}\"" }},\"typeParameters\":$typeParameters,\"supertypes\":$supers,\"constructors\":$constructors,\"properties\":$properties,\"methods\":$methods}"
+        }
+        val functionJson = functions.mapIndexed { index, function -> jsonFunction("<top-level>", function, index) }.joinToString(",", "[", "]")
+        "{\"version\":1,\"classes\":$classJson,\"functions\":$functionJson}"
+    } catch (error: Throwable) {
+        "{\"version\":1,\"classes\":[],\"error\":\"${escape(error.message ?: "Could not create Kotlite manifest.")}\"}"
+    }
+
+    private fun parameterJson(parameter: com.sunnychung.lib.multiplatform.kotlite.model.FunctionValueParameterNode): String =
+        "{\"name\":\"${escape(parameter.name)}\",\"type\":${jsonType(parameter.type)},\"hasDefault\":${parameter.defaultValue != null}}"
+
+    private fun jsonProperty(owner: String, name: String, type: TypeNode, mutable: Boolean, private: Boolean, getter: Boolean, setter: Boolean): String =
+        "{\"id\":\"${escape(owner)}.${escape(name)}\",\"name\":\"${escape(name)}\",\"type\":${jsonType(type)},\"mutable\":$mutable,\"visibility\":\"${if (private) "private" else "public"}\",\"getter\":$getter,\"setter\":$setter}"
+
+    private fun jsonFunction(owner: String, function: FunctionDeclarationNode, index: Int): String =
+        "{\"id\":\"${escape(owner)}.${escape(function.name)}.$index\",\"name\":\"${escape(function.name)}\",\"declaringType\":\"${escape(owner)}\",\"parameters\":${function.valueParameters.joinToString(",", "[", "]", transform = ::parameterJson)},\"returnType\":${jsonType(function.returnType)},\"visibility\":\"public\"}"
+
+    private fun jsonType(type: TypeNode): String =
+        "{\"classifier\":\"${escape(type.name)}\",\"arguments\":${type.arguments.orEmpty().joinToString(",", "[", "]", transform = ::jsonType)},\"nullable\":${type.isNullable},\"displayName\":\"${escape(type.descriptiveName())}\"}"
+
+    private fun jsonTypeName(name: String): String = jsonType(TypeNode(SourcePosition.NONE, name, null, false))
+
+    private fun superName(node: com.sunnychung.lib.multiplatform.kotlite.model.ASTNode): String? = when (node) {
+        is FunctionCallNode -> superName(node.function)
+        is TypeNode -> node.name
+        is VariableReferenceNode -> node.variableName
+        is NavigationNode -> node.member.name
+        else -> null
     }
 
     fun evaluate(filename: String, source: String): String = try {
