@@ -1,6 +1,6 @@
 FROM node:22-bookworm AS node
 
-FROM eclipse-temurin:21-jdk-bookworm
+FROM eclipse-temurin:21-jdk-jammy
 
 ENV DEBIAN_FRONTEND=noninteractive \
     NODE_ENV=production \
