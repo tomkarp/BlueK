@@ -103,7 +103,14 @@ export class LocalRuntimeClient implements RuntimeClient {
   }
   private request(op: string, data: Record<string, unknown> = {}): Promise<any> { this.start(); const id = this.nextId++; return new Promise((resolve, reject) => { this.pending.set(id, { resolve, reject }); this.worker!.postMessage({ id, op, ...data }); }); }
   async compile(files: ProjectFile[], revision: number, ..._unused: unknown[]): Promise<CompileResult> { this.stopWorker('Kotlite worker replaced by a new compilation.'); this.classes = metadata(files); const response = await this.request('compile', { files }); if (response.kind === 'error') { const location = sourceLocation(String(response.display || 'Kotlite compilation failed.')); return { generationId: '', sourceRevision: revision, classes: [], diagnostics: [{ fileName: sourceFileAtLine(files, location.line), line: location.line, column: location.column, severity: 'error', message: response.display }] }; } this.classes = Array.isArray(response.classes) ? addInheritedMembers(response.classes) : this.classes; this.generationId = crypto.randomUUID(); return { generationId: this.generationId, sourceRevision: revision, classes: this.classes, diagnostics: [] }; }
-  private publish(response: any) { if (response?.stage) this.stageListeners.forEach(listener => listener(response)); }
+  private publish(response: any) {
+    if (!response?.stage) return;
+    // Worker responses wrap the serialized snapshot as { stage: { stage: ... } }.
+    // Stage listeners consume the actual stage object, including for quiet
+    // Codepad requests whose result is not passed through write().
+    const stage = response.stage.stage || response.stage;
+    this.stageListeners.forEach(listener => listener({ ...response, stage }));
+  }
   private stopSimulation() { if (this.simulationTimer !== null) { window.clearTimeout(this.simulationTimer); this.simulationTimer = null; } }
   private scheduleSimulation() {
     if (this.simulationTimer !== null || !this.worker) return;
