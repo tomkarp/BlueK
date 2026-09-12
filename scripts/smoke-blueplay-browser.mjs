@@ -33,6 +33,13 @@ if (twoActorStage.stage.objects.length !== 2 || twoActorStage.stage.objects[0].x
 evaluate('step()', 'multiple actor step');
 const twoActorMovedStage = JSON.parse(session.takeStage());
 if (twoActorMovedStage.stage.objects[0].x !== 4 || twoActorMovedStage.stage.objects[1].x !== 21) throw new Error('BluePlay did not dispatch act() to every actor.');
+evaluate('class CallbackWorld : World(40, 30) { var acts = 0; override fun act() { acts += 1 } }; val callbackWorld = CallbackWorld(); showWorld(callbackWorld); step()', 'world dynamic dispatch');
+if (evaluate('callbackWorld.acts', 'world callback result').display !== '1') throw new Error('BluePlay did not dispatch tick() to an overridden student World.act().');
+evaluate('class KeyFigure : Actor() { override fun act() { if (isKeyDown(\"left\")) this.move(-2) } }; val keyWorld = MyWorld(); val keyFigure = KeyFigure(); keyWorld.addObject(keyFigure, 10, 10); showWorld(keyWorld)', 'keyboard setup');
+expectOk(JSON.parse(session.setKey('left', true)), 'key down');
+evaluate('step()', 'keyboard step');
+expectOk(JSON.parse(session.setKey('left', false)), 'key up');
+if (JSON.parse(session.evaluate('<BluePlay smoke>', 'keyFigure.x')).display !== '8') throw new Error('BluePlay key state did not reach a student Actor callback.');
 evaluate('firstActor.setImage("hero.png"); secondWorld.background = Image("sky.png"); playSound("step.wav"); showWorld(secondWorld)', 'media bridge');
 const mediaStage = JSON.parse(session.takeStage());
 if (mediaStage.stage.objects[0].imagePath !== 'hero.png' || mediaStage.stage.backgroundPath !== 'sky.png') throw new Error('BluePlay media paths did not reach the browser stage.');
