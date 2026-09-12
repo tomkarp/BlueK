@@ -260,6 +260,7 @@ useEffect(() => { if (!generation || !client) return; let active = true; const t
     setNewProjectDialog(false);
     if (generation) await stop();
     let project: { files: FileModel[]; resources: ResourceModel[] } = { files: [], resources: [] };
+    let initialCardPositions: Record<string, { x: number; y: number }> = {};
     if (choice !== 'empty') {
       const response = await fetch('/api/examples/blueplay');
       if (!response.ok) { setStatus('Project error'); setLog('BluePlay template could not be loaded.'); return; }
@@ -270,13 +271,20 @@ useEffect(() => { if (!generation || !client) return; let active = true; const t
         { fileName: 'Figure.kt', kind: 'class', source: 'class Figure : Actor() {\n    override fun act() {\n        if (isClicked) {\n            stop()\n            return\n        }\n        move(1)\n    }\n}\n' },
         { fileName: 'Main.kt', kind: 'functions', source: 'fun main() {\n    val world = MyWorld()\n    world.show()\n}\n' }
       ] : [
-        { fileName: 'MyWorld.kt', kind: 'class', source: 'class MyWorld : World(600, 400, 1) {\n}\n' },
-        { fileName: 'Figure.kt', kind: 'class', source: 'class Figure : Actor() {\n}\n' },
-        { fileName: 'Main.kt', kind: 'functions', source: 'fun main() {\n    val world = MyWorld()\n    world.show()\n}\n' }
+        { fileName: 'Main.kt', kind: 'functions', source: 'fun main() {\n}\n' }
       ];
       project.files = [...frameworkFiles, ...userFiles].map((file: any, index: number) => ({ ...file, id: `project-${Date.now()}-${index}`, revision: 1 }));
+      if (choice === 'blueplay-template') {
+        initialCardPositions = {
+          'BluePlayFunctions.kt': { x: 30, y: 32 },
+          'World.kt': { x: 310, y: 32 },
+          'Actor.kt': { x: 590, y: 32 },
+          'Image.kt': { x: 870, y: 32 },
+          'Main.kt': { x: 30, y: 202 },
+        };
+      }
     }
-    setFiles(project.files); setClasses([]); setResources(project.resources); setCardPositions({}); setSelected(0); markUncompiled(); setEditor(false); setStatus('New project'); setLog('');
+    setFiles(project.files); setClasses([]); setResources(project.resources); setCardPositions(Object.fromEntries(project.files.flatMap(file => initialCardPositions[file.fileName] ? [[file.id, initialCardPositions[file.fileName]]] : []))); setSelected(0); markUncompiled(); setEditor(false); setStatus('New project'); setLog('');
   };
   useEffect(() => {
     const canvas = canvasRef.current || document.querySelector<HTMLDivElement>('.canvas');
