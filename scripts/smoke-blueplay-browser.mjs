@@ -27,5 +27,10 @@ if (runningStage.stage.running !== true) throw new Error('BluePlay start() did n
 evaluate('stop()', 'stop');
 const stoppedStage = JSON.parse(session.takeStage());
 if (stoppedStage.stage.running !== false) throw new Error('BluePlay stop() did not clear running state.');
+evaluate('val clickedActor = Figure(); val clickedWorld = MyWorld(); clickedWorld.addObject(clickedActor, 7, 9)', 'click setup');
+expectOk(JSON.parse(session.setClick(7, 9)), 'actor click');
+if (evaluate('clickedActor.isClicked', 'actor click query').display !== 'true') throw new Error('BluePlay actor click was not delivered to the student object.');
+expectOk(JSON.parse(session.setClick(12, 13)), 'world click');
+if (evaluate('clickedWorld.isClicked', 'world click query').display !== 'true') throw new Error('BluePlay world click was not delivered to the student object.');
 
 console.log('BluePlay browser smoke test passed.');

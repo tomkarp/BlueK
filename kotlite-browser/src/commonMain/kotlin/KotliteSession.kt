@@ -11,6 +11,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.CustomFunctionDefinition
 import com.sunnychung.lib.multiplatform.kotlite.model.CustomFunctionParameter
 import com.sunnychung.lib.multiplatform.kotlite.model.ExecutionEnvironment
 import com.sunnychung.lib.multiplatform.kotlite.model.FunctionDeclarationNode
+import com.sunnychung.lib.multiplatform.kotlite.model.IntValue
 import com.sunnychung.lib.multiplatform.kotlite.model.NullValue
 import com.sunnychung.lib.multiplatform.kotlite.model.PropertyDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.model.RuntimeValue
@@ -42,6 +43,8 @@ class KotliteSession {
     private var analysisSource = ""
     private var stageSnapshot = ""
     private val keysDown = linkedSetOf<String>()
+    private var clickX: Int? = null
+    private var clickY: Int? = null
 
     init {
         resetInterpreter()
@@ -59,6 +62,30 @@ class KotliteSession {
             executable = { _, _, args, _ ->
                 stageSnapshot = (args[0] as StringValue).value
                 UnitValue
+            }
+        ))
+        environment.registerFunction(CustomFunctionDefinition(
+            position = SourcePosition.BUILTIN,
+            receiverType = null,
+            functionName = "bluekIsActorClicked",
+            returnType = "Boolean",
+            parameterTypes = listOf(CustomFunctionParameter("x", "Int"), CustomFunctionParameter("y", "Int")),
+            executable = { interpreter, _, args, _ ->
+                val matches = clickX == (args[0] as IntValue).value && clickY == (args[1] as IntValue).value
+                if (matches) { clickX = null; clickY = null }
+                BooleanValue(matches, interpreter.symbolTable())
+            }
+        ))
+        environment.registerFunction(CustomFunctionDefinition(
+            position = SourcePosition.BUILTIN,
+            receiverType = null,
+            functionName = "bluekIsWorldClicked",
+            returnType = "Boolean",
+            parameterTypes = emptyList(),
+            executable = { interpreter, _, _, _ ->
+                val matches = clickX != null && clickY != null
+                if (matches) { clickX = null; clickY = null }
+                BooleanValue(matches, interpreter.symbolTable())
             }
         ))
         environment.registerFunction(CustomFunctionDefinition(
@@ -183,6 +210,8 @@ class KotliteSession {
         nextHandle = 1
         stageSnapshot = ""
         keysDown.clear()
+        clickX = null
+        clickY = null
         resetInterpreter()
         output.clear()
         return result("reset", UnitValue)
@@ -202,6 +231,12 @@ class KotliteSession {
 
     fun setKey(key: String, pressed: Boolean): String {
         if (pressed) keysDown += key.lowercase() else keysDown -= key.lowercase()
+        return result("value", UnitValue)
+    }
+
+    fun setClick(x: Int, y: Int): String {
+        clickX = x
+        clickY = y
         return result("value", UnitValue)
     }
 

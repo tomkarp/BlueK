@@ -6,4 +6,5 @@ open class Actor {
     fun move(distance: Int) { x += distance }
     fun turn(degrees: Int) { rotation += degrees }
     val isAtEdge: Boolean get() = false
+    val isClicked: Boolean get() = bluekIsActorClicked(x, y)
 }

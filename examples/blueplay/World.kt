@@ -19,4 +19,5 @@ open class World(val width: Int, val height: Int, val cellSize: Int = 1) {
     }
     fun removeObject(actor: Actor) { if (this.actor == actor) this.actor = null }
     val numberOfObjects: Int get() = if (actor == null) 0 else 1
+    val isClicked: Boolean get() = bluekIsWorldClicked()
 }

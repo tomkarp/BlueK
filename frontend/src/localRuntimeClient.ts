@@ -93,7 +93,7 @@ export class LocalRuntimeClient implements RuntimeClient {
   async removeObject(objectId: string): Promise<void> { await this.execute({ op: 'remove', objectId }); }
   async sendInput(_text: string): Promise<void> { throw new Error('Kotlite console input is not yet supported in the local adapter.'); }
   async sendKey(key: string, pressed: boolean): Promise<void> { await this.execute({ op: 'key', key, pressed }); }
-  async sendClick(_x: number, _y: number): Promise<void> {}
+  async sendClick(x: number, y: number): Promise<void> { await this.execute({ op: 'click', x, y }); }
   async status(): Promise<RuntimeStatus> { return { workerAlive: Boolean(this.worker), generationId: this.generationId, available: Boolean(this.worker), error: null }; }
   async stop(): Promise<void> { this.stopWorker(); this.generationId = null; }
   async reset(): Promise<void> { await this.request('reset'); }
