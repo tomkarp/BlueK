@@ -365,10 +365,13 @@ export async function compileBrowserProject(root: string, sessionDir: string, fi
     let manifest: SymbolManifest | undefined;
     try {
         manifest = JSON.parse(await fs.readFile(generatedManifest, 'utf8')) as SymbolManifest;
-        await fs.writeFile(path.join(buildDir, 'manifest.json'), JSON.stringify(manifest));
     } catch {
-        return { ok: false, diagnostics: 'Kotlin/JS compilation succeeded, but BlueK could not read the generated symbol manifest.', directory: buildDir };
+        // KSP does not run when the project has no student source files at
+        // all (for example the empty BluePlay template). That is a valid
+        // empty symbol set, not a compiler failure.
+        manifest = { version: 1, classes: [] };
     }
+    await fs.writeFile(path.join(buildDir, 'manifest.json'), JSON.stringify(manifest));
     const bridge = bridgeSource(files, classesFromManifest(manifest));
     await fs.writeFile(path.join(bridgeDir, 'BlueKBridge.kt'), bridge.source);
     const result = await run(path.join(root, 'jvm', 'gradlew'), gradleArgs, buildDir);

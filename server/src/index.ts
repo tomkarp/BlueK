@@ -136,7 +136,8 @@ app.post('/api/session/:id/compile',asyncRoute(async(req:any,r:any)=>{
     const manifestClasses=manifest?classesFromManifest(manifest):[];
     const manifestNames=new Set(manifestClasses.map(value=>value.name));
     const functionClasses=classes.filter(value=>value.kind==='functions'&&!manifestNames.has(value.name));
-    r.json({generationId:gid,sourceRevision:req.body.revision||1,classes:[...manifestClasses,...functionClasses],manifest,diagnostics,browserRuntime,browserRuntimeError:browserDiagnostics||undefined});
+    const compilerClasses=manifestClasses.length?[...manifestClasses,...functionClasses]:classes;
+    r.json({generationId:gid,sourceRevision:req.body.revision||1,classes:compilerClasses,manifest,diagnostics,browserRuntime,browserRuntimeError:browserDiagnostics||undefined});
 }));
 app.get('/api/session/:id/status',asyncRoute(async(req:any,r:any)=>{const s=sessions.get(req.params.id);if(!s)return r.sendStatus(404);r.json({workerAlive:false,generationId:s.generation||null,available:false,error:'BlueK runs project code only in the browser worker.'})}));
 app.post('/api/session/:id/close',asyncRoute(async(req:any,r:any)=>{const s=sessions.get(req.params.id);if(!s)return r.sendStatus(404);await closeSession(req.params.id,s);r.sendStatus(204)}));
