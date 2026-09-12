@@ -11,7 +11,50 @@ const tr=(s:string):TypeRef=>{let display=s.trim().replace(/\s+/g,' ');const nul
 function meta(files:ProjectFile[]):ClassMeta[]{const result:any[]=[];for(const f of files){if(f.kind!=='class')continue;const m=f.source.match(/\b(class|interface|abstract\s+class)\s+(\w+)(?:\s*<([^>]+)>)?\s*(?::\s*([^\{]+))?/);if(!m)continue;const n=m[2];const ps=(s:string)=>s.split(',').map(x=>x.trim()).filter(Boolean).map((x,i)=>{const q=x.match(/(?:val|var)?\s*(\w+)\s*:\s*([^=]+)/);return{name:q?.[1]||`arg${i}`,type:tr(q?.[2]||'Any'),hasDefault:x.includes('=')}});const c=f.source.match(new RegExp('\\b'+n+'\\s*\\(([^)]*)\\)'));const methods:any[]=[];for(const x of f.source.matchAll(/\b(public\s+|private\s+|protected\s+)?(?:override\s+)?fun\s+(\w+)\s*\(([^)]*)\)\s*(?::\s*([^\{=]+))?/g)){if((x[1]||'').trim()==='private')continue;methods.push({id:`${n}::${x[2]}`,name:x[2],declaringType:n,parameters:ps(x[3]),returnType:tr(x[4]||'Unit'),visibility:'public'})}result.push({id:n,name:n,kind:m[1].includes('interface')?'interface':'class',constructors:m[1].includes('interface')?[]:[{id:`${n}::ctor`,parameters:ps(c?.[1]||'')}],methods,properties:[],supertypes:(m[4]||'').split(',').filter(Boolean).map(tr),typeParameters:(m[3]||'').split(',').map(x=>x.trim()).filter(Boolean)})}return result}
 const exampleDirectory = (name: string) => name === 'basic' ? path.join(root, 'examples') : path.join(root, 'examples', name);
 function packageNameForBrowser(files: ProjectFile[]): string { const main=files.find(file=>file.fileName==='Main.kt')||files.find(file=>/\bfun\s+main\s*\(/.test(file.source)); return main?.source.match(/^\s*package\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)/m)?.[1]||files.map(file=>file.source.match(/^\s*package\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)/m)?.[1]).find(Boolean)||''; }
-const readExample = async (name: string) => {
+const readExample = async (name: string): Promise<ProjectFile[]> => {
+    if (name === 'ausgebuext') {
+        const framework: ProjectFile[] = await readExample('blueplay');
+        const frameworkFiles = framework.filter(file => ['Actor.kt', 'BluePlayFunctions.kt', 'Image.kt', 'World.kt'].includes(file.fileName));
+        return [...frameworkFiles,
+            { id: 'Ausreisser.kt', fileName: 'Ausreisser.kt', kind: 'class', revision: 1, source: `class Ausreisser : Actor() {
+    init {
+        image = Image("figure.png")
+    }
+
+    override fun act() {
+        if (isClicked) {
+            world.removeObject(this)
+        } else {
+            move(1)
+        }
+    }
+}
+` },
+            { id: 'Spielfeld.kt', fileName: 'Spielfeld.kt', kind: 'class', revision: 1, source: `class Spielfeld : World(600, 400, 1) {
+    private var schritte = 0
+
+    init {
+        addObject(Ausreisser(), 100, 100)
+        addObject(Ausreisser(), 250, 200)
+        addObject(Ausreisser(), 400, 300)
+    }
+
+    override fun act() {
+        schritte++
+        if (numberOfObjects == 0) {
+            showText("Schritte: $schritte", 100, 50)
+            stop()
+        }
+    }
+}
+` },
+            { id: 'Main.kt', fileName: 'Main.kt', kind: 'functions', revision: 1, source: `fun main() {
+    val welt = Spielfeld()
+    welt.show()
+}
+` }
+        ];
+    }
     const directory = exampleDirectory(['blueplay-stress', 'blueplay-input'].includes(name) ? 'blueplay' : name);
     const names = (await fs.readdir(directory)).filter(fileName => fileName.endsWith('.kt')).sort();
     return Promise.all(names.map(async fileName => ({
@@ -46,7 +89,7 @@ const readExample = async (name: string) => {
     })));
 };
 const readExampleResources = async (name: string) => {
-    const directory = exampleDirectory(['blueplay-stress', 'blueplay-input'].includes(name) ? 'blueplay' : name);
+    const directory = exampleDirectory(['blueplay-stress', 'blueplay-input', 'ausgebuext'].includes(name) ? 'blueplay' : name);
     const resources: { path: string; data: string }[] = [];
     for (const folder of ['images', 'sounds']) {
         const resourceDirectory = path.join(directory, folder);
@@ -62,7 +105,7 @@ const readExampleResources = async (name: string) => {
 };
 app.get('/api/examples', asyncRoute(async (_: any, r: any) => r.json({ files: [], resources: [] })));
 app.get('/api/examples/:name', asyncRoute(async (req: any, r: any) => {
-    if (!['basic', 'blueplay', 'blueplay-stress', 'blueplay-input', 'krokoalarm', 'student-smoke'].includes(req.params.name)) return r.sendStatus(404);
+    if (!['ausgebuext', 'basic', 'blueplay', 'blueplay-stress', 'blueplay-input', 'krokoalarm', 'snap', 'student-smoke'].includes(req.params.name)) return r.sendStatus(404);
     r.json({ files: await readExample(req.params.name), resources: await readExampleResources(req.params.name) });
 }));
 app.use('/api/session/:id',(req,_r,next)=>{const s=sessions.get(req.params.id);if(s)s.lastActivity=Date.now();next()});
