@@ -89,6 +89,7 @@ open class World(val width: Int, val height: Int, val cellSize: Int = 1) {
         actor.x = x
         actor.y = y
     }
+    fun getObjects(): List<Actor> = actors
     fun removeObject(actor: Actor) {
         if (actors.count { it == actor } > 0) {
             actors.remove(actor)

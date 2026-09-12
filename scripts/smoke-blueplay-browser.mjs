@@ -45,6 +45,9 @@ if (evaluate('callbackWorld.getWidth()', 'world width accessor').display !== '40
 evaluate('callbackWorld.setBackground(12, 34, 56)', 'world color background');
 const colorStage = JSON.parse(session.takeStage());
 if (colorStage.stage.backgroundColor !== 'rgb(12,34,56)') throw new Error('BluePlay color background API failed.');
+if (evaluate('callbackWorld.getObjects().size', 'world object list').display !== '0') throw new Error('BluePlay World object list API failed.');
+evaluate('val collisionA = Figure(); val collisionB = Figure(); collisionA.setLocation(6, 6); collisionB.setLocation(6, 6)', 'actor collision setup');
+if (evaluate('collisionA.intersects(collisionB)', 'actor intersection').display !== 'true' || evaluate('collisionA.isTouching(collisionB)', 'actor touching').display !== 'true') throw new Error('BluePlay actor collision API failed.');
 evaluate('class KeyFigure : Actor() { override fun act() { if (isKeyDown(\"left\")) this.move(-2) } }; val keyWorld = MyWorld(); val keyFigure = KeyFigure(); keyWorld.addObject(keyFigure, 10, 10); showWorld(keyWorld)', 'keyboard setup');
 expectOk(JSON.parse(session.setKey('left', true)), 'key down');
 evaluate('step()', 'keyboard step');

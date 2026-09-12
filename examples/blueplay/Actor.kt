@@ -13,6 +13,8 @@ open class Actor {
     fun setLocation(newX: Int, newY: Int) { x = newX; y = newY }
     fun getRotation(): Int = rotation
     fun setRotation(degrees: Int) { rotation = degrees }
+    fun intersects(other: Actor): Boolean = x == other.x && y == other.y
+    fun isTouching(other: Actor): Boolean = intersects(other)
     open fun act() {}
     fun move(distance: Int) {
         val normalized = ((rotation % 360) + 360) % 360
