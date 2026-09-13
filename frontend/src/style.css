@@ -354,6 +354,9 @@ footer{flex:0 0 108px}
 .inspect-edit:hover,.inspect-save:hover{background:transparent;color:#087c9d}
 .popup-submenu{position:relative}
 .popup-submenu-trigger{display:flex!important;justify-content:space-between;align-items:center}
+.popup:has(~ .popup-empty-overlay)::before{order:2}
+.popup > .popup-submenu,.popup > button.method-menu-item,.popup > button.constructor-menu-item{order:1}
+.popup > hr,.popup > hr ~ button{order:3}
 .popup-submenu-trigger span{margin-left:24px;font-size:18px}.popup-empty-overlay{display:none}.popup:has(~ .popup-empty-overlay)::before{content:"(No accessible methods)";display:block;padding:10px 12px;border-bottom:1px solid #ddd;color:#aaa;font-style:italic}
 .popup-submenu-panel{position:absolute;left:100%;top:-1px;display:none;min-width:260px;max-height:70vh;overflow:auto;background:#fff;border:1px solid #aaa;box-shadow:2px 4px 12px #777}
 .popup-submenu:hover .popup-submenu-panel,.popup-submenu:focus-within .popup-submenu-panel{display:block}
@@ -364,7 +367,7 @@ footer{flex:0 0 108px}
 @keyframes bluek-spin{to{transform:rotate(360deg)}}
 
 /* BlueJ-style class-card context menu. */
-.popup{width:210px;background:#fff;border:1px solid #aaa;box-shadow:2px 4px 12px #777}
+.popup{width:210px;background:#fff;border:1px solid #aaa;box-shadow:2px 4px 12px #777;display:flex;flex-direction:column}
 .popup-title{display:none}
 .popup button{color:#222;background:#fff;padding:10px 12px;font-size:15px}
 .popup button:hover,.popup button:focus-visible{background:#08a6d2;color:#fff;outline:0}
