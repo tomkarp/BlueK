@@ -291,6 +291,11 @@ footer{flex:0 0 108px}
 .dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
 .create-object-dialog{min-width:min(480px,85vw)}
 .create-object-dialog h3{padding-bottom:14px;border-bottom:1px solid #ccc}
+.create-object-dialog,.method-dialog{background:#f5f5f5;border:2px solid #666;border-radius:10px;box-shadow:3px 5px 16px #333}
+.create-object-dialog h3,.method-dialog h3{font-size:22px;margin:0 0 18px;padding:0 0 14px;border-bottom:1px solid #c8c8c8}
+.create-object-dialog label,.method-dialog label{color:#333;font-size:16px}
+.create-object-dialog label>input,.method-dialog label>input{font-size:16px;background:#fff;border:1px solid #999}
+.create-object-dialog .dialog-actions,.method-dialog .dialog-actions{border-top:1px solid #ccc;padding-top:14px}
 .new-project-dialog{min-width:min(520px,88vw)}
 .new-project-dialog p{margin:0 0 14px;color:#555}
 .project-choice-list{display:grid;gap:8px}
