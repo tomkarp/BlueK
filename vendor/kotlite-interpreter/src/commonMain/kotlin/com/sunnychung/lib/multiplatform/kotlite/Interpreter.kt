@@ -1014,11 +1014,20 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
 //                symbolTable.undeclareProperty(it.parameter.transformedRefName!!)
 //            }
 
-        // variable "this" is available after primary constructor
-        symbolTable.declareProperty(callPosition, "this", TypeNode(callPosition, instance.clazz!!.fullQualifiedName, typeArguments.map { it.toTypeNode() }.emptyToNull(), false), false)
+        // variable "this" is available after primary constructor. Register
+        // the receiver for every class in the hierarchy as well: inherited
+        // properties are transformed to names such as "this/Person" while a
+        // subclass instance is being initialized.
+        val instanceType = TypeNode(callPosition, instance.clazz!!.fullQualifiedName, typeArguments.map { it.toTypeNode() }.emptyToNull(), false)
+        symbolTable.declareProperty(callPosition, "this", instanceType, false)
         symbolTable.assign("this", instance)
-        symbolTable.declareProperty(callPosition, "this/${instance.clazz!!.fullQualifiedName}", TypeNode(callPosition, instance.clazz!!.fullQualifiedName, typeArguments.map { it.toTypeNode() }.emptyToNull(), false), false)
-        symbolTable.assign("this/${instance.clazz!!.fullQualifiedName}", instance)
+        var receiverClass: ClassDefinition? = instance.clazz
+        while (receiverClass != null) {
+            val receiverName = "this/${receiverClass.fullQualifiedName}"
+            symbolTable.declareProperty(callPosition, receiverName, instanceType, false)
+            symbolTable.assign(receiverName, instance)
+            receiverClass = receiverClass.superClass
+        }
 //        symbolTable.registerTransformedSymbol(callPosition, IdentifierClassifier.Property, "this", "this")
         symbolTable.registerTransformedSymbol(callPosition, IdentifierClassifier.Property, "this/${instance.clazz!!.fullQualifiedName}", "this")
 

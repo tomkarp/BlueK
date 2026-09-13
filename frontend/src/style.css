@@ -117,6 +117,22 @@ footer{flex:0 0 108px}
 .workspace>.pane-splitter{grid-row:2}
 .workspace>.lower{grid-row:3;min-height:0}
 .workspace>footer{grid-row:4;min-height:0}
+.compiler-error-modal{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:5vh 8vw;background:#0006}
+.compiler-error-window{width:min(760px,100%);max-height:80vh;display:flex;flex-direction:column;background:#f5f4f1;border:2px solid #555;border-radius:8px;box-shadow:3px 5px 18px #333;padding:12px}
+.compiler-error-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-size:17px}
+.compiler-error-header button{border:1px solid #999;border-radius:4px;background:linear-gradient(#fff,#d5d5d5);padding:2px 9px;cursor:pointer}
+.compiler-error-window p{margin:0 0 8px;color:#555}
+.compiler-error-window pre{flex:1;min-height:120px;overflow:auto;white-space:pre-wrap;background:#fff;border:1px solid #aaa;margin:0 0 10px;padding:10px;font:14px monospace}
+
+.project-choice-with-info{position:relative;width:100%}
+.project-choice-with-info>button:first-child{width:100%;padding-right:58px}
+.project-choice-with-info .project-info-button{position:absolute;right:14px;top:50%;display:flex;width:32px;height:32px;min-height:0;transform:translateY(-50%);align-items:center;justify-content:center;margin:0;padding:0;border:1px solid #b00000;border-radius:50%;background:#fff;color:#b00000;font:bold 20px/1 Arial;cursor:pointer}
+.project-choice-with-info .project-info-button:hover,.project-choice-with-info .project-info-button:focus-visible{background:#b00000;color:#fff;outline:0}
+.project-info-panel{position:fixed;left:50%;top:50%;z-index:11;width:min(560px,calc(100vw - 40px));transform:translate(-50%,-50%);padding:22px 48px 20px 22px;border:2px solid #555;border-radius:9px;background:#fff;color:#333;box-shadow:3px 5px 18px #333;font-size:15px;line-height:1.45}
+.project-info-panel h4{margin:0 0 8px;font-size:18px;color:#b00000}
+.project-info-panel p{margin:7px 0}
+.project-info-panel a{color:#087c9d}
+.project-info-close{position:absolute;right:8px;top:7px;border:0!important;background:transparent!important;color:#555!important;font-size:24px!important;line-height:1!important;padding:0!important;margin:0!important;cursor:pointer}
 .canvas{overflow:auto}
 
 /* Native range input: it gives the BlueJ-style divider reliable pointer and
@@ -206,6 +222,13 @@ footer{flex:0 0 108px}
 .lower .codepad-toggle::after{content:"";display:block;width:0;height:0;border-top:8px solid transparent;border-bottom:8px solid transparent;border-left:12px solid #aaa}
 .lower .codepad-toggle:hover,.lower .codepad-toggle:focus-visible{background:transparent;color:transparent}
 .lower .codepad-toggle:hover::after,.lower .codepad-toggle:focus-visible::after{border-left-color:#aaa}
+
+/* Keep the diagram and object bench in separate paint layers.  Draggable
+   cards can otherwise escape the scrollable canvas when its content is
+   repainted, making them appear on top of the bench. */
+.workspace>.panels{position:relative;z-index:0;min-height:0}
+.workspace>.panels>.canvas{isolation:isolate;overflow:auto}
+.workspace>.lower{position:relative;z-index:1;isolation:isolate}
 .lower .bench-codepad-splitter{grid-column:3}
 .lower .bench{grid-row:1}
 .lower .bench-codepad-splitter{grid-row:1}
@@ -298,4 +321,16 @@ footer{flex:0 0 108px}
 .popup button{color:#b00000;background:#fff;padding:10px 12px;font-size:15px}
 .popup button:hover,.popup button:focus-visible{background:#08a6d2;color:#fff;outline:0}
 .popup hr{border-top:1px solid #bbb}
- .editor-dialog{min-width:min(850px,80vw);width:min(850px,80vw);height:min(680px,86vh);display:flex;flex-direction:column}.kotlin-editor{flex:1;min-height:0;margin:0 0 14px;border:1px solid #888;background:#fff;overflow:hidden}.kotlin-editor .cm-editor{height:100%}
+.editor-dialog{min-width:min(850px,80vw);width:min(850px,80vw);height:min(680px,86vh);display:flex;flex-direction:column}.kotlin-editor{flex:1;min-height:0;margin:0 0 14px;border:1px solid #888;background:#fff;overflow:hidden}.kotlin-editor .cm-editor{height:100%}
+
+/* Keep both workbench panes inside the workspace even when either splitter
+   is dragged to an extreme size. The available height always includes the
+   horizontal splitter and the status bar, so the splitter cannot disappear
+   and the diagram cannot paint into the lower pane. */
+.workspace{grid-template-rows:minmax(90px,min(var(--upper-pane,66%),calc(100% - 136px))) 14px minmax(90px,1fr) 32px;grid-template-columns:minmax(0,1fr);min-height:0;overflow:hidden}
+.workspace>.panels{grid-row:1;min-height:0;overflow:hidden;flex:initial}
+.workspace>.panels>.canvas{height:100%;min-height:0;max-height:100%;overflow:auto}
+.workspace>.pane-splitter{grid-row:2;position:relative;z-index:5;flex:0 0 14px;min-height:14px}
+.workspace>.lower{grid-row:3;min-height:0;min-width:0;width:100%;overflow:hidden;position:relative;z-index:1}
+.workspace>.lower>*{min-width:0}
+.workspace>footer{grid-row:4;min-height:0}
