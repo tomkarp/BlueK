@@ -6,7 +6,7 @@
       "fileName": "Person.kt",
       "kind": "class",
       "revision": 1,
-      "source": "open class Person(val name: String) {\n    var age = 0\n        set(value) {\n            if (value >= 0) {\n                field = value\n            } else {\n                field = 0\n            }\n        }\n\n    val remainingLifeYears: Int\n        // Let us be optimistic and take Master Yoda as our role model.\n        get() = 900 - age\n\n    init {\n        age = 0\n    }\n\n    fun speak() {\n        println(\"Hi, I am $name and I am $age years old and have $remainingLifeYears years left\")\n    }\n\n    fun listen() {\n        // Read one line and repeat it with a short comment.\n        val input = readln()\n        println(\"You said: $input\")\n    }\n}\n"
+      "source": "open class Person(val name: String) {\n    var age = 0\n        set(value) {\n            if (value >= 0) {\n                field = value\n            } else {\n                field = 0\n            }\n        }\n\n    val remainingLifeYears: Int\n        // Let’s stay optimistic and follow the example of Master Yoda.\n        get() = 900 - age\n\n    init {\n        age = 0\n    }\n\n    fun speak() {\n        println(\"Hi, I am $name and I am $age years old and have $remainingLifeYears years left\")\n    }\n\n    fun listen() {\n        // Read one line and repeat it with a short comment.\n        val input = readln()\n        println(\"You said: $input\")\n    }\n}\n"
     },
     {
       "fileName": "Student.kt",
