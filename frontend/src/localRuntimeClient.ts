@@ -159,7 +159,7 @@ export class LocalRuntimeClient implements RuntimeClient {
   async inspectObject(objectId: string): Promise<unknown> { return this.execute({ op: 'inspect', objectId }); }
   async evaluate(code: string, mode: 'expression' | 'block'): Promise<Value> { return this.execute({ op: 'eval', code, mode }); }
   async removeObject(objectId: string): Promise<void> { await this.execute({ op: 'remove', objectId }); }
-  async sendInput(text: string): Promise<void> { await this.execute({ op: 'input', text }); }
+  async sendInput(text: string): Promise<any> { return this.execute({ op: 'input', text }); }
   async sendKey(key: string, pressed: boolean): Promise<void> { await this.execute({ op: 'key', key, pressed }); }
   async sendClick(x: number, y: number): Promise<void> { await this.execute({ op: 'click', x, y }); }
   async status(): Promise<RuntimeStatus> { return { workerAlive: Boolean(this.worker), generationId: this.generationId, available: Boolean(this.worker), error: null }; }
