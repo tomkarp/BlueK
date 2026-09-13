@@ -55,6 +55,17 @@ class KotliteSession {
     private var stageSnapshot = ""
     private val pendingSounds = mutableListOf<String>()
     private val inputLines = mutableListOf<String>()
+    private data class PendingInputEvaluation(
+        val filename: String,
+        val source: String,
+        val script: ScriptNode,
+        val nodeIndex: Int,
+        val replayWholeExpression: Boolean,
+        val outputPrefix: String,
+        val consumedInputLines: List<String>
+    )
+    private var pendingInputEvaluation: PendingInputEvaluation? = null
+    private var currentEvaluationInputs = mutableListOf<String>()
     private val keysDown = linkedSetOf<String>()
     private var clickX: Int? = null
     private var clickY: Int? = null
@@ -71,7 +82,9 @@ class KotliteSession {
                 if (nullable) return NullValue
                 throw RuntimeException("No buffered console input is available. Enter a line in the BlueK Terminal first.")
             }
-            return StringValue(inputLines.removeAt(0), currentInterpreter.symbolTable())
+            val line = inputLines.removeAt(0)
+            currentEvaluationInputs += line
+            return StringValue(line, currentInterpreter.symbolTable())
         }
         environment.registerFunction(CustomFunctionDefinition(
             position = SourcePosition.BUILTIN,
@@ -292,23 +305,40 @@ class KotliteSession {
         else -> null
     }
 
-    fun evaluate(filename: String, source: String): String = try {
+    fun evaluate(filename: String, source: String): String {
+        var currentNodeIndex = 0
+        return try {
+        currentEvaluationInputs = mutableListOf()
         unsupportedInput(source)?.let { return errorMessage(it) }
         val previous = parse("<BlueK project>", analysisSource)
         val combined = parse("<BlueK project>", analysisSource + "\n" + source)
         SemanticAnalyzer(combined, environment).analyze()
         analyzedScript = combined
-        val value = interpreter.run {
-            combined.nodes.drop(previous.nodes.size).fold(UnitValue as RuntimeValue) { _, node ->
-                (node.eval() as? RuntimeValue) ?: UnitValue
-            }
+        var value = UnitValue as RuntimeValue
+        currentNodeIndex = previous.nodes.size
+        for (nodeIndex in previous.nodes.size until combined.nodes.size) {
+            currentNodeIndex = nodeIndex
+            value = (interpreter.run { combined.nodes[nodeIndex].eval() } as? RuntimeValue) ?: UnitValue
         }
         analysisSource += "\n" + source
         recordPropertyNames()
         val objectId = if (value is ClassInstance) registerExpressionObject(value) else null
         result("value", value, objectId)
     } catch (error: Throwable) {
+        if (error.message?.contains("No buffered console input is available") == true) {
+            val combined = analyzedScript ?: parse("<BlueK project>", analysisSource)
+            pendingInputEvaluation = PendingInputEvaluation(
+                filename,
+                source,
+                combined,
+                currentNodeIndex,
+                combined.nodes.getOrNull(currentNodeIndex) is FunctionCallNode,
+                output.toString(),
+                currentEvaluationInputs.toList()
+            )
+        }
         error(error)
+        }
     }
 
     /** Keep an object returned by a Codepad expression addressable by the GUI. */
@@ -435,6 +465,8 @@ class KotliteSession {
         stageSnapshot = ""
         pendingSounds.clear()
         inputLines.clear()
+        pendingInputEvaluation = null
+        currentEvaluationInputs = mutableListOf()
         keysDown.clear()
         clickX = null
         clickY = null
@@ -471,8 +503,47 @@ class KotliteSession {
     }
 
     fun enqueueInput(line: String): String {
+        val pending = pendingInputEvaluation
+        if (pending == null) {
+            inputLines += line
+            return result("value", UnitValue)
+        }
+        pendingInputEvaluation = null
+        if (pending.replayWholeExpression) {
+            inputLines.addAll(0, pending.consumedInputLines)
+            inputLines += line
+            val response = evaluate(pending.filename, pending.source)
+            val replayedOutput = output.toString()
+            if (pending.outputPrefix.isNotEmpty() && replayedOutput.startsWith(pending.outputPrefix)) {
+                output.clear()
+                output.append(replayedOutput.removePrefix(pending.outputPrefix))
+            }
+            return response
+        }
+
         inputLines += line
-        return result("value", UnitValue)
+        currentEvaluationInputs = mutableListOf()
+        var currentNodeIndex = pending.nodeIndex
+        return try {
+            var value = UnitValue as RuntimeValue
+            for (nodeIndex in pending.nodeIndex until pending.script.nodes.size) {
+                currentNodeIndex = nodeIndex
+                value = (interpreter.run { pending.script.nodes[nodeIndex].eval() } as? RuntimeValue) ?: UnitValue
+            }
+            analysisSource += "\n" + pending.source
+            recordPropertyNames()
+            val objectId = if (value is ClassInstance) registerExpressionObject(value) else null
+            result("value", value, objectId)
+        } catch (error: Throwable) {
+            if (error.message?.contains("No buffered console input is available") == true) {
+                pendingInputEvaluation = pending.copy(
+                    nodeIndex = currentNodeIndex,
+                    outputPrefix = output.toString(),
+                    consumedInputLines = currentEvaluationInputs.toList()
+                )
+            }
+            error(error)
+        }
     }
 
     private fun result(kind: String, value: RuntimeValue, objectId: String? = null, name: String? = null): String {

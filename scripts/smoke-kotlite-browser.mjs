@@ -173,6 +173,28 @@ if (JSON.parse(inputSession.evaluate('<input>', 'readlnOrNull()')).display !== '
 const inputError = JSON.parse(inputSession.evaluate('<input>', 'readln()'));
 if (inputError.kind !== 'error' || !inputError.display.includes('No buffered console input')) throw new Error('Empty readln did not produce a clear local-runtime error.');
 
+const resumedInputSession = api.bluekCreateKotliteSession();
+const resumedSource = `
+    println("Before")
+    val first = readln()
+    println("After " + first)
+    val second = readln()
+    println("Done " + second)
+`;
+if (JSON.parse(resumedInputSession.evaluate('<resumed input>', resumedSource)).kind !== 'error') throw new Error('A multi-readln expression should pause for input.');
+if (resumedInputSession.takeOutput() !== 'Before\n') throw new Error('Output before the first readln was not emitted exactly once.');
+if (JSON.parse(resumedInputSession.enqueueInput('Alice')).kind !== 'error') throw new Error('The first resumed readln should wait for its next input.');
+if (resumedInputSession.takeOutput() !== 'After Alice\n') throw new Error('Output after the first resumed readln was incorrect.');
+if (JSON.parse(resumedInputSession.enqueueInput('Bob')).kind === 'error') throw new Error('The second resumed readln failed.');
+if (resumedInputSession.takeOutput() !== 'Done Bob\n') throw new Error('Output after the second resumed readln was incorrect or duplicated.');
+
+const resumedFunctionSession = api.bluekCreateKotliteSession();
+expectOk(JSON.parse(resumedFunctionSession.load('<resumed function>', 'fun greet() { println("Start"); val name = readln(); println("Hello " + name) }')), 'resumed function load');
+if (JSON.parse(resumedFunctionSession.evaluate('<resumed function>', 'greet()')).kind !== 'error') throw new Error('A function containing readln should pause for input.');
+if (resumedFunctionSession.takeOutput() !== 'Start\n') throw new Error('Function output before readln was not emitted exactly once.');
+if (JSON.parse(resumedFunctionSession.enqueueInput('Eve')).kind === 'error') throw new Error('A function did not resume after input.');
+if (resumedFunctionSession.takeOutput() !== 'Hello Eve\n') throw new Error('Function output after readln was incorrect or duplicated.');
+
 const languageSession = api.bluekCreateKotliteSession();
 if (JSON.parse(languageSession.evaluate('<language>', 'var n = 0; while (n < 3) { n += 1 }; n')).display !== '3') throw new Error('While-loop evaluation failed.');
 if (JSON.parse(languageSession.evaluate('<language>', 'var total = 0; for (i in 1..3) { total += i }; total')).display !== '6') throw new Error('For-loop evaluation failed.');
