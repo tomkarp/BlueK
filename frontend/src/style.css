@@ -355,6 +355,7 @@ footer{flex:0 0 108px}
 .popup-submenu{position:relative}
 .popup-submenu-trigger{display:flex!important;justify-content:space-between;align-items:center}
 .popup:has(~ .popup-empty-overlay)::before{order:2}
+.popup > button{order:1}
 .popup > .popup-submenu,.popup > button.method-menu-item,.popup > button.constructor-menu-item{order:1}
 .popup > hr,.popup > hr ~ button{order:3}
 .popup-submenu-trigger span{margin-left:24px;font-size:18px}.popup-empty-overlay{display:none}.popup:has(~ .popup-empty-overlay)::before{content:"(No accessible methods)";display:block;padding:10px 12px;border-bottom:1px solid #ddd;color:#aaa;font-style:italic}
