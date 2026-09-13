@@ -354,7 +354,7 @@ footer{flex:0 0 108px}
 .inspect-edit:hover,.inspect-save:hover{background:transparent;color:#087c9d}
 .popup-submenu{position:relative}
 .popup-submenu-trigger{display:flex!important;justify-content:space-between;align-items:center}
-.popup-submenu-trigger span{margin-left:24px;font-size:18px}.popup-empty-overlay{display:none}.popup:has(~ .popup-empty-overlay) .popup-title::after{content:"(No accessible methods)";display:block;margin:12px -12px -12px;padding:10px 12px;border-top:1px solid #ddd;color:#aaa;font-style:italic}
+.popup-submenu-trigger span{margin-left:24px;font-size:18px}.popup-empty-overlay{display:none}.empty-object-popup{z-index:7}.empty-object-popup .popup-empty{display:block;padding:10px 12px;color:#aaa;font-style:italic}
 .popup-submenu-panel{position:absolute;left:100%;top:-1px;display:none;min-width:260px;max-height:70vh;overflow:auto;background:#fff;border:1px solid #aaa;box-shadow:2px 4px 12px #777}
 .popup-submenu:hover .popup-submenu-panel,.popup-submenu:focus-within .popup-submenu-panel{display:block}
 .compiling-overlay{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:rgba(35,38,40,.58);cursor:wait}
