@@ -177,10 +177,10 @@ footer{flex:0 0 108px}
 .terminal-window{pointer-events:auto}
 .bluek.terminal-split{width:calc(100vw - var(--terminal-split-width,430px))}
 .terminal-modal-split{display:flex;align-items:stretch;justify-content:flex-end;padding:0;pointer-events:none}
-.terminal-modal-split .terminal-window{flex:0 0 var(--terminal-split-width,430px);width:var(--terminal-split-width,430px)!important;height:100vh!important;border-radius:0;border-width:0 0 0 2px;box-shadow:-3px 0 12px #333}
+.terminal-modal-split .terminal-window{flex:0 0 var(--terminal-split-width,430px);width:var(--terminal-split-width,430px)!important;height:100vh!important;border-radius:0;border-width:0 0 0 2px;box-shadow:none}
 .terminal-window.split .terminal-header{cursor:default}
-.terminal-split-divider{position:absolute;top:0;bottom:0;right:var(--terminal-split-width,430px);z-index:4;width:10px;transform:translateX(50%);pointer-events:auto;cursor:col-resize;background:transparent;touch-action:none}
-.terminal-split-divider::after{content:"";position:absolute;top:50%;left:3px;width:4px;height:72px;transform:translateY(-50%);border-left:1px solid #777;border-right:1px solid #777;background:repeating-linear-gradient(to bottom,#777 0 1px,transparent 1px 4px)}
+.terminal-split-divider{position:absolute;top:0;bottom:0;right:var(--terminal-split-width,430px);z-index:4;width:18px;transform:translateX(50%);pointer-events:auto;cursor:col-resize;background:transparent;touch-action:none}
+.terminal-split-divider::after{content:"";position:absolute;top:50%;left:5px;width:8px;height:100px;transform:translateY(-50%);border-left:1px solid #777;border-right:1px solid #777;background:repeating-linear-gradient(to bottom,#777 0 1px,transparent 1px 5px)}
 .terminal-split-divider:hover::after,.terminal-split-divider:focus-visible::after{background-color:#c4c4c4;outline:2px solid #168fbd;outline-offset:1px}
 
 /* BlueJ keeps the workbench footer deliberately narrow: selection on the
