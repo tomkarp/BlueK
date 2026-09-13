@@ -152,6 +152,10 @@ if (fieldSession.takeOutput() !== 'Hi, ich bin Otto und 42 Jahre alt und habe no
 expectOk(JSON.parse(fieldSession.evaluate('<codepad>', 'fp.age = -1')), 'field accessor validation');
 const clampedAge = JSON.parse(fieldSession.evaluate('<codepad>', 'fp.age'));
 if (clampedAge.display !== '0') throw new Error('Implicit field setter did not enforce its branch.');
+const computedAssignment = JSON.parse(fieldSession.evaluate('<codepad>', 'fp.remaining = 5'));
+if (computedAssignment.kind !== 'error' || !String(computedAssignment.display).includes('val `remaining` cannot be reassigned')) {
+    throw new Error('Assigning to a computed val property should fail with a clear immutability error.');
+}
 
 const nullabilitySession = api.bluekCreateKotliteSession();
 const nullabilitySource = 'class MaybeName { var name: String? = null; fun label(): String { return name?.uppercase() ?: "unbenannt" } }';
