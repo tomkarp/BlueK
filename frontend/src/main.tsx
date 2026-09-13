@@ -213,6 +213,7 @@ function App() {
   useEffect(() => { document.documentElement.classList.toggle('bluek-stage-closed', Boolean(stage && !stageWindowOpen)); return () => document.documentElement.classList.remove('bluek-stage-closed'); }, [stage, stageWindowOpen]);
   const liveOutput = useRef(new Map<string, string>()), liveStreams = useRef(new Set<string>());
   const consoleOutput = useRef<HTMLPreElement>(null);
+  const terminalInput = useRef<HTMLInputElement>(null);
   const runtimeFailure = useRef(''); const runtimeEpoch = useRef(0);
   const [cardPositions, setCardPositions] = useState<Record<string, { x: number; y: number }>>({});
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -243,6 +244,7 @@ useEffect(() => { if (!generation || !client) return; let active = true; const t
   const write = (value: any) => { if (value.stage) setStage(value.stage.stage || value.stage); const alreadyLive = value.requestId ? liveOutput.current.get(value.requestId) || '' : ''; const output = value.output && alreadyLive && value.output.startsWith(alreadyLive) ? value.output.slice(alreadyLive.length) : value.output || ''; const display = value.kind === 'unit' ? '' : value.display || value.message || ''; if (value.requestId) { liveOutput.current.delete(value.requestId); for (const key of liveStreams.current) if (key.startsWith(`${value.requestId}:`)) liveStreams.current.delete(key); } if (!output && !display) return; if (output) setTerminalOpen(true); setLog(previous => appendLog(previous, `${output}${display}`)); };
   const writeLive = (value: any) => { const output = value.output || ''; if (!output) return; setTerminalOpen(true); const alreadyLive = value.requestId ? liveOutput.current.get(value.requestId) || '' : ''; const streamKey = `${value.requestId || 'event'}:${value.stream || 'stdout'}`; const streamStarted = liveStreams.current.has(streamKey); liveStreams.current.add(streamKey); if (value.requestId) liveOutput.current.set(value.requestId, `${alreadyLive}${output}`); const marker = value.stream === 'stderr' ? '[stderr] ' : ''; setLog(previous => appendLog(previous, `${!streamStarted ? marker : ''}${output}`)); };
   useEffect(() => { const output = consoleOutput.current; if (output) output.scrollTop = output.scrollHeight; }, [log]);
+  useEffect(() => { if (!terminalOpen || !inputReady) return; const frame = window.requestAnimationFrame(() => terminalInput.current?.focus()); return () => window.cancelAnimationFrame(frame); }, [terminalOpen, inputReady]);
   const objectFromResult = (value: any) => ({ objectId: value.objectId, className: value.className || String(value.display || 'Object').replace(/\(\)$/, ''), name: value.name || `object${Date.now()}` });
   const showReturnedValue = (value: any) => { if (!value || value.kind === 'unit' || value.kind === 'error') return; if (value.objectId) setResultObject(objectFromResult(value)); else setResultValue(value); };
   const showReturnedObject = (value: any) => { showReturnedValue(value); };
