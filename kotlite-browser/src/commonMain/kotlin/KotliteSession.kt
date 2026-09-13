@@ -232,8 +232,10 @@ class KotliteSession {
     fun load(filename: String, source: String): String = try {
         unsupportedInput(source)?.let { return errorMessage(it) }
         val previous = parse("<BlueK project>", analysisSource)
-        val combined = parse("<BlueK project>", analysisSource + "\n" + source)
-        SemanticAnalyzer(combined, environment).analyze()
+        val parsed = parse("<BlueK project>", analysisSource + "\n" + source)
+        val combined = analyzeWithClassFallback(parsed, previous.nodes.isEmpty(), absoluteFront = true) {
+            parse("<BlueK project>", analysisSource + "\n" + source)
+        }
         analyzedScript = combined
         // Definitions are installed once. Evaluating the complete project here
         // would repeat top-level constructors and other side effects.
@@ -305,6 +307,69 @@ class KotliteSession {
         else -> null
     }
 
+    private fun moveClassToAbsoluteFront(script: ScriptNode, className: String): ScriptNode {
+        val declaration = script.nodes.filterIsInstance<ClassDeclarationNode>()
+            .firstOrNull { it.name == className } ?: return script
+        return ScriptNode(script.position, listOf(declaration) + script.nodes.filterNot { it === declaration })
+    }
+
+    private fun moveClassToFirstClassSlot(script: ScriptNode, className: String): ScriptNode {
+        val declaration = script.nodes.filterIsInstance<ClassDeclarationNode>()
+            .firstOrNull { it.name == className } ?: return script
+        val classIndexes = script.nodes.mapIndexedNotNull { index, node ->
+            if (node is ClassDeclarationNode) index else null
+        }
+        val targetIndex = classIndexes.firstOrNull { script.nodes[it] === declaration } ?: return script
+        val firstClassIndex = classIndexes.firstOrNull() ?: return script
+        if (targetIndex == firstClassIndex) return script
+        val nodes = script.nodes.toMutableList()
+        nodes.removeAt(targetIndex)
+        nodes.add(firstClassIndex, declaration)
+        return ScriptNode(script.position, nodes)
+    }
+
+    private fun analyzeWithClassFallback(
+        script: ScriptNode,
+        allowFallback: Boolean,
+        absoluteFront: Boolean,
+        freshScript: () -> ScriptNode
+    ): ScriptNode {
+        if (!allowFallback) {
+            SemanticAnalyzer(script, environment).analyze()
+            return script
+        }
+        var candidate = script
+        val movedClasses = mutableListOf<String>()
+        var attempts = 0
+        while (true) {
+            try {
+                SemanticAnalyzer(candidate, environment).analyze()
+                return candidate
+            } catch (analysisError: Throwable) {
+                val className = missingClassName(analysisError.message.orEmpty())
+                    ?: throw analysisError
+                if (className in movedClasses || attempts++ >= script.nodes.size) throw analysisError
+                movedClasses += className
+                var reordered = freshScript()
+                movedClasses.forEach { movedClass ->
+                    reordered = if (absoluteFront) moveClassToAbsoluteFront(reordered, movedClass)
+                    else moveClassToFirstClassSlot(reordered, movedClass)
+                }
+                candidate = reordered
+            }
+        }
+    }
+
+    private fun missingClassName(message: String): String? = when {
+        Regex("No matching function `([^`]+)`").find(message) != null ->
+            Regex("No matching function `([^`]+)`").find(message)!!.groupValues[1]
+        Regex("Unknown type ([A-Za-z_][A-Za-z0-9_]*)").find(message) != null ->
+            Regex("Unknown type ([A-Za-z_][A-Za-z0-9_]*)").find(message)!!.groupValues[1]
+        Regex("Super class `([^`]+)` not found").find(message) != null ->
+            Regex("Super class `([^`]+)` not found").find(message)!!.groupValues[1]
+        else -> null
+    }
+
     fun evaluate(filename: String, source: String): String {
         var currentNodeIndex = 0
         return try {
@@ -312,13 +377,15 @@ class KotliteSession {
         unsupportedInput(source)?.let { return errorMessage(it) }
         val previous = parse("<BlueK project>", analysisSource)
         val combined = parse("<BlueK project>", analysisSource + "\n" + source)
-        SemanticAnalyzer(combined, environment).analyze()
-        analyzedScript = combined
+        val analyzed = analyzeWithClassFallback(combined, true, absoluteFront = true) {
+            parse("<BlueK project>", analysisSource + "\n" + source)
+        }
+        analyzedScript = analyzed
         var value = UnitValue as RuntimeValue
         currentNodeIndex = previous.nodes.size
-        for (nodeIndex in previous.nodes.size until combined.nodes.size) {
+        for (nodeIndex in previous.nodes.size until analyzed.nodes.size) {
             currentNodeIndex = nodeIndex
-            value = (interpreter.run { combined.nodes[nodeIndex].eval() } as? RuntimeValue) ?: UnitValue
+            value = (interpreter.run { analyzed.nodes[nodeIndex].eval() } as? RuntimeValue) ?: UnitValue
         }
         analysisSource += "\n" + source
         recordPropertyNames()

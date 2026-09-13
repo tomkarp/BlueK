@@ -13,6 +13,74 @@ const expectOk = (json, label) => {
 };
 const evaluate = (source, label) => expectOk(JSON.parse(session.evaluate('<smoke>', source)), label);
 
+const forwardReferenceSession = api.bluekCreateKotliteSession();
+expectOk(JSON.parse(forwardReferenceSession.load('<forward references>', `
+    class First {
+        fun run(): String {
+            val second = Second()
+            return second.text()
+        }
+    }
+    class Uses(var value: Later)
+    class Second { fun text() = "ok" }
+    class Later { fun label() = "later" }
+    class Child : Base() { fun child() = baseValue + 1 }
+    open class Base { var baseValue = 4 }
+`)), 'forward class references load');
+expectOk(JSON.parse(forwardReferenceSession.evaluate('<forward references>', 'val first = First()')), 'forward method construction');
+if (JSON.parse(forwardReferenceSession.evaluate('<forward references>', 'first.run()')).display !== 'ok') throw new Error('A method could not construct a class defined later in the project.');
+expectOk(JSON.parse(forwardReferenceSession.evaluate('<forward references>', 'val later = Later(); val uses = Uses(later)')), 'forward typed reference construction');
+if (JSON.parse(forwardReferenceSession.evaluate('<forward references>', 'uses.value.label()')).display !== 'later') throw new Error('A constructor parameter could not use a class defined later in the project.');
+expectOk(JSON.parse(forwardReferenceSession.evaluate('<forward references>', 'val child = Child()')), 'forward inheritance construction');
+if (JSON.parse(forwardReferenceSession.evaluate('<forward references>', 'child.child()')).display !== '5') throw new Error('Inheritance failed when the superclass was defined later in the project.');
+
+const classInputSession = api.bluekCreateKotliteSession();
+expectOk(JSON.parse(classInputSession.load('<class input>', `
+    class Reader {
+        fun ask() {
+            println("prompt")
+            val answer = readln()
+            println("answer=" + answer)
+        }
+    }
+`)), 'class input load');
+expectOk(JSON.parse(classInputSession.evaluate('<class input>', 'val reader = Reader()')), 'class input construction');
+if (JSON.parse(classInputSession.evaluate('<class input>', 'reader.ask()')).kind !== 'error') throw new Error('A class readln should wait for input.');
+if (classInputSession.takeOutput() !== 'prompt\n') throw new Error('Output before readln in a class method was not emitted exactly once.');
+if (JSON.parse(classInputSession.enqueueInput('Ada')).kind === 'error') throw new Error('Class readln did not resume after input.');
+if (classInputSession.takeOutput() !== 'answer=Ada\n') throw new Error('Output after readln in a class method was incorrect.');
+
+const objectGraphSession = api.bluekCreateKotliteSession();
+expectOk(JSON.parse(objectGraphSession.load('<object graph>', `
+    class Leaf(val text: String)
+    class Box(val leaf: Leaf) { fun show() = leaf.text }
+    class Root(val box: Box) { fun show() = box.show() }
+    class Child : Base() { override fun label() = "child" }
+    open class Base { open fun label() = "base"; fun call() = label() }
+`)), 'object graph and override load');
+if (JSON.parse(objectGraphSession.evaluate('<object graph>', 'val leaf = Leaf("x"); val box = Box(leaf); val root = Root(box); root.show()')).display !== 'x') throw new Error('Nested object references were not preserved.');
+if (JSON.parse(objectGraphSession.evaluate('<object graph>', 'val child = Child(); child.call()')).display !== 'child') throw new Error('Dynamic dispatch failed for a forward superclass definition.');
+
+const twoInputClassSession = api.bluekCreateKotliteSession();
+expectOk(JSON.parse(twoInputClassSession.load('<two class inputs>', `
+    class Dialogue {
+        fun run() {
+            println("A")
+            val first = readln()
+            println("B" + first)
+            val second = readln()
+            println("C" + second)
+        }
+    }
+`)), 'two class inputs load');
+expectOk(JSON.parse(twoInputClassSession.evaluate('<two class inputs>', 'val dialogue = Dialogue()')), 'two class inputs construction');
+if (JSON.parse(twoInputClassSession.evaluate('<two class inputs>', 'dialogue.run()')).kind !== 'error') throw new Error('The first class readln should wait for input.');
+if (twoInputClassSession.takeOutput() !== 'A\n') throw new Error('Output before the first class readln was incorrect.');
+if (JSON.parse(twoInputClassSession.enqueueInput('one')).kind !== 'error') throw new Error('The second class readln should wait for input.');
+if (twoInputClassSession.takeOutput() !== 'Bone\n') throw new Error('Output between two class readln calls was incorrect.');
+if (JSON.parse(twoInputClassSession.enqueueInput('two')).kind === 'error') throw new Error('The second class readln did not complete.');
+if (twoInputClassSession.takeOutput() !== 'Ctwo\n') throw new Error('Output after the second class readln was incorrect.');
+
 const collectionsSession = api.bluekCreateKotliteSession();
 const collectionsEvaluate = (source, label) => expectOk(JSON.parse(collectionsSession.evaluate('<collections>', source)), label);
 collectionsEvaluate('val numbers = listOf(1, 2)', 'immutable list construction');
