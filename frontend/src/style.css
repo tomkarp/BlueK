@@ -69,9 +69,12 @@ footer{flex:0 0 108px}
 .classcard strong{font-size:24px}
 .inspect-fields{background:#ff929b;color:#111;padding:12px 20px;margin:20px 20px 34px;min-height:92px}
 .inspect-window{width:min(520px,calc(100vw - 40px));min-width:0}
-.inspect-row{display:grid;grid-template-columns:1fr 1fr;align-items:center;margin:4px 0;background:#fff0f0;border:1px solid #e65f6b}
+.inspect-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr) auto;align-items:center;margin:4px 0;background:#fff0f0;border:1px solid #e65f6b}
 .inspect-row span{padding:8px;font:16px Arial,sans-serif}
-.inspect-row output{padding:8px;background:#fff;border-left:2px solid #e65f6b;font:16px monospace;min-height:35px}
+.inspect-row output{padding:8px;background:#fff;border-left:2px solid #e65f6b;font:16px monospace;min-height:35px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inspect-row input{width:100%;min-width:0;padding:8px;border:0;border-left:2px solid #e65f6b;font:16px monospace}
+.inspect-row input[aria-invalid="true"]{outline:2px solid #c00000;outline-offset:-2px}
+.inspect-error{grid-column:1 / -1;padding:4px 8px;color:#a00000;font:13px Arial,sans-serif;background:#ffe0e0}
 .classcard{position:relative}
 .framework-card{display:flex}
 .card-menu{position:absolute;top:7px;right:8px;width:28px;height:24px;border:1px solid #9a6b2f;border-radius:4px;background:#f8d59f;color:#333;font:bold 18px/16px Arial;cursor:pointer}
