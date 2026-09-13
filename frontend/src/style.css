@@ -83,6 +83,10 @@ footer{flex:0 0 108px}
 .result-dialog{text-align:center;min-width:400px}.result-value{margin:18px 0 22px;padding:22px;background:#fff;border:1px solid #999;font:18px monospace}
 .argument-object-select{display:block;width:max-content;max-width:100%;margin-top:5px;padding:3px 7px;border:1px solid #999;border-radius:3px;background:#e7e5e1;font:12px monospace;cursor:pointer}.argument-object-select:hover{background:#ccecf4}
 .popup-group{padding:7px 12px 5px;background:#eee;border-bottom:1px solid #ccc;color:#555;font-size:12px;font-style:italic}
+.inspector{background:transparent;display:block;pointer-events:none}
+.inspector .inspect-window{pointer-events:auto}
+.inspector .inspect-window h2{cursor:grab;user-select:none}
+.inspector .inspect-window h2:active{cursor:grabbing}
 .cards{position:relative;display:block;min-height:100%;margin:0;touch-action:none}
 .classcard{position:absolute;width:210px;cursor:grab}
 .classcard.uncompiled{background-image:none}
