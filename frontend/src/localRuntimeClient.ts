@@ -147,7 +147,7 @@ export class LocalRuntimeClient implements RuntimeClient {
     const rawMethod = String(request.name || request.callableId || '').replace(/<.*>$/, '');
     const methodParts = rawMethod.split('.');
     const methodName = methodParts.length >= 3 ? methodParts[methodParts.length - 2] : rawMethod;
-    const response = await this.request(request.op === 'eval' ? 'eval' : request.op, { code: request.code, filename: request.filename, className: request.className, args: request.args ? JSON.parse(request.args).join(', ') : '', name: request.name, objectId: request.objectId, methodName, property: request.property, value: request.value, generationId: request.generationId, mode: request.mode });
+    const response = await this.request(request.op === 'eval' ? 'eval' : request.op, { code: request.code, filename: request.filename, className: request.className, args: request.args ? JSON.parse(request.args).join(', ') : '', name: request.name, objectId: request.objectId, methodName, property: request.property, value: request.value, text: request.text, generationId: request.generationId, mode: request.mode });
     this.publish(response);
     const stage = this.stageOf(response);
     if (request.op === 'eval' && (/\bstop\s*\(/.test(request.code || '') || stage?.running === false)) this.stopSimulation();
