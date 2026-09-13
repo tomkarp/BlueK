@@ -325,6 +325,8 @@ footer{flex:0 0 108px}
 .popup-title{display:none}
 .popup button{color:#b00000;background:#fff;padding:10px 12px;font-size:15px}
 .popup button:hover,.popup button:focus-visible{background:#08a6d2;color:#fff;outline:0}
+.popup button.constructor-menu-item{color:#222}
+.popup button.constructor-menu-item:hover,.popup button.constructor-menu-item:focus-visible{color:#222}
 .popup hr{border-top:1px solid #bbb}
 .editor-dialog{min-width:min(850px,80vw);width:min(850px,80vw);height:min(680px,86vh);display:flex;flex-direction:column}.kotlin-editor{flex:1;min-height:0;margin:0 0 14px;border:1px solid #888;background:#fff;overflow:hidden}.kotlin-editor .cm-editor{height:100%}
 
