@@ -191,7 +191,7 @@ footer{flex:0 0 108px}
 .bluek.terminal-split{width:calc(100vw - var(--terminal-split-width,430px))}
 .terminal-modal-split{display:flex;align-items:stretch;justify-content:flex-end;padding:0;pointer-events:none}
 .terminal-modal-split .terminal-window{flex:0 0 var(--terminal-split-width,430px);width:var(--terminal-split-width,430px)!important;height:100vh!important;border-radius:0;border-width:0 0 0 2px;box-shadow:none}
-.terminal-window.split .terminal-header{height:58px;min-height:58px;margin:-12px -12px 5px;padding:0 12px}
+.terminal-window.split .terminal-header{height:58px;min-height:58px;margin:-12px -12px -1px;padding:0 12px}
 .terminal-window.split .terminal-header button{width:46px;height:40px;padding:0}
 .terminal-window.split .terminal-header{cursor:default}
 .terminal-split-divider{position:absolute;top:0;bottom:0;right:var(--terminal-split-width,430px);z-index:4;width:18px;transform:translateX(50%);pointer-events:auto;cursor:col-resize;background:transparent;touch-action:none}
