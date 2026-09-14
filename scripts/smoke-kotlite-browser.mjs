@@ -25,6 +25,10 @@ const runInteractive = async (target, source, lines, label) => {
   return { result, requested };
 };
 
+const terminalClearSession = api.bluekCreateKotliteSession();
+expectOk(JSON.parse(terminalClearSession.evaluate('<terminal clear>', 'print("before"); println("\\u000C"); print("after")')), 'terminal clear');
+if (terminalClearSession.takeOutput() !== '\u000C\nafter') throw new Error('Form-feed output did not clear the terminal before subsequent output.');
+
 const forwardReferenceSession = api.bluekCreateKotliteSession();
 expectOk(JSON.parse(forwardReferenceSession.load('<forward references>', `
     class First {

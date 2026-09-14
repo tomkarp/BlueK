@@ -77,7 +77,7 @@ class KotliteSession {
 
     private fun resetInterpreter() {
         environment = ExecutionEnvironment()
-        AllStdLibModules { text -> output.append(text) }.modules.forEach(environment::install)
+        AllStdLibModules { text -> appendOutput(text) }.modules.forEach(environment::install)
         // The published Kotlite stdlib 1.1.0 exposes collection callbacks through
         // synchronous Kotlin function types. Keep the standard library surface,
         // but provide its suspendable generated equivalent for the callback that
@@ -233,6 +233,18 @@ class KotliteSession {
         ))
         interpreter = KotliteInterpreter("<BlueK>", "", environment)
         interpreter.checkpointHook = { awaitRuntimeCheckpoint() }
+    }
+
+    /** Preserve BlueJ's form-feed terminal clear semantics for the UI. */
+    private fun appendOutput(text: String) {
+        val clearIndex = text.lastIndexOf('\u000C')
+        if (clearIndex >= 0) {
+            output.clear()
+            output.append('\u000C')
+            output.append(text.substring(clearIndex + 1))
+        } else {
+            output.append(text)
+        }
     }
 
     private fun parse(filename: String, source: String): ScriptNode =
