@@ -69,6 +69,10 @@ expectOk(JSON.parse(smartCastSession.load('<smart casts>', `
             if (value == null) return "fallback"
             return value.trim()
         }
+        fun normalizedOrFallback(value: String?): String {
+            if (value == null || value.trim() == "") return "fallback"
+            return value.trim()
+        }
         fun isBlank(value: String?): Boolean {
             return value == null || value.trim() == ""
         }
@@ -80,6 +84,7 @@ expectOk(JSON.parse(smartCastSession.load('<smart casts>', `
 expectOk(JSON.parse(smartCastSession.evaluate('<smart casts>', 'val nullableText = NullableText()')), 'smart cast construction');
 if (JSON.parse(smartCastSession.evaluate('<smart casts>', 'nullableText.normalized(null)')).display !== 'fallback') throw new Error('A null check with an early return did not smart-cast the value.');
 if (JSON.parse(smartCastSession.evaluate('<smart casts>', 'nullableText.normalized("  Ada  ")')).display !== 'Ada') throw new Error('A non-null value was not trimmed after the null check.');
+if (JSON.parse(smartCastSession.evaluate('<smart casts>', 'nullableText.normalizedOrFallback("  Ada  ")')).display !== 'Ada') throw new Error('A value was not smart-cast after a null check combined with ||.');
 if (JSON.parse(smartCastSession.evaluate('<smart casts>', 'nullableText.isBlank("   ")')).display !== 'true') throw new Error('The right side of || did not use a smart cast.');
 if (JSON.parse(smartCastSession.evaluate('<smart casts>', 'nullableText.hasText(" Ada ")')).display !== 'true') throw new Error('The right side of && did not use a smart cast.');
 

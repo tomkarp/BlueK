@@ -306,6 +306,15 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         return block?.statements?.lastOrNull() is ReturnNode
     }
 
+    private fun variableNonNullAfterCondition(node: ASTNode): String? {
+        return nullCheckVariable(node, "==")
+            ?: if (node is BinaryOpNode && node.operator == "||") {
+                nullCheckVariable(node.node1, "==")
+            } else {
+                null
+            }
+    }
+
     fun ASTNode.visit(modifier: Modifier = Modifier()) {
         when (this) {
             is AssignmentNode -> this.visit(modifier = modifier)
@@ -1753,7 +1762,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
         // After `if (value == null) return ...`, Kotlin smart-casts value
         // to its non-null type for the remainder of the surrounding block.
-        nullCheckVariable(condition, "==")
+        variableNonNullAfterCondition(condition)
             ?.takeIf { blockAlwaysReturns(trueBlock) }
             ?.let { smartCastNonNullVariables += it }
     }
