@@ -1757,7 +1757,13 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
     fun IfNode.visit(modifier: Modifier = Modifier()) {
         condition.visit(modifier = modifier)
-        trueBlock?.visit(modifier = modifier)
+        val trueBranchSmartCast = nullCheckVariable(condition, "!=")
+        if (trueBranchSmartCast != null) smartCastNonNullVariables += trueBranchSmartCast
+        try {
+            trueBlock?.visit(modifier = modifier)
+        } finally {
+            if (trueBranchSmartCast != null) smartCastNonNullVariables -= trueBranchSmartCast
+        }
         falseBlock?.visit(modifier = modifier)
 
         // After `if (value == null) return ...`, Kotlin smart-casts value

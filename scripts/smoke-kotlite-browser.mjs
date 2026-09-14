@@ -79,6 +79,15 @@ expectOk(JSON.parse(smartCastSession.load('<smart casts>', `
         fun hasText(value: String?): Boolean {
             return value != null && value.trim() != ""
         }
+        fun readInt(value: String?): Int {
+            while (true) {
+                val number = value?.trim()?.toIntOrNull()
+                if (number != null) {
+                    return number
+                }
+                return 0
+            }
+        }
     }
 `)), 'smart cast load');
 expectOk(JSON.parse(smartCastSession.evaluate('<smart casts>', 'val nullableText = NullableText()')), 'smart cast construction');
@@ -87,6 +96,7 @@ if (JSON.parse(smartCastSession.evaluate('<smart casts>', 'nullableText.normaliz
 if (JSON.parse(smartCastSession.evaluate('<smart casts>', 'nullableText.normalizedOrFallback("  Ada  ")')).display !== 'Ada') throw new Error('A value was not smart-cast after a null check combined with ||.');
 if (JSON.parse(smartCastSession.evaluate('<smart casts>', 'nullableText.isBlank("   ")')).display !== 'true') throw new Error('The right side of || did not use a smart cast.');
 if (JSON.parse(smartCastSession.evaluate('<smart casts>', 'nullableText.hasText(" Ada ")')).display !== 'true') throw new Error('The right side of && did not use a smart cast.');
+if (JSON.parse(smartCastSession.evaluate('<smart casts>', 'nullableText.readInt(" 42 ")')).display !== '42') throw new Error('A nullable value was not smart-cast inside a != null branch.');
 
 const nonReturningLoopSession = api.bluekCreateKotliteSession();
 expectOk(JSON.parse(nonReturningLoopSession.load('<non-returning loop>', `
