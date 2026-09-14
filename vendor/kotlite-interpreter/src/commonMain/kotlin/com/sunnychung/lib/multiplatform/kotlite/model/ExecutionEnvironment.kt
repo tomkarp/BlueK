@@ -1,5 +1,7 @@
 package com.sunnychung.lib.multiplatform.kotlite.model
 
+import com.sunnychung.lib.multiplatform.kotlite.Interpreter
+
 /**
  * ExecutionEnvironment is stateful. Need to pass the same ExecutionEnvironment instance into both
  * SemanticAnalyzer and Interpreter.
@@ -70,6 +72,32 @@ class ExecutionEnvironment(
                 CustomFunctionDeclarationNode(it)
             }
         }
+    }
+
+    /** Replace one generated library overload while preserving every other overload. */
+    fun replaceFunction(function: CustomFunctionDefinition) {
+        builtinFunctions.removeAll { declaration ->
+            val existing = declaration.definition
+            existing.receiverType == function.receiverType &&
+                existing.functionName == function.functionName &&
+                existing.parameterTypes.map { it.type } == function.parameterTypes.map { it.type }
+        }
+        registerFunction(function)
+    }
+
+    /** Attach a suspendable implementation without changing the analyzed overload identity. */
+    fun patchFunction(
+        receiverType: String?,
+        functionName: String,
+        parameterTypes: List<String>,
+        suspendExecutable: suspend (Interpreter, RuntimeValue?, List<RuntimeValue>, Map<String, DataType>) -> RuntimeValue,
+    ) {
+        builtinFunctions.firstOrNull { declaration ->
+            val existing = declaration.definition
+            existing.receiverType == receiverType && existing.functionName == functionName &&
+                existing.parameterTypes.map { it.type } == parameterTypes
+        }?.definition?.suspendExecutable = suspendExecutable
+            ?: throw IllegalStateException("Builtin function $receiverType/$functionName was not found")
     }
 
     fun registerExtensionProperty(property: ExtensionProperty) {

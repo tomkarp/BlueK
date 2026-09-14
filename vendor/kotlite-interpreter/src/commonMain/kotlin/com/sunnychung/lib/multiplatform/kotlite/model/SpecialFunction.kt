@@ -21,7 +21,7 @@ class SpecialFunction(
                 },
                 declaredTypeArguments = emptyList(),
                 position = SourcePosition.NONE,
-            ).evalClassMemberAnyFunctionCall(subject, function)
+            ).let { call -> interpreter.runImmediately { call.evalClassMemberAnyFunctionCall(subject, function) } }
         }
     }
 

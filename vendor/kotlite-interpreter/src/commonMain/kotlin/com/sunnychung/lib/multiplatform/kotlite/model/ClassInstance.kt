@@ -90,13 +90,13 @@ open class ClassInstance(
             ?: throw RuntimeException("Property $name has no backing field")
     }
 
-    fun assign(interpreter: Interpreter? = null, name: String, value: RuntimeValue): Pair<Boolean, FunctionDeclarationNode?> {
+    suspend fun assign(interpreter: Interpreter? = null, name: String, value: RuntimeValue): Pair<Boolean, FunctionDeclarationNode?> {
         val name = resolveRuntimeMemberName(name)
             ?: return parentInstance?.assign(interpreter = interpreter, name = name, value = value)
             ?: throw RuntimeException("Property $name is not defined in class ${clazz!!.fullQualifiedName}")
 
         (memberPropertyValues[name] as? RuntimeValueDelegate)?.let {
-            it.assign(interpreter, value)
+            it.assignSuspended(interpreter, value)
             return true to null
         }
 
@@ -104,7 +104,7 @@ open class ClassInstance(
         val customAccessor = clazz!!.findMemberPropertyCustomAccessor(name, inThisClassOnly = true)
         customAccessor?.setter?.let {
 //            return it
-            memberPropertyValues[name]!!.assign(interpreter, value)
+            memberPropertyValues[name]!!.assignSuspended(interpreter, value)
             return true to null
         }
 
@@ -117,31 +117,31 @@ open class ClassInstance(
             throw RuntimeException("Type ${value.type().name} cannot be casted to ${propertyDefinition.type.descriptiveName}")
         }
 
-        memberPropertyValues[name]!!.assign(interpreter, value)
+        memberPropertyValues[name]!!.assignSuspended(interpreter, value)
         return true to null
     }
 
     /**
      * Return value must be either FunctionDeclarationNode (if custom getter is defined) or RuntimeValue
      */
-    fun read(interpreter: Interpreter? = null, name: String): Any {
+    suspend fun read(interpreter: Interpreter? = null, name: String): Any {
         val name = resolveRuntimeMemberName(name)
             ?: return parentInstance?.read(interpreter = interpreter, name = name)
             ?: throw RuntimeException("Property $name is not defined in class ${clazz!!.fullQualifiedName}")
 
-        (memberPropertyValues[name] as? RuntimeValueDelegate)?.let { return it.read(interpreter) }
+        (memberPropertyValues[name] as? RuntimeValueDelegate)?.let { return it.readSuspended(interpreter) }
 
         // TODO remove
         val customAccessor = clazz!!.findMemberPropertyCustomAccessor(name, inThisClassOnly = true)
         customAccessor?.getter?.let {
 //            return it
-            return memberPropertyValues[name]!!.read(interpreter)
+            return memberPropertyValues[name]!!.readSuspended(interpreter)
         }
 
         val propertyDefinition = clazz!!.findMemberPropertyWithoutAccessor(name, inThisClassOnly = true)
             ?: throw RuntimeException("Property $name is not defined in class ${clazz!!.fullQualifiedName}")
 
-        return memberPropertyValues[name]!!.read(interpreter)
+        return memberPropertyValues[name]!!.readSuspended(interpreter)
     }
 
     fun getPropertyHolder(name: String): RuntimeValueAccessor? {

@@ -2,7 +2,7 @@ export type FileKind='class'|'functions';
 export interface ProjectFile{id:string;fileName:string;kind:FileKind;source:string;revision:number}
 export interface TypeRef{classifier:string;arguments:TypeRef[];nullable:boolean;displayName:string;projection?:'in'|'out'|'star'}
 export interface CallableMeta{id:string;name:string;declaringType:string;parameters:{name:string;type:TypeRef;hasDefault:boolean}[];returnType:TypeRef;visibility:string;inheritedFrom?:string;typeParameters?:string[]}
-export interface ClassMeta{id:string;name:string;qualifiedName?:string;kind:string;constructors:{id:string;parameters:any[]}[];methods:CallableMeta[];properties:any[];supertypes:TypeRef[];typeParameters:string[]}
+export interface ClassMeta{id:string;name:string;qualifiedName?:string;kind:string;constructors:ManifestConstructor[];methods:CallableMeta[];properties:ManifestProperty[];supertypes:TypeRef[];typeParameters:string[]}
 export interface ManifestConstructor{ id:string; parameters:{name:string; type:TypeRef; hasDefault:boolean}[] }
 export interface ManifestProperty{ id:string; name:string; type:TypeRef; mutable:boolean; visibility:string; getter?:boolean; setter?:boolean; getterId?:string; setterId?:string; generated?:boolean }
 export interface ManifestCallable extends CallableMeta{ generated?:boolean; companion?:boolean }
@@ -18,9 +18,61 @@ export interface ManifestClass{
     properties:ManifestProperty[];
     methods:ManifestCallable[];
 }
-export interface SymbolManifest{ version:1; classes:ManifestClass[] }
-export interface CompileResult{generationId:string;sourceRevision:number;classes:ClassMeta[];manifest?:SymbolManifest;diagnostics:any[];browserRuntime?:{entry:string;packageName:string};browserRuntimeError?:string}
-export interface RuntimeStatus{workerAlive:boolean;generationId:string|null;available:boolean;error:string|null}
-export interface RuntimeClient{compile(files:ProjectFile[],revision:number):Promise<CompileResult>;createObject(classId:string,constructorId:string,typeArguments:TypeRef[],args:string[],name:string):Promise<Value>;invokeMethod(objectId:string,callableId:string,typeArguments:TypeRef[],args:string[]):Promise<Value>;inspectObject(objectId:string):Promise<unknown>;evaluate(code:string,mode:'expression'|'block'):Promise<Value>;removeObject(objectId:string):Promise<void>;sendInput(text:string):Promise<void>;status():Promise<RuntimeStatus>;stop():Promise<void>;reset():Promise<void>}
-export type Value={kind:'unit'|'null'|'scalar'|'object';display:string;objectId?:string};
-export type OutputEvent={kind:'output';display:string;output:string;stream:'stdout'|'stderr';requestId?:string};
+export interface SymbolManifest{ version:1; classes:ManifestClass[]; functions:(ManifestCallable & {sourceLine:number})[] }
+export interface Diagnostic { fileName?:string; line:number; column:number; severity:'error'|'warning'; message:string }
+export interface CompileResult{generationId:string;sourceRevision:number;classes:ClassMeta[];diagnostics:Diagnostic[]}
+
+/** A session has exactly one phase, shared by every UI surface. */
+export type Phase = 'uncompiled' | 'compiling' | 'ready' | 'running' | 'waitingForInput' | 'faulted';
+export interface InspectedField { name: string; value: string; type?: TypeRef | null }
+export interface RuntimeValue {
+  kind: 'unit' | 'null' | 'scalar' | 'object' | 'inspect' | 'error';
+  display?: string;
+  type?: TypeRef;
+  objectId?: string;
+  className?: string;
+  name?: string;
+  fields?: InspectedField[];
+  phase?: 'request' | 'analysis' | 'runtime' | 'transport';
+  fatal?: boolean;
+  output?: string;
+  stage?: any;
+}
+export interface RuntimeSnapshot {
+  generationId: string;
+  revision: number;
+  phase: Phase;
+  classes: ClassMeta[];
+  inspections: Record<string, RuntimeValue>;
+  error: string | null;
+}
+export type RuntimeCommand = { generationId?: string } & (
+  | { op: 'eval'; code: string; filename?: string }
+  | { op: 'main'; fileName: string }
+  | { op: 'create'; className: string; name: string; args: string[]; typeArguments?: string[] }
+  | { op: 'invoke'; objectId: string; name: string; args: string[]; typeArguments?: string[] }
+  | { op: 'get'; objectId: string; property: string }
+  | { op: 'set'; objectId: string; property: string; value: string }
+  | { op: 'inspect'; objectId: string }
+  | { op: 'bind'; objectId: string; name: string }
+  | { op: 'input'; text: string; inputRequestId?: number; eof?: boolean }
+  | { op: 'key'; key: string; pressed: boolean }
+  | { op: 'click'; x: number; y: number }
+);
+export type WorkerCommand = RuntimeCommand | { op: 'compile'; files: ProjectFile[]; generationId: string };
+export interface WorkerReply {
+  id: number;
+  generationId: string;
+  response: RuntimeValue;
+  snapshot: RuntimeSnapshot;
+}
+export type RuntimeEvent = {
+  type: 'event';
+  generationId: string;
+  executionId: number;
+  sequence: number;
+  kind: 'started' | 'output' | 'snapshot' | 'inputRequested';
+  inputRequestId?: number;
+  output?: string;
+  snapshot: RuntimeSnapshot;
+};

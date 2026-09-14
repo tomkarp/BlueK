@@ -8,7 +8,7 @@ fun String.toTypeNode(filename: String) = Parser(Lexer(filename, this))
     .type(isParseDottedIdentifiers = true, isIncludeLastIdentifierAsTypeName = true)
 
 class CustomFunctionDeclarationNode(
-    private val def: CustomFunctionDefinition,
+    val definition: CustomFunctionDefinition,
     position: SourcePosition? = null,
     name: String? = null,
     receiver: TypeNode? = null,
@@ -19,28 +19,29 @@ class CustomFunctionDeclarationNode(
     body: BlockNode? = null,
     transformedRefName: String? = null,
 ) : FunctionDeclarationNode(
-    position = position ?: def.position,
-    name = name ?: def.functionName,
-    receiver = receiver ?: def.receiverType?.toTypeNode(def.position.filename),
-    declaredReturnType = returnType ?: def.returnType.toTypeNode(def.position.filename),
-    typeParameters = typeParameters ?: def.typeParameters.map {
-        TypeParameterNode(def.position, it.name, it.typeUpperBound?.toTypeNode(def.position.filename))
+    position = position ?: definition.position,
+    name = name ?: definition.functionName,
+    receiver = receiver ?: definition.receiverType?.toTypeNode(definition.position.filename),
+    declaredReturnType = returnType ?: definition.returnType.toTypeNode(definition.position.filename),
+    typeParameters = typeParameters ?: definition.typeParameters.map {
+        TypeParameterNode(definition.position, it.name, it.typeUpperBound?.toTypeNode(definition.position.filename))
     },
-    valueParameters = valueParameters ?: def.parameterTypes.map {
+    valueParameters = valueParameters ?: definition.parameterTypes.map {
         FunctionValueParameterNode(
-            position = def.position,
+            position = definition.position,
             name = it.name,
-            declaredType = it.type.toTypeNode(def.position.filename),
-            defaultValue = it.defaultValueExpression?.let { Parser(Lexer(def.position.filename, it)).expression() },
+            declaredType = it.type.toTypeNode(definition.position.filename),
+            defaultValue = it.defaultValueExpression?.let { Parser(Lexer(definition.position.filename, it)).expression() },
             modifiers = with(Parser(Lexer("", ""))) { it.modifiers.toFunctionValueParameterModifiers() }
         )
     },
-    declaredModifiers = modifiers ?: def.modifiers,
-    body = body ?: BlockNode(emptyList(), SourcePosition(def.position.filename, 1, 1), ScopeType.Function, FunctionBodyFormat.Block, def.returnType.toTypeNode(def.position.filename)),
+    declaredModifiers = modifiers ?: definition.modifiers,
+    body = body ?: BlockNode(emptyList(), SourcePosition(definition.position.filename, 1, 1), ScopeType.Function, FunctionBodyFormat.Block, definition.returnType.toTypeNode(definition.position.filename)),
     transformedRefName = transformedRefName,
 ) {
-    override fun execute(interpreter: Interpreter, receiver: RuntimeValue?, arguments: List<RuntimeValue>, typeArguments: Map<String, DataType>): RuntimeValue {
-        return def.executable(interpreter, receiver, arguments, typeArguments)
+    override suspend fun execute(interpreter: Interpreter, receiver: RuntimeValue?, arguments: List<RuntimeValue>, typeArguments: Map<String, DataType>): RuntimeValue {
+        return definition.suspendExecutable?.invoke(interpreter, receiver, arguments, typeArguments)
+            ?: definition.executable(interpreter, receiver, arguments, typeArguments)
     }
 
     override fun copy(
@@ -58,7 +59,7 @@ class CustomFunctionDeclarationNode(
             throw UnsupportedOperationException("Copying subclasses is not supported")
         }
         return CustomFunctionDeclarationNode(
-            def/*.copy(
+            definition/*.copy(
                 receiverType = receiver,
             )*/,
             name = name,

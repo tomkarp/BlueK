@@ -17,7 +17,9 @@ data class CustomFunctionDefinition(
     val modifiers: Set<FunctionModifier> = emptySet(),
 
     val executable: (interpreter: Interpreter, receiver: RuntimeValue?, args: List<RuntimeValue>, typeArgs: Map<String, DataType>) -> RuntimeValue,
-)
+) {
+    var suspendExecutable: (suspend (Interpreter, RuntimeValue?, List<RuntimeValue>, Map<String, DataType>) -> RuntimeValue)? = null
+}
 
 class CustomFunctionParameter(val name: String, val type: String, val defaultValueExpression: String? = null, val modifiers: Set<String> = emptySet())
 

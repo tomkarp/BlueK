@@ -10,6 +10,8 @@ interface RuntimeValueAccessor {
 
     fun assign(interpreter: Interpreter? = null, value: RuntimeValue)
     fun read(interpreter: Interpreter? = null): RuntimeValue
+    suspend fun assignSuspended(interpreter: Interpreter? = null, value: RuntimeValue) = assign(interpreter, value)
+    suspend fun readSuspended(interpreter: Interpreter? = null): RuntimeValue = read(interpreter)
 }
 
 class RuntimeValueHolder(override val type: DataType, val isMutable: Boolean, value: RuntimeValue? = null) : RuntimeValueAccessor {
@@ -39,14 +41,22 @@ class RuntimeValueHolder(override val type: DataType, val isMutable: Boolean, va
 /**
  * For class members with custom accessors
  */
-class RuntimeValueDelegate(override val type: DataType, val reader: ((Interpreter?) -> RuntimeValue)?, val writer: ((Interpreter?, RuntimeValue) -> Unit)?, val backing: RuntimeValueAccessor? = null) : RuntimeValueAccessor {
+class RuntimeValueDelegate(override val type: DataType, val reader: (suspend (Interpreter?) -> RuntimeValue)?, val writer: (suspend (Interpreter?, RuntimeValue) -> Unit)?, val backing: RuntimeValueAccessor? = null) : RuntimeValueAccessor {
     override fun assign(interpreter: Interpreter?, value: RuntimeValue) {
-        if (writer == null) throw RuntimeException("Setter is not defined")
-        writer!!(interpreter, value)
+        backing?.assign(interpreter, value) ?: throw RuntimeException("Setter requires asynchronous evaluation")
     }
 
     override fun read(interpreter: Interpreter?): RuntimeValue {
-        if (reader == null) throw RuntimeException("Getter is not defined")
-        return reader!!(interpreter)
+        return backing?.read(interpreter) ?: throw RuntimeException("Getter requires asynchronous evaluation")
+    }
+
+    override suspend fun assignSuspended(interpreter: Interpreter?, value: RuntimeValue) {
+        writer?.invoke(interpreter, value) ?: backing?.assignSuspended(interpreter, value)
+            ?: throw RuntimeException("Property is not writable")
+    }
+
+    override suspend fun readSuspended(interpreter: Interpreter?): RuntimeValue {
+        return reader?.invoke(interpreter) ?: backing?.readSuspended(interpreter)
+            ?: throw RuntimeException("Property is not readable")
     }
 }

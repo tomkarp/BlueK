@@ -120,6 +120,10 @@ class LambdaValue(val value: LambdaLiteralNode, private val resolvedType: Functi
     override fun convertToString() = "Lambda()"
 
     fun execute(arguments: Array<RuntimeValue?>): RuntimeValue {
+        return interpreter.runImmediately { executeSuspended(arguments) }
+    }
+
+    suspend fun executeSuspended(arguments: Array<RuntimeValue?>): RuntimeValue {
         return interpreter.evalFunctionCall(
             arguments = arguments,
             typeArguments = emptyArray(),
@@ -131,6 +135,10 @@ class LambdaValue(val value: LambdaLiteralNode, private val resolvedType: Functi
     }
 
     fun execute(arguments: Array<RuntimeValue?>, receiver: RuntimeValue): RuntimeValue {
+        return interpreter.runImmediately { executeSuspended(arguments, receiver) }
+    }
+
+    suspend fun executeSuspended(arguments: Array<RuntimeValue?>, receiver: RuntimeValue): RuntimeValue {
         return interpreter.evalClassMemberAnyFunctionCall(
             position = value.position,
             subject = receiver,

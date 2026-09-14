@@ -12,6 +12,18 @@ const expectOk = (json, label) => {
   return json;
 };
 const evaluate = (source, label) => expectOk(JSON.parse(session.evaluate('<smoke>', source)), label);
+const runInteractive = async (target, source, lines, label) => {
+  const requested = [];
+  let result;
+  const started = expectOk(JSON.parse(target.startEvaluate('<interactive>', source, id => requested.push(id), value => { result = JSON.parse(value); })), `${label} start`);
+  if (started.kind !== 'unit') throw new Error(`${label}: did not start`);
+  for (const line of lines) {
+    const id = requested.shift();
+    if (!id) throw new Error(`${label}: input was not requested`);
+    expectOk(JSON.parse(line === null ? target.enqueueEof() : target.enqueueInput(line)), `${label} input ${id}`);
+  }
+  return { result, requested };
+};
 
 const forwardReferenceSession = api.bluekCreateKotliteSession();
 expectOk(JSON.parse(forwardReferenceSession.load('<forward references>', `
@@ -45,10 +57,8 @@ expectOk(JSON.parse(classInputSession.load('<class input>', `
     }
 `)), 'class input load');
 expectOk(JSON.parse(classInputSession.evaluate('<class input>', 'val reader = Reader()')), 'class input construction');
-if (JSON.parse(classInputSession.evaluate('<class input>', 'reader.ask()')).kind !== 'error') throw new Error('A class readln should wait for input.');
-if (classInputSession.takeOutput() !== 'prompt\n') throw new Error('Output before readln in a class method was not emitted exactly once.');
-if (JSON.parse(classInputSession.enqueueInput('Ada')).kind === 'error') throw new Error('Class readln did not resume after input.');
-if (classInputSession.takeOutput() !== 'answer=Ada\n') throw new Error('Output after readln in a class method was incorrect.');
+await runInteractive(classInputSession, 'reader.ask()', ['Ada'], 'class input');
+if (classInputSession.takeOutput() !== 'prompt\nanswer=Ada\n') throw new Error('Buffered class input/output order incorrect.');
 
 const multilineExpressionSession = api.bluekCreateKotliteSession();
 expectOk(JSON.parse(multilineExpressionSession.load('<multiline expression>', `
@@ -135,12 +145,9 @@ expectOk(JSON.parse(twoInputClassSession.load('<two class inputs>', `
     }
 `)), 'two class inputs load');
 expectOk(JSON.parse(twoInputClassSession.evaluate('<two class inputs>', 'val dialogue = Dialogue()')), 'two class inputs construction');
-if (JSON.parse(twoInputClassSession.evaluate('<two class inputs>', 'dialogue.run()')).kind !== 'error') throw new Error('The first class readln should wait for input.');
-if (twoInputClassSession.takeOutput() !== 'A\n') throw new Error('Output before the first class readln was incorrect.');
-if (JSON.parse(twoInputClassSession.enqueueInput('one')).kind !== 'error') throw new Error('The second class readln should wait for input.');
-if (twoInputClassSession.takeOutput() !== 'Bone\n') throw new Error('Output between two class readln calls was incorrect.');
-if (JSON.parse(twoInputClassSession.enqueueInput('two')).kind === 'error') throw new Error('The second class readln did not complete.');
-if (twoInputClassSession.takeOutput() !== 'Ctwo\n') throw new Error('Output after the second class readln was incorrect.');
+await runInteractive(twoInputClassSession, 'dialogue.run()', ['one', 'two'], 'two input');
+const twoOutput = twoInputClassSession.takeOutput();
+if (twoOutput !== 'A\nBone\nCtwo\n') throw new Error(`Two buffered inputs had incorrect output order: ${JSON.stringify(twoOutput)}`);
 
 const collectionsSession = api.bluekCreateKotliteSession();
 const collectionsEvaluate = (source, label) => expectOk(JSON.parse(collectionsSession.evaluate('<collections>', source)), label);
@@ -148,6 +155,17 @@ collectionsEvaluate('val numbers = listOf(1, 2)', 'immutable list construction')
 if (collectionsEvaluate('numbers[0]', 'list index access').display !== '1') throw new Error('List index access failed in an incremental session.');
 if (collectionsEvaluate('numbers.size', 'list size').display !== '2') throw new Error('List size failed in an incremental session.');
 if (collectionsEvaluate('numbers.count { it > 1 }', 'list predicate count').display !== '1') throw new Error('List predicate count failed in an incremental session.');
+const lambdaInputSession = api.bluekCreateKotliteSession();
+expectOk(JSON.parse(lambdaInputSession.load('<lambda input>', 'fun ask(): Boolean = readln() == "ja"')), 'lambda input load');
+const lambdaRequests = [];
+let lambdaResult;
+expectOk(JSON.parse(lambdaInputSession.startEvaluate('<lambda input>', 'listOf(1, 2, 3).count { ask() }', id => lambdaRequests.push(id), value => { lambdaResult = JSON.parse(value); })), 'stdlib callback start');
+for (const answer of ['ja', 'nein', 'ja']) {
+  const requestId = lambdaRequests.shift();
+  if (!requestId) throw new Error('Stdlib callback did not request its next input.');
+  expectOk(JSON.parse(lambdaInputSession.enqueueInput(answer)), `stdlib callback input ${requestId}`);
+}
+if (lambdaResult?.display !== '2' || lambdaRequests.length !== 0) throw new Error('A stdlib callback did not resume exactly once per input.');
 collectionsEvaluate('val mutableNumbers = mutableListOf(1, 2)', 'mutable list construction');
 if (collectionsEvaluate('mutableNumbers.add(3)', 'mutable list add').display !== 'true') throw new Error('Mutable list add failed in an incremental session.');
 if (collectionsEvaluate('mutableNumbers[2]', 'mutable list index access').display !== '3') throw new Error('Mutable list mutation was not retained.');
@@ -230,9 +248,9 @@ if (evaluate('second.value', 'separate state').display !== '10') throw new Error
 evaluate('val immutable = 1', 'val declaration');
 const invalid = JSON.parse(session.evaluate('<smoke>', 'immutable = 2'));
 if (invalid.kind !== 'error') throw new Error('val reassignment was not rejected.');
-if (JSON.parse(session.remove(benchObject.objectId)).kind === 'error') throw new Error('Removing a valid object handle failed.');
-if (JSON.parse(session.inspect(benchObject.objectId)).kind !== 'error' || JSON.parse(session.invoke(benchObject.objectId, 'increment', '')).kind !== 'error') throw new Error('A removed object handle remained usable.');
+expectOk(JSON.parse(session.inspect(benchObject.objectId)), 'retained object reference');
 expectOk(JSON.parse(session.reset()), 'runtime reset');
+if (JSON.parse(session.inspect(benchObject.objectId)).kind !== 'error') throw new Error('Reset retained an old object handle.');
 if (JSON.parse(session.evaluate('<smoke>', 'first.value')).kind !== 'error') throw new Error('Runtime reset retained an old codepad binding.');
 
 const personSession = api.bluekCreateKotliteSession();
@@ -365,34 +383,36 @@ if (JSON.parse(shadowedBuiltinSession.evaluate('<shadowed builtins>', 'readIntIn
 }
 
 const inputSession = api.bluekCreateKotliteSession();
-if (JSON.parse(inputSession.enqueueInput('Ada')).kind === 'error') throw new Error('Buffered console input could not be queued.');
-if (JSON.parse(inputSession.evaluate('<input>', 'readln()')).display !== 'Ada') throw new Error('readln did not consume buffered local console input.');
-if (JSON.parse(inputSession.evaluate('<input>', 'readLine()')).display !== 'null') throw new Error('readLine did not return null at local input end.');
-if (JSON.parse(inputSession.evaluate('<input>', 'readlnOrNull()')).display !== 'null') throw new Error('readlnOrNull did not return null at local input end.');
-const inputError = JSON.parse(inputSession.evaluate('<input>', 'readln()'));
-if (inputError.kind !== 'error' || !inputError.display.includes('No buffered console input')) throw new Error('Empty readln did not produce a clear local-runtime error.');
+let inputResult;
+let inputRequested = 0;
+inputSession.startEvaluate('<input>', 'readln()', () => { inputRequested += 1; }, value => { inputResult = JSON.parse(value); });
+if (inputRequested !== 1 || inputResult) throw new Error('An open input channel did not suspend readln.');
+inputSession.enqueueInput('Ada');
+if (inputResult.display !== 'Ada') throw new Error('readln did not resume with the entered line.');
+inputResult = undefined;
+inputSession.startEvaluate('<input>', 'readLine()', () => { inputRequested += 1; }, value => { inputResult = JSON.parse(value); });
+inputSession.enqueueEof();
+if (inputResult.display !== 'null') throw new Error('readLine did not return null at explicit EOF.');
+inputResult = undefined;
+inputSession.startEvaluate('<input>', 'readlnOrNull()', () => { inputRequested += 1; }, value => { inputResult = JSON.parse(value); });
+inputSession.enqueueEof();
+if (inputResult.display !== 'null') throw new Error('readlnOrNull did not return null at explicit EOF.');
+inputResult = undefined;
+inputSession.startEvaluate('<input>', 'readln()', () => { inputRequested += 1; }, value => { inputResult = JSON.parse(value); });
+inputSession.enqueueEof();
+if (inputResult.kind !== 'error') throw new Error('readln did not produce a regular catchable EOF error.');
 
-const resumedInputSession = api.bluekCreateKotliteSession();
-const resumedSource = `
-    println("Before")
-    val first = readln()
-    println("After " + first)
-    val second = readln()
-    println("Done " + second)
-`;
-if (JSON.parse(resumedInputSession.evaluate('<resumed input>', resumedSource)).kind !== 'error') throw new Error('A multi-readln expression should pause for input.');
-if (resumedInputSession.takeOutput() !== 'Before\n') throw new Error('Output before the first readln was not emitted exactly once.');
-if (JSON.parse(resumedInputSession.enqueueInput('Alice')).kind !== 'error') throw new Error('The first resumed readln should wait for its next input.');
-if (resumedInputSession.takeOutput() !== 'After Alice\n') throw new Error('Output after the first resumed readln was incorrect.');
-if (JSON.parse(resumedInputSession.enqueueInput('Bob')).kind === 'error') throw new Error('The second resumed readln failed.');
-if (resumedInputSession.takeOutput() !== 'Done Bob\n') throw new Error('Output after the second resumed readln was incorrect or duplicated.');
+// An interrupted call must never be replayed: it may already have mutated objects.
+const failedSession = api.bluekCreateKotliteSession();
+expectOk(JSON.parse(failedSession.load('<failure>', 'class Counter { var n = 0; fun ask() { n++; println("prompt"); readln(); n++ } }')), 'failure fixture');
+const failedObject = expectOk(JSON.parse(failedSession.create('Counter', '', 'counter')), 'failure object');
+let failedInput;
+failedSession.startEvaluate('<failure>', 'counter.ask()', () => { failedInput = true; }, () => undefined);
+if (!failedInput || failedSession.takeOutput() !== 'prompt\n') throw new Error('Output before interactive pause was lost.');
+failedSession.enqueueInput('later');
+const failedInspection = JSON.parse(failedSession.inspect(failedObject.objectId));
+if (failedInspection.fields.find(field => field.name === 'n').value !== '2') throw new Error('Side effects before and after continuation were duplicated or lost.');
 
-const resumedFunctionSession = api.bluekCreateKotliteSession();
-expectOk(JSON.parse(resumedFunctionSession.load('<resumed function>', 'fun greet() { println("Start"); val name = readln(); println("Hello " + name) }')), 'resumed function load');
-if (JSON.parse(resumedFunctionSession.evaluate('<resumed function>', 'greet()')).kind !== 'error') throw new Error('A function containing readln should pause for input.');
-if (resumedFunctionSession.takeOutput() !== 'Start\n') throw new Error('Function output before readln was not emitted exactly once.');
-if (JSON.parse(resumedFunctionSession.enqueueInput('Eve')).kind === 'error') throw new Error('A function did not resume after input.');
-if (resumedFunctionSession.takeOutput() !== 'Hello Eve\n') throw new Error('Function output after readln was incorrect or duplicated.');
 
 const languageSession = api.bluekCreateKotliteSession();
 if (JSON.parse(languageSession.evaluate('<language>', 'var n = 0; while (n < 3) { n += 1 }; n')).display !== '3') throw new Error('While-loop evaluation failed.');
@@ -400,15 +420,22 @@ if (JSON.parse(languageSession.evaluate('<language>', 'var total = 0; for (i in 
 const typeError = JSON.parse(languageSession.evaluate('<language>', 'val number: Int = "wrong"'));
 if (typeError.kind !== 'error' || !typeError.display.includes('Expected type is `Int`')) throw new Error('A basic type mismatch was not rejected.');
 const visibilitySession = api.bluekCreateKotliteSession();
-if (JSON.parse(visibilitySession.load('<visibility>', 'class Secret { private var hidden = 1 }')).kind === 'error') throw new Error('Private property syntax unexpectedly failed.');
+if (JSON.parse(visibilitySession.load('<visibility>', 'class Secret { private var hidden = 1; fun read(): Int = hidden }')).kind === 'error') throw new Error('Private property syntax unexpectedly failed.');
 const visibilityManifest = JSON.parse(visibilitySession.manifest());
 if (visibilityManifest.classes[0].properties[0].visibility !== 'private') throw new Error('Private property visibility was lost in the Kotlite manifest.');
-if (JSON.parse(visibilitySession.evaluate('<visibility>', 'val secret = Secret(); secret.hidden')).kind !== 'error') throw new Error('Private property could be read from top-level code.');
-if (JSON.parse(visibilitySession.evaluate('<visibility>', 'secret.hidden = 2')).kind !== 'error') throw new Error('Private property could be written from top-level code.');
-if (JSON.parse(visibilitySession.evaluate('<visibility>', 'class PrivateReader { fun read(secret: Secret): Int = secret.hidden }')).kind === 'error') throw new Error('Private property could not be read from class code.');
-const protectedError = JSON.parse(visibilitySession.load('<visibility>', 'class Protected { protected fun hidden() {} }'));
+expectOk(JSON.parse(visibilitySession.evaluate('<visibility>', 'val secret = Secret()')), 'private property fixture');
+if (JSON.parse(visibilitySession.evaluate('<visibility>', 'secret.read()')).display !== '1') throw new Error('Private property could not be read by its owning class.');
+if (JSON.parse(visibilitySession.evaluate('<visibility>', 'secret.hidden')).kind !== 'error') throw new Error('Private property could be read from top-level code.');
+// Private access is currently rejected at runtime. Test each violation in a fresh session,
+// rather than accepting the generic refusal from an already-faulted interpreter.
+const privateWriteSession = api.bluekCreateKotliteSession();
+expectOk(JSON.parse(privateWriteSession.load('<visibility>', 'class Secret { private var hidden = 1 }; val secret = Secret()')), 'private write fixture');
+const privateWriteError = JSON.parse(privateWriteSession.evaluate('<visibility>', 'secret.hidden = 2'));
+if (privateWriteError.kind !== 'error' || !/private/i.test(privateWriteError.display)) throw new Error('Private property could be written from top-level code.');
+const syntaxSession = api.bluekCreateKotliteSession();
+const protectedError = JSON.parse(syntaxSession.load('<visibility>', 'class Protected { protected fun hidden() {} }'));
 if (protectedError.kind !== 'error' || !protectedError.display.includes('protected')) throw new Error('Unsupported protected visibility did not produce a clear error.');
-const secondaryConstructorError = JSON.parse(visibilitySession.evaluate('<visibility>', 'class Secondary { constructor(value: Int) {} }'));
+const secondaryConstructorError = JSON.parse(syntaxSession.evaluate('<visibility>', 'class Secondary { constructor(value: Int) {} }'));
 if (secondaryConstructorError.kind !== 'error' || !secondaryConstructorError.display.includes('Secondary constructors are not supported')) throw new Error('Secondary constructors did not produce a clear local error.');
 
 console.log('Kotlite browser session smoke test passed.');

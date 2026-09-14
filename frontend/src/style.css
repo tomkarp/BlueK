@@ -15,6 +15,9 @@
    inside the browser viewport. */
 .terminal-window.maximized{position:fixed;inset:4vh 4vw;width:auto;height:auto;margin:0}
 .terminal-window.maximized pre{min-height:0}
+.terminal-notice{flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 8px;font-size:12px;color:#555}
+.terminal-notice[role=alert]{color:#a00000}
+.terminal-window pre{min-height:0}
 .terminal-window{position:relative}
 .terminal-resize-handle{position:absolute;right:2px;bottom:2px;width:18px;height:18px;cursor:nwse-resize}
 .terminal-resize-handle::after{position:absolute;right:2px;bottom:2px;width:10px;height:10px;border-right:2px solid #777;border-bottom:2px solid #777;content:""}

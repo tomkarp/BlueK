@@ -429,7 +429,7 @@ open class ClassDefinition(
                     ),
                     declaredTypeArguments = emptyList(),
                     position = SourcePosition("", 1, 1)
-                ).evalClassMemberAnyFunctionCall(subject, function)
+                ).let { call -> interpreter.runImmediately { call.evalClassMemberAnyFunctionCall(subject, function) } }
                     .let { (it as IntValue).value }
             }
         }
@@ -622,7 +622,7 @@ open class ClassDefinition(
             (superClass?.findDeclarations(filter) ?: emptyList())
     }
 
-    open fun construct(interpreter: Interpreter, callArguments: Array<RuntimeValue>, typeArguments: Array<DataType>, callPosition: SourcePosition): ClassInstance {
+    open suspend fun construct(interpreter: Interpreter, callArguments: Array<RuntimeValue>, typeArguments: Array<DataType>, callPosition: SourcePosition): ClassInstance {
         return interpreter.constructClassInstance(callArguments, callPosition, typeArguments, this@ClassDefinition)
     }
 

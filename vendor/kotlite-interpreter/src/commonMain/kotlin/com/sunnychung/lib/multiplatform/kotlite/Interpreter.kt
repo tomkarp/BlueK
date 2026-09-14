@@ -108,8 +108,16 @@ import com.sunnychung.lib.multiplatform.kotlite.model.WhenNode
 import com.sunnychung.lib.multiplatform.kotlite.model.WhenSubjectNode
 import com.sunnychung.lib.multiplatform.kotlite.model.WhileNode
 import com.sunnychung.lib.multiplatform.kotlite.util.ClassMemberResolver
+import kotlin.coroutines.startCoroutine
 
 open class Interpreter(val rootNode: ASTNode, val executionEnvironment: ExecutionEnvironment) {
+
+    /** Optional host scheduler hook used by interactive runtimes. */
+    var checkpointHook: (suspend () -> Unit)? = null
+
+    suspend fun checkpoint() {
+        checkpointHook?.invoke()
+    }
 
     internal val callStack = CallStack()
     internal val globalScope = callStack.currentSymbolTable()
@@ -140,7 +148,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
 
     fun symbolTable() = callStack.currentSymbolTable()
 
-    fun ASTNode.eval(): Any {
+    suspend fun ASTNode.eval(): Any {
         return when (this) {
             is AssignmentNode -> this.eval()
             is BinaryOpNode -> this.eval()
@@ -196,7 +204,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
-    fun ScriptNode.eval() {
+    suspend fun ScriptNode.eval() {
         nodes.forEach { it.eval() }
     }
 
@@ -206,7 +214,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
     fun <T : RuntimeValue, R: RuntimeValue> castType(a: Any, b: Any, calculation: (T, T) -> R): R
         = calculation(a as T, b as T)
 
-    fun BinaryOpNode.eval(): RuntimeValue {
+    suspend fun BinaryOpNode.eval(): RuntimeValue {
         if (hasFunctionCall == true) {
             val result = call!!.eval()
             return when (operator) {
@@ -292,14 +300,20 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 return BooleanValue(r1 != r2)
             }
 
-            "||" -> castType<BooleanValue, BooleanValue>(node1.eval()) { a -> if (a.value) BooleanValue(true) else node2.eval() as BooleanValue }
-            "&&" -> castType<BooleanValue, BooleanValue>(node1.eval()) { a -> if (!a.value) BooleanValue(false) else node2.eval() as BooleanValue }
+            "||" -> {
+                val a = node1.eval() as BooleanValue
+                if (a.value) BooleanValue(true) else node2.eval() as BooleanValue
+            }
+            "&&" -> {
+                val a = node1.eval() as BooleanValue
+                if (!a.value) BooleanValue(false) else node2.eval() as BooleanValue
+            }
 
             else -> throw UnsupportedOperationException()
         }
     }
 
-    fun UnaryOpNode.eval(): RuntimeValue {
+    suspend fun UnaryOpNode.eval(): RuntimeValue {
         val result = node!!.eval()
         if (operator == "!!") {
             if (result === NullValue) {
@@ -344,7 +358,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
-    fun PropertyDeclarationNode.eval() {
+    suspend fun PropertyDeclarationNode.eval() {
         val symbolTable = callStack.currentSymbolTable()
         val name = transformedRefName!!
         if (initialValue != null) {
@@ -359,7 +373,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
-    protected fun ASTNode.write(value: RuntimeValue) {
+    protected suspend fun ASTNode.write(value: RuntimeValue) {
         when (this) {
             is VariableReferenceNode -> {
                 if (this.ownerRef != null) {
@@ -429,7 +443,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
-    fun AssignmentNode.eval() {
+    suspend fun AssignmentNode.eval() {
         if (subject is NavigationNode && subject.operator == "?.") {
             throw UnsupportedOperationException("?: on left side of assignment is not supported")
         }
@@ -440,8 +454,8 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             return
         }
 
-        val read = { subject.eval() as RuntimeValue }
-        val write = { value: RuntimeValue ->
+        suspend fun read(): RuntimeValue = subject.eval() as RuntimeValue
+        suspend fun write(value: RuntimeValue) {
             if (assignFunctionCall != null) {
                 // TODO any less "hacky" way to implement?
                 assignFunctionCall!!.eval(replaceArguments = mapOf(assignFunctionCall!!.arguments.lastIndex to value))
@@ -485,7 +499,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         write(finalResult)
     }
 
-    fun VariableReferenceNode.eval(): RuntimeValue {
+    suspend fun VariableReferenceNode.eval(): RuntimeValue {
         // usual variable -> transformedRefName
         // class constructor -> variableName? TODO
         if (ownerRef != null) {
@@ -515,7 +529,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         return callStack.currentSymbolTable().read(transformedRefName ?: variableName)
     }
 
-    fun FunctionDeclarationNode.eval() {
+    suspend fun FunctionDeclarationNode.eval() {
         if (receiver == null) {
             callStack.currentSymbolTable().declareFunction(position, transformedRefName!!, this)
         } else {
@@ -523,7 +537,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
-    fun FunctionCallNode.eval(replaceArguments: Map<Int, RuntimeValue> = emptyMap()): RuntimeValue {
+    suspend fun FunctionCallNode.eval(replaceArguments: Map<Int, RuntimeValue> = emptyMap()): RuntimeValue {
         // TODO move to semantic analyzer
         when (function) {
             is VariableReferenceNode, is TypeNode -> {
@@ -680,11 +694,11 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
-    fun FunctionCallNode.evalFunctionCall(functionNode: CallableNode, extraSymbols: SymbolTable? = null, replaceArguments: Map<Int, RuntimeValue> = emptyMap()): RuntimeValue {
+    suspend fun FunctionCallNode.evalFunctionCall(functionNode: CallableNode, extraSymbols: SymbolTable? = null, replaceArguments: Map<Int, RuntimeValue> = emptyMap()): RuntimeValue {
         return evalFunctionCall(this, functionNode, emptyMap(), emptyList(), extraSymbols, replaceArguments).result
     }
 
-    fun evalFunctionCall(
+    suspend fun evalFunctionCall(
         callNode: FunctionCallNode,
         functionNode: CallableNode,
         extraScopeParameters: Map<String, RuntimeValue>,
@@ -720,7 +734,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         return evalFunctionCall(callArguments, callNode.typeArguments.toTypedArray(), callNode.position, functionNode, extraScopeParameters, extraTypeResolutions, extraSymbols, replaceArguments, subject, extraScopePropertyHolders)
     }
 
-    fun evalFunctionCall(
+    suspend fun evalFunctionCall(
         arguments: Array<RuntimeValue?>,
         typeArguments: Array<TypeNode>,
         callPosition: SourcePosition,
@@ -833,7 +847,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                     symbolTable.declareProperty(callPosition, it.transformedRefName!!, argumentType, false)
                     symbolTable.assign(
                         name = it.transformedRefName!!,
-                        value = replaceArguments[index] ?: arguments[index] ?: (it.defaultValue!!.eval() as RuntimeValue)
+                        value = replaceArguments[index] ?: arguments[index] ?: (evaluateNode(it.defaultValue!!) as RuntimeValue)
                             .also { arguments[index] = it }
                     )
                 } else if (isVararg) {
@@ -879,14 +893,14 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                             },
                             body = null,
                         ) {
-                            override fun execute(
+                            override suspend fun execute(
                                 interpreter: Interpreter,
                                 receiver: RuntimeValue?,
                                 lambdaArguments: List<RuntimeValue>,
                                 typeArguments: Map<String, DataType>
                             ): RuntimeValue {
                                 return ((replaceArguments[index] ?: arguments[index]) as? LambdaValue)
-                                    ?.execute(lambdaArguments.toTypedArray())
+                                    ?.executeSuspended(lambdaArguments.toTypedArray())
                                     ?: NullValue
                             }
                         }
@@ -935,7 +949,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
-    fun FunctionCallNode.evalCreateClassInstance(clazz: ClassDefinition, typeArguments: List<TypeNode>, replaceArguments: Map<Int, RuntimeValue> = emptyMap()): ClassInstance {
+    suspend fun FunctionCallNode.evalCreateClassInstance(clazz: ClassDefinition, typeArguments: List<TypeNode>, replaceArguments: Map<Int, RuntimeValue> = emptyMap()): ClassInstance {
         callStack.push(functionFullQualifiedName = "class", scopeType = ScopeType.ClassInitializer, callPosition = this.position)
         try {
             // TODO generalize duplicated code
@@ -964,7 +978,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             val symbolTable = callStack.currentSymbolTable()
             clazz.primaryConstructor?.parameters?.forEachIndexed { index, it ->
                 // no need to use transformedRefName as duplicated declarations are not possible here
-                val value = callArguments[index] ?: (it.parameter.defaultValue!!.eval() as RuntimeValue)
+                val value = callArguments[index] ?: (evaluateNode(it.parameter.defaultValue!!) as RuntimeValue)
                 symbolTable.declareProperty(it.position, it.parameter.transformedRefName!!, it.parameter.type.resolveGenericParameterTypeArguments(typeArgumentByName), false)
                 symbolTable.assign(it.parameter.transformedRefName!!, value)
                 callArguments[index] = value
@@ -976,7 +990,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
-    fun constructClassInstance(callArguments: Array<RuntimeValue>, callPosition: SourcePosition, typeArguments: Array<DataType>, clazz: ClassDefinition): ClassInstance {
+    suspend fun constructClassInstance(callArguments: Array<RuntimeValue>, callPosition: SourcePosition, typeArguments: Array<DataType>, clazz: ClassDefinition): ClassInstance {
         val parentInstance = clazz.superClassInvocation?.let { superClassInvocation ->
             callStack.push("super", ScopeType.Class, SourcePosition("TODO", 1, 1)) // TODO filename
             typeArguments.forEachIndexed { index, dataType ->
@@ -1110,7 +1124,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
 //        return evalClassMemberAnyFunctionCall(subject, function)
 //    }
 
-    fun FunctionCallNode.evalClassMemberAnyFunctionCall(subject: RuntimeValue, function: FunctionDeclarationNode, replaceArguments: Map<Int, RuntimeValue> = emptyMap(), extraScopePropertyHolders: Map<String, RuntimeValueAccessor> = emptyMap()): RuntimeValue {
+    suspend fun FunctionCallNode.evalClassMemberAnyFunctionCall(subject: RuntimeValue, function: FunctionDeclarationNode, replaceArguments: Map<Int, RuntimeValue> = emptyMap(), extraScopePropertyHolders: Map<String, RuntimeValueAccessor> = emptyMap()): RuntimeValue {
         return evalClassMemberAnyFunctionCall(position, subject, function.receiver, function) { typeResolutions ->
             evalFunctionCall(
                 callNode = this.copy(function = function),
@@ -1124,7 +1138,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
-    fun evalClassMemberAnyFunctionCall(position: SourcePosition, subject: RuntimeValue, function: CallableNode, arguments: Array<RuntimeValue?>, typeArguments: Array<TypeNode> = emptyArray(), extraScopePropertyHolders: Map<String, RuntimeValueAccessor> = emptyMap()): RuntimeValue {
+    suspend fun evalClassMemberAnyFunctionCall(position: SourcePosition, subject: RuntimeValue, function: CallableNode, arguments: Array<RuntimeValue?>, typeArguments: Array<TypeNode> = emptyArray(), extraScopePropertyHolders: Map<String, RuntimeValueAccessor> = emptyMap()): RuntimeValue {
         return evalClassMemberAnyFunctionCall(position, subject, subject.type().toTypeNode(), function) { typeResolutions ->
             evalFunctionCall(
                 arguments = arguments,
@@ -1139,7 +1153,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
-    private fun evalClassMemberAnyFunctionCall(position: SourcePosition, subject: RuntimeValue, receiverType: TypeNode?, function: CallableNode, callOperation: (typeResolutions: List<TypeParameterNode>) -> FunctionCallResult): RuntimeValue {
+    private suspend fun evalClassMemberAnyFunctionCall(position: SourcePosition, subject: RuntimeValue, receiverType: TypeNode?, function: CallableNode, callOperation: suspend (typeResolutions: List<TypeParameterNode>) -> FunctionCallResult): RuntimeValue {
         callStack.push(functionFullQualifiedName = "class", scopeType = ScopeType.ClassMemberFunction, callPosition = position)
         try {
             val symbolTable = callStack.currentSymbolTable()
@@ -1199,32 +1213,34 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
-    fun BlockNode.eval(): RuntimeValue {
+    suspend fun BlockNode.eval(): RuntimeValue {
         // additional scope because new variables can be declared in blocks of `if`, `while`, etc.
         // also, function parameters can be shadowed
         callStack.push(functionFullQualifiedName = null, scopeType = type, callPosition = position)
         val result = try {
-            statements.map { it.eval() as? RuntimeValue }.lastOrNull() ?: UnitValue
+            var value: RuntimeValue = UnitValue
+            for (statement in statements) value = statement.eval() as? RuntimeValue ?: UnitValue
+            value
         } finally {
             callStack.pop(type)
         }
         return result
     }
 
-    fun ReturnNode.eval() {
+    suspend fun ReturnNode.eval() {
         val value = (value?.eval() ?: UnitValue) as RuntimeValue
         throw NormalReturnException(returnToAddress = returnToAddress, returnToLabel = returnToLabel, value = value)
     }
 
-    fun BreakNode.eval() {
+    suspend fun BreakNode.eval() {
         throw NormalBreakException()
     }
 
-    fun ContinueNode.eval() {
+    suspend fun ContinueNode.eval() {
         throw NormalContinueException()
     }
 
-    fun IfNode.eval(): RuntimeValue {
+    suspend fun IfNode.eval(): RuntimeValue {
         val conditionalValue = condition.eval() as BooleanValue
         return if (conditionalValue.value) {
             trueBlock?.eval() ?: UnitValue
@@ -1233,7 +1249,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
-    fun WhileNode.eval() {
+    suspend fun WhileNode.eval() {
 //        if (conditionalValue.value) {
 //            if (body == null || body.statements.isEmpty()) {
 //                throw NotPermittedOperationException("Infinite loop is not allowed")
@@ -1242,6 +1258,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         // TODO detect infinite loop
         try {
             while ((condition.eval() as BooleanValue).value) {
+                checkpoint()
                 try {
                     body?.eval()
                 } catch (_: NormalContinueException) {}
@@ -1249,9 +1266,10 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         } catch (_: NormalBreakException) {}
     }
 
-    fun DoWhileNode.eval() {
+    suspend fun DoWhileNode.eval() {
         try {
             do {
+                checkpoint()
                 try {
                     body?.eval()
                 } catch (_: NormalContinueException) {}
@@ -1259,7 +1277,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         } catch (_: NormalBreakException) {}
     }
 
-    fun ClassDeclarationNode.eval() {
+    suspend fun ClassDeclarationNode.eval() {
         val declarationScope = callStack.currentSymbolTable()
         val classType = TypeNode(
             position = position,
@@ -1421,7 +1439,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
-    fun NavigationNode.eval(): RuntimeValue {
+    suspend fun NavigationNode.eval(): RuntimeValue {
         val obj = (subject.eval() as RuntimeValue)
             .let { resolveSuperKeyword(it) }
 //        return obj.memberPropertyValues[member.transformedRefName!!]!!
@@ -1479,7 +1497,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
-    fun IndexOpNode.eval(): RuntimeValue {
+    suspend fun IndexOpNode.eval(): RuntimeValue {
         if (hasFunctionCall == true) {
             return call!!.eval()
         } else {
@@ -1487,7 +1505,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
-    fun AsOpNode.eval(): RuntimeValue {
+    suspend fun AsOpNode.eval(): RuntimeValue {
         val value = expression.eval() as RuntimeValue
         val targetType = symbolTable().typeNodeToDataType(type) ?: throw RuntimeException("Unknown type `${type.descriptiveName()}`")
         return if (targetType.isCastableFrom(value.type())) {
@@ -1499,7 +1517,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
-    fun LambdaLiteralNode.eval(): RuntimeValue {
+    suspend fun LambdaLiteralNode.eval(): RuntimeValue {
         val refs = this.accessedRefs!!
         val currentSymbolTable = callStack.currentSymbolTable()
         val runtimeRefs = SymbolTable(Int.MAX_VALUE, "lambda-symbol-ref", ScopeType.Closure, currentSymbolTable.rootScope)
@@ -1544,7 +1562,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         return LambdaValue(this, lambdaType, runtimeRefs, this@Interpreter)
     }
 
-    fun InfixFunctionCallNode.eval(): RuntimeValue {
+    suspend fun InfixFunctionCallNode.eval(): RuntimeValue {
         call?.eval()?.let {
             if (functionName == "!in") {
                 return BooleanValue((it as BooleanValue).value.not())
@@ -1567,7 +1585,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
-    fun ElvisOpNode.eval(): RuntimeValue {
+    suspend fun ElvisOpNode.eval(): RuntimeValue {
         val result = primaryNode.eval() as RuntimeValue
         if (result != NullValue) {
             return result
@@ -1575,7 +1593,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         return fallbackNode.eval() as RuntimeValue
     }
 
-    fun ThrowNode.eval(): RuntimeValue {
+    suspend fun ThrowNode.eval(): RuntimeValue {
         var initialResult = value.eval() as RuntimeValue
         var result: RuntimeValue? = initialResult
         while (result !is ThrowableValue && result is ClassInstance) {
@@ -1611,7 +1629,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         throw EvaluateRuntimeException(stacktrace = stacktrace, error = error)
     }
 
-    fun TryNode.eval(): RuntimeValue {
+    suspend fun TryNode.eval(): RuntimeValue {
         try {
             return mainBlock.eval() as RuntimeValue
         } catch (e: EvaluateRuntimeException) {
@@ -1637,7 +1655,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         return ThrowableValue(symbolTable(), message, cause?.toValue(), emptyList(), this.fullClassName)
     }
 
-    fun CatchNode.eval(value: ThrowableValue): RuntimeValue {
+    suspend fun CatchNode.eval(value: ThrowableValue): RuntimeValue {
         callStack.push("<catch>", ScopeType.Catch, position)
         return try {
             valueTransformedRefName?.let { valueTransformedRefName ->
@@ -1655,7 +1673,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
-    fun WhenNode.eval(): RuntimeValue {
+    suspend fun WhenNode.eval(): RuntimeValue {
         callStack.push("<when>", ScopeType.WhenOuter, position)
         try {
             val subjectValue = subject?.value?.eval() as? RuntimeValue ?: UnitValue
@@ -1702,7 +1720,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
-    fun ForNode.eval(): RuntimeValue {
+    suspend fun ForNode.eval(): RuntimeValue {
         val subjectValue = subject.eval() as RuntimeValue
         callStack.push("<for>", ScopeType.For, position)
 
@@ -1788,6 +1806,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             ).enrichIterableCall(iteratorValue.type())
 
             while ((hasNextCall.eval() as BooleanValue).value) {
+                checkpoint()
                 val nextValue = nextCall.eval()
 
                 variables.forEach {
@@ -1812,19 +1831,22 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         return UnitValue
     }
 
-    fun StringNode.eval(): StringValue {
-        return StringValue(nodes.joinToString("") { (it.eval() as RuntimeValue).convertToString() })
+    suspend fun StringNode.eval(): StringValue {
+        val value = buildString {
+            for (node in nodes) append((node.eval() as RuntimeValue).convertToString())
+        }
+        return StringValue(value)
     }
 
-    fun StringLiteralNode.eval() = StringValue(content)
+    suspend fun StringLiteralNode.eval() = StringValue(content)
 
-    fun IntegerNode.eval() = IntValue(value)
-    fun LongNode.eval() = LongValue(value)
-    fun DoubleNode.eval() = DoubleValue(value)
-    fun BooleanNode.eval() = BooleanValue(value)
-    fun CharNode.eval() = CharValue(value)
-    fun NullNode.eval() = NullValue
-    fun ValueNode.eval() = value
+    suspend fun IntegerNode.eval() = IntValue(value)
+    suspend fun LongNode.eval() = LongValue(value)
+    suspend fun DoubleNode.eval() = DoubleValue(value)
+    suspend fun BooleanNode.eval() = BooleanValue(value)
+    suspend fun CharNode.eval() = CharValue(value)
+    suspend fun NullNode.eval() = NullValue
+    suspend fun ValueNode.eval() = value
 
     fun StringValue(value: String) = StringValue(value, symbolTable())
     fun IntValue(value: Int) = IntValue(value, symbolTable())
@@ -1853,9 +1875,23 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         return callStack.currentSymbolTable().assertToDataType(call!!.returnType!!)
     }
 
-    fun eval(): RuntimeValue {
+    suspend fun evalSuspended(): RuntimeValue {
         log.d { "=== Interpreter eval() ===" }
         return rootNode.eval() as? RuntimeValue ?: UnitValue
     }
+
+    /** Synchronous compatibility boundary for legacy host callers. */
+    fun eval(): RuntimeValue = runImmediately { evalSuspended() }
+
+    fun <T> runImmediately(block: suspend () -> T): T {
+        var completed: Result<T>? = null
+        block.startCoroutine(object : kotlin.coroutines.Continuation<T> {
+            override val context: kotlin.coroutines.CoroutineContext = kotlin.coroutines.EmptyCoroutineContext
+            override fun resumeWith(result: Result<T>) { completed = result }
+        })
+        return completed?.getOrThrow() ?: throw IllegalStateException("Execution suspended at a synchronous compatibility boundary")
+    }
+
+    suspend fun evaluateNode(node: ASTNode): Any = node.eval()
 
 }

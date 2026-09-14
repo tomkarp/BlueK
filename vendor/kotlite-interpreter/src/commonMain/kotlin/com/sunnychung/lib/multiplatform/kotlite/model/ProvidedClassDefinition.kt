@@ -66,7 +66,7 @@ class ProvidedClassDefinition(
 ) {
     val typeParameters_ = typeParameters
 
-    override fun construct(
+    override suspend fun construct(
         interpreter: Interpreter,
         callArguments: Array<RuntimeValue>,
         typeArguments: Array<DataType>,

@@ -1,7 +1,7 @@
 import com.sunnychung.lib.multiplatform.kotlite.Interpreter
 import com.sunnychung.lib.multiplatform.kotlite.KotliteInterpreter
 import com.sunnychung.lib.multiplatform.kotlite.Parser
-import com.sunnychung.lib.multiplatform.kotlite.SemanticAnalyzer
+import com.sunnychung.lib.multiplatform.kotlite.ReplAnalyzer
 import com.sunnychung.lib.multiplatform.kotlite.extension.fullClassName
 import com.sunnychung.lib.multiplatform.kotlite.lexer.Lexer
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassDeclarationNode
@@ -10,9 +10,11 @@ import com.sunnychung.lib.multiplatform.kotlite.model.FunctionCallNode
 import com.sunnychung.lib.multiplatform.kotlite.model.BooleanValue
 import com.sunnychung.lib.multiplatform.kotlite.model.CustomFunctionDefinition
 import com.sunnychung.lib.multiplatform.kotlite.model.CustomFunctionParameter
+import com.sunnychung.lib.multiplatform.kotlite.model.DelegatedValue
 import com.sunnychung.lib.multiplatform.kotlite.model.ExecutionEnvironment
 import com.sunnychung.lib.multiplatform.kotlite.model.FunctionDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.model.IntValue
+import com.sunnychung.lib.multiplatform.kotlite.model.LambdaValue
 import com.sunnychung.lib.multiplatform.kotlite.model.NullValue
 import com.sunnychung.lib.multiplatform.kotlite.model.PropertyDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.model.RuntimeValue
@@ -32,12 +34,16 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.js.ExperimentalJsExport
 import kotlin.js.JsExport
+import kotlin.coroutines.Continuation
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
+import kotlin.coroutines.startCoroutine
 
 /**
  * One browser-worker session. Kotlite has no public REPL, so BlueK keeps one
- * Interpreter alive and analyzes each new snippet against its current symbol
- * table. Only declarations are evaluated during project loading; top-level
- * initializers run only when the user actually submits them.
+ * Interpreter alive. Analysis runs on a fresh AST of the accumulated source;
+ * execution visits only the newly submitted interval. Project initializers run
+ * once when the session is loaded.
  */
 @OptIn(ExperimentalJsExport::class)
 @JsExport
@@ -55,17 +61,12 @@ class KotliteSession {
     private var stageSnapshot = ""
     private val pendingSounds = mutableListOf<String>()
     private val inputLines = mutableListOf<String>()
-    private data class PendingInputEvaluation(
-        val filename: String,
-        val source: String,
-        val script: ScriptNode,
-        val nodeIndex: Int,
-        val replayWholeExpression: Boolean,
-        val outputPrefix: String,
-        val consumedInputLines: List<String>
-    )
-    private var pendingInputEvaluation: PendingInputEvaluation? = null
-    private var currentEvaluationInputs = mutableListOf<String>()
+    private var inputContinuation: Continuation<RuntimeValue>? = null
+    private var inputNullable = false
+    private var inputRequestId = 0
+    private var inputRequested: ((Int) -> Unit)? = null
+    private var executionCompleted: ((String) -> Unit)? = null
+    private var faulted = false
     private val keysDown = linkedSetOf<String>()
     private var clickX: Int? = null
     private var clickY: Int? = null
@@ -77,39 +78,50 @@ class KotliteSession {
     private fun resetInterpreter() {
         environment = ExecutionEnvironment()
         AllStdLibModules { text -> output.append(text) }.modules.forEach(environment::install)
-        fun readBufferedLine(currentInterpreter: Interpreter, nullable: Boolean): RuntimeValue {
+        // The published Kotlite stdlib 1.1.0 exposes collection callbacks through
+        // synchronous Kotlin function types. Keep the standard library surface,
+        // but provide its suspendable generated equivalent for the callback that
+        // must be able to cross a readln suspension.
+        environment.patchFunction(
+            receiverType = "Iterable<T>",
+            functionName = "count",
+            parameterTypes = listOf("(T) -> Boolean"),
+        ) { currentInterpreter, receiver, args, _ ->
+            val iterable = (receiver as DelegatedValue<*>).value as Iterable<RuntimeValue>
+            val predicate = args[0] as LambdaValue
+            var count = 0
+            for (element in iterable) {
+                if ((predicate.executeSuspended(arrayOf(element)) as BooleanValue).value) count += 1
+            }
+            IntValue(count, currentInterpreter.symbolTable())
+        }
+        suspend fun readBufferedLine(currentInterpreter: Interpreter, nullable: Boolean): RuntimeValue {
             if (inputLines.isEmpty()) {
-                if (nullable) return NullValue
-                throw RuntimeException("No buffered console input is available. Enter a line in the BlueK Terminal first.")
+                return suspendCoroutine { continuation ->
+                    inputNullable = nullable
+                    inputContinuation = continuation
+                    inputRequestId += 1
+                    inputRequested?.invoke(inputRequestId)
+                }
             }
             val line = inputLines.removeAt(0)
-            currentEvaluationInputs += line
             return StringValue(line, currentInterpreter.symbolTable())
         }
-        environment.registerFunction(CustomFunctionDefinition(
-            position = SourcePosition.BUILTIN,
-            receiverType = null,
-            functionName = "readln",
-            returnType = "String",
-            parameterTypes = emptyList(),
-            executable = { currentInterpreter, _, _, _ -> readBufferedLine(currentInterpreter, false) }
-        ))
-        environment.registerFunction(CustomFunctionDefinition(
-            position = SourcePosition.BUILTIN,
-            receiverType = null,
-            functionName = "readLine",
-            returnType = "String?",
-            parameterTypes = emptyList(),
-            executable = { currentInterpreter, _, _, _ -> readBufferedLine(currentInterpreter, true) }
-        ))
-        environment.registerFunction(CustomFunctionDefinition(
-            position = SourcePosition.BUILTIN,
-            receiverType = null,
-            functionName = "readlnOrNull",
-            returnType = "String?",
-            parameterTypes = emptyList(),
-            executable = { currentInterpreter, _, _, _ -> readBufferedLine(currentInterpreter, true) }
-        ))
+        fun registerRead(name: String, nullable: Boolean) {
+            val definition = CustomFunctionDefinition(
+                position = SourcePosition.BUILTIN,
+                receiverType = null,
+                functionName = name,
+                returnType = if (nullable) "String?" else "String",
+                parameterTypes = emptyList(),
+                executable = { _, _, _, _ -> throw IllegalStateException("$name requires asynchronous evaluation") }
+            )
+            definition.suspendExecutable = { currentInterpreter, _, _, _ -> readBufferedLine(currentInterpreter, nullable) }
+            environment.registerFunction(definition)
+        }
+        registerRead("readln", false)
+        registerRead("readLine", true)
+        registerRead("readlnOrNull", true)
         environment.registerFunction(CustomFunctionDefinition(
             position = SourcePosition.BUILTIN,
             receiverType = null,
@@ -220,36 +232,13 @@ class KotliteSession {
             }
         ))
         interpreter = KotliteInterpreter("<BlueK>", "", environment)
+        interpreter.checkpointHook = { awaitRuntimeCheckpoint() }
     }
 
     private fun parse(filename: String, source: String): ScriptNode =
         Parser(Lexer(filename = filename, code = source)).script()
 
-    private fun unsupportedInput(source: String): String? {
-        return null
-    }
-
-    fun load(filename: String, source: String): String = try {
-        unsupportedInput(source)?.let { return errorMessage(it) }
-        val previous = parse("<BlueK project>", analysisSource)
-        val parsed = parse("<BlueK project>", analysisSource + "\n" + source)
-        val combined = analyzeWithClassFallback(parsed, previous.nodes.isEmpty(), absoluteFront = true) {
-            parse("<BlueK project>", analysisSource + "\n" + source)
-        }
-        analyzedScript = combined
-        // Definitions are installed once. Evaluating the complete project here
-        // would repeat top-level constructors and other side effects.
-        interpreter.run {
-            combined.nodes.drop(previous.nodes.size)
-                .filter { it is ClassDeclarationNode || it is FunctionDeclarationNode || (it is PropertyDeclarationNode && it.initialValue == null) }
-                .forEach { it.eval() }
-        }
-        analysisSource += "\n" + source
-        recordPropertyNames()
-        result("loaded", UnitValue)
-    } catch (error: Throwable) {
-        error(error)
-    }
+    fun load(filename: String, source: String): String = evaluate(filename, source)
 
     /** Metadata for the GUI, derived from the same AST Kotlite analyzes. */
     fun manifest(): String = try {
@@ -293,7 +282,7 @@ class KotliteSession {
     }
 
     private fun jsonFunction(owner: String, function: FunctionDeclarationNode, index: Int): String =
-        "{\"id\":\"${escape(owner)}.${escape(function.name)}.$index\",\"name\":\"${escape(function.name)}\",\"declaringType\":\"${escape(owner)}\",\"parameters\":${function.valueParameters.joinToString(",", "[", "]", transform = ::parameterJson)},\"returnType\":${jsonType(function.returnType)},\"visibility\":\"${visibility(function.modifiers)}\"}"
+        "{\"sourceLine\":${function.position.lineNum},\"id\":\"${escape(owner)}.${escape(function.name)}.$index\",\"name\":\"${escape(function.name)}\",\"declaringType\":\"${escape(owner)}\",\"parameters\":${function.valueParameters.joinToString(",", "[", "]", transform = ::parameterJson)},\"returnType\":${jsonType(function.returnType)},\"visibility\":\"${visibility(function.modifiers)}\"}"
     private fun jsonType(type: TypeNode): String =
         "{\"classifier\":\"${escape(type.name)}\",\"arguments\":${type.arguments.orEmpty().joinToString(",", "[", "]", transform = ::jsonType)},\"nullable\":${type.isNullable},\"displayName\":\"${escape(type.descriptiveName())}\"}"
 
@@ -307,117 +296,74 @@ class KotliteSession {
         else -> null
     }
 
-    private fun moveClassToAbsoluteFront(script: ScriptNode, className: String): ScriptNode {
-        val declaration = script.nodes.filterIsInstance<ClassDeclarationNode>()
-            .firstOrNull { it.name == className } ?: return script
-        return ScriptNode(script.position, listOf(declaration) + script.nodes.filterNot { it === declaration })
-    }
-
-    private fun moveClassToFirstClassSlot(script: ScriptNode, className: String): ScriptNode {
-        val declaration = script.nodes.filterIsInstance<ClassDeclarationNode>()
-            .firstOrNull { it.name == className } ?: return script
-        val classIndexes = script.nodes.mapIndexedNotNull { index, node ->
-            if (node is ClassDeclarationNode) index else null
-        }
-        val targetIndex = classIndexes.firstOrNull { script.nodes[it] === declaration } ?: return script
-        val firstClassIndex = classIndexes.firstOrNull() ?: return script
-        if (targetIndex == firstClassIndex) return script
-        val nodes = script.nodes.toMutableList()
-        nodes.removeAt(targetIndex)
-        nodes.add(firstClassIndex, declaration)
-        return ScriptNode(script.position, nodes)
-    }
-
-    private fun analyzeWithClassFallback(
-        script: ScriptNode,
-        allowFallback: Boolean,
-        absoluteFront: Boolean,
-        freshScript: () -> ScriptNode
-    ): ScriptNode {
-        if (!allowFallback) {
-            SemanticAnalyzer(script, environment).analyze()
-            return script
-        }
-        var candidate = script
-        val movedClasses = mutableListOf<String>()
-        var attempts = 0
-        while (true) {
-            try {
-                SemanticAnalyzer(candidate, environment).analyze()
-                return candidate
-            } catch (analysisError: Throwable) {
-                val className = missingClassName(analysisError.message.orEmpty())
-                    ?: throw analysisError
-                if (className in movedClasses || attempts++ >= script.nodes.size) throw analysisError
-                movedClasses += className
-                var reordered = freshScript()
-                movedClasses.forEach { movedClass ->
-                    reordered = if (absoluteFront) moveClassToAbsoluteFront(reordered, movedClass)
-                    else moveClassToFirstClassSlot(reordered, movedClass)
-                }
-                candidate = reordered
-            }
-        }
-    }
-
-    private fun missingClassName(message: String): String? = when {
-        Regex("No matching function `([^`]+)`").find(message) != null ->
-            Regex("No matching function `([^`]+)`").find(message)!!.groupValues[1]
-        Regex("Unknown type ([A-Za-z_][A-Za-z0-9_]*)").find(message) != null ->
-            Regex("Unknown type ([A-Za-z_][A-Za-z0-9_]*)").find(message)!!.groupValues[1]
-        Regex("Super class `([^`]+)` not found").find(message) != null ->
-            Regex("Super class `([^`]+)` not found").find(message)!!.groupValues[1]
-        else -> null
-    }
-
+    /**
+     * Analyze without changing the running interpreter, then execute only the
+     * new source interval. Never retry an evaluated expression: its side effects
+     * cannot be rolled back. A runtime failure requires a fresh session.
+     */
     fun evaluate(filename: String, source: String): String {
-        var currentNodeIndex = 0
+        // Legacy synchronous callers must retain their historical contract;
+        // interactive start* calls install the yielding scheduler explicitly.
+        val hook = interpreter.checkpointHook
+        interpreter.checkpointHook = null
         return try {
-        currentEvaluationInputs = mutableListOf()
-        unsupportedInput(source)?.let { return errorMessage(it) }
-        val previous = parse("<BlueK project>", analysisSource)
-        val combined = parse("<BlueK project>", analysisSource + "\n" + source)
-        val analyzed = analyzeWithClassFallback(combined, true, absoluteFront = true) {
-            parse("<BlueK project>", analysisSource + "\n" + source)
+            interpreter.runImmediately { evaluateSuspended(filename, source) }
+        } finally {
+            interpreter.checkpointHook = hook
         }
-        analyzedScript = analyzed
-        var value = UnitValue as RuntimeValue
-        currentNodeIndex = previous.nodes.size
-        for (nodeIndex in previous.nodes.size until analyzed.nodes.size) {
-            currentNodeIndex = nodeIndex
-            value = (interpreter.run { analyzed.nodes[nodeIndex].eval() } as? RuntimeValue) ?: UnitValue
+    }
+
+    private suspend fun evaluateSuspended(filename: String, source: String): String {
+        if (faulted) return errorMessage("Runtime failed. Reset or compile before running more code.", "runtime", true)
+        val boundary = analysisSource.length + 1
+        val analyzed = try {
+            ReplAnalyzer.analyze("<BlueK project>", analysisSource + "\n" + source, environment)
+        } catch (error: Throwable) {
+            return error(error, "analysis")
         }
-        analysisSource += "\n" + source
-        recordPropertyNames()
-        val objectId = if (value is ClassInstance) registerExpressionObject(value) else null
-        result("value", value, objectId)
-    } catch (error: Throwable) {
-        if (error.message?.contains("No buffered console input is available") == true) {
-            val combined = analyzedScript ?: parse("<BlueK project>", analysisSource)
-            pendingInputEvaluation = PendingInputEvaluation(
-                filename,
-                source,
-                combined,
-                currentNodeIndex,
-                combined.nodes.getOrNull(currentNodeIndex) is FunctionCallNode,
-                output.toString(),
-                currentEvaluationInputs.toList()
-            )
+        return try {
+            var value: RuntimeValue = UnitValue
+            for (node in analyzed.nodes.filter { it.position.index >= boundary }) {
+                value = interpreter.evaluateNode(node) as? RuntimeValue ?: UnitValue
+            }
+            analysisSource += "\n" + source
+            analyzedScript = analyzed
+            recordPropertyNames()
+            val objectId = if (value is ClassInstance) registerExpressionObject(value) else null
+            result("value", value, objectId)
+        } catch (error: Throwable) {
+            faulted = true
+            error(error, "runtime", true)
         }
-        error(error)
-        }
+    }
+
+    /** Starts one execution and returns before an input wait. */
+    fun startEvaluate(filename: String, source: String, onInput: (Int) -> Unit, onComplete: (String) -> Unit): String {
+        if (executionCompleted != null) return errorMessage("Another runtime command is running.")
+        inputRequested = onInput
+        executionCompleted = onComplete
+        (suspend { evaluateSuspended(filename, source) }).startCoroutine(object : Continuation<String> {
+            override val context = kotlin.coroutines.EmptyCoroutineContext
+            override fun resumeWith(result: Result<String>) {
+                inputContinuation = null
+                inputRequested = null
+                executionCompleted?.invoke(result.getOrElse { error(it, "runtime", true) })
+                executionCompleted = null
+            }
+        })
+        return result("started", UnitValue)
     }
 
     /** Keep an object returned by a Codepad expression addressable by the GUI. */
     private fun registerExpressionObject(value: ClassInstance): String {
+        handles.entries.firstOrNull { it.value === value }?.let { return it.key }
         val binding = "__bluek_expression_${nextHandle++}"
         // Keep semantic analysis aware of the binding without evaluating the
         // expression a second time. The declaration is intentionally added
         // without an initializer; the already evaluated object is assigned
         // directly above.
         analysisSource += "\nval $binding: ${value.type().toTypeNode().descriptiveName()}"
-        val script = parse("<BlueK project>", analysisSource)
-        SemanticAnalyzer(script, environment).analyze()
+        val script = ReplAnalyzer.analyze("<BlueK project>", analysisSource, environment)
         val declaration = script.nodes.filterIsInstance<PropertyDeclarationNode>()
             .last { it.name == binding }
         val transformedBinding = declaration.transformedRefName
@@ -463,8 +409,10 @@ class KotliteSession {
     }
 
     fun create(className: String, argumentsSource: String, requestedName: String): String {
+        if (!requestedName.matches(Regex("[A-Za-z_]\\w*"))) return errorMessage("Invalid object name.")
+        if (runCatching { interpreter.symbolTable().findPropertyByDeclaredName(requestedName) }.getOrNull() != null) return errorMessage("An object or variable with this name already exists.")
         val handleName = "__bluek_handle_${nextHandle++}"
-        val expression = "val $handleName = $className($argumentsSource)"
+        val expression = "val $handleName = $className($argumentsSource)\nval $requestedName = $handleName"
         val evaluated = evaluate("<BlueK constructor>", expression)
         if (evaluated.startsWith("{\"kind\":\"error\"")) return evaluated
         val value = interpreter.symbolTable().findPropertyByDeclaredName(handleName)
@@ -472,12 +420,36 @@ class KotliteSession {
         val id = "object-${nextHandle++}"
         handles[id] = value
         bindingNames[id] = handleName
-        if (requestedName.matches(Regex("[A-Za-z_]\\w*"))) {
-            val alias = "val $requestedName = $handleName"
-            val aliasResult = evaluate("<BlueK object binding>", alias)
-            if (aliasResult.startsWith("{\"kind\":\"error\"")) return aliasResult
-        }
         return result("object", value, id, requestedName)
+    }
+
+    fun startCreate(className: String, argumentsSource: String, requestedName: String, onInput: (Int) -> Unit, onComplete: (String) -> Unit): String {
+        if (!requestedName.matches(Regex("[A-Za-z_]\\w*"))) return errorMessage("Invalid object name.")
+        if (runCatching { interpreter.symbolTable().findPropertyByDeclaredName(requestedName) }.getOrNull() != null) return errorMessage("An object or variable with this name already exists.")
+        val handleName = "__bluek_handle_${nextHandle++}"
+        val expression = "val $handleName = $className($argumentsSource)\nval $requestedName = $handleName"
+        return startEvaluate("<BlueK constructor>", expression, onInput) { evaluated ->
+            if (evaluated.startsWith("{\"kind\":\"error\"")) { onComplete(evaluated); return@startEvaluate }
+            val value = interpreter.symbolTable().findPropertyByDeclaredName(handleName)
+            if (value == null) { onComplete(errorMessage("Constructor did not create an object.")); return@startEvaluate }
+            val id = "object-${nextHandle++}"; handles[id] = value; bindingNames[id] = handleName
+            onComplete(result("object", value, id, requestedName))
+        }
+    }
+
+    /** Bind an existing handle; the object itself is never copied or recreated. */
+    fun bind(objectId: String, name: String): String {
+        val value = handles[objectId] ?: return errorMessage("Object handle is no longer available.")
+        val binding = bindingNames[objectId] ?: return errorMessage("Object handle is no longer available.")
+        if (!name.matches(Regex("[A-Za-z_]\\w*"))) return errorMessage("Invalid object name.")
+        val existing = runCatching { interpreter.symbolTable().findPropertyByDeclaredName(name) }.getOrNull()
+        if (existing != null) {
+            return if (existing === value) result("object", value, objectId, name)
+            else errorMessage("An object or variable with this name already exists.")
+        }
+        val bound = evaluate("<BlueK object binding>", "val $name = $binding")
+        if (bound.startsWith("{\"kind\":\"error\"")) return bound
+        return result("object", value, objectId, name)
     }
 
     fun invoke(objectId: String, methodName: String, argumentsSource: String): String {
@@ -487,12 +459,22 @@ class KotliteSession {
         return evaluate("<BlueK method call>", "$binding.$methodName($argumentsSource)")
     }
 
+    fun startInvoke(objectId: String, methodName: String, argumentsSource: String, onInput: (Int) -> Unit, onComplete: (String) -> Unit): String {
+        val binding = bindingNames[objectId] ?: return errorMessage("Object handle is no longer available.")
+        return startEvaluate("<BlueK method call>", "$binding.$methodName($argumentsSource)", onInput, onComplete)
+    }
+
     fun set(objectId: String, propertyName: String, valueSource: String): String {
         handles[objectId] ?: return errorMessage("Object handle is no longer available.")
         val binding = bindingNames[objectId]
             ?: return errorMessage("Object handle is no longer available.")
         if (!propertyName.matches(Regex("[A-Za-z_]\\w*"))) return errorMessage("Invalid property name.")
         return evaluate("<BlueK inspector>", "$binding.$propertyName = $valueSource")
+    }
+
+    fun startSet(objectId: String, propertyName: String, valueSource: String, onInput: (Int) -> Unit, onComplete: (String) -> Unit): String {
+        val binding = bindingNames[objectId] ?: return errorMessage("Object handle is no longer available.")
+        return startEvaluate("<BlueK inspector>", "$binding.$propertyName = $valueSource", onInput, onComplete)
     }
 
     fun inspect(objectId: String): String {
@@ -509,19 +491,30 @@ class KotliteSession {
             } else {
                 val member = value.readBackingPropertyByDeclaredName(name)
                 val display = member?.convertToString() ?: "<uninitialized>"
-                "{\"name\":\"${escape(name)}\",\"value\":\"${escape(display)}\"}"
+                "{\"name\":\"${escape(name)}\",\"value\":\"${escape(display)}\",\"type\":${member?.let { jsonType(it.type().toTypeNode()) } ?: "null"}}"
             }
         }
-        return "{\"kind\":\"inspect\",\"objectId\":\"${escape(objectId)}\",\"className\":\"${escape(value.type().name)}\",\"fields\":$fields}"
+        return "{\"kind\":\"inspect\",\"objectId\":\"${escape(objectId)}\",\"className\":\"${escape(value.type().toTypeNode().descriptiveName())}\",\"fields\":$fields}"
     }
 
-    fun remove(objectId: String): String {
-        handles.remove(objectId)
-        bindingNames.remove(objectId)
-        return result("value", UnitValue)
+    /** Explicit property access may run a getter; passive inspection never does. */
+    fun get(objectId: String, propertyName: String): String {
+        val binding = bindingNames[objectId]
+            ?: return errorMessage("Object handle is no longer available.")
+        if (!propertyName.matches(Regex("[A-Za-z_]\\w*"))) return errorMessage("Invalid property name.")
+        return evaluate("<BlueK property>", "$binding.$propertyName")
+    }
+
+    fun startGet(objectId: String, propertyName: String, onInput: (Int) -> Unit, onComplete: (String) -> Unit): String {
+        val binding = bindingNames[objectId] ?: return errorMessage("Object handle is no longer available.")
+        return startEvaluate("<BlueK property>", "$binding.$propertyName", onInput, onComplete)
     }
 
     fun reset(): String {
+        inputContinuation?.resumeWith(Result.failure(RuntimeException("Runtime reset.")))
+        inputContinuation = null
+        executionCompleted = null
+        inputRequested = null
         handles.clear()
         bindingNames.clear()
         analysisSource = ""
@@ -532,8 +525,7 @@ class KotliteSession {
         stageSnapshot = ""
         pendingSounds.clear()
         inputLines.clear()
-        pendingInputEvaluation = null
-        currentEvaluationInputs = mutableListOf()
+        faulted = false
         keysDown.clear()
         clickX = null
         clickY = null
@@ -570,60 +562,43 @@ class KotliteSession {
     }
 
     fun enqueueInput(line: String): String {
-        val pending = pendingInputEvaluation
-        if (pending == null) {
-            inputLines += line
-            return result("value", UnitValue)
-        }
-        pendingInputEvaluation = null
-        if (pending.replayWholeExpression) {
-            inputLines.addAll(0, pending.consumedInputLines)
-            inputLines += line
-            val response = evaluate(pending.filename, pending.source)
-            val replayedOutput = output.toString()
-            if (pending.outputPrefix.isNotEmpty() && replayedOutput.startsWith(pending.outputPrefix)) {
-                output.clear()
-                output.append(replayedOutput.removePrefix(pending.outputPrefix))
-            }
-            return response
-        }
+        inputContinuation?.let { continuation ->
+            inputContinuation = null
+            continuation.resume(StringValue(line, interpreter.symbolTable()))
+        } ?: inputLines.add(line)
+        return result("value", UnitValue)
+    }
 
-        inputLines += line
-        currentEvaluationInputs = mutableListOf()
-        var currentNodeIndex = pending.nodeIndex
-        return try {
-            var value = UnitValue as RuntimeValue
-            for (nodeIndex in pending.nodeIndex until pending.script.nodes.size) {
-                currentNodeIndex = nodeIndex
-                value = (interpreter.run { pending.script.nodes[nodeIndex].eval() } as? RuntimeValue) ?: UnitValue
-            }
-            analysisSource += "\n" + pending.source
-            recordPropertyNames()
-            val objectId = if (value is ClassInstance) registerExpressionObject(value) else null
-            result("value", value, objectId)
-        } catch (error: Throwable) {
-            if (error.message?.contains("No buffered console input is available") == true) {
-                pendingInputEvaluation = pending.copy(
-                    nodeIndex = currentNodeIndex,
-                    outputPrefix = output.toString(),
-                    consumedInputLines = currentEvaluationInputs.toList()
-                )
-            }
-            error(error)
+    fun enqueueEof(): String {
+        inputContinuation?.let { continuation ->
+            inputContinuation = null
+            if (inputNullable) continuation.resume(NullValue)
+            else continuation.resumeWith(Result.failure(RuntimeException("EOF while reading a non-null line")))
         }
+        return result("value", UnitValue)
     }
 
     private fun result(kind: String, value: RuntimeValue, objectId: String? = null, name: String? = null): String {
         val display = if (value === UnitValue) "Unit" else if (value === NullValue) "null" else value.convertToString()
         val actualKind = if (value === UnitValue) "unit" else if (value === NullValue) "null" else if (value is ClassInstance) "object" else "scalar"
-        return "{\"kind\":\"$actualKind\",\"display\":\"${escape(display)}\"" +
-            (objectId?.let { ",\"objectId\":\"${escape(it)}\",\"className\":\"${escape(value.type().name)}\"" } ?: "") +
+        return "{\"kind\":\"$actualKind\",\"display\":\"${escape(display)}\",\"type\":${jsonType(value.type().toTypeNode())}" +
+            (objectId?.let { ",\"objectId\":\"${escape(it)}\",\"className\":\"${escape(value.type().toTypeNode().descriptiveName())}\"" } ?: "") +
             (name?.let { ",\"name\":\"${escape(it)}\"" } ?: "") + "}"
     }
 
-    private fun error(error: Throwable): String = errorMessage("${error.fullClassName}: ${error.message ?: "Kotlite evaluation failed."}")
-    private fun errorMessage(message: String): String = "{\"kind\":\"error\",\"display\":\"${escape(message)}\"}"
-    private fun escape(value: String): String = value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
+    private fun error(error: Throwable, phase: String = "analysis", fatal: Boolean = false): String =
+        errorMessage("${error.fullClassName}: ${error.message ?: "Kotlite evaluation failed."}", phase, fatal)
+    private fun errorMessage(message: String, phase: String = "request", fatal: Boolean = false): String =
+        "{\"kind\":\"error\",\"display\":\"${escape(message)}\",\"phase\":\"$phase\",\"fatal\":$fatal}"
+    private fun escape(value: String): String = buildString {
+        value.forEach { character ->
+            when (character) {
+                '\\' -> append("\\\\")
+                '"' -> append("\\\"")
+                else -> if (character.code < 32) append("\\u" + character.code.toString(16).padStart(4, '0')) else append(character)
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalJsExport::class)
