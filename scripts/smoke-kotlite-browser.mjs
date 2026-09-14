@@ -294,6 +294,60 @@ if (JSON.parse(nullabilitySession.evaluate('<nullability>', 'maybe.label()')).di
 expectOk(JSON.parse(nullabilitySession.evaluate('<nullability>', 'maybe.name = "Ada"')), 'nullable property assignment');
 if (JSON.parse(nullabilitySession.evaluate('<nullability>', 'maybe.label()')).display !== 'ADA') throw new Error('Safe-call or Elvis evaluation failed for a non-null value.');
 
+const animalGameSession = api.bluekCreateKotliteSession();
+const animalGameSource = `
+    class Tier(val name: String) {
+        var energie = 5
+        var glueckslevel = 10
+
+        fun fuettern(menge: Int) {
+            energie = energie + menge
+            if (energie > 10) { energie = 10 }
+        }
+
+        fun spielen() {
+            energie = energie - 1
+            glueckslevel = glueckslevel + 3
+        }
+
+        fun langweilen() {
+            energie = energie - 2
+            glueckslevel = glueckslevel - 1
+        }
+
+        fun istGluecklich(): Boolean { return glueckslevel >= 20 }
+        fun istTraurig(): Boolean { return glueckslevel <= 0 }
+        fun istVerhungert(): Boolean { return energie <= 0 }
+    }
+
+    class Spiel {
+        val spieler = Tier("Wuffi")
+        val gegner = Tier("Bello")
+
+        fun vorbereiten() {
+            spieler.fuettern(20)
+            gegner.spielen()
+        }
+
+        fun status(): String {
+            return spieler.name + ": " + spieler.energie + "/" + spieler.glueckslevel
+        }
+
+        fun gewonnen(): Boolean {
+            return spieler.istGluecklich() && !spieler.istVerhungert()
+        }
+    }
+`;
+expectOk(JSON.parse(animalGameSession.load('<tierisch gluecklich>', animalGameSource)), 'animal game load');
+expectOk(JSON.parse(animalGameSession.evaluate('<tierisch gluecklich>', 'val spiel = Spiel()')), 'animal game construction');
+expectOk(JSON.parse(animalGameSession.evaluate('<tierisch gluecklich>', 'spiel.vorbereiten()')), 'animal game state changes');
+if (JSON.parse(animalGameSession.evaluate('<tierisch gluecklich>', 'spiel.status()')).display !== 'Wuffi: 10/10') {
+    throw new Error('The Tierisch-gluecklich object/reference flow produced the wrong state.');
+}
+if (JSON.parse(animalGameSession.evaluate('<tierisch gluecklich>', 'spiel.gewonnen()')).display !== 'false') {
+    throw new Error('The Tierisch-gluecklich game flow returned the wrong win state.');
+}
+
 const inputSession = api.bluekCreateKotliteSession();
 if (JSON.parse(inputSession.enqueueInput('Ada')).kind === 'error') throw new Error('Buffered console input could not be queued.');
 if (JSON.parse(inputSession.evaluate('<input>', 'readln()')).display !== 'Ada') throw new Error('readln did not consume buffered local console input.');

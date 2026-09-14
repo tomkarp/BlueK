@@ -7,6 +7,7 @@ import { searchKeymap } from '@codemirror/search';
 import { EditorState } from '@codemirror/state';
 import { EditorView, drawSelection, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view';
 import { kotlin } from '@codemirror/legacy-modes/mode/clike';
+import { inflateSync } from 'fflate';
 import './style.css';
 import { LocalRuntimeClient } from './localRuntimeClient';
 
@@ -38,9 +39,11 @@ const decodeBlueKLink = async (value: string) => {
   if (!encoded || !['d1', 'p1'].includes(version)) throw new Error('Invalid BlueK project link.');
   const bytes = base64UrlToBytes(encoded);
   if (version === 'p1') return JSON.parse(new TextDecoder().decode(bytes));
-  if (!('DecompressionStream' in window)) throw new Error('This browser cannot open compressed BlueK links.');
-  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
-  return JSON.parse(await new Response(stream).text());
+  if ('DecompressionStream' in window) {
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return JSON.parse(await new Response(stream).text());
+  }
+  return JSON.parse(new TextDecoder().decode(inflateSync(bytes)));
 };
 const svgEscape = (value: string) => value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[character] || character));
 const decodeDrawingText = (value: string) => { try { return decodeURIComponent(value); } catch { return value; } };
