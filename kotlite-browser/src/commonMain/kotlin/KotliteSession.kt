@@ -65,6 +65,7 @@ class KotliteSession {
     private var inputNullable = false
     private var inputRequestId = 0
     private var inputRequested: ((Int) -> Unit)? = null
+    private var outputUpdated: (() -> Unit)? = null
     private var executionCompleted: ((String) -> Unit)? = null
     private var faulted = false
     private val keysDown = linkedSetOf<String>()
@@ -245,6 +246,11 @@ class KotliteSession {
         } else {
             output.append(text)
         }
+        outputUpdated?.invoke()
+    }
+
+    fun setOutputCallback(callback: (() -> Unit)?) {
+        outputUpdated = callback
     }
 
     private fun parse(filename: String, source: String): ScriptNode =

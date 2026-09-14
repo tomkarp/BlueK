@@ -12,6 +12,7 @@ export interface KotliteSessionBridge {
   startInvoke(objectId: string, methodName: string, argumentsSource: string, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
   startSet(objectId: string, propertyName: string, valueSource: string, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
   startGet(objectId: string, propertyName: string, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
+  setOutputCallback(callback: (() => void) | null): void;
   create(className: string, argumentsSource: string, name: string): string;
   invoke(objectId: string, name: string, argumentsSource: string): string;
   get(objectId: string, property: string): string;
@@ -67,6 +68,13 @@ export class RuntimeHost {
     emit({ type: 'event', generationId: this.snapshot.generationId, executionId, sequence: ++this.sequence, kind, snapshot: this.snapshot, ...extra });
   }
 
+  private emitStreamingOutput(executionId: number, emit: Emit) {
+    const output = this.session?.takeOutput() || '';
+    if (!output) return;
+    this.refreshSnapshot();
+    emit({ type: 'event', generationId: this.snapshot.generationId, executionId, sequence: ++this.sequence, kind: 'output', output, snapshot: this.snapshot });
+  }
+
   dispatch(id: number, command: WorkerCommand, emit: Emit): void {
     try {
       if (command.op === 'compile') {
@@ -76,6 +84,7 @@ export class RuntimeHost {
         const source = command.files.map(file => `// BlueK file: ${file.fileName}\n${file.source}`).join('\n\n');
         const executionId = id;
         this.active = { executionId };
+        this.session.setOutputCallback(() => this.emitStreamingOutput(executionId, emit));
         this.emitEvent(executionId, 'started', emit);
         const onInput = (inputRequestId: number) => {
           if (!this.active || this.active.executionId !== executionId) return;
@@ -85,6 +94,7 @@ export class RuntimeHost {
         };
         const onComplete = (result: string) => {
           if (!this.active || this.active.executionId !== executionId) return;
+          this.session!.setOutputCallback(null);
           this.active = null;
           const response = JSON.parse(result) as RuntimeValue;
           if (response.kind !== 'error') {
@@ -124,6 +134,7 @@ export class RuntimeHost {
       }
       const executionId = id;
       this.active = { executionId }; this.snapshot.phase = 'running';
+      this.session.setOutputCallback(() => this.emitStreamingOutput(executionId, emit));
       this.emitEvent(executionId, 'started', emit);
       const onInput = (inputRequestId: number) => {
         if (!this.active || this.active.executionId !== executionId) return;
@@ -132,6 +143,7 @@ export class RuntimeHost {
       };
       const onComplete = (result: string) => {
         if (!this.active || this.active.executionId !== executionId) return;
+        this.session!.setOutputCallback(null);
         this.active = null; const response = JSON.parse(result); this.snapshot.phase = response.fatal ? 'faulted' : 'ready';
         emit(this.publish(id, response));
       };

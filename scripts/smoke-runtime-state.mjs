@@ -46,6 +46,7 @@ class Child(n: Int): Counter(n)
 val shared = Counter(10)
 fun main() { shared.add(5) }
 fun readTwo() { print("A"); println(readln()); print("B"); println(readln()) }
+fun loopOutput() { for (i in 1..3) println(i) }
 ` },
 ];
 const outputs = [];
@@ -91,6 +92,9 @@ await ok({ op: 'main', fileName: 'Actions.kt' });
 assert.equal(field(shared.objectId), '15');
 await ok({ op: 'main', fileName: 'Actions.kt' });
 assert.equal(field(shared.objectId), '20');
+const loopExecution = client.execute({ op: 'eval', code: 'loopOutput()' });
+await loopExecution;
+assert.deepEqual(outputs.splice(0), ['1\n', '2\n', '3\n'], 'loop output must stream after each println');
 const string = await ok({ op: 'eval', code: '"true"' });
 assert.equal(string.type.displayName, 'String');
 assert.equal((await ok({ op: 'eval', code: 'true' })).type.displayName, 'Boolean');
