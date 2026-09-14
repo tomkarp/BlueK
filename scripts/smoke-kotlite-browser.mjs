@@ -348,6 +348,22 @@ if (JSON.parse(animalGameSession.evaluate('<tierisch gluecklich>', 'spiel.gewonn
     throw new Error('The Tierisch-gluecklich game flow returned the wrong win state.');
 }
 
+const shadowedBuiltinSession = api.bluekCreateKotliteSession();
+const shadowedBuiltinSource = `
+    fun readIntInRange(prompt: String, min: Int, max: Int): Int {
+        while (true) {
+            val zahl = 2
+            if (zahl >= min && zahl <= max) {
+                return zahl
+            }
+        }
+    }
+`;
+expectOk(JSON.parse(shadowedBuiltinSession.load('<shadowed builtins>', shadowedBuiltinSource)), 'shadowed builtin parameter names');
+if (JSON.parse(shadowedBuiltinSession.evaluate('<shadowed builtins>', 'readIntInRange("Zahl: ", 1, 3)')).display !== '2') {
+    throw new Error('Parameters named min/max were incorrectly resolved as builtin functions.');
+}
+
 const inputSession = api.bluekCreateKotliteSession();
 if (JSON.parse(inputSession.enqueueInput('Ada')).kind === 'error') throw new Error('Buffered console input could not be queued.');
 if (JSON.parse(inputSession.evaluate('<input>', 'readln()')).display !== 'Ada') throw new Error('readln did not consume buffered local console input.');

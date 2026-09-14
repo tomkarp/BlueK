@@ -2835,10 +2835,14 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
     // e.g. `name()`, where name is a VariableReferenceNode
     fun VariableReferenceNode.type(modifier: ResolveTypeModifier = ResolveTypeModifier()) = type ?: (
-            currentScope.findClass(variableName)
-                ?.let { ClassTypeNode(TypeNode(position, variableName, null, false)) }
+            // A value in the current scope shadows functions and class names in
+            // expression position, just as it does in Kotlin. This matters for
+            // common parameter names such as `min` and `max`, which are also
+            // available as standard-library functions.
+            currentScope.getPropertyTypeOrNull(variableName)?.first?.type?.toTypeNode()
                 ?: currentScope.findFunctionsByOriginalName(variableName).firstOrNull()?.let { FunctionTypeNode(position = it.first.position, parameterTypes = null, returnType = null, isNullable = false) }
-                ?: currentScope.getPropertyType(variableName).first.type.toTypeNode()!!
+                ?: currentScope.findClass(variableName)?.let { ClassTypeNode(TypeNode(position, variableName, null, false)) }
+                ?: error("Unable to resolve variable `$variableName`")
             ).let { resolvedType ->
                 if (variableName in smartCastNonNullVariables && resolvedType.isNullable) {
                     resolvedType.copy(isNullable = false)
