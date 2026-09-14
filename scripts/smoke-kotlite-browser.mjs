@@ -62,6 +62,27 @@ expectOk(JSON.parse(multilineExpressionSession.load('<multiline expression>', `
 expectOk(JSON.parse(multilineExpressionSession.evaluate('<multiline expression>', 'val text = Text()')), 'multiline expression construction');
 if (JSON.parse(multilineExpressionSession.evaluate('<multiline expression>', 'text.text()')).display !== 'HiHallo') throw new Error('A line break after a binary operator was not accepted.');
 
+const smartCastSession = api.bluekCreateKotliteSession();
+expectOk(JSON.parse(smartCastSession.load('<smart casts>', `
+    class NullableText {
+        fun normalized(value: String?): String {
+            if (value == null) return "fallback"
+            return value.trim()
+        }
+        fun isBlank(value: String?): Boolean {
+            return value == null || value.trim() == ""
+        }
+        fun hasText(value: String?): Boolean {
+            return value != null && value.trim() != ""
+        }
+    }
+`)), 'smart cast load');
+expectOk(JSON.parse(smartCastSession.evaluate('<smart casts>', 'val nullableText = NullableText()')), 'smart cast construction');
+if (JSON.parse(smartCastSession.evaluate('<smart casts>', 'nullableText.normalized(null)')).display !== 'fallback') throw new Error('A null check with an early return did not smart-cast the value.');
+if (JSON.parse(smartCastSession.evaluate('<smart casts>', 'nullableText.normalized("  Ada  ")')).display !== 'Ada') throw new Error('A non-null value was not trimmed after the null check.');
+if (JSON.parse(smartCastSession.evaluate('<smart casts>', 'nullableText.isBlank("   ")')).display !== 'true') throw new Error('The right side of || did not use a smart cast.');
+if (JSON.parse(smartCastSession.evaluate('<smart casts>', 'nullableText.hasText(" Ada ")')).display !== 'true') throw new Error('The right side of && did not use a smart cast.');
+
 const nonReturningLoopSession = api.bluekCreateKotliteSession();
 expectOk(JSON.parse(nonReturningLoopSession.load('<non-returning loop>', `
     class Reader {

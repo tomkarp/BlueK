@@ -114,6 +114,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     var functionDefIndex = 0
     var variableDefIndex = 0
     val symbolRecorders = mutableListOf<SymbolReferenceSet>()
+    private val smartCastNonNullVariables = mutableSetOf<String>()
 
     // a cache of common types for optimization. not a must to use them
     val typeRegistry = listOf(
@@ -292,6 +293,19 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         val isSkipGenerics: Boolean = false,
     )
 
+    private fun nullCheckVariable(node: ASTNode, operator: String): String? {
+        if (node !is BinaryOpNode || node.operator != operator) return null
+        return when {
+            node.node1 is VariableReferenceNode && node.node2 is NullNode -> (node.node1 as VariableReferenceNode).variableName
+            node.node2 is VariableReferenceNode && node.node1 is NullNode -> (node.node2 as VariableReferenceNode).variableName
+            else -> null
+        }
+    }
+
+    private fun blockAlwaysReturns(block: BlockNode?): Boolean {
+        return block?.statements?.lastOrNull() is ReturnNode
+    }
+
     fun ASTNode.visit(modifier: Modifier = Modifier()) {
         when (this) {
             is AssignmentNode -> this.visit(modifier = modifier)
@@ -442,7 +456,17 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         }
 
         node1.visit(modifier = modifier)
-        node2.visit(modifier = modifier)
+        val smartCastVariable = when (operator) {
+            "||" -> nullCheckVariable(node1, "==")
+            "&&" -> nullCheckVariable(node1, "!=")
+            else -> null
+        }
+        if (smartCastVariable != null) smartCastNonNullVariables += smartCastVariable
+        try {
+            node2.visit(modifier = modifier)
+        } finally {
+            if (smartCastVariable != null) smartCastNonNullVariables -= smartCastVariable
+        }
         val functionName = if (operator in setOf("+", "-", "*", "/", "%", "<", ">", "<=", ">=", "..", "..<")) {
             operatorToFunctionName(operator)
         } else null
@@ -962,6 +986,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             }
         }
 
+        smartCastNonNullVariables.clear()
         if (body != null) {
             body.visit(modifier = modifier)
 
@@ -978,6 +1003,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 }
             }
         }
+        smartCastNonNullVariables.clear()
 
         while (additionalScopeCount-- > 0) {
             popScope()
@@ -1724,6 +1750,12 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         condition.visit(modifier = modifier)
         trueBlock?.visit(modifier = modifier)
         falseBlock?.visit(modifier = modifier)
+
+        // After `if (value == null) return ...`, Kotlin smart-casts value
+        // to its non-null type for the remainder of the surrounding block.
+        nullCheckVariable(condition, "==")
+            ?.takeIf { blockAlwaysReturns(trueBlock) }
+            ?.let { smartCastNonNullVariables += it }
     }
 
     fun WhileNode.visit(modifier: Modifier = Modifier()) {
@@ -2792,7 +2824,13 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 ?.let { ClassTypeNode(TypeNode(position, variableName, null, false)) }
                 ?: currentScope.findFunctionsByOriginalName(variableName).firstOrNull()?.let { FunctionTypeNode(position = it.first.position, parameterTypes = null, returnType = null, isNullable = false) }
                 ?: currentScope.getPropertyType(variableName).first.type.toTypeNode()!!
-            ).also { type = it }
+            ).let { resolvedType ->
+                if (variableName in smartCastNonNullVariables && resolvedType.isNullable) {
+                    resolvedType.copy(isNullable = false)
+                } else {
+                    resolvedType
+                }
+            }.also { if (variableName !in smartCastNonNullVariables) type = it }
 
     fun IndexOpNode.type(modifier: ResolveTypeModifier = ResolveTypeModifier()): TypeNode {
         return call!!.type(modifier = modifier)
