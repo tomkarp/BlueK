@@ -50,6 +50,18 @@ if (classInputSession.takeOutput() !== 'prompt\n') throw new Error('Output befor
 if (JSON.parse(classInputSession.enqueueInput('Ada')).kind === 'error') throw new Error('Class readln did not resume after input.');
 if (classInputSession.takeOutput() !== 'answer=Ada\n') throw new Error('Output after readln in a class method was incorrect.');
 
+const multilineExpressionSession = api.bluekCreateKotliteSession();
+expectOk(JSON.parse(multilineExpressionSession.load('<multiline expression>', `
+    class Text {
+        fun text(): String {
+            return "Hi" +
+                "Hallo"
+        }
+    }
+`)), 'multiline expression load');
+expectOk(JSON.parse(multilineExpressionSession.evaluate('<multiline expression>', 'val text = Text()')), 'multiline expression construction');
+if (JSON.parse(multilineExpressionSession.evaluate('<multiline expression>', 'text.text()')).display !== 'HiHallo') throw new Error('A line break after a binary operator was not accepted.');
+
 const objectGraphSession = api.bluekCreateKotliteSession();
 expectOk(JSON.parse(objectGraphSession.load('<object graph>', `
     class Leaf(val text: String)

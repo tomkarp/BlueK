@@ -1276,6 +1276,7 @@ open class Parser(protected val lexer: Lexer) {
         while (currentToken.type == TokenType.Operator && currentToken.value in setOf("+", "-")) {
             val t = currentToken
             eat(TokenType.Operator)
+            repeatedNL()
             node = BinaryOpNode(t.position, node, multiplicativeExpression(), t.value.toString())
         }
         return node
@@ -1294,6 +1295,7 @@ open class Parser(protected val lexer: Lexer) {
         while (currentToken.type == TokenType.Operator && currentToken.value in setOf("*", "/", "%")) {
             val t = currentToken
             eat(TokenType.Operator)
+            repeatedNL()
             node = BinaryOpNode(t.position, node, asExpression(), t.value.toString())
         }
         return node
