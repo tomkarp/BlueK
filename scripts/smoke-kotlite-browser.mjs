@@ -62,6 +62,19 @@ expectOk(JSON.parse(multilineExpressionSession.load('<multiline expression>', `
 expectOk(JSON.parse(multilineExpressionSession.evaluate('<multiline expression>', 'val text = Text()')), 'multiline expression construction');
 if (JSON.parse(multilineExpressionSession.evaluate('<multiline expression>', 'text.text()')).display !== 'HiHallo') throw new Error('A line break after a binary operator was not accepted.');
 
+const nonReturningLoopSession = api.bluekCreateKotliteSession();
+expectOk(JSON.parse(nonReturningLoopSession.load('<non-returning loop>', `
+    class Reader {
+        fun read(): Int {
+            while (true) {
+                return 1
+            }
+        }
+    }
+`)), 'non-returning loop load');
+expectOk(JSON.parse(nonReturningLoopSession.evaluate('<non-returning loop>', 'val reader = Reader()')), 'non-returning loop construction');
+if (JSON.parse(nonReturningLoopSession.evaluate('<non-returning loop>', 'reader.read()')).display !== '1') throw new Error('A function ending in while (true) was not accepted with its declared return type.');
+
 const objectGraphSession = api.bluekCreateKotliteSession();
 expectOk(JSON.parse(objectGraphSession.load('<object graph>', `
     class Leaf(val text: String)

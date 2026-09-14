@@ -973,7 +973,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 variantsOfThis.forEach { it.inferredReturnType = inferredReturnType }
             } else {
                 val subjectType = returnType.resolveGenericParameterType(typeParameters).toDataType()
-                if (subjectType !is UnitType && !subjectType.isAssignableFrom(valueType)) {
+                if (subjectType !is UnitType && valueType !is NothingType && !subjectType.isAssignableFrom(valueType)) {
                     throw TypeMismatchException(position, subjectType.nameWithNullable, valueType.nameWithNullable)
                 }
             }
@@ -1697,7 +1697,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
         value?.visit(modifier = modifier)
         val valueType = value?.type()?.toDataType() ?: UnitType()
-        if (declaredReturnType != null && !declaredReturnType.isAssignableFrom(valueType)) {
+        if (declaredReturnType != null && valueType !is NothingType && !declaredReturnType.isAssignableFrom(valueType)) {
             throw TypeMismatchException(position, s.returnType!!.descriptiveName, valueType.descriptiveName)
         }
     }
@@ -2642,8 +2642,8 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             is TypeParameterNode -> TODO()
             is ValueNode -> TODO()
             is VariableReferenceNode -> this.type(modifier = modifier)
-            is WhileNode -> typeRegistry["Unit"]!!
-            is DoWhileNode -> typeRegistry["Unit"]!!
+            is WhileNode -> if (condition is BooleanNode && condition.value) typeRegistry["Nothing"]!! else typeRegistry["Unit"]!!
+            is DoWhileNode -> if (condition is BooleanNode && condition.value) typeRegistry["Nothing"]!! else typeRegistry["Unit"]!!
 
             is IntegerNode -> typeRegistry["Int"]!!
             is LongNode -> typeRegistry["Long"]!!
