@@ -38,12 +38,13 @@ nicht im Fokus; die Projektauswahl bleibt enthalten.
 | GUI-13 | Clear leert alle Terminalinhalte sofort, auch im geteilten Terminal; App bleibt sichtbar; spätere Ausgabe funktioniert | GUI grün: Clear im Split-Terminal, Form Feed, danach neue Ausgabe | Abgesichert |
 | GUI-14 | Print/println wird während laufender Schleife sichtbar | GUI grün: Ausgabe vor Schleifenende, danach Reset | Laufzeit prüft zusätzlich Einzelereignisse |
 | GUI-15 | Keine EOF/Stop/Close-Leiste oder Hinweiszeile; aktives Eingabefeld farblich erkennbar | GUI grün: Eingabe aktiv/inaktiv, keine Hinweiszeile | Visuelle Details noch offen |
-| GUI-16 | Add Media deaktiviert mit Tooltip | GUI grün | Abgesichert |
+| GUI-16 | Files zeigt zunächst nur einen Hinweis-Popup ohne Funktionalität | GUI grün | Abgesichert |
 | GUI-17 | Vorlagen erscheinen untereinander; Escape bricht Projekt-, Konstruktor- und Methodendialoge ab; Eingabefokus startet sinnvoll | GUI grün: 17/17 Chromium-Tests | Weitere visuelle Abnahmen offen |
 | GUI-18 | Primitive Inspektoren zeigen ihren Typ, bleiben feldlos und werden beim Verschieben aktiviert; Escape schließt den aktiven Inspector | GUI grün: 18/18 Chromium-Tests | Weitere Typen noch ausbauen |
 | GUI-19 | Codepad-Eingaben und Ergebnisse stehen mit kompaktem vertikalem Abstand wie im BlueJ-Stil | GUI-Test grün | Visuelle Abnahme offen |
 | GUI-20 | Lange Codepad-Werte werden per CSS dynamisch einzeilig gekürzt, behalten den Typ sichtbar und zeigen den vollständigen Wert per Hover | GUI-Test grün | Visuelle Abnahme offen |
 | GUI-21 | Dasselbe Codepad-Objekt kann unter mehreren Referenznamen auf der Objektbank abgelegt werden; der gemeinsame Inspector zeigt den jeweils aufgerufenen Referenznamen | GUI-Test grün | Visuelle Abnahme offen |
+| GUI-22 | Obere Aktionen sind zu New Project, Open / Import, Save / Export und Files gebündelt; Open nutzt ein Drop-Feld, Save das New-Project-Layout und alle schalten gemeinsam auf Icon-only um | GUI-Test grün | Visuelle Abnahme offen |
 | RT-01 | Identität, Getter/Setter, Main, Reset, Input, veraltete Worker-Antworten bleiben korrekt | Bestehende Integrationstests | `test:runtime-state` |
 | ARCH-01 | Inspektoransicht verändert keine Laufzeitdaten und ruft beim Rendern keine Getter auf | Modelltest grün | `test:inspector` |
 | ARCH-02 | Parallele Getter-Refreshes nicht doppelt ausführen; alte Ergebnisse nach Reset/Schließen verwerfen | Modelltest grün | `test:inspector` |

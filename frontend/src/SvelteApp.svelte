@@ -160,6 +160,7 @@
     inheritanceSelection = "",
     showInheritance = true,
     settingsNotice = false,
+    filesNotice = false,
     stageWindowOpen = false,
     stageMaximized = false,
     stagePosition: { left: number; top: number } | null = null,
@@ -167,6 +168,7 @@
     paneSplit = 66,
     benchWidth: number | null = null,
     codepadMenu: { x: number; y: number; text?: string } | null = null;
+  let toolbarDialog: "open" | "save" | null = null;
   let inheritanceEdges: Array<{
     id: string;
     x1: number;
@@ -728,6 +730,8 @@
       else if (newClassOpen) newClassOpen = false;
       else if (newFunctionsOpen) newFunctionsOpen = false;
       else if (settingsNotice) settingsNotice = false;
+      else if (filesNotice) filesNotice = false;
+      else if (toolbarDialog) toolbarDialog = null;
       else if (newProjectOpen) newProjectOpen = false;
       else if (terminalOpen) {
         terminalOpen = false;
@@ -1739,12 +1743,24 @@
     const file = input.files?.[0];
     input.value = "";
     if (!file) return;
+    await openProjectFile(file);
+  }
+  async function openProjectFile(file: File) {
     try {
+      if (!/\.json$/i.test(file.name)) {
+        status = "This file format is not implemented yet.";
+        return;
+      }
       await loadProject(JSON.parse(await file.text()), `Loaded ${file.name}`);
     } catch (reason) {
       status = "Project error";
       error = reason instanceof Error ? reason.message : String(reason);
     }
+  }
+  async function openProjectDrop(event: DragEvent) {
+    event.preventDefault();
+    const file = event.dataTransfer?.files?.[0];
+    if (file) await openProjectFile(file);
   }
   async function importKotlin(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
@@ -1905,31 +1921,18 @@
     </div>
   {/if}
   <div class="toolbar">
-    <button on:click={() => (newProjectOpen = true)}>New Project</button>
-    <button on:click={shareProject} disabled={!files.length}
-      >Share Project</button
-    >
-    <label
-      >Open Project<input
-        type="file"
-        accept=".json,.bluek.json,application/json"
-        on:change={importProject}
-      /></label
-    >
-    <button on:click={exportProject} disabled={!files.length}
-      >Save Project</button
-    >
-    <label
-      >Import Kotlin Files<input
-        type="file"
-        accept=".kt,text/plain"
-        multiple
-        on:change={importKotlin}
-      /></label
-    >
-    <label class="media-disabled" aria-disabled="true" title="Not yet supported"
-      >Add Media<input type="file" disabled /></label
-    >
+    <button class="toolbar-main-action" on:click={() => (newProjectOpen = true)} aria-label="New Project" title="New Project">
+      <span class="toolbar-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 2.5h10l4 4V21.5H5z"/><path d="M15 2.5v4h4"/></svg></span><span>New Project</span>
+    </button>
+    <button class="toolbar-main-action" on:click={() => (toolbarDialog = "open")} aria-label="Open / Import" title="Open / Import">
+        <span class="toolbar-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 19h12M12 16V5M9 8l3-3 3 3"/></svg></span><span>Open / Import</span>
+      </button>
+    <button class="toolbar-main-action" on:click={() => (toolbarDialog = "save")} aria-label="Save / Export" title="Save / Export">
+        <span class="toolbar-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 5h12M12 8v11M9 16l3 3 3-3"/></svg></span><span>Save / Export</span>
+      </button>
+    <button class="toolbar-main-action" on:click={() => (filesNotice = true)} aria-label="Files" title="Files">
+      <span class="toolbar-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 3.5h7l1.5 2H20v4H7v11H4z"/><path d="M7 9.5v11h13v-11M10 13h7M10 16h5"/></svg></span><span>Files</span>
+    </button>
     <div class="toolbar-options">
       <button
         class:active={terminalOpen}
@@ -2370,7 +2373,7 @@
           class="svelte-editor-host"
           use:codeMirror={{ value: editorSource, onChange: updateSource }}
         ></div>
-        <button on:click={() => (editorOpen = false)}>Close</button>
+        <div class="dialog-actions"><button on:click={() => (editorOpen = false)}>Close</button></div>
       </div>
     </div>{/if}
   {#if compilerDialog}<div class="modal" role="presentation">
@@ -2411,10 +2414,9 @@
             </div>{/if}
           <pre
             class="compiler-error-message">{diagnostic.message}</pre>{/each}{#if !compilerDiagnostics.length}<pre
-            class="compiler-error-text">{error}</pre>{/if}<button
+            class="compiler-error-text">{error}</pre>{/if}<div class="dialog-actions"><button
           use:focusOnMount
-          on:click={() => (compilerDialog = false)}>Close</button
-        >
+          on:click={() => (compilerDialog = false)}>Close</button></div>
       </div>
     </div>{/if}
 
@@ -2498,7 +2500,7 @@
             </div>
           {:else}No fields{/each}
         </div>
-        <button on:click={() => closeInspector(inspector.id)}>Close</button>
+        <div class="dialog-actions"><button on:click={() => closeInspector(inspector.id)}>Close</button></div>
       </div>
     </div>
   {/each}
@@ -2558,14 +2560,13 @@
             /></label
           >{/each}{#if dialogError}<div class="dialog-error" role="alert">
             {dialogError}
-          </div>{/if}<button on:click={() => (createDialog = null)}
+          </div>{/if}<div class="dialog-actions"><button on:click={() => (createDialog = null)}
           >Cancel</button
         ><button
           on:click={confirmCreate}
           disabled={!canExecute ||
             missingTypeArgument(createTypeArgs) ||
-            missingRequired(createDialog.parameters, createArgs)}>Create</button
-        >
+            missingRequired(createDialog.parameters, createArgs)}>Create</button></div>
       </div>
     </div>{/if}
   {#if invokeDialog}<div class="modal" role="presentation">
@@ -2597,15 +2598,14 @@
             /></label
           >{/each}{#if dialogError}<div class="dialog-error" role="alert">
             {dialogError}
-          </div>{/if}<button on:click={() => (invokeDialog = null)}
+          </div>{/if}<div class="dialog-actions"><button on:click={() => (invokeDialog = null)}
           >Cancel</button
         ><button
           on:click={confirmInvoke}
           disabled={!canExecute ||
             missingTypeArgument(invokeTypeArgs) ||
             missingRequired(invokeDialog.method.parameters || [], invokeArgs)}
-          >Invoke</button
-        >
+          >Invoke</button></div>
       </div>
     </div>{/if}
   {#if resultDialog}<div class="modal">
@@ -2739,9 +2739,9 @@
         </fieldset>
         {#if error}<div class="dialog-error" role="alert">
             {error}
-          </div>{/if}<button on:click={() => (newClassOpen = false)}
+          </div>{/if}<div class="dialog-actions"><button on:click={() => (newClassOpen = false)}
           >Cancel</button
-        ><button on:click={confirmNewClass}>Create</button>
+        ><button on:click={confirmNewClass}>Create</button></div>
       </div>
     </div>{/if}
   {#if newFunctionsOpen}<div class="modal" role="presentation">
@@ -2763,9 +2763,9 @@
           /></label
         >{#if error}<div class="dialog-error" role="alert">
             {error}
-          </div>{/if}<button on:click={() => (newFunctionsOpen = false)}
+          </div>{/if}<div class="dialog-actions"><button on:click={() => (newFunctionsOpen = false)}
           >Cancel</button
-        ><button on:click={confirmFunctions}>Create</button>
+        ><button on:click={confirmFunctions}>Create</button></div>
       </div>
     </div>{/if}
 
@@ -2858,6 +2858,42 @@
       {/if}
     </div>
   {/if}
+  {#if toolbarDialog === "open"}<div class="modal" role="presentation">
+      <div class="dialog toolbar-dialog" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="open-import-title" use:containClicks>
+        <h3 id="open-import-title">Open / Import</h3>
+        <p>Drop a project file or directory here, or click to choose one.</p>
+        <label
+          class="project-dropzone"
+          on:dragover|preventDefault
+          on:drop={openProjectDrop}
+        >
+          <strong>JSON · BlueJ ZIP · Project directory</strong>
+          <span>Accepted: .json, .zip, or a complete project directory</span>
+          <input type="file" accept=".json,.bluek.json,.zip,application/json,application/zip" webkitdirectory multiple on:change={(event) => { importProject(event); toolbarDialog = null; }} />
+        </label>
+        <div class="dialog-actions"><button on:click={() => (toolbarDialog = null)}>Cancel</button></div>
+      </div>
+    </div>{/if}
+  {#if toolbarDialog === "save"}<div class="modal" role="presentation">
+      <div class="dialog toolbar-dialog" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="save-export-title" use:containClicks>
+        <h3 id="save-export-title">Save / Export</h3>
+        <p>Choose how to save or share this project:</p>
+        <div class="project-choice-list toolbar-project-choice-list">
+          <button on:click={() => { exportProject(); toolbarDialog = null; }} disabled={!files.length}><strong>Export Project JSON</strong><span>Export the complete BlueK project as JSON.</span></button>
+          <button on:click={() => { shareProject(); toolbarDialog = null; }} disabled={!files.length}><strong>Copy Full Project Link</strong><span>Share the complete project encoded in the URL.</span></button>
+          <button disabled><strong>Export BlueJ Project (.zip)</strong><span>Export for BlueJ (not implemented yet).</span></button>
+          <button disabled><strong>Copy Short Link</strong><span>Create a shortened project link (not implemented yet).</span></button>
+        </div>
+        <div class="dialog-actions"><button on:click={() => (toolbarDialog = null)}>Cancel</button></div>
+      </div>
+    </div>{/if}
+  {#if filesNotice}<div class="modal" role="presentation">
+      <div class="dialog settings-dialog" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="svelte-files-title" use:containClicks>
+        <h3 id="svelte-files-title">Files</h3>
+        <p>The file manager is not implemented yet.</p>
+        <div class="dialog-actions"><button on:click={() => (filesNotice = false)}>Close</button></div>
+      </div>
+    </div>{/if}
   {#if settingsNotice}<div class="modal" role="presentation">
       <div
         class="dialog settings-dialog"
@@ -2869,7 +2905,7 @@
       >
         <h3 id="svelte-settings-title">Settings</h3>
         <p>Settings are not implemented yet.</p>
-        <button on:click={() => (settingsNotice = false)}>Close</button>
+        <div class="dialog-actions"><button on:click={() => (settingsNotice = false)}>Close</button></div>
       </div>
     </div>{/if}
   {#if objectNamePrompt}<div class="modal" role="presentation">
@@ -2891,12 +2927,11 @@
               if (event.key === "Enter") confirmObjectOnBench();
             }}
           /></label
-        ><button on:click={() => (objectNamePrompt = null)}>Cancel</button
+        ><div class="dialog-actions"><button on:click={() => (objectNamePrompt = null)}>Cancel</button
         ><button
           on:click={confirmObjectOnBench}
           disabled={!/^[A-Za-z_]\w*$/.test(objectName.trim()) ||
-            bench.some((item) => item.name === objectName.trim())}>OK</button
-        >
+            bench.some((item) => item.name === objectName.trim())}>OK</button></div>
       </div>
     </div>{/if}
   {#if codepadMenu}<div

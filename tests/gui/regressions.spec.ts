@@ -143,6 +143,34 @@ test('GUI-21 the same codepad object can be added under two reference names', as
   await expect(inspector.locator('h2')).toHaveText('hund2 : Hund');
 });
 
+test('GUI-22 top actions are grouped, ordered and switch to icon-only mode together', async ({ page }) => {
+  await project(page, 'class Hund {}');
+  const actions = page.locator('.toolbar-main-action');
+  await expect(actions).toHaveCount(4);
+  await expect(actions.nth(0)).toHaveText(/New Project/);
+  await expect(actions.nth(1)).toHaveText(/Open \/ Import/);
+  await expect(actions.nth(2)).toHaveText(/Save \/ Export/);
+  await expect(actions.nth(3)).toHaveText(/Files/);
+  await actions.nth(1).click();
+  const openDialog = page.getByRole('dialog', { name: 'Open / Import' });
+  await expect(openDialog.locator('.project-dropzone')).toContainText('JSON');
+  await expect(openDialog.locator('.project-dropzone')).toContainText('BlueJ ZIP');
+  await expect(openDialog.locator('.project-dropzone')).toContainText('Project directory');
+  await openDialog.getByRole('button', { name: 'Cancel' }).click();
+  await actions.nth(2).click();
+  const saveDialog = page.getByRole('dialog', { name: 'Save / Export' });
+  await expect(saveDialog.getByRole('button', { name: /Project JSON/ })).toBeEnabled();
+  await expect(saveDialog.getByRole('button', { name: /Full Project Link/ })).toBeEnabled();
+  await expect(saveDialog.getByRole('button', { name: /BlueJ/ })).toBeDisabled();
+  await expect(saveDialog.getByRole('button', { name: /Short Link/ })).toBeDisabled();
+  await saveDialog.getByRole('button', { name: 'Cancel' }).click();
+  await actions.nth(3).click();
+  await expect(page.getByRole('dialog', { name: 'Files' })).toContainText('not implemented');
+  await page.setViewportSize({ width: 800, height: 1000 });
+  for (const action of await actions.all())
+    await expect(action.locator('span:not(.toolbar-action-icon)')).toBeHidden();
+});
+
 test('GUI-05 history works immediately after execution and terminal output', async ({ page }) => {
   await project(page);
   for (const code of ['5', 'println("Hallo")']) {
@@ -297,10 +325,10 @@ test('GUI-12 GUI-13 GUI-15 input echo order and clearing preserve the app', asyn
   await expect(terminal.locator('pre')).not.toContainText('after');
 });
 
-test('GUI-16 media remains disabled', async ({ page }) => {
+test('GUI-16 Files remains an informational placeholder', async ({ page }) => {
   await project(page);
-  await expect(page.locator('.media-disabled')).toHaveAttribute('title', 'Not yet supported');
-  await expect(page.locator('.media-disabled input')).toBeDisabled();
+  await page.getByRole('button', { name: 'Files', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Files' })).toContainText('not implemented');
 });
 
 test('GUI-14 output is visible before a long loop finishes', async ({ page }) => {
