@@ -161,6 +161,7 @@
     showInheritance = true,
     settingsNotice = false,
     filesNotice = false,
+    shareNotice = "",
     stageWindowOpen = false,
     stageMaximized = false,
     stagePosition: { left: number; top: number } | null = null,
@@ -1724,8 +1725,12 @@
     try {
       await navigator.clipboard.writeText(url.href);
       status = "Project link copied";
+      shareNotice = "Project link copied to clipboard.";
+      window.setTimeout(() => (shareNotice = ""), 3000);
     } catch {
       window.prompt("Copy this project link:", url.href);
+      shareNotice = "Project link ready to copy.";
+      window.setTimeout(() => (shareNotice = ""), 4000);
     }
   }
   async function loadProject(payload: any, message = "Project loaded.") {
@@ -1927,7 +1932,7 @@
     <button class="toolbar-main-action" on:click={() => (toolbarDialog = "open")} aria-label="Open / Import" title="Open / Import">
         <span class="toolbar-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 19h12M12 16V5M9 8l3-3 3 3"/></svg></span><span>Open / Import</span>
       </button>
-    <button class="toolbar-main-action" on:click={() => (toolbarDialog = "save")} aria-label="Save / Export" title="Save / Export">
+    <button class="toolbar-main-action" on:click={() => (toolbarDialog = "save")} disabled={!files.length} aria-label="Save / Export" title="Save / Export">
         <span class="toolbar-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 5h12M12 8v11M9 16l3 3 3-3"/></svg></span><span>Save / Export</span>
       </button>
     <button class="toolbar-main-action" on:click={() => (filesNotice = true)} aria-label="Files" title="Files">
@@ -2295,6 +2300,7 @@
       </footer>
     </section>
   </div>
+  {#if shareNotice}<div class="share-notice" role="status" aria-live="polite">{shareNotice}</div>{/if}
   {#if terminalOpen}<div
       class:terminal-modal-split={terminalSplit}
       class="terminal-modal"

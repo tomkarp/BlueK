@@ -171,6 +171,11 @@ test('GUI-22 top actions are grouped, ordered and switch to icon-only mode toget
     await expect(action.locator('span:not(.toolbar-action-icon)')).toBeHidden();
 });
 
+test('GUI-23 Save / Export is disabled for an empty project', async ({ page }) => {
+  await project(page);
+  await expect(page.locator('.toolbar-main-action').nth(2)).toBeDisabled();
+});
+
 test('GUI-05 history works immediately after execution and terminal output', async ({ page }) => {
   await project(page);
   for (const code of ['5', 'println("Hallo")']) {

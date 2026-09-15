@@ -420,3 +420,4 @@ footer{flex:0 0 108px}
 .svelte-preview .dialog-error{color:#b00020;margin:8px 0}
 .svelte-preview .inspect-edit-input{min-width:120px;flex:1;padding:5px;font:13px monospace}
 .svelte-preview .inspect-error{color:#b00020}
+.share-notice{position:fixed;z-index:100;top:72px;left:50%;transform:translateX(-50%);padding:10px 16px;border:1px solid #2878c8;border-radius:5px;background:#eef7ff;color:#075b70;box-shadow:2px 3px 10px #888;font-size:14px}
