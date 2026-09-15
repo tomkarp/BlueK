@@ -6,7 +6,7 @@ const read = path => readFile(new URL(path, root), 'utf8');
 const runtimeSources = [
   ['frontend/src/localRuntimeClient.ts', await read('frontend/src/localRuntimeClient.ts')],
   ['frontend/src/localRuntimeWorker.ts', await read('frontend/src/localRuntimeWorker.ts')],
-  ['frontend/src/main.tsx', await read('frontend/src/main.tsx')],
+  ['frontend/src/SvelteApp.svelte', await read('frontend/src/SvelteApp.svelte')],
 ];
 
 const forbidden = [

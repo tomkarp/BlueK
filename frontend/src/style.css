@@ -406,3 +406,11 @@ footer{flex:0 0 108px}
 .workspace>.lower{grid-row:3;min-height:0;min-width:0;width:100%;overflow:hidden;position:relative;z-index:1}
 .workspace>.lower>*{min-width:0}
 .workspace>footer{grid-row:4;min-height:0}
+
+/* Svelte uses the same layout classes throughout, without preview-specific overrides. */
+.svelte-preview .terminal-window.floating{position:fixed;margin:0}
+.svelte-preview .terminal-header{cursor:move;user-select:none}
+.svelte-preview .svelte-editor-host{height:52vh;overflow:hidden;margin-bottom:14px;border:1px solid #888}
+.svelte-preview .dialog-error{color:#b00020;margin:8px 0}
+.svelte-preview .inspect-edit-input{min-width:120px;flex:1;padding:5px;font:13px monospace}
+.svelte-preview .inspect-error{color:#b00020}
