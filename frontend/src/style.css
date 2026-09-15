@@ -399,6 +399,15 @@ footer{flex:0 0 108px}
 .popup button{border-bottom:0}
 .popup hr{border-top:1px solid #d6d6d6;margin:1px 0}
 .editor-dialog{min-width:min(850px,80vw);width:min(850px,80vw);height:min(680px,86vh);display:flex;flex-direction:column}.kotlin-editor{flex:1;min-height:0;margin:0 0 14px;border:1px solid #888;background:#fff;overflow:hidden}.kotlin-editor .cm-editor{height:100%}
+.editor-dialog.maximized{position:fixed;inset:4vh 4vw;width:auto;height:auto;max-height:none;margin:0}
+.editor-header{display:flex;align-items:center;justify-content:space-between;margin:0 0 10px;font-weight:bold}
+.editor-header h3{margin:0}
+.editor-header>div{display:flex;gap:4px}
+.editor-header button{min-width:28px;padding:2px 7px;margin:0;border:1px solid #999;border-radius:4px;background:linear-gradient(#fff,#d5d5d5);cursor:pointer;font-size:16px;line-height:20px}
+.svelte-editor-host{position:relative}
+.editor-format{position:absolute;right:10px;bottom:10px;z-index:2;width:30px;height:30px;padding:0!important;margin:0!important;border:1px solid #999!important;border-radius:4px;background:#f5f4f1cc!important;color:#444;font-size:22px;line-height:26px;cursor:pointer}
+.editor-format:hover{background:#fff!important;color:#111}
+.editor-dialog.maximized .svelte-editor-host{height:auto;flex:1;min-height:0}
 
 /* Keep both workbench panes inside the workspace even when either splitter
    is dragged to an extreme size. The available height always includes the
@@ -416,7 +425,9 @@ footer{flex:0 0 108px}
 .svelte-preview .terminal-window.floating{position:fixed;margin:0}
 .svelte-preview .terminal-header{cursor:move;user-select:none}
 .svelte-preview .editor-dialog{height:auto;max-height:86vh}
+.svelte-preview .editor-dialog.maximized{position:fixed;inset:4vh 4vw;width:auto;height:auto;max-height:none;margin:0}
 .svelte-preview .svelte-editor-host{height:min(52vh,calc(86vh - 120px));min-height:220px;overflow:hidden;margin-bottom:14px;border:1px solid #888}
+.svelte-preview .editor-dialog.maximized .svelte-editor-host{height:auto;flex:1;min-height:0}
 .svelte-preview .dialog-error{color:#b00020;margin:8px 0}
 .svelte-preview .inspect-edit-input{min-width:120px;flex:1;padding:5px;font:13px monospace}
 .svelte-preview .inspect-error{color:#b00020}

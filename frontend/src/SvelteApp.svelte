@@ -117,6 +117,7 @@
     terminalPosition: { left: number; top: number } | null = null,
     terminalSize = { width: 780, height: 520 };
   let editorOpen = false,
+    editorMaximized = false,
     editorSource = "",
     status = "Ready",
     error = "",
@@ -171,6 +172,8 @@
     paneSplit = 66,
     benchWidth: number | null = null,
     codepadMenu: { x: number; y: number; text?: string } | null = null;
+  let formatOpenEditor = () => {};
+  let formatShortcutLabel = "Ctrl+Shift+I";
   let toolbarDialog: "open" | "save" | null = null;
   let inheritanceEdges: Array<{
     id: string;
@@ -491,6 +494,7 @@
       });
       return true;
     };
+    formatOpenEditor = formatDocument;
     view = new EditorView({
       state: EditorState.create({
         doc: current.value,
@@ -547,6 +551,7 @@
       },
       destroy() {
         ++formatRequest;
+        if (formatOpenEditor === formatDocument) formatOpenEditor = () => {};
         window.removeEventListener("keydown", formatShortcut, true);
         formatter.dispose();
         view.destroy();
@@ -576,6 +581,7 @@
   }
 
   onMount(() => {
+    formatShortcutLabel = /Mac/i.test(navigator.platform) ? "Cmd+Shift+I" : "Ctrl+Shift+I";
     client = new LocalRuntimeClient();
     inspectorModel = new InspectorModel(client, () => { inspectorRevision += 1; });
     const unsubscribe = client.subscribe(() => {
@@ -760,7 +766,7 @@
       else if (resultDialog) resultDialog = null;
       else if (activeInspectorId && inspectorWindows.some((item) => item.id === activeInspectorId))
         closeInspector(activeInspectorId);
-      else if (editorOpen) editorOpen = false;
+      else if (editorOpen) closeEditor();
       else if (newClassOpen) newClassOpen = false;
       else if (newFunctionsOpen) newFunctionsOpen = false;
       else if (settingsNotice) settingsNotice = false;
@@ -865,8 +871,13 @@
     if (!file) return;
     selected = files.findIndex((item) => item.id === file.id);
     editorSource = file.source;
+    editorMaximized = false;
     editorOpen = true;
     menu = null;
+  }
+  function closeEditor() {
+    editorOpen = false;
+    editorMaximized = false;
   }
   function updateSource(value: string) {
     editorSource = value;
@@ -925,6 +936,7 @@
     files = [...files, duplicate];
     selected = files.length - 1;
     editorSource = duplicate.source;
+    editorMaximized = false;
     editorOpen = true;
     markUncompiled();
   }
@@ -2406,13 +2418,27 @@
       </div>
     </div>{/if}
   {#if editorOpen}<div class="modal">
-      <div class="dialog editor-dialog">
-        <h3>{currentFile?.fileName || "Kotlin file"}</h3>
+      <div class:maximized={editorMaximized} class="dialog editor-dialog">
+        <div class="editor-header" role="toolbar">
+          <h3>{currentFile?.fileName || "Kotlin file"}</h3>
+          <div>
+            <button
+              on:click={() => (editorMaximized = !editorMaximized)}
+              aria-label={editorMaximized ? "Restore editor window" : "Maximize editor window"}
+              title={editorMaximized ? "Restore editor window" : "Maximize editor window"}
+            >{editorMaximized ? "❐" : "□"}</button>
+            <button on:click={closeEditor} aria-label="Close editor" title="Close editor">×</button>
+          </div>
+        </div>
         <div
           class="svelte-editor-host"
           use:codeMirror={{ value: editorSource, onChange: updateSource }}
-        ></div>
-        <div class="dialog-actions"><button on:click={() => (editorOpen = false)}>Close</button></div>
+        ><button
+            class="editor-format"
+            on:click={formatOpenEditor}
+            aria-label="Format Kotlin file"
+            title={`Format Kotlin file (${formatShortcutLabel})`}
+          >≡</button></div>
       </div>
     </div>{/if}
   {#if compilerDialog}<div class="modal" role="presentation">

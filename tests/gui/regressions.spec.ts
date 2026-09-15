@@ -96,6 +96,22 @@ test('GUI-26 Cmd-Shift-I also formats the complete file', async ({ page }) => {
   await expect(editor.locator('.cm-line').nth(2)).toHaveText('        println("Wuff")');
 });
 
+test('GUI-27 editor window has maximize, close and format controls', async ({ page }) => {
+  await project(page, 'class Hund {\nfun bellen() {\nprintln("Wuff")\n}\n}');
+  await page.locator('.classcard').dblclick();
+  const dialog = page.locator('.editor-dialog');
+  await expect(dialog.getByRole('button', { name: 'Format Kotlin file' })).toHaveAttribute(
+    'title',
+    /Format Kotlin file \((Cmd|Ctrl)\+Shift\+I\)/,
+  );
+  await dialog.getByRole('button', { name: 'Format Kotlin file' }).click();
+  await expect(dialog.locator('.cm-line').nth(1)).toHaveText('    fun bellen() {');
+  await dialog.getByRole('button', { name: 'Maximize editor window' }).click();
+  await expect(dialog).toHaveClass(/maximized/);
+  await dialog.getByRole('button', { name: 'Close editor' }).click();
+  await expect(dialog).toHaveCount(0);
+});
+
 test('GUI-03 GUI-04 computed values update after every inspector edit', async ({ page }) => {
   await project(page, 'class Hund(var alter: Int = 1) { val steuer: Int get() = alter * 10 }');
   const entry = await evaluate(page, 'Hund()');
