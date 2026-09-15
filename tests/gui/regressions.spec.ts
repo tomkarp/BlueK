@@ -109,11 +109,18 @@ test('GUI-20 long codepad values retain their type and reveal the full value on 
   await project(page);
   const entry = await evaluate(page, `"${'a'.repeat(200)}"`);
   const result = entry.locator('.codepad-result, .codepad-object-label');
-  const full = await result.getAttribute('title');
+  const value = result.locator('.codepad-result-value');
+  const full = await value.getAttribute('title');
   const visible = await result.textContent();
+  const metrics = await value.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+    textOverflow: getComputedStyle(element).textOverflow,
+  }));
   expect(full).toContain(': String');
   expect(visible).toContain(': String');
-  expect(visible!.length).toBeLessThan(full!.length);
+  expect(metrics.clientWidth).toBeLessThan(metrics.scrollWidth);
+  expect(metrics.textOverflow).toBe('ellipsis');
 });
 
 test('GUI-05 history works immediately after execution and terminal output', async ({ page }) => {

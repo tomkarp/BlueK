@@ -444,13 +444,13 @@
     codepadMenu = null;
   }
 
-  function compactCodepadResult(value: string | undefined) {
-    if (!value || value.length <= 72) return value;
+  function codepadResultValue(value: string) {
     const separator = value.lastIndexOf(" : ");
-    if (separator < 0) return `${value.slice(0, 69)}…`;
-    const type = value.slice(separator);
-    const valueLimit = Math.max(8, 72 - type.length - 1);
-    return `${value.slice(0, valueLimit)}…${type}`;
+    return separator < 0 ? value : value.slice(0, separator);
+  }
+  function codepadResultType(value: string) {
+    const separator = value.lastIndexOf(" : ");
+    return separator < 0 ? "" : value.slice(separator);
   }
   function selectAllCodepadHistory() {
     document.querySelectorAll(".codepad-entry").forEach((entry, index) => {
@@ -2230,8 +2230,11 @@
                       aria-label={`Get ${entry.className || "object"} on object bench`}
                     >
                       <span class="codepad-object-icon" aria-hidden="true"
-                      ></span><span class="codepad-object-label" title={entry.result}
-                        >{#if entry.result}{compactCodepadResult(entry.result)}{:else}<span class="codepad-object-placeholder"
+                      ></span><span class="codepad-object-label"
+                        >{#if entry.result}<span class="codepad-result-value" title={entry.result}
+                          >{codepadResultValue(entry.result)}</span
+                        ><span class="codepad-result-type">{codepadResultType(entry.result)}</span
+                        >{:else}<span class="codepad-object-placeholder"
                           >&lt;object&gt;</span
                         ><span> : {entry.className}</span>{/if}</span
                       >
@@ -2239,8 +2242,10 @@
                   {:else if entry.error}<div class="codepad-error">
                       {entry.error}
                     </div>
-                  {:else if entry.result}<div class="codepad-result" title={entry.result}>
-                      <span class="codepad-value-icon" aria-hidden="true"></span>{compactCodepadResult(entry.result)}
+                  {:else if entry.result}<div class="codepad-result">
+                      <span class="codepad-value-icon" aria-hidden="true"></span><span class="codepad-result-value" title={entry.result}
+                        >{codepadResultValue(entry.result)}</span
+                      ><span class="codepad-result-type">{codepadResultType(entry.result)}</span>
                     </div>{/if}
                 </div>
               {/each}
