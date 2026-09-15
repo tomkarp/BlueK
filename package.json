@@ -26,6 +26,7 @@
     "@codemirror/search": "^6.7.2",
     "@codemirror/state": "^6.7.4",
     "@codemirror/view": "^6.43.11",
+    "@scalar/kotlin-fmt": "0.4.1",
     "fflate": "^0.8.3",
     "vite": "8.2.2"
   },

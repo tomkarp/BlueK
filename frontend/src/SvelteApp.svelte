@@ -16,12 +16,13 @@
     appendTerminal, terminalParts, codepadResult, codepadError, kotlinCallArguments, missingRequired, missingTypeArgument, codepadIsDisabled,
   } from "./uiParity";
   import { LocalRuntimeClient } from "./localRuntimeClient";
+  import { KotlinFormatterClient } from "./kotlinFormatterClient";
   import { InspectorModel, inspectorFieldText, type InspectionView, type InspectorField } from "./inspectorModel";
   import { createProjectPayload, projectModelFromPayload } from "./projectFormat";
   import { compileProject, executeCodepad } from "./codepadFlow";
   import { minimalSetup } from "codemirror";
   import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
-  import { EditorSelection, EditorState, StateEffect, type StateCommand, type Transaction } from "@codemirror/state";
+  import { EditorState, StateEffect } from "@codemirror/state";
   import {
     EditorView,
     drawSelection,
@@ -33,7 +34,6 @@
     defaultKeymap,
     history as historyExtension,
     historyKeymap,
-    indentSelection,
     indentWithTab,
   } from "@codemirror/commands";
   import {
@@ -472,24 +472,25 @@
     options: { value: string; onChange: (value: string) => void },
   ) {
     let current = options;
-    const formatDocument: StateCommand = ({ state, dispatch }) => {
-      let formatting: Transaction | undefined;
-      const wholeDocument = state.update({
-        selection: EditorSelection.single(0, state.doc.length),
-      }).state;
-      indentSelection({
-        state: wholeDocument,
-        dispatch: transaction => { formatting = transaction; },
+    const formatter = new KotlinFormatterClient();
+    let view: EditorView;
+    let formatRequest = 0;
+    const formatDocument = () => {
+      const request = ++formatRequest;
+      const source = view.state.doc.toString();
+      void formatter.format(source).then((formatted) => {
+        if (request !== formatRequest || formatted === view.state.doc.toString()) return;
+        view.dispatch({
+          changes: { from: 0, to: view.state.doc.length, insert: formatted },
+          userEvent: "input.format",
+        });
+      }).catch((error: unknown) => {
+        if (request === formatRequest)
+          dialogError = error instanceof Error ? error.message : String(error);
       });
-      if (formatting) {
-        dispatch(state.update({
-          changes: formatting.changes,
-          selection: state.selection.map(formatting.changes),
-        }, { userEvent: "input.format" }));
-      }
       return true;
     };
-    const view = new EditorView({
+    view = new EditorView({
       state: EditorState.create({
         doc: current.value,
         extensions: [
@@ -535,6 +536,8 @@
           });
       },
       destroy() {
+        ++formatRequest;
+        formatter.dispose();
         view.destroy();
       },
     };
