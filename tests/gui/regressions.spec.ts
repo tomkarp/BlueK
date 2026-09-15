@@ -25,6 +25,57 @@ test('GUI-11 codepad works without Compile in an empty project', async ({ page }
   await evaluate(page, 'answer');
 });
 
+test('GUI-24 project statements fail before execution, with file location; Codepad still runs statements', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, files: [
+    { fileName: 'Init.kt', kind: 'functions', source: 'fun initialize(): Int { println("MUST NOT RUN"); return 1 }\nval initialized = initialize()' },
+    { fileName: 'Actions.kt', kind: 'functions', source: '// Add top-level Kotlin functions here\n  println("Hallo")' },
+  ] };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  await page.getByRole('button', { name: 'Compile', exact: true }).click();
+  const errors = page.getByRole('dialog', { name: 'Compiler errors' });
+  await expect(errors).toBeVisible();
+  await expect(errors.locator('.compiler-error-location')).toHaveText('Actions.kt · line 2, column 3');
+  await expect(errors).toContainText('Only declarations');
+  await expect(page.locator('.terminal-window')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  // Compile-on-demand must not bypass a previously failed validation.
+  await page.getByLabel('Codepad input').fill('println("bypass")');
+  await page.getByLabel('Codepad input').press('Enter');
+  await expect(errors).toBeVisible();
+  await expect(page.locator('.terminal-window')).toHaveCount(0);
+  await expect(page.locator('.codepad-entry')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'New Project', exact: true }).click();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('dialog', { name: 'Create New Project' }).getByRole('button', { name: /^Empty Project/ }).click();
+  await expect(page.locator('.classcard')).toHaveCount(0);
+  await evaluate(page, 'println("Hallo")');
+  await expect(page.locator('.terminal-output pre')).toHaveText('Hallo\n');
+});
+
+test('GUI-25 editor does not open automatic code completion', async ({ page }) => {
+  await project(page, 'class Hund {}');
+  await page.locator('.classcard').dblclick();
+  const editor = page.locator('.editor-dialog .cm-editor');
+  await editor.click();
+  await page.keyboard.type('prin');
+  await expect(page.locator('.cm-tooltip-autocomplete')).toHaveCount(0);
+});
+
+test('GUI-26 Cmd/Ctrl-Shift-I auto-formats the complete file', async ({ page }) => {
+  await project(page, 'class Hund {\nfun bellen() {\nprintln("Wuff")\n}\n}');
+  await page.locator('.classcard').dblclick();
+  const editor = page.locator('.editor-dialog .cm-editor');
+  await editor.click();
+  await page.keyboard.press('Control+Shift+I');
+  await expect(editor.locator('.cm-line')).toHaveCount(5);
+  await expect(editor.locator('.cm-line').nth(0)).toHaveText('class Hund {');
+  await expect(editor.locator('.cm-line').nth(1)).toHaveText('    fun bellen() {');
+  await expect(editor.locator('.cm-line').nth(2)).toHaveText('        println("Wuff")');
+  await expect(editor.locator('.cm-line').nth(3)).toHaveText('    }');
+  await expect(editor.locator('.cm-line').nth(4)).toHaveText('}');
+});
+
 test('GUI-03 GUI-04 computed values update after every inspector edit', async ({ page }) => {
   await project(page, 'class Hund(var alter: Int = 1) { val steuer: Int get() = alter * 10 }');
   const entry = await evaluate(page, 'Hund()');

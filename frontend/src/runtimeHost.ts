@@ -8,6 +8,7 @@ export interface KotliteSessionBridge {
   manifest(): string;
   evaluate(filename: string, source: string): string;
   startEvaluate(filename: string, source: string, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
+  startLoadProject(filenames: string[], sources: string[], onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
   startCreate(className: string, argumentsSource: string, requestedName: string, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
   startInvoke(objectId: string, methodName: string, argumentsSource: string, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
   startSet(objectId: string, propertyName: string, valueSource: string, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
@@ -81,7 +82,6 @@ export class RuntimeHost {
         this.active = null; this.handles.clear(); this.sequence = 0;
         this.snapshot = { generationId: command.generationId, revision: 0, phase: 'compiling', classes: [], inspections: {}, error: null };
         this.session = this.createSession();
-        const source = command.files.map(file => `// BlueK file: ${file.fileName}\n${file.source}`).join('\n\n');
         const executionId = id;
         this.active = { executionId };
         this.session.setOutputCallback(() => this.emitStreamingOutput(executionId, emit));
@@ -101,11 +101,12 @@ export class RuntimeHost {
             this.snapshot.classes = manifestClasses(JSON.parse(this.session!.manifest()), command.files);
             this.snapshot.phase = 'ready';
           } else {
-            this.snapshot.phase = response.fatal ? 'faulted' : 'ready';
+            this.snapshot.phase = response.fatal ? 'faulted' : 'uncompiled';
           }
           emit(this.publish(id, response));
         };
-        this.session.startEvaluate('<BlueK project>', source, onInput, onComplete);
+        const started = this.session.startLoadProject(command.files.map(file => file.fileName), command.files.map(file => file.source), onInput, onComplete);
+        if ((JSON.parse(started) as RuntimeValue).kind === 'error') onComplete(started);
         return;
       }
       if (!this.session || command.generationId !== this.snapshot.generationId) throw new RequestError('Stale or missing runtime generation.');

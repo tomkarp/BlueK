@@ -19,9 +19,9 @@
   import { InspectorModel, inspectorFieldText, type InspectionView, type InspectorField } from "./inspectorModel";
   import { createProjectPayload, projectModelFromPayload } from "./projectFormat";
   import { compileProject, executeCodepad } from "./codepadFlow";
-  import { basicSetup } from "codemirror";
+  import { minimalSetup } from "codemirror";
   import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
-  import { EditorState, StateEffect } from "@codemirror/state";
+  import { EditorSelection, EditorState, StateEffect, type StateCommand, type Transaction } from "@codemirror/state";
   import {
     EditorView,
     drawSelection,
@@ -33,6 +33,7 @@
     defaultKeymap,
     history as historyExtension,
     historyKeymap,
+    indentSelection,
     indentWithTab,
   } from "@codemirror/commands";
   import {
@@ -471,11 +472,28 @@
     options: { value: string; onChange: (value: string) => void },
   ) {
     let current = options;
+    const formatDocument: StateCommand = ({ state, dispatch }) => {
+      let formatting: Transaction | undefined;
+      const wholeDocument = state.update({
+        selection: EditorSelection.single(0, state.doc.length),
+      }).state;
+      indentSelection({
+        state: wholeDocument,
+        dispatch: transaction => { formatting = transaction; },
+      });
+      if (formatting) {
+        dispatch(state.update({
+          changes: formatting.changes,
+          selection: state.selection.map(formatting.changes),
+        }, { userEvent: "input.format" }));
+      }
+      return true;
+    };
     const view = new EditorView({
       state: EditorState.create({
         doc: current.value,
         extensions: [
-          basicSetup,
+          minimalSetup,
           lineNumbers(),
           historyExtension(),
           closeBrackets(),
@@ -489,6 +507,7 @@
             ...closeBracketsKeymap,
             ...historyKeymap,
             ...searchKeymap,
+            { key: "Mod-Shift-i", run: formatDocument },
             indentWithTab,
           ]),
           EditorView.theme({

@@ -27,6 +27,22 @@ Archivierter Vergleichs-Commit: `ff1f5d7`.
 - `runtime-contract`: gemeinsame Transporttypen. Ansichtsdetails werden nicht
   dem Worker-Protokoll hinzugefügt.
 
+## Projektdateien und Codepad
+
+`RuntimeHost` lädt Projektdateien ausschließlich über `KotliteSession.startLoadProject`.
+Dieser Adapter prüft die ASTs aller Dateien auf erlaubte Top-Level-Deklarationen
+(Klassen/Interfaces, Funktionen und Properties), bevor die gemeinsame semantische
+Analyse und irgendeine Ausführung beginnen. Direkte Anweisungen werden mit
+Dateiname, Zeile und Spalte als typisierte Diagnose zurückgegeben. Die Oberfläche
+implementiert keine eigene Kotlin-Grammatik. Kotlites vorhandener Sprachumfang
+wird dadurch nicht erweitert.
+
+Nach einem Analysefehler bleibt die Laufzeit `uncompiled`; Compile-on-demand
+darf die Prüfung nicht umgehen. Codepad verwendet weiterhin `startEvaluate`
+und erlaubt direkte Anweisungen. Gültige Property-Initialisierer werden beim
+Laden weiterhin einmal ausgeführt, auch mit Ausgabe oder Eingabe; eine Trennung
+von Compile und Initialisierung ist nicht Teil dieser Grenze.
+
 ## Inspektor: Datenfluss und Lebensdauer
 
 Die Laufzeit ist die Quelle gespeicherter Feldwerte. Fenster enthalten nur ID

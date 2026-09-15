@@ -47,6 +47,10 @@ nicht im Fokus; die Projektauswahl bleibt enthalten.
 | GUI-22 | Obere Aktionen sind zu New Project, Open / Import, Save / Export und Files gebündelt; Open nutzt ein Drop-Feld, Save das New-Project-Layout und alle schalten gemeinsam auf Icon-only um | GUI-Test grün | Visuelle Abnahme offen |
 | GUI-23 | Save / Export ist bei leerem Projekt bereits auf der Hauptleiste deaktiviert | GUI-Test grün | Abgesichert |
 | RT-01 | Identität, Getter/Setter, Main, Reset, Input, veraltete Worker-Antworten bleiben korrekt | Bestehende Integrationstests | `test:runtime-state` |
+| GUI-24 | Direkte Anweisungen in Projektdateien ergeben vor jeder Ausgabe einen Compilerfehler mit Dateiposition; auch Codepad kann den fehlgeschlagenen Compile nicht umgehen; direkte Codepad-Anweisungen bleiben erlaubt | GUI grün: echter Worker, Fehlerdialog mit Actions.kt/Zeile/Spalte, keine Terminalausgabe, Codepad nach Projektwechsel | Abgesichert in Chromium |
+| GUI-25 | CodeMirror zeigt keine automatische Codevervollständigung; normale Editorfunktionen und Klammerergänzung bleiben erhalten | Chromium-Test grün: 1/1; Typecheck und Svelte-Build grün | Abgesichert |
+| GUI-26 | Cmd/Ctrl-Shift-I formatiert die komplette Datei nach der Kotlin-Struktur; normale Tab-/Shift-Tab-Einrückung bleibt separat | Chromium-Test grün: 1/1; Typecheck grün | Abgesichert |
+| RT-02 | Alle Projektdateien werden vor Initialisierung auf Deklarationen geprüft; Syntax-/Analysefehler verhindern Seiteneffekte; gültige Initialisierer und Codepad-Anweisungen bleiben ausführbar | Laufzeittest grün: mehrere Dateien, Aufruf/Zuweisung/Schleife/if/Literal, Syntax-/Typfehler, Initialisierung mit Eingabe, alle drei mitgelieferten Vorlagen | `test:runtime-state` |
 | ARCH-01 | Inspektoransicht verändert keine Laufzeitdaten und ruft beim Rendern keine Getter auf | Modelltest grün | `test:inspector` |
 | ARCH-02 | Parallele Getter-Refreshes nicht doppelt ausführen; alte Ergebnisse nach Reset/Schließen verwerfen | Modelltest grün | `test:inspector` |
 | ARCH-03 | Fenster besitzen nur ID/Position, Feldwerte stammen aus Laufzeit plus typisiertem Getter-Modell | Refactoring umgesetzt, 16 GUI-Tests grün | Entwurf: `docs/architecture.md` |
@@ -80,6 +84,22 @@ Typecheck und Svelte-Build erfolgreich.
 2026-09-15: Lange Codepad-Werte werden mit sichtbarem Typ gekürzt; der vollständige
 Wert steht als Hover-Text zur Verfügung. GUI-Suite erfolgreich mit 20/20 Chromium-
 Tests; Typecheck und Svelte-Build erfolgreich.
+
+2026-09-15: Projektdateien verwenden den deklarationsbasierten Ladeweg im
+Kotlin-Adapter; Codepad bleibt ausführbar. Kotlin-Bundle neu gebaut,
+Typecheck (0 Fehler/0 Warnungen), UI-/Inspector-/Projektformat-/Codepad-Helfertests,
+Runtime-Integration, `browser-smoke` (Node/VM, kein echter Browser) und
+Svelte-Produktionsbuild erfolgreich. Echter Chromium-Prüflauf: 24/24 GUI-Tests
+bei 1440 × 1000 bestanden. Zusätzlich kompilieren alle drei JSON-Vorlagen über
+den neuen Projekt-Ladeweg.
+
+Erste Prüfläufe scheiterten an der Funktionsaufruf-Position (Klammer statt
+Funktionsname, korrigiert) und am Projektwechsel im neuen GUI-Test (Hash-Wechsel
+lädt die App nicht neu; anschließend fehlte die Bestätigung des Ersetzens).
+Test nutzt jetzt den echten New-Project-Ablauf mit Bestätigung. Gradle- und
+Testserver-Starts waren zunächst sandboxbedingt blockiert; mit freigegebenem
+Cache-/Prozesszugriff erfolgreich wiederholt. Build-Warnungen zu Kotlin-Cast,
+Bundlegröße und Worker-URL bleiben bestehen; keine visuelle Nutzerabnahme behauptet.
 
 Offen bleiben die explizit genannten visuellen Abnahmen, weitere Datentypen,
 Viewportgrößen und Browser. Die Liste bedeutet keine vollständige Feature-Parität.

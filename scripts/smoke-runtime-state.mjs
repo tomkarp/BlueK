@@ -151,7 +151,7 @@ await client.reset();
 assert.equal(client.getSnapshot().phase, 'ready');
 client.invalidate();
 const initializerClient = new LocalRuntimeClient(() => new TestWorker());
-const initializerFiles = [{ id: 'init', fileName: 'Init.kt', kind: 'functions', revision: 1, source: 'print("init: "); val initialized = readln()' }];
+const initializerFiles = [{ id: 'init', fileName: 'Init.kt', kind: 'functions', revision: 1, source: 'fun initialize(): String { print("init: "); return readln() }\nval initialized = initialize()' }];
 const initializerCompile = initializerClient.compile(initializerFiles, 1);
 await new Promise((resolve, reject) => {
   const started = Date.now();
@@ -165,4 +165,53 @@ await initializerClient.sendInput('Ada');
 assert.equal((await initializerCompile).diagnostics.length, 0);
 assert.equal((await initializerClient.execute({ op: 'eval', code: 'initialized' })).display, 'Ada');
 initializerClient.invalidate();
+
+// RT-02: project files are declaration-only; Codepad remains executable.
+const projectClient = new LocalRuntimeClient(() => new TestWorker());
+const projectOutputs = [];
+projectClient.onResponse(value => { if (value.output) projectOutputs.push(value.output); });
+const file = (fileName, source) => ({ id: fileName, fileName, source, kind: 'functions', revision: 1 });
+const sideEffect = file('Init.kt', 'fun initialize(): Int { println("MUST NOT RUN"); return 1 }\nval initialized = initialize()');
+for (const statement of ['println("Hallo")', 'initialized = 2', 'for (i in 1..3) println(i)', 'if (true) println("Hallo")', '42']) {
+  const result = await projectClient.compile([sideEffect, file('Statements.kt', `// a comment\n\n  ${statement}`)], 1);
+  assert.equal(result.diagnostics.length, 1, statement);
+  const diagnostic = result.diagnostics[0];
+  assert.equal(diagnostic.fileName, 'Statements.kt');
+  assert.equal(diagnostic.line, 3);
+  assert.equal(diagnostic.column, 3);
+  assert.match(diagnostic.message, /Only declarations/);
+  assert.equal(result.generationId, '');
+  assert.equal(projectClient.getSnapshot().phase, 'uncompiled');
+  assert.deepEqual(projectOutputs, [], 'no initializer may run before all files are validated');
+  await assert.rejects(projectClient.execute({ op: 'eval', code: 'println("bypass")' }), /compile the project/);
+}
+const syntaxError = await projectClient.compile([sideEffect, file('Broken.kt', '\nfun broken( {}')], 2);
+assert.equal(syntaxError.diagnostics[0].fileName, 'Broken.kt');
+assert.equal(syntaxError.diagnostics[0].line, 2);
+assert.deepEqual(projectOutputs, [], 'syntax errors must also prevent initialization');
+const semanticError = await projectClient.compile([sideEffect, file('Types.kt', 'val number: Int = "wrong"')], 3);
+assert.equal(semanticError.diagnostics[0].fileName, 'Types.kt');
+assert.deepEqual(projectOutputs, [], 'semantic analysis must finish before initialization');
+assert.equal(projectClient.getSnapshot().phase, 'uncompiled');
+const declarations = await projectClient.compile([
+  file('Types.kt', 'interface Named { fun name(): String }\nclass Example: Named { override fun name(): String = "Example" }'),
+  file('Actions.kt', '/* println("not a statement") */\nvar count = 0\nval greeting = "println(\\"text\\")"\nfun main() { println("Hallo"); count += 1 }'),
+], 4);
+assert.deepEqual(declarations.diagnostics, []);
+assert.deepEqual(projectOutputs, [], 'declaring main does not execute it');
+for (const code of ['println("Codepad")', 'count = 2', 'for (i in 1..2) println(i)']) {
+  const value = await projectClient.execute({ op: 'eval', code });
+  assert.notEqual(value.kind, 'error', value.display);
+}
+assert.equal(projectOutputs.splice(0).join(''), 'Codepad\n1\n2\n');
+assert.equal((await projectClient.execute({ op: 'eval', code: 'count' })).display, '2');
+assert.notEqual((await projectClient.execute({ op: 'main', fileName: 'Actions.kt' })).kind, 'error');
+assert.equal(projectOutputs.splice(0).join(''), 'Hallo\n');
+for (const template of ['kotlin-example', 'blueplay-empty', 'blueplay']) {
+  const payload = JSON.parse(await readFile(`frontend/public/examples/${template}.bluek.json`, 'utf8'));
+  const result = await projectClient.compile(payload.files.map(entry => ({ ...entry, id: entry.fileName })), 5);
+  assert.deepEqual(result.diagnostics, [], `${template} must still compile through the project loader`);
+}
+projectClient.invalidate();
 console.log('Runtime state integration passed: shared identity, main, inspectors, input, reset, concurrency, stale replies and transport failure.');
+console.log('Project validation passed: declarations only, source positions, no effects on rejection, recovery and executable Codepad.');

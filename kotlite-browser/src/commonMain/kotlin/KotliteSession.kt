@@ -4,6 +4,7 @@ import com.sunnychung.lib.multiplatform.kotlite.Parser
 import com.sunnychung.lib.multiplatform.kotlite.ReplAnalyzer
 import com.sunnychung.lib.multiplatform.kotlite.extension.fullClassName
 import com.sunnychung.lib.multiplatform.kotlite.lexer.Lexer
+import com.sunnychung.lib.multiplatform.kotlite.model.ASTNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassInstance
 import com.sunnychung.lib.multiplatform.kotlite.model.FunctionCallNode
@@ -257,6 +258,48 @@ class KotliteSession {
         Parser(Lexer(filename = filename, code = source)).script()
 
     fun load(filename: String, source: String): String = evaluate(filename, source)
+
+    /** Project files contain declarations, unlike executable Codepad snippets.
+     * Parse every file before evaluating even the first property initializer.
+     */
+    fun startLoadProject(filenames: Array<String>, sources: Array<String>, onInput: (Int) -> Unit, onComplete: (String) -> Unit): String {
+        if (executionCompleted != null) return errorMessage("Another runtime command is running.")
+        if (filenames.size != sources.size) return errorMessage("Project filenames and sources must match.")
+        for (index in sources.indices) {
+            val filename = filenames[index]
+            val script = try {
+                parse(filename, sources[index])
+            } catch (error: Throwable) {
+                // Kotlite parser exceptions expose their location in the message.
+                val location = Regex("line (\\d+) col (\\d+)").find(error.message.orEmpty())
+                return projectError(filename, location?.groupValues?.get(1)?.toIntOrNull() ?: 1,
+                    location?.groupValues?.get(2)?.toIntOrNull() ?: 1, error.message ?: "Invalid Kotlin source.")
+            }
+            val statement = script.nodes.firstOrNull {
+                it !is ClassDeclarationNode && it !is FunctionDeclarationNode && it !is PropertyDeclarationNode
+            }
+            if (statement != null) {
+                val position = statementPosition(statement)
+                return projectError(filename, position.lineNum, position.col,
+                    "Only declarations are allowed at the top level of a Kotlin project file. Move this statement into a function or run it in the Codepad.")
+            }
+        }
+        // Keep the existing combined-source positions used by manifest/diagnostic mapping.
+        val source = sources.indices.joinToString("\n\n") { "// BlueK file: ${filenames[it]}\n${sources[it]}" }
+        return startEvaluate("<BlueK project>", source, onInput, onComplete)
+    }
+
+    private fun statementPosition(node: ASTNode): SourcePosition = when (node) {
+        // Call positions point at '('; highlight the callee instead.
+        is FunctionCallNode -> statementPosition(node.function)
+        is NavigationNode -> statementPosition(node.subject)
+        else -> node.position
+    }
+
+    private fun projectError(filename: String, line: Int, column: Int, message: String): String {
+        val diagnostic = "{\"fileName\":\"${escape(filename)}\",\"line\":$line,\"column\":$column,\"severity\":\"error\",\"message\":\"${escape(message)}\"}"
+        return "{\"kind\":\"error\",\"display\":\"${escape(message)}\",\"phase\":\"analysis\",\"fatal\":false,\"diagnostics\":[$diagnostic]}"
+    }
 
     /** Metadata for the GUI, derived from the same AST Kotlite analyzes. */
     fun manifest(): String = try {

@@ -30,6 +30,7 @@ export interface InspectedField { name: string; value: string; type?: TypeRef | 
 export interface RuntimeValue {
   kind: 'unit' | 'null' | 'scalar' | 'object' | 'inspect' | 'error';
   display?: string;
+  diagnostics?: Diagnostic[];
   type?: TypeRef;
   objectId?: string;
   className?: string;

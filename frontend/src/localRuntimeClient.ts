@@ -96,7 +96,7 @@ export class LocalRuntimeClient {
       this.start();
       const reply = await this.request({ op: 'compile', files: this.project, generationId });
       const response = this.accept(reply, epoch);
-      const diagnostics = response.kind === 'error' ? [this.diagnostic(response.display || 'Compilation failed.', files)] : [];
+      const diagnostics = response.kind === 'error' ? response.diagnostics ?? [this.diagnostic(response.display || 'Compilation failed.', files)] : [];
       return { generationId: diagnostics.length ? '' : generationId, sourceRevision: revision, classes: reply.snapshot.classes, diagnostics };
     } catch (error) {
       if (epoch === this.epoch) this.fail(error instanceof Error ? error.message : String(error));
