@@ -110,6 +110,7 @@ footer{flex:0 0 108px}
 .bluek:has(.stage-window-chrome.maximized) .game-controls{right:auto;bottom:auto;left:var(--bluek-controls-left);top:var(--bluek-controls-top);width:var(--bluek-controls-width)}
  .codepad-history{height:154px;overflow:auto;padding:4px 8px;background:#faf9f4;border:1px solid #ddd;border-radius:5px 5px 0 0;font:16px monospace;white-space:pre-wrap}.codepad-entry{padding:3px 0;border-bottom:1px solid #eee}.codepad textarea{height:36px;border-radius:0 0 7px 7px;padding:6px 8px}
 .codepad-result,.codepad-object-result{display:flex;align-items:center;gap:12px;color:#168b22;font:18px monospace;padding:3px 0 4px 4px;margin:0;text-align:left}.codepad-object-result{border:0;background:transparent;cursor:pointer}.codepad-object-result:hover{color:#0b6415;text-decoration:underline}.codepad-object-placeholder{color:#888}.codepad-value-icon,.codepad-object-icon{display:inline-block;flex:0 0 12px;width:12px;height:12px;border-radius:2px;background:#b21f2d;box-shadow:inset 0 0 0 1px #7d111c}.codepad-error{color:#a11;padding:3px 0 4px 28px;white-space:pre-wrap}
+.codepad-object-result:disabled{cursor:default;opacity:.7}.codepad-object-result:disabled:hover{text-decoration:none}
 
 /* The world controls follow the measured world element in every window mode. */
 .bluek:has(.stage-window-chrome) .game-controls{position:fixed;right:auto;bottom:auto;left:var(--bluek-controls-left);top:var(--bluek-controls-top);width:var(--bluek-controls-width)}
@@ -201,7 +202,7 @@ footer{flex:0 0 108px}
 .terminal-window.split .terminal-header button{width:46px;height:40px;padding:0;font-size:20px;line-height:1}
 .terminal-reopen{display:none}
 .terminal-window.split .terminal-header{cursor:default}
-.terminal-split-divider{position:absolute;top:0;bottom:0;right:var(--terminal-split-width,430px);z-index:4;width:18px;transform:translateX(50%);pointer-events:auto;cursor:col-resize;background:transparent;touch-action:none}
+.terminal-split-divider{position:fixed;inset:0 var(--terminal-split-width,430px) 0 auto;z-index:25;width:18px;transform:translateX(50%);pointer-events:auto;cursor:col-resize;background:transparent;touch-action:none}
 .terminal-split-divider::after{content:"";position:absolute;top:50%;left:5px;width:8px;height:100px;transform:translateY(-50%);border-left:1px solid #777;border-right:1px solid #777;background:repeating-linear-gradient(to bottom,#777 0 1px,transparent 1px 5px)}
 .terminal-split-divider:hover::after,.terminal-split-divider:focus-visible::after{background-color:#c4c4c4;outline:2px solid #168fbd;outline-offset:1px}
 
@@ -360,6 +361,7 @@ footer{flex:0 0 108px}
 .new-project-dialog{min-width:min(520px,88vw)}
 .new-project-dialog p{margin:0 0 14px;color:#555}
 .project-choice-list{display:grid;gap:8px}
+.project-choice-row{display:grid;grid-template-columns:1fr;gap:8px}
 .project-choice-list button{display:flex;flex-direction:column;align-items:flex-start;gap:4px;width:100%;margin:0;padding:12px 14px;text-align:left;border:1px solid #aaa;border-radius:5px;background:#fff;color:#b00000;cursor:pointer}
 .project-choice-list button:hover,.project-choice-list button:focus-visible{background:#08a6d2;color:#fff;outline:0}
 .project-choice-list strong{font-size:15px}
@@ -410,7 +412,8 @@ footer{flex:0 0 108px}
 /* Svelte uses the same layout classes throughout, without preview-specific overrides. */
 .svelte-preview .terminal-window.floating{position:fixed;margin:0}
 .svelte-preview .terminal-header{cursor:move;user-select:none}
-.svelte-preview .svelte-editor-host{height:52vh;overflow:hidden;margin-bottom:14px;border:1px solid #888}
+.svelte-preview .editor-dialog{height:auto;max-height:86vh}
+.svelte-preview .svelte-editor-host{height:min(52vh,calc(86vh - 120px));min-height:220px;overflow:hidden;margin-bottom:14px;border:1px solid #888}
 .svelte-preview .dialog-error{color:#b00020;margin:8px 0}
 .svelte-preview .inspect-edit-input{min-width:120px;flex:1;padding:5px;font:13px monospace}
 .svelte-preview .inspect-error{color:#b00020}

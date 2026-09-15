@@ -11,9 +11,14 @@
     addSuperclass,
     cardCenter,
     cardBorderPoint,
-    appendTerminal, terminalParts, codepadResult, codepadError, kotlinCallArguments, missingRequired, missingTypeArgument,
+    defaultObjectName,
+    sourceDeclarationName,
+    appendTerminal, terminalParts, codepadResult, codepadError, kotlinCallArguments, missingRequired, missingTypeArgument, codepadIsDisabled,
   } from "./uiParity";
   import { LocalRuntimeClient } from "./localRuntimeClient";
+  import { InspectorModel, inspectorFieldText, type InspectionView, type InspectorField } from "./inspectorModel";
+  import { createProjectPayload, projectModelFromPayload } from "./projectFormat";
+  import { compileProject, executeCodepad } from "./codepadFlow";
   import { basicSetup } from "codemirror";
   import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
   import { EditorState, StateEffect } from "@codemirror/state";
@@ -40,6 +45,7 @@
   import { kotlin } from "@codemirror/legacy-modes/mode/clike";
   import type {
     Diagnostic,
+    InspectedField,
     ProjectFile,
     RuntimeSnapshot,
     RuntimeValue,
@@ -50,6 +56,7 @@
     code: string;
     result?: string;
     error?: string;
+    objectResult?: boolean;
     objectId?: string;
     className?: string;
   };
@@ -112,14 +119,25 @@
     status = "Ready",
     error = "",
     compilerDialog = false,
-    compilerDiagnostics: Diagnostic[] = [],
-    inspected: RuntimeValue | null = null,
-    inspectorPosition: { left: number; top: number } | null = null;
+    compilerDiagnostics: Diagnostic[] = [];
+  let activeInspectorId = "";
+  let inspected: InspectionView | null = null;
   let inspectorWindows: Array<{
     id: string;
-    data: RuntimeValue;
     position: { left: number; top: number };
   }> = [];
+  let inspectorModel: InspectorModel;
+  let inspectorRevision = 0;
+  let inspectorViews: Array<{ id: string; position: { left: number; top: number }; data: InspectionView }> = [];
+  $: {
+    // Both runtime fields and independently resolved getters update the derived view.
+    void runtime;
+    void inspectorRevision;
+    inspectorViews = inspectorWindows.map(item => ({
+    ...item, data: inspectorModel?.view(item.id),
+    })).filter((item): item is typeof item & { data: InspectionView } => Boolean(item.data));
+  }
+  $: inspected = inspectorViews.find(item => item.id === activeInspectorId)?.data || null;
   let menu: {
     x: number;
     y: number;
@@ -200,80 +218,8 @@
     "MyWorld.kt": { x: 590, y: 202 },
   };
 
-  function validProject(payload: any) {
-    if (
-      payload?.format !== "bluek-project" ||
-      payload?.version !== 1 ||
-      !Array.isArray(payload.files)
-    )
-      throw new Error("Invalid BlueK project.");
-    if (
-      payload.files.some(
-        (item: any) =>
-          !item ||
-          typeof item.fileName !== "string" ||
-          !/^[A-Za-z0-9_.-]+\.kt$/.test(item.fileName) ||
-          typeof item.source !== "string",
-      )
-    )
-      throw new Error("Invalid Kotlin file in project.");
-    if (
-      new Set(payload.files.map((item: any) => item.fileName)).size !==
-      payload.files.length
-    )
-      throw new Error("The project contains duplicate Kotlin file names.");
-    if (
-      payload.resources !== undefined &&
-      (!Array.isArray(payload.resources) ||
-        payload.resources.some(
-          (item: any) =>
-            !item ||
-            typeof item.path !== "string" ||
-            !item.path ||
-            item.path.startsWith("/") ||
-            item.path.split("/").includes("..") ||
-            typeof item.data !== "string" ||
-            !/^data:[^;]+;base64,/.test(item.data),
-        ))
-    )
-      throw new Error("The project contains invalid media resources.");
-    if (
-      Array.isArray(payload.resources) &&
-      new Set(payload.resources.map((item: any) => item.path)).size !==
-        payload.resources.length
-    )
-      throw new Error("The project contains duplicate media resources.");
-    const positions = payload.cardPositions;
-    if (
-      positions !== undefined &&
-      (!positions ||
-        typeof positions !== "object" ||
-        Array.isArray(positions) ||
-        Object.entries(positions).some(
-          ([fileName, position]: [string, any]) =>
-            !/^[A-Za-z0-9_.-]+\.kt$/.test(fileName) ||
-            !position ||
-            !Number.isFinite(position.x) ||
-            !Number.isFinite(position.y) ||
-            position.x < 0 ||
-            position.y < 0,
-        ))
-    )
-      throw new Error("The project contains invalid card positions.");
-    return payload;
-  }
   function projectPayload() {
-    return {
-      format: "bluek-project",
-      version: 1,
-      files,
-      resources,
-      cardPositions: Object.fromEntries(
-        files
-          .filter((file) => cardPositions[file.id])
-          .map((file) => [file.fileName, cardPositions[file.id]]),
-      ),
-    };
+    return createProjectPayload(files, resources, cardPositions);
   }
   function beginCardDrag(event: PointerEvent, file: ProjectFile) {
     if (event.button !== 0 || event.pointerType === "touch") return;
@@ -427,8 +373,10 @@
     event.preventDefault();
   }
   function beginBenchResize(event: PointerEvent) {
+    const benchElement = document.querySelector<HTMLElement>(".lower .bench"),
+      measuredWidth = benchElement?.getBoundingClientRect().width;
     const start = event.clientX,
-      initial = benchWidth ?? 260;
+      initial = benchWidth ?? measuredWidth ?? 260;
     const move = (next: PointerEvent) => {
       benchWidth = Math.max(
         120,
@@ -582,15 +530,11 @@
 
   onMount(() => {
     client = new LocalRuntimeClient();
+    inspectorModel = new InspectorModel(client, () => { inspectorRevision += 1; });
     const unsubscribe = client.subscribe(() => {
       runtime = client.getSnapshot();
       if (runtime.phase === "waitingForInput" || runtime.phase === "faulted")
         terminalOpen = true;
-      inspectorWindows = inspectorWindows.map((item) =>
-        runtime.inspections[item.id]
-          ? { ...item, data: runtime.inspections[item.id] }
-          : item,
-      );
     });
     const unsubscribeOutput = client.onResponse((value) => {
       if (value.output) {
@@ -749,11 +693,44 @@
     invokeDialog = null;
     createDialog = null;
     bench = [];
-    inspected = null;
+    activeInspectorId = "";
     inspectorWindows = [];
     history = [];
     status = "Uncompiled";
     error = "";
+  }
+  function handleWindowKeydown(event: KeyboardEvent) {
+    if (event.key === "Escape") {
+      if (projectInfo) projectInfo = null;
+      else if (compilerDialog) compilerDialog = false;
+      else if (createDialog) {
+        createDialog = null;
+        dialogError = "";
+      } else if (invokeDialog) {
+        invokeDialog = null;
+        dialogError = "";
+      } else if (objectNamePrompt) objectNamePrompt = null;
+      else if (resultDialog) resultDialog = null;
+      else if (editorOpen) editorOpen = false;
+      else if (newClassOpen) newClassOpen = false;
+      else if (newFunctionsOpen) newFunctionsOpen = false;
+      else if (settingsNotice) settingsNotice = false;
+      else if (newProjectOpen) newProjectOpen = false;
+      else if (terminalOpen) {
+        terminalOpen = false;
+        terminalSplit = false;
+      } else if (stageWindowOpen) {
+        stageWindowOpen = false;
+        stageMaximized = false;
+      } else if (menu) menu = null;
+      else if (codepadMenu) codepadMenu = null;
+      else return;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    if (document.activeElement?.classList.contains("game-stage"))
+      stageKey(event, true);
   }
   function newFile(kind: "class" | "functions", name: string) {
     const source =
@@ -843,14 +820,33 @@
   function updateSource(value: string) {
     editorSource = value;
     if (!currentFile) return;
+    const file = currentFile;
+    const oldName = sourceDeclarationName(file.source);
+    const newName = sourceDeclarationName(value);
+    const fileStem = file.fileName.replace(/\.kt$/, "");
+    const renamedFileName =
+      file.kind === "class" &&
+      newName &&
+      newName !== oldName &&
+      (oldName === fileStem || !oldName) &&
+      !files.some(
+        (item) => item.id !== file.id && item.fileName === `${newName}.kt`,
+      )
+        ? `${newName}.kt`
+        : file.fileName;
     files = files.map((file) =>
       file.id === currentFile.id
-        ? { ...file, source: value, revision: file.revision + 1 }
+        ? {
+            ...file,
+            fileName: renamedFileName,
+            source: value,
+            revision: file.revision + 1,
+          }
         : file,
     );
     client?.invalidate();
     bench = [];
-    inspected = null;
+    activeInspectorId = "";
     inspectorWindows = [];
     history = [];
     status = "Uncompiled";
@@ -881,43 +877,31 @@
     editorOpen = true;
     markUncompiled();
   }
-  async function compile() {
-    if (!client || !files.length || runtime.phase === "compiling") return;
+  async function compile(): Promise<boolean> {
+    if (!client || runtime.phase === "compiling") return false;
     status = "Compiling…";
     error = "";
     compilerDialog = false;
     compilerDiagnostics = [];
     history = [];
     bench = [];
-    inspected = null;
+    activeInspectorId = "";
     inspectorWindows = [];
-    try {
-      const result = await client.compile(files, Date.now());
-      compilerDiagnostics = result.diagnostics;
-      if (result.diagnostics.length) {
+    const result = await compileProject(client, files, Date.now());
+    compilerDiagnostics = result.diagnostics;
+    if (!result.ok) {
         status = "Compile error";
         error = result.diagnostics
           .map(
             (item) =>
               `${item.fileName || ""}:${item.line}:${item.column}: ${item.message}`,
           )
-          .join("\n");
+          .join("\n") || result.error || "Compilation failed.";
         compilerDialog = true;
-      } else status = "Compiled";
-    } catch (reason) {
-      status = "Compile error";
-      error = reason instanceof Error ? reason.message : String(reason);
-      compilerDiagnostics = [
-        {
-          severity: "error",
-          fileName: currentFile?.fileName,
-          line: 1,
-          column: 1,
-          message: error,
-        },
-      ];
-      compilerDialog = true;
+        return false;
     }
+    status = "Compiled";
+    return true;
   }
   async function runMain() {
     if (!canExecute || !mainEntries.length) return;
@@ -930,6 +914,7 @@
       if (result.kind === "error")
         error = result.display || "Execution failed.";
       else status = "Ready";
+      await refreshComputedInspectors();
     } catch (reason) {
       if (runtime.phase !== "uncompiled") {
         status = "Ready";
@@ -938,33 +923,45 @@
     }
   }
   async function executeCode(code = codepad.trim()) {
-    if (!client || !canExecute || !code) return;
-    const generation = runtime.generationId;
+    if (!client || !code) return;
     codepad = "";
     codepadHistoryIndex = -1;
-    try {
-      const result = await client.execute({ op: "eval", code });
-      if (runtime.generationId !== generation) return;
+    const result = await executeCodepad(client, files, Date.now(), code);
+    if (result.kind === "compile-error") {
+      compilerDiagnostics = result.compile.diagnostics;
+      status = "Compile error";
+      error = result.compile.diagnostics
+        .map((item) => `${item.fileName || ""}:${item.line}:${item.column}: ${item.message}`)
+        .join("\n") || result.compile.error || "Compilation failed.";
+      compilerDialog = true;
+      return;
+    }
+    if (result.kind === "stale") return;
+    if (result.kind === "error") {
+      history = [...history, { code, error: result.error }];
+    } else {
+      const response = result.response;
       history = [
         ...history,
-        result.kind === "error"
-          ? { code, error: codepadError(result) }
-          : result.objectId
+        response.kind === "error"
+          ? { code, error: codepadError(response) }
+          : response.kind === "object" || Boolean(response.objectId)
             ? {
                 code,
-                objectId: result.objectId,
-                className: result.className || "Object",
+                objectResult: true,
+                result: response.kind === "object" ? undefined : codepadResult(response),
+                objectId: response.objectId,
+                className:
+                  response.className || response.type?.displayName || "Object",
               }
-            : { code, result: codepadResult(result) },
+            : { code, result: codepadResult(response) },
       ];
-    } catch (reason) {
-      if (runtime.generationId === generation)
-        history = [...history, { code, error: String(reason) }];
     }
+    await refreshComputedInspectors();
     await tick();
     const historyElement = document.querySelector(".codepad-history");
     if (historyElement) historyElement.scrollTop = historyElement.scrollHeight;
-    if (!terminalOpen)
+    if (codepadOpen && !inputReady)
       document.querySelector<HTMLTextAreaElement>(".codepad textarea")?.focus();
   }
   function submitCodepad(event: KeyboardEvent) {
@@ -1040,7 +1037,7 @@
       typeParameters: meta?.typeParameters || [],
       parameters: constructors[index]?.parameters || [],
     };
-    createName = className.charAt(0).toLowerCase() + className.slice(1);
+    createName = defaultObjectName(className, bench.map((object) => object.name));
     createArgs = (constructors[index]?.parameters || []).map(() => "");
     createTypeArgs = (meta?.typeParameters || []).map(() => "");
     dialogError = "";
@@ -1296,6 +1293,7 @@
           `${invokeDialog.object ? invokeDialog.object.name + "." : invokeDialog.receiver || ""}${method.name}${suffix}()`,
         );
         invokeDialog = null;
+        if (request.op !== "get") await refreshComputedInspectors();
       }
     } catch (reason) {
       dialogError = reason instanceof Error ? reason.message : String(reason);
@@ -1360,18 +1358,18 @@
       };
       inspectorWindows = [
         ...inspectorWindows.filter((item) => item.id !== object.objectId),
-        { id: object.objectId, data: result, position },
+        { id: object.objectId, position },
       ];
-      inspected = result;
-      inspectorPosition = position;
+      activeInspectorId = object.objectId;
+      await inspectorModel.refresh(object.objectId);
     }
   }
   function closeInspector(id: string) {
     inspectorWindows = inspectorWindows.filter((item) => item.id !== id);
+    inspectorModel.forget(id);
     if (inspected?.objectId === id) {
       const next = inspectorWindows.at(-1);
-      inspected = next?.data || null;
-      inspectorPosition = next?.position || null;
+      activeInspectorId = next?.id || "";
     }
   }
   function beginInspectorDrag(event: PointerEvent) {
@@ -1387,7 +1385,7 @@
     const bounds = element.getBoundingClientRect(),
       offsetX = event.clientX - bounds.left,
       offsetY = event.clientY - bounds.top,
-      objectId = inspected?.objectId;
+      objectId = activeInspectorId;
     const move = (next: PointerEvent) => {
       const position = {
         left: Math.max(
@@ -1405,7 +1403,6 @@
           ),
         ),
       };
-      inspectorPosition = position;
       if (objectId)
         inspectorWindows = inspectorWindows.map((item) =>
           item.id === objectId ? { ...item, position } : item,
@@ -1424,7 +1421,7 @@
     closeInspector(objectId);
     menu = null;
   }
-  function fieldProperty(data: RuntimeValue, field: any) {
+  function fieldProperty(data: RuntimeValue, field: InspectedField) {
     return classes
       .find(
         (item) =>
@@ -1438,15 +1435,15 @@
       )
       ?.properties?.find((item) => item.name === field.name);
   }
-  function fieldValue(data: RuntimeValue, field: any) {
-    const value = String(field.display ?? field.value ?? "");
-    return fieldProperty(data, field)?.type?.classifier === "String" &&
-      value !== "null" &&
-      value !== "<computed>"
-      ? JSON.stringify(value)
-      : value;
+  function fieldValue(data: RuntimeValue, field: InspectorField) {
+    return inspectorFieldText(field, field.type || fieldProperty(data, field)?.type);
   }
-  function canEditField(field: any, data = inspected) {
+  async function refreshComputedInspectors() {
+    for (const inspector of inspectorWindows) {
+      await inspectorModel.refresh(inspector.id);
+    }
+  }
+  function canEditField(field: InspectorField, data = inspected) {
     const property = data && fieldProperty(data, field);
     return (
       canExecute &&
@@ -1602,7 +1599,7 @@
     stageWindowOpen = false;
     stageMaximized = false;
     bench = [];
-    inspected = null;
+    activeInspectorId = "";
     inspectorWindows = [];
     history = [];
     error = "";
@@ -1625,14 +1622,14 @@
       error = reason instanceof Error ? reason.message : String(reason);
     }
   }
-  function beginFieldEdit(field: any, data = inspected) {
+  function beginFieldEdit(field: InspectorField, data = inspected) {
     if (!data) return;
-    inspected = data;
+    activeInspectorId = data.objectId || "";
     editingField = field.name;
     fieldDraft = fieldValue(data, field);
     fieldError = "";
   }
-  async function saveField(field: any) {
+  async function saveField(field: InspectorField) {
     if (!inspected?.objectId) return;
     try {
       const objectId = inspected.objectId,
@@ -1645,11 +1642,7 @@
       if (result.kind === "error")
         fieldError = result.display || "Could not set property.";
       else {
-        const refreshed = await client.execute({ op: "inspect", objectId });
-        inspected = refreshed;
-        inspectorWindows = inspectorWindows.map((item) =>
-          item.id === objectId ? { ...item, data: refreshed } : item,
-        );
+        await inspectorModel.refresh(objectId);
         editingField = "";
         fieldError = "";
       }
@@ -1711,30 +1704,10 @@
     }
   }
   async function loadProject(payload: any, message = "Project loaded.") {
-    validProject(payload);
-    const imported = payload.files.map((item: any, index: number) => ({
-      id: `project-${Date.now()}-${index}`,
-      fileName: item.fileName,
-      kind: item.kind === "functions" ? "functions" : "class",
-      source: item.source,
-      revision: Number(item.revision) || 1,
-    }));
-    const positions =
-      payload.cardPositions && typeof payload.cardPositions === "object"
-        ? payload.cardPositions
-        : {};
-    files = imported;
-    resources = Array.isArray(payload.resources) ? payload.resources : [];
-    cardPositions = Object.fromEntries(
-      imported
-        .filter(
-          (file: ProjectFile) =>
-            positions[file.fileName] &&
-            Number.isFinite(positions[file.fileName].x) &&
-            Number.isFinite(positions[file.fileName].y),
-        )
-        .map((file: ProjectFile) => [file.id, positions[file.fileName]]),
-    );
+    const imported = projectModelFromPayload(payload, (index) => `project-${Date.now()}-${index}`);
+    files = imported.files;
+    resources = imported.resources;
+    cardPositions = imported.cardPositions;
     selected = 0;
     editorOpen = false;
     markUncompiled();
@@ -1874,9 +1847,7 @@
     menu = null;
     codepadMenu = null;
   }}
-  on:keydown={(event) =>
-    document.activeElement?.classList.contains("game-stage") &&
-    stageKey(event, true)}
+  on:keydown={handleWindowKeydown}
   on:keyup={(event) =>
     document.activeElement?.classList.contains("game-stage") &&
     stageKey(event, false)}
@@ -2224,29 +2195,31 @@
                     })}
                 >
                   <div>{entry.code}</div>
-                  {#if entry.objectId}
+                  {#if entry.objectResult || entry.objectId}
                     <button
                       class="codepad-object-result svelte-codepad-object-result"
+                      disabled={!entry.objectId}
                       on:click={() =>
+                        entry.objectId &&
                         requestObjectOnBench({
                           kind: "object",
-                          objectId: entry.objectId!,
+                          objectId: entry.objectId,
                           className: entry.className || "Object",
                         })}
                       aria-label={`Get ${entry.className || "object"} on object bench`}
                     >
                       <span class="codepad-object-icon" aria-hidden="true"
                       ></span><span class="codepad-object-label"
-                        ><span class="codepad-object-placeholder"
+                        >{#if entry.result}{entry.result}{:else}<span class="codepad-object-placeholder"
                           >&lt;object&gt;</span
-                        ><span> : {entry.className}</span></span
+                        ><span> : {entry.className}</span>{/if}</span
                       >
                     </button>
                   {:else if entry.error}<div class="codepad-error">
                       {entry.error}
                     </div>
-                  {:else if entry.result}<div class="codepad-object-result">
-                      {entry.result}
+                  {:else if entry.result}<div class="codepad-result">
+                      <span class="codepad-value-icon" aria-hidden="true"></span>{entry.result}
                     </div>{/if}
                 </div>
               {/each}
@@ -2256,7 +2229,7 @@
               rows="1"
               bind:value={codepad}
               on:keydown={submitCodepad}
-              disabled={!canExecute}
+              disabled={codepadIsDisabled(runtime.phase, inputReady)}
             ></textarea>
           </section>
         {/if}
@@ -2419,7 +2392,7 @@
       </div>
     </div>{/if}
 
-  {#each inspectorWindows as inspector, index (inspector.id)}
+  {#each inspectorViews as inspector, index (inspector.id)}
     <div class="inspector">
       <div
         class="inspect-window"
@@ -2428,8 +2401,7 @@
         tabindex="-1"
         style={`position:fixed;left:${inspector.position.left}px;top:${inspector.position.top}px;margin:0;z-index:${10 + index}`}
         on:pointerdown={(event) => {
-          inspected = inspector.data;
-          inspectorPosition = inspector.position;
+          activeInspectorId = inspector.id;
           if (
             !(event.target as HTMLElement).closest("button,input,.inspect-row")
           )
@@ -2649,33 +2621,33 @@
       >
         <h3 id="new-project-title">Create New Project</h3>
         <p>Choose a starting point:</p>
-        <button on:click={() => chooseTemplate("empty")}>Empty Project</button
-        ><button on:click={() => chooseTemplate("kotlin")}
-          >Kotlin Example</button
-        >
-        <div class="project-choice-with-info">
-          <button on:click={() => chooseTemplate("empty-blueplay")}
-            >BluePlay Template</button
-          ><button
+        <div class="project-choice-list">
+          <div class="project-choice-row">
+            <button on:click={() => chooseTemplate("empty")}><strong>Empty Project</strong><span>Start with a blank BlueK project.</span></button>
+            <button on:click={() => chooseTemplate("kotlin")}><strong>Kotlin Example</strong><span>Start with a small Kotlin example.</span></button>
+          </div>
+          <div class="project-choice-with-info">
+            <button on:click={() => chooseTemplate("empty-blueplay")}><strong>BluePlay Template</strong><span>Start with the BluePlay classes.</span></button
+            ><button
             class="project-info-button"
             on:click|stopPropagation={() => (projectInfo = "template")}
             aria-label="What is BluePlay?">?</button
-          >
-        </div>
-        <div class="project-choice-with-info">
-          <button on:click={() => chooseTemplate("blueplay")}
-            >BluePlay Example</button
-          ><button
+            >
+          </div>
+          <div class="project-choice-with-info">
+            <button on:click={() => chooseTemplate("blueplay")}><strong>BluePlay Example</strong><span>Open a complete BluePlay example.</span></button
+            ><button
             class="project-info-button"
             on:click|stopPropagation={() => (projectInfo = "example")}
             aria-label="What is BluePlay?">?</button
-          >
+            >
+          </div>
         </div>
-        <button
+        <div class="dialog-actions"><button
           on:click={() => {
             newProjectOpen = false;
             projectInfo = null;
-          }}>Cancel</button
+          }}>Cancel</button></div
         >{#if projectInfo}<div
             class="project-info-panel"
             role="dialog"

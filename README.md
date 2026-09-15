@@ -1,6 +1,9 @@
 # BlueK
 
-BlueK ist eine browserbasierte Kotlin-Lernumgebung nach dem BlueJ-Prinzip. Die vorhandene React-Oberfläche mit Klassenkarten, Objektbank, Codepad und BluePlay bleibt erhalten. Schülercode wird ausschließlich in einem Browser-Worker mit Kotlite ausgeführt.
+BlueK ist eine browserbasierte Kotlin-Lernumgebung nach dem BlueJ-Prinzip. Die
+Svelte-Oberfläche mit Klassenkarten, Objektbank, Codepad und BluePlay ist die
+einzige gepflegte Anwendung. Schülercode wird ausschließlich in einem
+Browser-Worker mit Kotlite ausgeführt.
 
 ## Start und Build
 
@@ -12,15 +15,9 @@ npm run build
 npm run dev
 ```
 
-Für den lokalen Vergleich der alternativen Svelte-Oberfläche:
-
-```sh
-npm run dev:svelte
-```
-
-Der Svelte-Modus verwendet denselben `LocalRuntimeClient`, Worker und das
-Kotlin/JS-Bundle wie React. Ein Produktionsbuild ist mit `npm run build:svelte`
-möglich. Die Oberfläche ist lokal unter dem von Vite ausgegebenen Port
+Die Anwendung verwendet Svelte und den `LocalRuntimeClient` direkt. Ein
+Produktionsbuild ist mit `npm run build:svelte` möglich. Die Oberfläche ist
+lokal unter dem von Vite ausgegebenen Port
 erreichbar; es wird nichts gepusht oder auf GitHub Pages verändert.
 
 `npm run build:kotlite` erzeugt den lokal eingebundenen Bundle unter `frontend/public/kotlite/`; `npm run build` baut die statische Vite-Anwendung nach `frontend/dist/`. Die Produktionsdateien können mit jedem statischen Webserver ausgeliefert werden:
@@ -38,9 +35,8 @@ Die verbindlichen Zuständigkeiten, Zustandsübergänge, Einschränkungen und di
 
 Die Klassenkarten-Metadaten für Klassen, Properties, Konstruktoren und Methoden stammen aus dem von Kotlite analysierten AST. Der Browser-Adapter ergänzt nur geerbte Mitglieder für die vorhandene GUI und ordnet Top-Level-Funktionen ihren Dateikarten zu.
 
-- `frontend/src/main.tsx` enthält die bestehende GUI.
-- `frontend/src/SvelteApp.svelte` enthält die lokal auswählbare Svelte-GUI;
-  `frontend/src/entry.ts` schaltet sie über `VITE_FRAMEWORK=svelte` ein.
+- `frontend/src/SvelteApp.svelte` enthält die Svelte-GUI.
+- `frontend/src/entry.ts` ist der alleinige Browser-Einstiegspunkt.
 - `frontend/src/localRuntimeClient.ts` ist der einzige Befehlszugang und liefert einen gemeinsamen beobachtbaren Runtime-Snapshot an die GUI.
 - `frontend/src/localRuntimeWorker.ts` lädt das statische Kotlite-Asset und serialisiert Worker-Nachrichten.
 - `frontend/src/runtimeHost.ts` übersetzt Befehle in die Kotlin/JS-Schnittstelle und veröffentlicht danach Ausgaben und passive Objektzustände.

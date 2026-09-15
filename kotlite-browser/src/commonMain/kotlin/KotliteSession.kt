@@ -347,7 +347,10 @@ class KotliteSession {
             analysisSource += "\n" + source
             analyzedScript = analyzed
             recordPropertyNames()
-            val objectId = if (value is ClassInstance) registerExpressionObject(value) else null
+            // Kotlin values are objects from BlueK's point of view. Keep every
+            // non-Unit expression addressable by the Codepad object control,
+            // including values such as Int and String.
+            val objectId = if (value !== UnitValue) registerExpressionValue(value) else null
             result("value", value, objectId)
         } catch (error: Throwable) {
             faulted = true
@@ -372,8 +375,8 @@ class KotliteSession {
         return result("started", UnitValue)
     }
 
-    /** Keep an object returned by a Codepad expression addressable by the GUI. */
-    private fun registerExpressionObject(value: ClassInstance): String {
+    /** Keep a value returned by a Codepad expression addressable by the GUI. */
+    private fun registerExpressionValue(value: RuntimeValue): String {
         handles.entries.firstOrNull { it.value === value }?.let { return it.key }
         val binding = "__bluek_expression_${nextHandle++}"
         // Keep semantic analysis aware of the binding without evaluating the

@@ -300,7 +300,10 @@ const sourceSuperclass = (source: string) => {
       .find(Boolean) || null
   );
 };
+const sourceDeclarationName = (source: string) =>
+  source.match(/\b(?:class|interface|object)\s+([A-Za-z_]\w*)/)?.[1] || null;
 const addSuperclass = (source: string, superclass: string) => {
+  if (sourceSuperclass(source) === superclass) return source;
   const declaration =
     /\b((?:(?:public|private|protected|internal|abstract|open|data|sealed|inner|enum|annotation|value)\s+)*class\s+[A-Za-z_]\w*(?:\s*<[^>{}]*>)?(?:\s*\([^{}]*\))?)(?:\s*:\s*([^\n{]+))?(\s*\{)/m;
   return source.replace(
@@ -321,6 +324,14 @@ const cardCenter = (bounds: {
   x: bounds.left + bounds.width / 2,
   y: bounds.top + bounds.height / 2,
 });
+const defaultObjectName = (className: string, usedNames: string[] = []) => {
+  const base = className
+    .replace(/s*<.*>$/, "")
+    .replace(/^./, (letter) => letter.toLowerCase());
+  let number = 1;
+  while (usedNames.includes(`${base}${number}`)) number += 1;
+  return `${base}${number}`;
+};
 const cardBorderPoint = (
   bounds: { left: number; top: number; width: number; height: number },
   center: { x: number; y: number },
@@ -354,10 +365,12 @@ export {
   drawnImageDataUrl,
   runtimeClassName,
   specializeCallable,
+  sourceDeclarationName,
   sourceSuperclass,
   addSuperclass,
   cardCenter,
   cardBorderPoint,
+  defaultObjectName,
 };
 
 export function appendTerminal(previous: string, addition: string) {
@@ -437,4 +450,14 @@ export function missingRequired(parameters: any[] = [], values: string[]) {
 
 export function missingTypeArgument(values: string[]) {
   return values.some((value) => !value.trim());
+}
+
+export function codepadIsDisabled(phase: string, inputReady = false) {
+  return (
+    inputReady ||
+    phase === "compiling" ||
+    phase === "running" ||
+    phase === "waitingForInput" ||
+    phase === "faulted"
+  );
 }

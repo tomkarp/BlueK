@@ -11,7 +11,12 @@
     "browser-smoke": "node scripts/smoke-static-architecture.mjs && node scripts/smoke-svelte-architecture.mjs && node scripts/smoke-kotlite-browser.mjs && node scripts/smoke-blueplay-browser.mjs && npm run test:runtime-state",
     "typecheck": "tsc && svelte-check --tsconfig ./tsconfig.json --threshold error",
     "test:runtime-state": "node scripts/smoke-runtime-state.mjs",
-    "test:ui": "node scripts/smoke-ui-behavior.mjs"
+    "test:ui": "node scripts/smoke-ui-behavior.mjs",
+    "test:gui": "playwright test",
+    "test:inspector": "node scripts/smoke-inspector-model.mjs",
+    "test:project-format": "node scripts/smoke-project-format.mjs",
+    "test:codepad-flow": "node scripts/smoke-codepad-flow.mjs",
+    "test:regression": "npm run typecheck && npm run test:ui && npm run test:runtime-state && npm run test:inspector && npm run test:project-format && npm run test:codepad-flow && npm run test:gui"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",
@@ -25,13 +30,14 @@
     "vite": "8.2.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@sveltejs/vite-plugin-svelte": "^7.3.0",
     "@types/node": "22.20.2",
     "codemirror": "^6.0.2",
-    "svelte": "^5.57.0",
-    "typescript": "^6.0.0",
-    "svelte-check": "^4.7.6",
     "prettier": "^3.0.0",
-    "prettier-plugin-svelte": "^3.0.0"
+    "prettier-plugin-svelte": "^3.0.0",
+    "svelte": "^5.57.0",
+    "svelte-check": "^4.7.6",
+    "typescript": "^6.0.0"
   }
 }

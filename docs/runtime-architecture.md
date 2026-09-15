@@ -37,10 +37,10 @@ Codepad / Konstruktor / Methodenmenü / Inspektor / main
 - `vendor/kotlite-interpreter/.../ReplAnalyzer.kt`: Kotlite-seitiger Einstieg für
   die Analyse einer fortlaufenden Sitzung.
 
-React hält Projektdokumente, Fensterpositionen, Auswahl, Dialogentwürfe,
+Svelte hält Projektdokumente, Fensterpositionen, Auswahl, Dialogentwürfe,
 Ausgabehistorie und Objektbank-Beschriftungen. Klassenmetadaten, Laufzustand und
-Inspektorwerte kommen aus dem Snapshot über `useSyncExternalStore`. Der Inspektor
-hält keine zweite veränderliche Kopie der Objektfelder.
+Inspektorwerte werden aus dem autoritativen Runtime-Snapshot abgeleitet. Der
+Inspektor hält keine zweite veränderliche Kopie der Objektfelder.
 
 ## Zustands- und Fehlerregeln
 
@@ -107,7 +107,7 @@ aus dem Format des angezeigten Werts.
 5. **BluePlay:** Keine Erweiterung der API oder vollständige Prüfung in diesem
    Auftrag. Die Steuerung bleibt angebunden; schnelle Tastaturereignisse bei
    laufendem Befehl benötigen noch einen gesonderten Input-Snapshot-Entwurf.
-6. **UI-Struktur:** `main.tsx` ist weiterhin groß. Eine weitere Aufteilung in
+6. **UI-Struktur:** `SvelteApp.svelte` ist weiterhin groß. Eine weitere Aufteilung in
    Ansichts-Komponenten ist möglich, darf aber keine neuen Objektzustandskopien
    oder Interpreter-Zugänge schaffen.
 
