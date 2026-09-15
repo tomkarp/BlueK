@@ -124,11 +124,12 @@
   let inspected: InspectionView | null = null;
   let inspectorWindows: Array<{
     id: string;
+    referenceName: string;
     position: { left: number; top: number };
   }> = [];
   let inspectorModel: InspectorModel;
   let inspectorRevision = 0;
-  let inspectorViews: Array<{ id: string; position: { left: number; top: number }; data: InspectionView }> = [];
+  let inspectorViews: Array<{ id: string; referenceName: string; position: { left: number; top: number }; data: InspectionView }> = [];
   $: {
     // Both runtime fields and independently resolved getters update the derived view.
     void runtime;
@@ -502,6 +503,7 @@
       if (update.docChanged) current.onChange(update.state.doc.toString());
     });
     view.dispatch({ effects: StateEffect.appendConfig.of(listener) });
+    view.focus();
     return {
       update(next: { value: string; onChange: (value: string) => void }) {
         current = next;
@@ -1366,7 +1368,7 @@
       };
       inspectorWindows = [
         ...inspectorWindows.filter((item) => item.id !== object.objectId),
-        { id: object.objectId, position },
+        { id: object.objectId, referenceName: object.name, position },
       ];
       activeInspectorId = object.objectId;
       await inspectorModel.refresh(object.objectId);
@@ -2441,9 +2443,7 @@
         }}
       >
         <h2>
-          {bench.find((object) => object.objectId === inspector.id)
-            ? `${bench.find((object) => object.objectId === inspector.id)?.name} : ${inspectorType(inspector.data)}`
-            : "Object"}
+          {`${inspector.referenceName} : ${inspectorType(inspector.data)}`}
         </h2>
         <div
           class="inspect-fields"

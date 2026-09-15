@@ -134,6 +134,13 @@ test('GUI-21 the same codepad object can be added under two reference names', as
   await expect(page.locator('.bench .object')).toHaveCount(2);
   await expect(page.locator('.bench')).toContainText('hund1');
   await expect(page.locator('.bench')).toContainText('hund2');
+  const objects = page.locator('.bench .object');
+  await objects.nth(0).dblclick();
+  const inspector = page.getByRole('dialog', { name: 'Object inspector' });
+  await expect(inspector.locator('h2')).toHaveText('hund1 : Hund');
+  await objects.nth(1).dblclick();
+  await expect(page.locator('.inspect-window')).toHaveCount(1);
+  await expect(inspector.locator('h2')).toHaveText('hund2 : Hund');
 });
 
 test('GUI-05 history works immediately after execution and terminal output', async ({ page }) => {
@@ -251,6 +258,7 @@ test('GUI-08 GUI-10 editor renames files even after empty content', async ({ pag
   await page.locator('.classcard').dblclick();
   const dialog = page.locator('.editor-dialog');
   const editor = dialog.locator('.cm-content');
+  await expect(editor).toBeFocused();
   await editor.fill('class Tier {}');
   await expect(dialog.locator('h3')).toHaveText('Tier.kt');
   await editor.fill('');
