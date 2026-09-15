@@ -123,6 +123,19 @@ test('GUI-20 long codepad values retain their type and reveal the full value on 
   expect(metrics.textOverflow).toBe('ellipsis');
 });
 
+test('GUI-21 the same codepad object can be added under two reference names', async ({ page }) => {
+  await project(page, 'class Hund {}');
+  const entry = await evaluate(page, 'Hund()');
+  for (const name of ['hund1', 'hund2']) {
+    await entry.getByRole('button').click();
+    await page.getByLabel('Name of instance').fill(name);
+    await page.getByRole('button', { name: 'OK', exact: true }).click();
+  }
+  await expect(page.locator('.bench .object')).toHaveCount(2);
+  await expect(page.locator('.bench')).toContainText('hund1');
+  await expect(page.locator('.bench')).toContainText('hund2');
+});
+
 test('GUI-05 history works immediately after execution and terminal output', async ({ page }) => {
   await project(page);
   for (const code of ['5', 'println("Hallo")']) {

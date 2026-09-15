@@ -1015,14 +1015,11 @@
   }
   function addBenchObject(value: RuntimeValue) {
     if (!value.objectId) return;
-    bench = [
-      ...bench.filter((item) => item.objectId !== value.objectId),
-      {
-        objectId: value.objectId,
-        className: value.className || "Object",
-        name: value.name || `object${bench.length + 1}`,
-      },
-    ];
+    bench = [...bench, {
+      objectId: value.objectId,
+      className: value.className || "Object",
+      name: value.name || `object${bench.length + 1}`,
+    }];
   }
 
 
@@ -1434,9 +1431,10 @@
     window.addEventListener("pointerup", stop);
     event.preventDefault();
   }
-  function removeObject(objectId: string) {
-    bench = bench.filter((object) => object.objectId !== objectId);
-    closeInspector(objectId);
+  function removeObject(object: BenchObject) {
+    bench = bench.filter((item) => item.name !== object.name);
+    if (!bench.some((item) => item.objectId === object.objectId))
+      closeInspector(object.objectId);
     menu = null;
   }
   function fieldProperty(data: RuntimeValue, field: InspectedField) {
@@ -2163,7 +2161,7 @@
       <div class:codepad-collapsed={!codepadOpen} class="lower">
         <section class="bench">
           <div class="bench-items">
-            {#each bench as object (object.objectId)}
+            {#each bench as object (object.name)}
               <div
                 role="button"
                 tabindex="0"
@@ -2855,7 +2853,7 @@
         >
         <button
           disabled={!canExecute}
-          on:click={() => removeObject(menu!.object!.objectId)}>Remove</button
+          on:click={() => removeObject(menu!.object!)}>Remove</button
         >
       {/if}
     </div>
