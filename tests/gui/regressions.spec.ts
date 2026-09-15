@@ -60,6 +60,62 @@ test('GUI-07 every value can be placed on the bench', async ({ page }) => {
   }
 });
 
+test('GUI-18 primitive inspectors show their type and the active inspector is on top', async ({ page }) => {
+  await project(page);
+  for (const [code, name] of [['5', 'zahl'], ['"Hallo"', 'text']]) {
+    const entry = await evaluate(page, code);
+    await entry.getByRole('button').click();
+    await page.getByLabel('Name of instance').fill(name);
+    await page.getByRole('button', { name: 'OK', exact: true }).click();
+  }
+  const objects = page.locator('.bench .object');
+  await objects.nth(0).dblclick();
+  await objects.nth(1).dblclick();
+  const inspectors = page.locator('.inspect-window');
+  await expect(inspectors).toHaveCount(2);
+  await expect(inspectors.nth(0).locator('h2')).toHaveText('zahl : Int');
+  await expect(inspectors.nth(1).locator('h2')).toHaveText('text : String');
+  await expect(inspectors.nth(0).locator('.inspect-no-fields')).toHaveText('No fields');
+  await expect(inspectors.nth(1).locator('.inspect-no-fields')).toHaveText('No fields');
+  const secondBox = (await inspectors.nth(1).boundingBox())!;
+  await page.mouse.move(secondBox.x + secondBox.width / 2, secondBox.y + 16);
+  await page.mouse.down();
+  await page.mouse.move(secondBox.x + secondBox.width / 2 + 300, secondBox.y + 216);
+  await page.mouse.up();
+  const zIndexes = await inspectors.evaluateAll((items) => items.map((item) => Number(getComputedStyle(item).zIndex)));
+  expect(zIndexes[1]).toBeGreaterThan(zIndexes[0]);
+  await page.keyboard.press('Escape');
+  await expect(inspectors).toHaveCount(1);
+});
+
+test('GUI-19 codepad rows use uniform compact spacing without separator lines', async ({ page }) => {
+  await project(page);
+  await evaluate(page, '5');
+  await evaluate(page, '3');
+  const entries = page.locator('.codepad-entry');
+  const rows = page.locator('.codepad-entry > div, .codepad-entry > button');
+  await expect(rows).toHaveCount(4);
+  const gaps = await rows.evaluateAll((items) => items.slice(1).map((item, index) => {
+    const previous = items[index].getBoundingClientRect();
+    const current = item.getBoundingClientRect();
+    return current.top - previous.bottom;
+  }));
+  expect(Math.max(...gaps) - Math.min(...gaps)).toBeLessThan(3);
+  for (let index = 0; index < await entries.count(); index++)
+    await expect(entries.nth(index)).toHaveCSS('border-bottom-width', '0px');
+});
+
+test('GUI-20 long codepad values retain their type and reveal the full value on hover', async ({ page }) => {
+  await project(page);
+  const entry = await evaluate(page, `"${'a'.repeat(200)}"`);
+  const result = entry.locator('.codepad-result, .codepad-object-label');
+  const full = await result.getAttribute('title');
+  const visible = await result.textContent();
+  expect(full).toContain(': String');
+  expect(visible).toContain(': String');
+  expect(visible!.length).toBeLessThan(full!.length);
+});
+
 test('GUI-05 history works immediately after execution and terminal output', async ({ page }) => {
   await project(page);
   for (const code of ['5', 'println("Hallo")']) {
@@ -200,8 +256,9 @@ test('GUI-12 GUI-13 GUI-15 input echo order and clearing preserve the app', asyn
   await expect(terminal.locator('.terminal-input-echo')).toHaveText('Test');
   await expect(input).toBeDisabled();
   await expect(terminal.locator('.terminal-notice')).toHaveCount(0);
+  await terminal.getByLabel('Split terminal to the right').click();
   await terminal.getByLabel('Clear terminal').click();
-  await expect(terminal.locator('pre')).toHaveText('');
+  await expect(terminal.locator('.terminal-output pre')).toHaveText('');
   await expect(page.getByRole('button', { name: 'New Project', exact: true })).toBeVisible();
   await evaluate(page, 'println("after")');
   await expect(terminal.locator('pre')).toHaveText('after\n');

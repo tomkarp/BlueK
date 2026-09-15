@@ -443,6 +443,15 @@
     navigator.clipboard?.writeText(value).catch(() => undefined);
     codepadMenu = null;
   }
+
+  function compactCodepadResult(value: string | undefined) {
+    if (!value || value.length <= 72) return value;
+    const separator = value.lastIndexOf(" : ");
+    if (separator < 0) return `${value.slice(0, 69)}…`;
+    const type = value.slice(separator);
+    const valueLimit = Math.max(8, 72 - type.length - 1);
+    return `${value.slice(0, valueLimit)}…${type}`;
+  }
   function selectAllCodepadHistory() {
     document.querySelectorAll(".codepad-entry").forEach((entry, index) => {
       const range = document.createRange();
@@ -711,6 +720,8 @@
         dialogError = "";
       } else if (objectNamePrompt) objectNamePrompt = null;
       else if (resultDialog) resultDialog = null;
+      else if (activeInspectorId && inspectorWindows.some((item) => item.id === activeInspectorId))
+        closeInspector(activeInspectorId);
       else if (editorOpen) editorOpen = false;
       else if (newClassOpen) newClassOpen = false;
       else if (newFunctionsOpen) newFunctionsOpen = false;
@@ -1364,6 +1375,15 @@
       await inspectorModel.refresh(object.objectId);
     }
   }
+  function bringInspectorToFront(id: string) {
+    activeInspectorId = id;
+    const inspector = inspectorWindows.find((item) => item.id === id);
+    if (!inspector || inspectorWindows.at(-1)?.id === id) return;
+    inspectorWindows = [
+      ...inspectorWindows.filter((item) => item.id !== id),
+      inspector,
+    ];
+  }
   function closeInspector(id: string) {
     inspectorWindows = inspectorWindows.filter((item) => item.id !== id);
     inspectorModel.forget(id);
@@ -1372,7 +1392,7 @@
       activeInspectorId = next?.id || "";
     }
   }
-  function beginInspectorDrag(event: PointerEvent) {
+  function beginInspectorDrag(event: PointerEvent, objectId: string) {
     if (
       event.button !== 0 ||
       (event.target as HTMLElement).closest("button,input")
@@ -1384,8 +1404,7 @@
     if (!element) return;
     const bounds = element.getBoundingClientRect(),
       offsetX = event.clientX - bounds.left,
-      offsetY = event.clientY - bounds.top,
-      objectId = activeInspectorId;
+      offsetY = event.clientY - bounds.top;
     const move = (next: PointerEvent) => {
       const position = {
         left: Math.max(
@@ -1403,10 +1422,9 @@
           ),
         ),
       };
-      if (objectId)
-        inspectorWindows = inspectorWindows.map((item) =>
-          item.id === objectId ? { ...item, position } : item,
-        );
+      inspectorWindows = inspectorWindows.map((item) =>
+        item.id === objectId ? { ...item, position } : item,
+      );
     };
     const stop = () => {
       window.removeEventListener("pointermove", move);
@@ -1437,6 +1455,9 @@
   }
   function fieldValue(data: RuntimeValue, field: InspectorField) {
     return inspectorFieldText(field, field.type || fieldProperty(data, field)?.type);
+  }
+  function inspectorType(data: InspectionView) {
+    return data.className || data.type?.displayName || data.type?.classifier || "Object";
   }
   async function refreshComputedInspectors() {
     for (const inspector of inspectorWindows) {
@@ -2209,8 +2230,8 @@
                       aria-label={`Get ${entry.className || "object"} on object bench`}
                     >
                       <span class="codepad-object-icon" aria-hidden="true"
-                      ></span><span class="codepad-object-label"
-                        >{#if entry.result}{entry.result}{:else}<span class="codepad-object-placeholder"
+                      ></span><span class="codepad-object-label" title={entry.result}
+                        >{#if entry.result}{compactCodepadResult(entry.result)}{:else}<span class="codepad-object-placeholder"
                           >&lt;object&gt;</span
                         ><span> : {entry.className}</span>{/if}</span
                       >
@@ -2218,8 +2239,8 @@
                   {:else if entry.error}<div class="codepad-error">
                       {entry.error}
                     </div>
-                  {:else if entry.result}<div class="codepad-result">
-                      <span class="codepad-value-icon" aria-hidden="true"></span>{entry.result}
+                  {:else if entry.result}<div class="codepad-result" title={entry.result}>
+                      <span class="codepad-value-icon" aria-hidden="true"></span>{compactCodepadResult(entry.result)}
                     </div>{/if}
                 </div>
               {/each}
@@ -2309,9 +2330,9 @@
           </div>
         </div>
         <div class="terminal-output">
-          <pre>{#each terminalParts(terminal) as part}<span
-                class:terminal-input-echo={part.input}>{part.text}</span
-              >{/each}</pre>
+          {#key terminal}<pre>{#each terminalParts(terminal) as part}<span
+                  class:terminal-input-echo={part.input}>{part.text}</span
+                >{/each}</pre>{/key}
           <button
             class="terminal-clear"
             on:click|stopPropagation={clearTerminal}
@@ -2399,22 +2420,26 @@
         role="dialog"
         aria-label="Object inspector"
         tabindex="-1"
-        style={`position:fixed;left:${inspector.position.left}px;top:${inspector.position.top}px;margin:0;z-index:${10 + index}`}
+        style={`position:fixed;left:${inspector.position.left}px;top:${inspector.position.top}px;margin:0;z-index:${inspector.id === activeInspectorId ? 100 : 10 + index}`}
         on:pointerdown={(event) => {
-          activeInspectorId = inspector.id;
+          bringInspectorToFront(inspector.id);
           if (
             !(event.target as HTMLElement).closest("button,input,.inspect-row")
           )
-            beginInspectorDrag(event);
+            beginInspectorDrag(event, inspector.id);
         }}
+        on:click={() => bringInspectorToFront(inspector.id)}
         on:keydown={(event) => {
-          if (event.key === "Escape" && !editingField)
+          if (event.key === "Escape" && (!editingField || inspected?.objectId !== inspector.id)) {
+            event.preventDefault();
+            event.stopPropagation();
             closeInspector(inspector.id);
+          }
         }}
       >
         <h2>
           {bench.find((object) => object.objectId === inspector.id)
-            ? `${bench.find((object) => object.objectId === inspector.id)?.name} : ${inspector.data.className}`
+            ? `${bench.find((object) => object.objectId === inspector.id)?.name} : ${inspectorType(inspector.data)}`
             : "Object"}
         </h2>
         <div
