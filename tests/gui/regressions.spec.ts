@@ -151,15 +151,17 @@ test('GUI-01 new project offers all templates and can be cancelled', async ({ pa
 });
 
 test('GUI-17 Escape cancels constructor and method parameter dialogs', async ({ page }) => {
-  await project(page, 'class Hund { fun laufen(weite: Int) {} }');
+  await project(page, 'class Hund(var alter: Int) { fun laufen(weite: Int) {} }');
   await evaluate(page, '1');
   await page.locator('.classcard').click({ button: 'right' });
   await page.locator('.constructor-menu-item').click();
-  await expect(page.getByRole('dialog', { name: 'Create Hund' })).toBeVisible();
+  const constructorDialog = page.getByRole('dialog', { name: 'Create Hund' });
+  await expect(constructorDialog).toBeVisible();
+  await expect(constructorDialog.locator('input').nth(1)).toBeFocused();
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('dialog', { name: 'Create Hund' })).toBeHidden();
+  await expect(constructorDialog).toBeHidden();
 
-  const objectEntry = await evaluate(page, 'Hund()');
+  const objectEntry = await evaluate(page, 'Hund(1)');
   await objectEntry.getByRole('button').click();
   await page.getByLabel('Name of instance').fill('hund1');
   await page.getByRole('button', { name: 'OK', exact: true }).click();
@@ -167,6 +169,7 @@ test('GUI-17 Escape cancels constructor and method parameter dialogs', async ({ 
   await page.locator('.method-menu-item').first().click();
   const methodDialog = page.getByRole('dialog', { name: /hund1/ });
   await expect(methodDialog).toBeVisible();
+  await expect(methodDialog.locator('input').first()).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(methodDialog).toBeHidden();
 });

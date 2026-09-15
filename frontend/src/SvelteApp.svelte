@@ -2521,8 +2521,8 @@
         <label
           >Name of instance<input
             bind:value={createName}
-            use:focusOnMount={!createDialog.typeParameters.length &&
-              !createDialog.parameters.length}
+            use:focusOnMount={!createDialog.parameters.length &&
+              !createDialog.typeParameters.length}
             on:keydown={(event) => {
               if (event.key === "Escape") createDialog = null;
               if (event.key === "Enter") confirmCreate();
@@ -2555,6 +2555,7 @@
             >{parameter.name}: {parameter.type?.displayName ||
               "Any?"}{parameter.hasDefault ? " (optional)" : ""}<input
               bind:value={createArgs[index]}
+              use:focusOnMount={index === 0}
               on:keydown={(event) => event.key === "Enter" && confirmCreate()}
             /></label
           >{/each}{#if dialogError}<div class="dialog-error" role="alert">
@@ -2593,6 +2594,7 @@
             >{parameter.name}: {parameter.type?.displayName ||
               "Any?"}{parameter.hasDefault ? " (optional)" : ""}<input
               bind:value={invokeArgs[index]}
+              use:focusOnMount={index === 0}
               on:keydown={(event) => event.key === "Enter" && confirmInvoke()}
             /></label
           >{/each}{#if dialogError}<div class="dialog-error" role="alert">
