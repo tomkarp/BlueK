@@ -23,11 +23,10 @@ Archivierter Vergleichs-Commit: `ff1f5d7`.
   typisierte Compile-/Ausführungsergebnisse zurück und verwirft Antworten
   nach einem Generationswechsel. Darstellung, History und Fokus bleiben in
   `SvelteApp.svelte`.
-- `kotlinFormatterClient.ts` und `kotlinFormatterWorker.ts`: asynchrone
-  CodeMirror-Formatierung über den lokalen ktfmt-WASM-Build. Vite bündelt den
-  Worker, das WASM und die Laufzeit in die Anwendung; es gibt keinen Server-
-  oder CDN-Aufruf. Der Worker ist eine reine Hilfskomponente für die
-  Formatierung und verändert keinen Runtime-Zustand.
+- `kotlinFormatterClient.ts`: asynchrone CodeMirror-Formatierung über den
+  lokalen ktfmt-WASM-Build im Hauptthread. Vite bündelt WASM und Laufzeit in
+  die Anwendung; es gibt keinen Server- oder CDN-Aufruf. Der Formatter
+  verändert keinen Runtime-Zustand.
 - `RuntimeHost` und Kotlin-Session: Ausführung und tatsächlicher Objektzustand.
 - `runtime-contract`: gemeinsame Transporttypen. Ansichtsdetails werden nicht
   dem Worker-Protokoll hinzugefügt.

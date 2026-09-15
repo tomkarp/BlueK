@@ -2439,6 +2439,7 @@
             aria-label="Format Kotlin file"
             title={`Format Kotlin file (${formatShortcutLabel})`}
           >≡</button></div>
+        {#if dialogError}<div class="dialog-error" role="alert">{dialogError}</div>{/if}
       </div>
     </div>{/if}
   {#if compilerDialog}<div class="modal" role="presentation">

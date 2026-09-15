@@ -1,49 +1,33 @@
-type FormatResponse =
-  | { id: number; formatted: string; ktfmtVersion: string }
-  | { id: number; error: string };
+import { format as formatMain, init as initMain } from "@scalar/kotlin-fmt";
+import artifactUrl from "@scalar/kotlin-fmt/wasm?url";
 
-type Pending = {
-  resolve: (value: string) => void;
-  reject: (reason: Error) => void;
-};
+let mainReady: Promise<void> | undefined;
+
+async function initializeMainFormatter() {
+  const bytes = new Uint8Array(await (await fetch(artifactUrl)).arrayBuffer());
+  const isWasm = bytes[0] === 0 && bytes[1] === 0x61 && bytes[2] === 0x73 && bytes[3] === 0x6d;
+  const browserInit = initMain as unknown as (options: {
+    bytes: ArrayBufferView;
+    encoding: "none" | "brotli";
+  }) => Promise<void>;
+  await browserInit({ bytes, encoding: isWasm ? "none" : "brotli" });
+}
+
+function formatMainThread(source: string) {
+  mainReady ??= initializeMainFormatter();
+  return mainReady.then(() => formatMain(source, {
+    style: "kotlinlang",
+    removeUnusedImports: false,
+    preserveLambdaBreaks: true,
+  }));
+}
 
 export class KotlinFormatterClient {
-  private readonly worker: Worker;
-  private nextId = 0;
-  private pending = new Map<number, Pending>();
-
-  constructor() {
-    this.worker = new Worker(
-      new URL("./kotlinFormatterWorker.ts", import.meta.url),
-      { type: "module" },
-    );
-    this.worker.onmessage = (event: MessageEvent<FormatResponse>) => {
-      const response = event.data;
-      const request = this.pending.get(response.id);
-      if (!request) return;
-      this.pending.delete(response.id);
-      if ("error" in response) request.reject(new Error(response.error));
-      else request.resolve(response.formatted);
-    };
-    this.worker.onerror = (event) => {
-      const error = new Error(event.message || "Kotlin-Formatierung fehlgeschlagen.");
-      for (const request of this.pending.values()) request.reject(error);
-      this.pending.clear();
-    };
-  }
-
   format(source: string): Promise<string> {
-    const id = ++this.nextId;
-    return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      this.worker.postMessage({ id, source });
-    });
+    return formatMainThread(source);
   }
 
   dispose() {
-    this.worker.terminate();
-    const error = new Error("Kotlin-Formatierung abgebrochen.");
-    for (const request of this.pending.values()) request.reject(error);
-    this.pending.clear();
+    // The formatter is page-local and has no worker to terminate.
   }
 }
