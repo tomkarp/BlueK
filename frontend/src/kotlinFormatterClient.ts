@@ -7,10 +7,13 @@ async function initializeMainFormatter() {
   const bytes = new Uint8Array(await (await fetch(artifactUrl)).arrayBuffer());
   const isWasm = bytes[0] === 0 && bytes[1] === 0x61 && bytes[2] === 0x73 && bytes[3] === 0x6d;
   const browserInit = initMain as unknown as (options: {
-    bytes: ArrayBufferView;
+    bytes?: ArrayBufferView;
+    url?: string | URL;
     encoding: "none" | "brotli";
   }) => Promise<void>;
-  await browserInit({ bytes, encoding: isWasm ? "none" : "brotli" });
+  await browserInit(isWasm
+    ? { bytes, encoding: "none" }
+    : { url: artifactUrl, encoding: "brotli" });
 }
 
 function formatMainThread(source: string) {
