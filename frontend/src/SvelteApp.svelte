@@ -39,6 +39,7 @@
   import {
     bracketMatching,
     defaultHighlightStyle,
+    indentUnit,
     StreamLanguage,
     syntaxHighlighting,
   } from "@codemirror/language";
@@ -496,6 +497,7 @@
         extensions: [
           minimalSetup,
           lineNumbers(),
+          indentUnit.of("    "),
           historyExtension(),
           closeBrackets(),
           bracketMatching(),
@@ -526,6 +528,14 @@
       if (update.docChanged) current.onChange(update.state.doc.toString());
     });
     view.dispatch({ effects: StateEffect.appendConfig.of(listener) });
+    const formatShortcut = (event: KeyboardEvent) => {
+      if ((event.key.toLowerCase() !== "i" && event.code !== "KeyI") ||
+          !event.shiftKey || (!event.metaKey && !event.ctrlKey)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      formatDocument();
+    };
+    window.addEventListener("keydown", formatShortcut, true);
     view.focus();
     return {
       update(next: { value: string; onChange: (value: string) => void }) {
@@ -537,6 +547,7 @@
       },
       destroy() {
         ++formatRequest;
+        window.removeEventListener("keydown", formatShortcut, true);
         formatter.dispose();
         view.destroy();
       },

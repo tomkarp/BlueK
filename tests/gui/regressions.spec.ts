@@ -62,6 +62,16 @@ test('GUI-25 editor does not open automatic code completion', async ({ page }) =
   await expect(page.locator('.cm-tooltip-autocomplete')).toHaveCount(0);
 });
 
+test('GUI-25 editor uses four spaces for manual indentation', async ({ page }) => {
+  await project(page, 'class Hund {}');
+  await page.locator('.classcard').dblclick();
+  const editor = page.locator('.editor-dialog .cm-editor');
+  await editor.click();
+  await page.keyboard.press('Control+Home');
+  await page.keyboard.press('Tab');
+  await expect(editor.locator('.cm-line').first()).toHaveText('    class Hund {}');
+});
+
 test('GUI-26 Cmd/Ctrl-Shift-I auto-formats the complete file', async ({ page }) => {
   await project(page, 'class Hund {\nfun bellen() {\nprintln("Wuff")\n}\n}');
   await page.locator('.classcard').dblclick();
@@ -74,6 +84,16 @@ test('GUI-26 Cmd/Ctrl-Shift-I auto-formats the complete file', async ({ page }) 
   await expect(editor.locator('.cm-line').nth(2)).toHaveText('        println("Wuff")');
   await expect(editor.locator('.cm-line').nth(3)).toHaveText('    }');
   await expect(editor.locator('.cm-line').nth(4)).toHaveText('}');
+});
+
+test('GUI-26 Cmd-Shift-I also formats the complete file', async ({ page }) => {
+  await project(page, 'class Hund {\nfun bellen() {\nprintln("Wuff")\n}\n}');
+  await page.locator('.classcard').dblclick();
+  const editor = page.locator('.editor-dialog .cm-editor');
+  await editor.click();
+  await page.keyboard.press('Meta+Shift+I');
+  await expect(editor.locator('.cm-line').nth(1)).toHaveText('    fun bellen() {');
+  await expect(editor.locator('.cm-line').nth(2)).toHaveText('        println("Wuff")');
 });
 
 test('GUI-03 GUI-04 computed values update after every inspector edit', async ({ page }) => {
