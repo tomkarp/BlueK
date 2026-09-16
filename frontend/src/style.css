@@ -80,6 +80,10 @@ footer{flex:0 0 108px}
 .inspect-row input[aria-invalid="true"]{outline:2px solid #c00000;outline-offset:-2px}
 .inspect-error{grid-column:1 / -1;padding:4px 8px;color:#a00000;font:13px Arial,sans-serif;background:#ffe0e0}
 .dialog-error{margin:4px 0 12px;padding:8px 10px;color:#a00000;background:#ffe0e0;border:1px solid #d66;font-size:14px}
+.editor-dialog-error{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.editor-dialog-error>span{min-width:0;overflow-wrap:anywhere}
+.dialog-error-close{flex:0 0 auto!important;min-width:24px!important;width:24px;height:24px;padding:0!important;margin:0!important;border:1px solid #c77!important;border-radius:4px;background:#fff0f0!important;color:#900;font:bold 16px/20px Arial,sans-serif;cursor:pointer}
+.dialog-error-close:hover,.dialog-error-close:focus-visible{background:#fff!important;color:#600;outline:2px solid #c77;outline-offset:1px}
 .classcard{position:relative}
 .framework-card{display:flex}
 .card-menu{position:absolute;top:7px;right:8px;width:28px;height:24px;border:1px solid #9a6b2f;border-radius:4px;background:#f8d59f;color:#333;font:bold 18px/16px Arial;cursor:pointer}

@@ -112,6 +112,24 @@ test('GUI-27 editor window has maximize, close and format controls', async ({ pa
   await expect(dialog).toHaveCount(0);
 });
 
+test('GUI-34 failed formatting shows a dismissible error and clears it on retry', async ({ page }) => {
+  await page.route('**/kotlin_fmt.wasm.br', (route) =>
+    route.fulfill({ status: 200, body: 'not a wasm module' }),
+  );
+  await project(page, 'class Hund {}');
+  await page.locator('.classcard').dblclick();
+  const dialog = page.locator('.editor-dialog');
+  const format = dialog.getByRole('button', { name: 'Format Kotlin file' });
+  await format.click();
+  const error = dialog.getByRole('alert');
+  await expect(error).toBeVisible();
+  await expect(error.getByRole('button', { name: 'Close format error' })).toBeVisible();
+  await error.getByRole('button', { name: 'Close format error' }).click();
+  await expect(error).toHaveCount(0);
+  await format.click();
+  await expect(error).toBeVisible();
+});
+
 test('GUI-28 editor window can be moved and resized', async ({ page }) => {
   await project(page, 'class Hund {}');
   await page.locator('.classcard').dblclick();

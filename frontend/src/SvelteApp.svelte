@@ -489,6 +489,7 @@
     let view: EditorView;
     let formatRequest = 0;
     const formatDocument = () => {
+      dialogError = "";
       const request = ++formatRequest;
       const source = view.state.doc.toString();
       void formatter.format(source).then((formatted) => {
@@ -498,8 +499,10 @@
           userEvent: "input.format",
         });
       }).catch((error: unknown) => {
-        if (request === formatRequest)
-          dialogError = error instanceof Error ? error.message : String(error);
+        if (request === formatRequest) {
+          const message = error instanceof Error ? error.message : String(error);
+          dialogError = message.replaceAll("com.facebook.ktfmt.format.", "");
+        }
       });
       return true;
     };
@@ -2651,7 +2654,13 @@
               aria-label="Format Kotlin file"
               title={`Format Kotlin file (${formatShortcutLabel})`}
             >≡</button></div>
-          {#if dialogError}<div class="dialog-error" role="alert">{dialogError}</div>{/if}
+          {#if dialogError}<div class="dialog-error editor-dialog-error" role="alert"><span>{dialogError}</span><button
+              type="button"
+              class="dialog-error-close"
+              aria-label="Close format error"
+              title="Close format error"
+              on:click={() => (dialogError = "")}
+            >×</button></div>{/if}
           {#each ["n", "ne", "e", "se", "s", "sw", "w", "nw"] as direction}<div
             role="separator"
             aria-label={`Resize editor ${direction}`}
@@ -2708,7 +2717,13 @@
                 aria-label="Format Kotlin file"
                 title={`Format Kotlin file (${formatShortcutLabel})`}
               >≡</button></div>
-            {#if dialogError}<div class="dialog-error" role="alert">{dialogError}</div>{/if}
+            {#if dialogError}<div class="dialog-error editor-dialog-error" role="alert"><span>{dialogError}</span><button
+                type="button"
+                class="dialog-error-close"
+                aria-label="Close format error"
+                title="Close format error"
+                on:click={() => (dialogError = "")}
+              >×</button></div>{/if}
             {#each ["n", "ne", "e", "se", "s", "sw", "w", "nw"] as direction}<div
               role="separator"
               aria-label={`Resize editor ${direction}`}
