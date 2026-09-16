@@ -63,6 +63,13 @@
     className?: string;
   };
   type CardPosition = { x: number; y: number };
+  type EditorWindowState = {
+    id: string;
+    fileId: string;
+    maximized: boolean;
+    position: { left: number; top: number } | null;
+    size: { width: number; height: number };
+  };
   let client: LocalRuntimeClient;
   let dialogError = "";
   function focusOnMount(node: HTMLElement, enabled = true) {
@@ -116,9 +123,11 @@
     terminalSplitWidth = 430,
     terminalPosition: { left: number; top: number } | null = null,
     terminalSize = { width: 780, height: 520 };
-  let editorOpen = false,
-    editorMaximized = false,
-    editorSource = "",
+  let activeWindow: "terminal" | "editor" | null = null;
+  let editorWindows: EditorWindowState[] = [],
+    activeEditorId = "",
+    editorTabbed = false,
+    editorGroup: EditorWindowState | null = null,
     status = "Ready",
     error = "",
     compilerDialog = false,
@@ -172,7 +181,7 @@
     paneSplit = 66,
     benchWidth: number | null = null,
     codepadMenu: { x: number; y: number; text?: string } | null = null;
-  let formatOpenEditor = () => {};
+  const editorFormatters = new Map<string, () => boolean>();
   let formatShortcutLabel = "Ctrl+Shift+I";
   let toolbarDialog: "open" | "save" | null = null;
   let inheritanceEdges: Array<{
@@ -473,7 +482,7 @@
   }
   function codeMirror(
     node: HTMLElement,
-    options: { value: string; onChange: (value: string) => void },
+    options: { id: string; value: string; onChange: (value: string) => void },
   ) {
     let current = options;
     const formatter = new KotlinFormatterClient();
@@ -494,7 +503,7 @@
       });
       return true;
     };
-    formatOpenEditor = formatDocument;
+    editorFormatters.set(current.id, formatDocument);
     view = new EditorView({
       state: EditorState.create({
         doc: current.value,
@@ -535,6 +544,7 @@
     const formatShortcut = (event: KeyboardEvent) => {
       if ((event.key.toLowerCase() !== "i" && event.code !== "KeyI") ||
           !event.shiftKey || (!event.metaKey && !event.ctrlKey)) return;
+      if (!node.contains(document.activeElement)) return;
       event.preventDefault();
       event.stopPropagation();
       formatDocument();
@@ -542,8 +552,13 @@
     window.addEventListener("keydown", formatShortcut, true);
     view.focus();
     return {
-      update(next: { value: string; onChange: (value: string) => void }) {
+      update(next: { id: string; value: string; onChange: (value: string) => void }) {
+        const previousId = current.id;
         current = next;
+        if (previousId !== next.id) {
+          editorFormatters.delete(previousId);
+          editorFormatters.set(next.id, formatDocument);
+        }
         if (next.value !== view.state.doc.toString())
           view.dispatch({
             changes: { from: 0, to: view.state.doc.length, insert: next.value },
@@ -551,12 +566,15 @@
       },
       destroy() {
         ++formatRequest;
-        if (formatOpenEditor === formatDocument) formatOpenEditor = () => {};
+        editorFormatters.delete(current.id);
         window.removeEventListener("keydown", formatShortcut, true);
         formatter.dispose();
         view.destroy();
       },
     };
+  }
+  function formatEditor(id: string) {
+    editorFormatters.get(id)?.();
   }
   $: currentFile = files[selected];
   $: classes = runtime.classes || [];
@@ -766,13 +784,17 @@
       else if (resultDialog) resultDialog = null;
       else if (activeInspectorId && inspectorWindows.some((item) => item.id === activeInspectorId))
         closeInspector(activeInspectorId);
-      else if (editorOpen) closeEditor();
+      else if (activeWindow === "editor" && editorWindows.length) closeEditor();
       else if (newClassOpen) newClassOpen = false;
       else if (newFunctionsOpen) newFunctionsOpen = false;
       else if (settingsNotice) settingsNotice = false;
       else if (filesNotice) filesNotice = false;
       else if (toolbarDialog) toolbarDialog = null;
       else if (newProjectOpen) newProjectOpen = false;
+      else if (activeWindow === "terminal" && terminalOpen) {
+        terminalOpen = false;
+        terminalSplit = false;
+      } else if (editorWindows.length) closeEditor();
       else if (terminalOpen) {
         terminalOpen = false;
         terminalSplit = false;
@@ -803,7 +825,6 @@
     };
     files = [...files, file];
     selected = files.length - 1;
-    editorSource = source;
     markUncompiled();
   }
   function confirmNewClass() {
@@ -832,7 +853,6 @@
     };
     files = [...files, file];
     selected = files.length - 1;
-    editorSource = source;
     newClassOpen = false;
     error = "";
     markUncompiled();
@@ -870,19 +890,143 @@
   function openEditor(file = currentFile) {
     if (!file) return;
     selected = files.findIndex((item) => item.id === file.id);
-    editorSource = file.source;
-    editorMaximized = false;
-    editorOpen = true;
+    const existing = editorWindows.find((item) => item.fileId === file.id);
+    if (!existing) {
+      editorWindows = [...editorWindows, {
+        id: `editor-${file.id}`,
+        fileId: file.id,
+        maximized: false,
+        position: null,
+        size: { width: 780, height: 520 },
+      }];
+      activeEditorId = `editor-${file.id}`;
+    } else {
+      activeEditorId = existing.id;
+    }
+    activeWindow = "editor";
     menu = null;
   }
-  function closeEditor() {
-    editorOpen = false;
-    editorMaximized = false;
+  function collectEditors() {
+    if (editorWindows.length < 2 || editorTabbed) return;
+    const active = editorWindows.find((item) => item.id === activeEditorId) || editorWindows[0];
+    editorGroup = { ...active, id: "editor-group" };
+    editorTabbed = true;
+    activeEditorId = active.id;
+    activeWindow = "editor";
   }
-  function updateSource(value: string) {
-    editorSource = value;
+  function ungroupEditors() {
+    if (!editorTabbed || !editorGroup) return;
+    const baseLeft = editorGroup.position?.left ?? Math.max(8, (window.innerWidth - editorGroup.size.width) / 2);
+    const baseTop = editorGroup.position?.top ?? Math.max(8, (window.innerHeight - editorGroup.size.height) / 2);
+    editorWindows = editorWindows.map((item, index) => ({
+      ...item,
+      maximized: false,
+      size: { ...editorGroup!.size },
+      position: item.position || {
+        left: Math.max(8, Math.min(window.innerWidth - 220, baseLeft + index * 32)),
+        top: Math.max(8, Math.min(window.innerHeight - 120, baseTop + index * 32)),
+      },
+    }));
+    editorGroup = null;
+    editorTabbed = false;
+  }
+  function selectEditorTab(id: string) {
+    if (!editorWindows.some((item) => item.id === id)) return;
+    activeEditorId = id;
+    activeWindow = "editor";
+  }
+  function toggleEditorMaximized(id: string) {
+    const frame = editorFrame(id);
+    if (frame) updateEditorFrame(id, { maximized: !frame.maximized });
+    activeEditorId = id;
+    activeWindow = "editor";
+  }
+  function closeEditor(id = activeEditorId) {
+    editorWindows = editorWindows.filter((item) => item.id !== id);
+    if (activeEditorId === id) activeEditorId = editorWindows.at(-1)?.id || "";
+    if (editorTabbed && editorWindows.length === 1) {
+      editorWindows = editorWindows.map((item) => ({
+        ...item,
+        maximized: editorGroup?.maximized || false,
+        position: editorGroup?.position || item.position,
+        size: editorGroup?.size || item.size,
+      }));
+      editorGroup = null;
+      editorTabbed = false;
+    }
+    if (!editorWindows.length) {
+      editorGroup = null;
+      editorTabbed = false;
+      if (activeWindow === "editor") activeWindow = terminalOpen ? "terminal" : null;
+    }
+  }
+  function editorFrame(id: string): EditorWindowState | null {
+    return editorTabbed ? editorGroup : editorWindows.find((item) => item.id === id) || null;
+  }
+  function updateEditorFrame(id: string, update: Partial<EditorWindowState>) {
+    if (editorTabbed && editorGroup) editorGroup = { ...editorGroup, ...update };
+    else editorWindows = editorWindows.map((item) => item.id === id ? { ...item, ...update } : item);
+  }
+  function beginEditorDrag(event: PointerEvent, id: string) {
+    const editorWindow = editorFrame(id);
+    if (!editorWindow || editorWindow.maximized || event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
+    const element = (event.currentTarget as HTMLElement).closest(".editor-dialog");
+    if (!element) return;
+    const bounds = element.getBoundingClientRect();
+    const offsetX = event.clientX - bounds.left;
+    const offsetY = event.clientY - bounds.top;
+    const move = (next: PointerEvent) => {
+      const position = {
+        left: Math.max(8, Math.min(window.innerWidth - 220, next.clientX - offsetX)),
+        top: Math.max(8, Math.min(window.innerHeight - 120, next.clientY - offsetY)),
+      };
+      updateEditorFrame(id, { position });
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+    event.preventDefault();
+  }
+  function beginEditorResize(event: PointerEvent, id: string, direction: string) {
+    const editorWindow = editorFrame(id);
+    if (!editorWindow || editorWindow.maximized || event.button !== 0) return;
+    const element = (event.currentTarget as HTMLElement).closest(".editor-dialog");
+    if (!element) return;
+    (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+    const bounds = element.getBoundingClientRect();
+    const start = { x: event.clientX, y: event.clientY, left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height };
+    const move = (next: PointerEvent) => {
+      const dx = next.clientX - start.x, dy = next.clientY - start.y;
+      const minWidth = 420, minHeight = 260;
+      let left = start.left, top = start.top, width = start.width, height = start.height;
+      if (direction.includes("e")) width = Math.max(minWidth, start.width + dx);
+      if (direction.includes("s")) height = Math.max(minHeight, start.height + dy);
+      if (direction.includes("w")) {
+        width = Math.max(minWidth, start.width - dx);
+        left = start.left + start.width - width;
+      }
+      if (direction.includes("n")) {
+        height = Math.max(minHeight, start.height - dy);
+        top = start.top + start.height - height;
+      }
+      const position = { left: Math.max(8, left), top: Math.max(8, top) };
+      updateEditorFrame(id, { position, size: { width, height } });
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+    event.preventDefault();
+  }
+  function updateSource(fileId: string, value: string) {
     if (!currentFile) return;
-    const file = currentFile;
+    const file = files.find((item) => item.id === fileId);
+    if (!file) return;
     const oldName = sourceDeclarationName(file.source);
     const newName = sourceDeclarationName(value);
     const fileStem = file.fileName.replace(/\.kt$/, "");
@@ -897,7 +1041,7 @@
         ? `${newName}.kt`
         : file.fileName;
     files = files.map((file) =>
-      file.id === currentFile.id
+        file.id === fileId
         ? {
             ...file,
             fileName: renamedFileName,
@@ -918,7 +1062,13 @@
     files = files.filter((item) => item.id !== file.id);
     selected = Math.max(0, Math.min(selected, files.length - 1));
     menu = null;
-    editorOpen = false;
+    editorWindows = editorWindows.filter((item) => item.fileId !== file.id);
+    if (activeEditorId && !editorWindows.some((item) => item.id === activeEditorId))
+      activeEditorId = editorWindows.at(-1)?.id || "";
+    if (!editorWindows.length) {
+      editorGroup = null;
+      editorTabbed = false;
+    }
     markUncompiled();
   }
   function duplicateFile(file: ProjectFile) {
@@ -935,9 +1085,7 @@
     };
     files = [...files, duplicate];
     selected = files.length - 1;
-    editorSource = duplicate.source;
-    editorMaximized = false;
-    editorOpen = true;
+    openEditor(duplicate);
     markUncompiled();
   }
   async function compile(): Promise<boolean> {
@@ -1602,6 +1750,7 @@
       ".terminal-window",
     );
     if (!element) return;
+    (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
     const bounds = element.getBoundingClientRect();
     const start = {
       x: event.clientX,
@@ -1784,7 +1933,10 @@
     resources = imported.resources;
     cardPositions = imported.cardPositions;
     selected = 0;
-    editorOpen = false;
+    editorWindows = [];
+    activeEditorId = "";
+    editorGroup = null;
+    editorTabbed = false;
     markUncompiled();
     status = message;
   }
@@ -1989,6 +2141,7 @@
         class="toolbar-icon-button"
         on:click={() => {
           terminalOpen = !terminalOpen;
+          if (terminalOpen) activeWindow = "terminal";
           if (!terminalOpen) terminalSplit = false;
         }}
         aria-label={terminalOpen ? "Hide terminal" : "Show terminal"}
@@ -2322,7 +2475,10 @@
         >
         {#if !terminalOpen && (terminal || inputReady)}<button
             class="terminal-reopen"
-            on:click={() => (terminalOpen = true)}>Terminal</button
+            on:click={() => {
+              terminalOpen = true;
+              activeWindow = "terminal";
+            }}>Terminal</button
           >{/if}
         <span
           class:active={runtime.phase === "running" ||
@@ -2348,7 +2504,9 @@
   {#if shareNotice}<div class="share-notice" role="status" aria-live="polite">{shareNotice}</div>{/if}
   {#if terminalOpen}<div
       class:terminal-modal-split={terminalSplit}
+      class:window-active={activeWindow === "terminal"}
       class="terminal-modal"
+      on:pointerdown={() => (activeWindow = "terminal")}
     >
       <div
         class:split={terminalSplit}
@@ -2362,8 +2520,11 @@
         <div
           role="toolbar"
           tabindex="0"
-          class="terminal-header"
-          on:pointerdown={beginTerminalDrag}
+          class="terminal-header window-header"
+          on:pointerdown={(event) => {
+            activeWindow = "terminal";
+            beginTerminalDrag(event);
+          }}
         >
           <span>BlueK Terminal</span>
           <div>
@@ -2374,6 +2535,7 @@
                 : "Maximize terminal window"}
               >{terminalMaximized ? "❐" : "□"}</button
             ><button
+              class="terminal-split-toggle"
               on:click|stopPropagation={toggleTerminalSplit}
               aria-label={terminalSplit
                 ? "Restore terminal window"
@@ -2417,30 +2579,141 @@
           ></div>{/each}
       </div>
     </div>{/if}
-  {#if editorOpen}<div class="modal">
-      <div class:maximized={editorMaximized} class="dialog editor-dialog">
-        <div class="editor-header" role="toolbar">
-          <h3>{currentFile?.fileName || "Kotlin file"}</h3>
-          <div>
-            <button
-              on:click={() => (editorMaximized = !editorMaximized)}
-              aria-label={editorMaximized ? "Restore editor window" : "Maximize editor window"}
-              title={editorMaximized ? "Restore editor window" : "Maximize editor window"}
-            >{editorMaximized ? "❐" : "□"}</button>
-            <button on:click={closeEditor} aria-label="Close editor" title="Close editor">×</button>
+  {#if editorWindows.length}<div class:window-active={activeWindow === "editor"} class="modal editor-modal">
+      {#if editorTabbed && editorGroup}
+        {@const editorFile = files.find((file) => file.id === activeEditorId.replace(/^editor-/, "")) || files.find((file) => file.id === editorGroup?.fileId)}
+        {#if editorFile}<div
+          class:maximized={editorGroup.maximized}
+          class:floating={Boolean(editorGroup.position) && !editorGroup.maximized}
+          class="dialog editor-dialog editor-tabbed-dialog"
+          style={`${editorGroup.maximized ? "" : `width:${editorGroup.size.width}px;height:${editorGroup.size.height}px;`} ${editorGroup.position && !editorGroup.maximized ? `left:${editorGroup.position.left}px;top:${editorGroup.position.top}px;` : ""}`}
+          on:pointerdown={() => { activeWindow = "editor"; }}
+        >
+          <div
+            class="editor-header window-header"
+            role="toolbar"
+            tabindex="0"
+            on:pointerdown={(event) => {
+              activeWindow = "editor";
+              beginEditorDrag(event, activeEditorId);
+            }}
+          >
+            <div class="editor-tabs" role="tablist" aria-label="Open editor files">
+              {#each editorWindows as tabWindow (tabWindow.id)}
+                {@const tabFile = files.find((file) => file.id === tabWindow.fileId)}
+                {#if tabFile}<button
+                  class:active={tabWindow.id === activeEditorId}
+                  role="tab"
+                  aria-selected={tabWindow.id === activeEditorId}
+                  on:click={() => selectEditorTab(tabWindow.id)}
+                ><span>{tabFile.fileName}</span><span
+                    class="editor-tab-close"
+                    role="button"
+                    tabindex="0"
+                    aria-label={`Close ${tabFile.fileName}`}
+                    on:click|stopPropagation={() => closeEditor(tabWindow.id)}
+                    on:keydown|stopPropagation={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        closeEditor(tabWindow.id);
+                      }
+                    }}>×</span></button>{/if}
+              {/each}
+            </div>
+            <div class="editor-window-controls">
+              <button
+                on:click={() => toggleEditorMaximized(activeEditorId)}
+                aria-label={editorGroup.maximized ? "Restore editor window" : "Maximize editor window"}
+                title={editorGroup.maximized ? "Restore editor window" : "Maximize editor window"}
+              >{editorGroup.maximized ? "❐" : "□"}</button>
+              <button
+                on:click={ungroupEditors}
+                aria-label="Ungroup editor tabs"
+                title="Ungroup editor tabs"
+              ><svg class="window-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 10L3 3M3 9V3h6M14 10l7-7M15 3h6v6M10 14l-7 7M3 15v6h6M14 14l7 7M21 15v6h-6"/></svg></button>
+              <button on:click={() => closeEditor(activeEditorId)} aria-label="Close editor" title="Close editor">×</button>
+            </div>
           </div>
-        </div>
-        <div
-          class="svelte-editor-host"
-          use:codeMirror={{ value: editorSource, onChange: updateSource }}
-        ><button
-            class="editor-format"
-            on:click={formatOpenEditor}
-            aria-label="Format Kotlin file"
-            title={`Format Kotlin file (${formatShortcutLabel})`}
-          >≡</button></div>
-        {#if dialogError}<div class="dialog-error" role="alert">{dialogError}</div>{/if}
-      </div>
+          <div
+            class="svelte-editor-host"
+            on:pointerdown={() => { activeWindow = "editor"; }}
+            use:codeMirror={{ id: activeEditorId, value: editorFile.source, onChange: (value: string) => updateSource(editorFile.id, value) }}
+          ><button
+              class="editor-format"
+              on:click={() => formatEditor(activeEditorId)}
+              aria-label="Format Kotlin file"
+              title={`Format Kotlin file (${formatShortcutLabel})`}
+            >≡</button></div>
+          {#if dialogError}<div class="dialog-error" role="alert">{dialogError}</div>{/if}
+          {#each ["n", "ne", "e", "se", "s", "sw", "w", "nw"] as direction}<div
+            role="separator"
+            aria-label={`Resize editor ${direction}`}
+            class={`editor-resize-handle editor-resize-${direction}`}
+            on:pointerdown={(event) => {
+              activeWindow = "editor";
+              beginEditorResize(event, activeEditorId, direction);
+            }}
+          ></div>{/each}
+        </div>{/if}
+      {:else}{#each editorWindows as editorWindow (editorWindow.id)}
+          {@const editorFile = files.find((file) => file.id === editorWindow.fileId)}
+          {#if editorFile}<div
+            class:maximized={editorWindow.maximized}
+            class:floating={Boolean(editorWindow.position) && !editorWindow.maximized}
+            class:editor-window-active={activeEditorId === editorWindow.id}
+            class="dialog editor-dialog"
+            style={`${editorWindow.maximized ? "" : `width:${editorWindow.size.width}px;height:${editorWindow.size.height}px;`} ${editorWindow.position && !editorWindow.maximized ? `left:${editorWindow.position.left}px;top:${editorWindow.position.top}px;` : ""} z-index:${activeEditorId === editorWindow.id ? 2 : 1};`}
+            on:pointerdown={() => { activeWindow = "editor"; activeEditorId = editorWindow.id; }}
+          >
+            <div
+              class="editor-header window-header"
+              role="toolbar"
+              tabindex="0"
+              on:pointerdown={(event) => {
+                activeWindow = "editor";
+                activeEditorId = editorWindow.id;
+                beginEditorDrag(event, editorWindow.id);
+              }}
+            >
+              <h3>{editorFile.fileName}</h3>
+              <div class="editor-window-controls">
+                <button
+                  on:click={() => toggleEditorMaximized(editorWindow.id)}
+                  aria-label={editorWindow.maximized ? "Restore editor window" : "Maximize editor window"}
+                  title={editorWindow.maximized ? "Restore editor window" : "Maximize editor window"}
+                >{editorWindow.maximized ? "❐" : "□"}</button>
+                <button
+                  disabled={editorWindows.length < 2}
+                  on:click={collectEditors}
+                  aria-label="Collect editor windows into tabs"
+                  title="Collect editor windows into tabs"
+                ><svg class="window-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l7 7M10 4v6H4M21 3l-7 7M14 4v6h6M3 21l7-7M4 14h6v6M21 21l-7-7M14 20v-6h6"/></svg></button>
+                <button on:click={() => closeEditor(editorWindow.id)} aria-label="Close editor" title="Close editor">×</button>
+              </div>
+            </div>
+            <div
+              class="svelte-editor-host"
+              on:pointerdown={() => { activeWindow = "editor"; activeEditorId = editorWindow.id; }}
+              use:codeMirror={{ id: editorWindow.id, value: editorFile.source, onChange: (value: string) => updateSource(editorFile.id, value) }}
+            ><button
+                class="editor-format"
+                on:click={() => formatEditor(editorWindow.id)}
+                aria-label="Format Kotlin file"
+                title={`Format Kotlin file (${formatShortcutLabel})`}
+              >≡</button></div>
+            {#if dialogError}<div class="dialog-error" role="alert">{dialogError}</div>{/if}
+            {#each ["n", "ne", "e", "se", "s", "sw", "w", "nw"] as direction}<div
+              role="separator"
+              aria-label={`Resize editor ${direction}`}
+              class={`editor-resize-handle editor-resize-${direction}`}
+              on:pointerdown={(event) => {
+                activeWindow = "editor";
+                activeEditorId = editorWindow.id;
+                beginEditorResize(event, editorWindow.id, direction);
+              }}
+            ></div>{/each}
+          </div>{/if}
+        {/each}{/if}
     </div>{/if}
   {#if compilerDialog}<div class="modal" role="presentation">
       <div

@@ -112,6 +112,207 @@ test('GUI-27 editor window has maximize, close and format controls', async ({ pa
   await expect(dialog).toHaveCount(0);
 });
 
+test('GUI-28 editor window can be moved and resized', async ({ page }) => {
+  await project(page, 'class Hund {}');
+  await page.locator('.classcard').dblclick();
+  const dialog = page.locator('.editor-dialog');
+  const header = dialog.locator('.editor-header');
+  const beforeMove = await dialog.boundingBox();
+  const headerBox = await header.boundingBox();
+  if (!beforeMove || !headerBox) throw new Error('Editor bounds unavailable');
+  await page.mouse.move(headerBox.x + 100, headerBox.y + 15);
+  await page.mouse.down();
+  await page.mouse.move(headerBox.x + 180, headerBox.y + 75);
+  await page.mouse.up();
+  const afterMove = await dialog.boundingBox();
+  expect(afterMove?.x).toBeGreaterThan(beforeMove.x + 50);
+  expect(afterMove?.y).toBeGreaterThan(beforeMove.y + 50);
+  const resize = dialog.locator('.editor-resize-se');
+  const resizeBox = await resize.boundingBox();
+  if (!resizeBox || !afterMove) throw new Error('Editor resize bounds unavailable');
+  await page.mouse.move(resizeBox.x + 3, resizeBox.y + 3);
+  await page.mouse.down();
+  await page.mouse.move(resizeBox.x + 100, resizeBox.y + 80);
+  await page.mouse.up();
+  const afterResize = await dialog.boundingBox();
+  expect(afterResize?.width).toBeGreaterThan(afterMove.width + 50);
+  expect(afterResize?.height).toBeGreaterThan(afterMove.height + 30);
+});
+
+test('GUI-29 editor uses terminal window chrome without a bottom gap', async ({ page }) => {
+  await project(page, 'class Hund {}');
+  await page.locator('.classcard').dblclick();
+  const dialog = page.locator('.editor-dialog');
+  const header = dialog.locator('.editor-header');
+  const editorHost = dialog.locator('.svelte-editor-host');
+  await expect(header).toHaveCSS('cursor', 'move');
+  await expect(dialog).toHaveCSS('background-color', 'rgb(245, 244, 241)');
+  await expect(dialog).toHaveCSS('border-top-width', '2px');
+  await expect(editorHost).toHaveCSS('margin-bottom', '0px');
+  const dialogBox = await dialog.boundingBox();
+  const editorBox = await editorHost.boundingBox();
+  if (!dialogBox || !editorBox) throw new Error('Editor bounds unavailable');
+  expect(dialogBox.y + dialogBox.height - (editorBox.y + editorBox.height)).toBeLessThan(30);
+});
+
+test('GUI-30 clicking editor or terminal brings that window to the front', async ({ page }) => {
+  await project(page, 'class Hund {}');
+  await page.locator('.classcard').dblclick();
+  await page.getByLabel('Show terminal', { exact: true }).click();
+  const editorModal = page.locator('.editor-modal');
+  const terminalModal = page.locator('.terminal-modal');
+  await expect(terminalModal).toHaveClass(/window-active/);
+  await expect(editorModal).not.toHaveClass(/window-active/);
+  const editorHeader = editorModal.locator('.editor-header');
+  const terminalHeader = terminalModal.locator('.terminal-header');
+  const terminalHeaderBeforeMove = await terminalHeader.boundingBox();
+  if (!terminalHeaderBeforeMove) throw new Error('Terminal header bounds unavailable');
+  await page.mouse.move(terminalHeaderBeforeMove.x + 80, terminalHeaderBeforeMove.y + 12);
+  await page.mouse.down();
+  await page.mouse.move(terminalHeaderBeforeMove.x + 680, terminalHeaderBeforeMove.y + 12);
+  await page.mouse.up();
+  const editorHeaderBeforeClick = await editorHeader.boundingBox();
+  if (!editorHeaderBeforeClick) throw new Error('Editor header bounds unavailable');
+  await page.mouse.click(editorHeaderBeforeClick.x + 12, editorHeaderBeforeClick.y + 12);
+  await expect(editorModal).toHaveClass(/window-active/);
+  await expect(terminalModal).not.toHaveClass(/window-active/);
+  const editorBoxAfterClick = await editorModal.locator('.editor-dialog').boundingBox();
+  const editorHeaderBox = await editorHeader.boundingBox();
+  if (!editorHeaderBox) throw new Error('Editor header bounds unavailable');
+  await page.mouse.move(editorHeaderBox.x + 80, editorHeaderBox.y + 12);
+  await page.mouse.down();
+  await page.mouse.move(editorHeaderBox.x - 250, editorHeaderBox.y + 12);
+  await page.mouse.up();
+  const terminalHeaderBox = await terminalHeader.boundingBox();
+  if (!terminalHeaderBox || !editorBoxAfterClick) throw new Error('Window bounds unavailable');
+  const terminalClickX = Math.max(terminalHeaderBox.x + 12, editorBoxAfterClick.x + editorBoxAfterClick.width + 12);
+  await page.mouse.click(terminalClickX, terminalHeaderBox.y + 12);
+  await expect(terminalModal).toHaveClass(/window-active/);
+  await expect(editorModal).not.toHaveClass(/window-active/);
+});
+
+test('GUI-31 one editor window can stay open per project file', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, files: [
+    { fileName: 'Hund.kt', kind: 'class', source: 'class Hund {}' },
+    { fileName: 'Katze.kt', kind: 'class', source: 'class Katze {}' },
+  ] };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  await expect(page.getByLabel('Codepad input')).toBeEnabled();
+  await page.getByLabel('Hund', { exact: true }).dblclick();
+  await page.getByLabel('Katze', { exact: true }).dblclick();
+  await expect(page.locator('.editor-dialog')).toHaveCount(2);
+  await expect(page.locator('.editor-dialog').filter({ hasText: 'Hund.kt' })).toHaveCount(1);
+  await expect(page.locator('.editor-dialog').filter({ hasText: 'Katze.kt' })).toHaveCount(1);
+});
+
+test('GUI-32 editor and terminal share controls, minimum size and full frame handles', async ({ page }) => {
+  await project(page, 'class Hund {}');
+  await page.locator('.classcard').dblclick();
+  await page.getByLabel('Show terminal', { exact: true }).click();
+
+  const editor = page.locator('.editor-dialog');
+  const terminal = page.locator('.terminal-window');
+  const editorButtons = editor.locator('.editor-header button');
+  const terminalButtons = terminal.locator('.terminal-header button');
+  await expect(editorButtons.nth(0)).toHaveText('□');
+  await expect(editorButtons.nth(1).locator('svg.window-icon')).toHaveCount(1);
+  await expect(editorButtons.nth(2)).toHaveText('×');
+  await expect(terminalButtons.nth(0)).toHaveText('□');
+  await expect(terminalButtons.nth(2)).toHaveText('×');
+  await expect(terminalButtons.nth(1)).toHaveCSS('height', await terminalButtons.nth(0).evaluate((node) => getComputedStyle(node).height));
+
+  await terminalButtons.nth(2).click();
+  await expect(terminal).toHaveCount(0);
+  for (const windowLocator of [editor]) {
+    const west = windowLocator.locator('[class$="resize-w"]');
+    const south = windowLocator.locator('[class$="resize-s"]');
+    await expect(west).toHaveCSS('width', '24px');
+    await expect(south).toHaveCSS('height', '24px');
+    await expect(west).toHaveCSS('touch-action', 'none');
+    const box = await windowLocator.boundingBox();
+    const westBox = await west.boundingBox();
+    if (!box || !westBox) throw new Error('Window resize bounds unavailable');
+    await page.mouse.move(westBox.x + 12, westBox.y + 12);
+    await page.mouse.down();
+    await page.mouse.move(westBox.x + 600, westBox.y + 12);
+    await page.mouse.up();
+    const resized = await windowLocator.boundingBox();
+    if (!resized) throw new Error('Window bounds unavailable after resize');
+    expect(resized.width).toBeGreaterThanOrEqual(420);
+    expect(resized.height).toBeGreaterThanOrEqual(260);
+    const southBox = await south.boundingBox();
+    if (!southBox) throw new Error('Window bottom resize bounds unavailable');
+    await page.mouse.move(southBox.x + 12, southBox.y + 12);
+    await page.mouse.down();
+    await page.mouse.move(southBox.x + 12, southBox.y - 600);
+    await page.mouse.up();
+    const resizedHeight = await windowLocator.boundingBox();
+    if (!resizedHeight) throw new Error('Window bounds unavailable after height resize');
+    expect(resizedHeight.height).toBeGreaterThanOrEqual(260);
+  }
+  await page.getByLabel('Show terminal', { exact: true }).click();
+  const terminalWest = terminal.locator('[class$="resize-w"]');
+  const terminalSouth = terminal.locator('[class$="resize-s"]');
+  const terminalWestBox = await terminalWest.boundingBox();
+  if (!terminalWestBox) throw new Error('Terminal resize bounds unavailable');
+  await page.mouse.move(terminalWestBox.x + 12, terminalWestBox.y + 12);
+  await page.mouse.down();
+  await page.mouse.move(terminalWestBox.x + 600, terminalWestBox.y + 12);
+  await page.mouse.up();
+  const terminalResized = await terminal.boundingBox();
+  if (!terminalResized) throw new Error('Terminal bounds unavailable after resize');
+  expect(terminalResized.width).toBeGreaterThanOrEqual(420);
+  expect(terminalResized.height).toBeGreaterThanOrEqual(260);
+  const terminalSouthBox = await terminalSouth.boundingBox();
+  if (!terminalSouthBox) throw new Error('Terminal bottom resize bounds unavailable');
+  await page.mouse.move(terminalSouthBox.x + 12, terminalSouthBox.y + 12);
+  await page.mouse.down();
+  await page.mouse.move(terminalSouthBox.x + 12, terminalSouthBox.y - 600);
+  await page.mouse.up();
+  const terminalResizedHeight = await terminal.boundingBox();
+  if (!terminalResizedHeight) throw new Error('Terminal bounds unavailable after height resize');
+  expect(terminalResizedHeight.height).toBeGreaterThanOrEqual(260);
+});
+
+test('GUI-33 editor windows can be collected into tabs and ungrouped again', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, files: [
+    { fileName: 'Hund.kt', kind: 'class', source: 'class Hund {}' },
+    { fileName: 'Katze.kt', kind: 'class', source: 'class Katze {}' },
+  ] };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  await expect(page.getByLabel('Codepad input')).toBeEnabled();
+  await page.getByLabel('Hund', { exact: true }).dblclick();
+  await page.getByLabel('Katze', { exact: true }).dblclick();
+  await expect(page.locator('.editor-dialog')).toHaveCount(2);
+  await expect(page.locator('.editor-dialog:not(.editor-tabbed-dialog) .editor-window-controls').first()).toHaveCSS('gap', '4px');
+  await expect(page.locator('.editor-dialog:not(.editor-tabbed-dialog) .editor-header').first()).toHaveCSS('margin-bottom', '0px');
+  await page.getByLabel('Collect editor windows into tabs').last().click();
+  await expect(page.locator('.editor-tabbed-dialog')).toHaveCount(1);
+  await expect(page.locator('.editor-tabbed-dialog .editor-window-controls')).toHaveCSS('gap', '4px');
+  await expect(page.locator('.editor-tabs [role="tab"]')).toHaveCount(2);
+  const firstTab = page.locator('.editor-tabs [role="tab"]').first();
+  const firstTabLabel = firstTab.locator('span').first();
+  await expect(firstTab).toHaveCSS('flex-shrink', '1');
+  const firstTabBox = await firstTab.boundingBox();
+  const firstTabLabelBox = await firstTabLabel.boundingBox();
+  if (!firstTabBox || !firstTabLabelBox) throw new Error('Tab bounds unavailable');
+  expect(firstTabBox.width).toBeGreaterThan(firstTabLabelBox.width + 20);
+  await page.locator('.editor-tabs [role="tab"]').filter({ hasText: 'Hund.kt' }).click();
+  const activeTab = page.locator('.editor-tabs [role="tab"][aria-selected="true"]');
+  await expect(activeTab).toHaveText(/Hund\.kt/);
+  await expect(activeTab).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await expect(activeTab).toHaveCSS('border-bottom-color', 'rgb(255, 255, 255)');
+  await expect(page.locator('.editor-tabbed-dialog .cm-content')).toContainText('class Hund {}');
+  await page.getByLabel('Close Katze.kt').click();
+  await expect(page.locator('.editor-tabbed-dialog')).toHaveCount(0);
+  await expect(page.locator('.editor-dialog')).toHaveCount(1);
+  await page.getByLabel('Katze', { exact: true }).dblclick();
+  await page.getByLabel('Collect editor windows into tabs').last().click();
+  await page.getByLabel('Ungroup editor tabs').click();
+  await expect(page.locator('.editor-tabbed-dialog')).toHaveCount(0);
+  await expect(page.locator('.editor-dialog')).toHaveCount(2);
+});
+
 test('GUI-03 GUI-04 computed values update after every inspector edit', async ({ page }) => {
   await project(page, 'class Hund(var alter: Int = 1) { val steuer: Int get() = alter * 10 }');
   const entry = await evaluate(page, 'Hund()');

@@ -400,9 +400,21 @@ footer{flex:0 0 108px}
 .popup hr{border-top:1px solid #d6d6d6;margin:1px 0}
 .editor-dialog{min-width:min(850px,80vw);width:min(850px,80vw);height:min(680px,86vh);display:flex;flex-direction:column}.kotlin-editor{flex:1;min-height:0;margin:0 0 14px;border:1px solid #888;background:#fff;overflow:hidden}.kotlin-editor .cm-editor{height:100%}
 .editor-dialog.maximized{position:fixed;inset:4vh 4vw;width:auto;height:auto;max-height:none;margin:0}
+.editor-dialog.floating{position:fixed;margin:0}
+.editor-dialog{position:relative}
+.editor-resize-handle{position:absolute;z-index:3;width:10px;height:10px}
+.editor-resize-n,.editor-resize-s{left:10px;right:10px;width:auto;cursor:ns-resize}
+.editor-resize-n{top:-4px}.editor-resize-s{bottom:-4px}
+.editor-resize-e,.editor-resize-w{top:10px;bottom:10px;height:auto;cursor:ew-resize}
+.editor-resize-e{right:-4px}.editor-resize-w{left:-4px}
+.editor-resize-ne,.editor-resize-se,.editor-resize-sw,.editor-resize-nw{cursor:nwse-resize}
+.editor-resize-ne{right:-4px;top:-4px;cursor:nesw-resize}.editor-resize-se{right:-4px;bottom:-4px}
+.editor-resize-sw{left:-4px;bottom:-4px;cursor:nesw-resize}.editor-resize-nw{left:-4px;top:-4px}
 .editor-header{display:flex;align-items:center;justify-content:space-between;margin:0 0 10px;font-weight:bold}
 .editor-header h3{margin:0}
 .editor-header>div{display:flex;gap:4px}
+.editor-window-controls{display:flex;gap:4px!important}
+.editor-dialog:not(.editor-tabbed-dialog) .editor-header{margin-bottom:0}
 .editor-header button{min-width:28px;padding:2px 7px;margin:0;border:1px solid #999;border-radius:4px;background:linear-gradient(#fff,#d5d5d5);cursor:pointer;font-size:16px;line-height:20px}
 .svelte-editor-host{position:relative}
 .editor-format{position:absolute;right:10px;bottom:10px;z-index:2;width:30px;height:30px;padding:0!important;margin:0!important;border:1px solid #999!important;border-radius:4px;background:#f5f4f1cc!important;color:#444;font-size:22px;line-height:26px;cursor:pointer}
@@ -426,9 +438,53 @@ footer{flex:0 0 108px}
 .svelte-preview .terminal-header{cursor:move;user-select:none}
 .svelte-preview .editor-dialog{height:auto;max-height:86vh}
 .svelte-preview .editor-dialog.maximized{position:fixed;inset:4vh 4vw;width:auto;height:auto;max-height:none;margin:0}
-.svelte-preview .svelte-editor-host{height:min(52vh,calc(86vh - 120px));min-height:220px;overflow:hidden;margin-bottom:14px;border:1px solid #888}
+.svelte-preview .editor-dialog.floating{position:fixed;margin:0}
+.svelte-preview .svelte-editor-host{height:auto;flex:1;min-height:220px;overflow:hidden;margin:0;border:1px solid #aaa;background:#fff}
 .svelte-preview .editor-dialog.maximized .svelte-editor-host{height:auto;flex:1;min-height:0}
 .svelte-preview .dialog-error{color:#b00020;margin:8px 0}
 .svelte-preview .inspect-edit-input{min-width:120px;flex:1;padding:5px;font:13px monospace}
 .svelte-preview .inspect-error{color:#b00020}
 .share-notice{position:fixed;z-index:100;top:72px;left:50%;transform:translateX(-50%);padding:10px 16px;border:1px solid #2878c8;border-radius:5px;background:#eef7ff;color:#075b70;box-shadow:2px 3px 10px #888;font-size:14px}
+
+/* The Kotlin editor is the same kind of floating window as the terminal.
+   Keep its chrome and content area aligned with the terminal, including the
+   drag affordance and the compact spacing below the editor. */
+.editor-dialog{background:#f5f4f1;border:2px solid #555;border-radius:8px;padding:12px;box-shadow:none}
+.editor-tabbed-dialog .editor-header{margin-bottom:0;align-items:center}
+.editor-tabbed-dialog .editor-header h3{display:none}
+.editor-tabbed-dialog .editor-header>.editor-tabs{display:flex;align-items:flex-end;gap:3px;flex:1;min-width:0;min-height:32px;margin:0 8px -1px 0;overflow-x:auto}
+.editor-tabbed-dialog .editor-tabs button{display:flex;align-items:center;gap:10px;flex:0 1 max-content;min-width:0;padding:5px 8px 5px 12px;border:1px solid #aaa;border-radius:4px 4px 0 0;background:#ddd;color:#333;cursor:pointer;font:13px Arial,sans-serif;white-space:nowrap}
+.editor-tabbed-dialog .editor-tabs button>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.editor-tabbed-dialog .editor-tabs button.active{position:relative;z-index:1;background:#fff;border-color:#888;border-bottom-color:#fff;font-weight:bold;margin-bottom:-1px;box-shadow:0 -1px 0 #888}
+.editor-tabbed-dialog .editor-tab-close{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:3px;color:#555;font:bold 16px/16px Arial,sans-serif}
+.editor-tabbed-dialog .editor-tab-close:hover,.editor-tabbed-dialog .editor-tab-close:focus-visible{background:#ccc;color:#111;outline:0}
+.editor-tabbed-dialog .svelte-editor-host{flex:1;min-height:0}
+.window-icon{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round}
+.editor-header{cursor:grab;user-select:none;margin:0 0 8px;font-size:14px}
+.editor-header:active{cursor:grabbing}
+.editor-header h3{font-size:14px}
+.editor-header button{border:1px solid #999;border-radius:4px;background:linear-gradient(#fff,#d5d5d5);padding:5px 12px;cursor:pointer;font-size:14px;line-height:normal}
+.svelte-editor-host{flex:1;min-height:0;height:auto;margin:0;border:1px solid #aaa;background:#fff;overflow:hidden}
+
+/* Terminal and editor are non-modal floating windows with one shared chrome. */
+.terminal-modal,.editor-modal{z-index:20}
+.terminal-modal.window-active,.editor-modal.window-active{z-index:30}
+.editor-modal{background:transparent;pointer-events:none}
+.editor-modal .editor-dialog{pointer-events:auto}
+.window-header{display:flex;align-items:center;justify-content:space-between;margin:0 0 8px;font-weight:bold;cursor:move;user-select:none}
+.window-header:active{cursor:move}
+.window-header h3{margin:0;font-size:14px}
+.window-header>div{display:flex;gap:4px}
+.window-header button{width:32px;height:32px;min-width:32px;margin:0;border:1px solid #999;border-radius:4px;background:linear-gradient(#fff,#d5d5d5);padding:0;cursor:pointer;font-size:20px;line-height:1;display:grid;place-items:center}
+.window-header{margin:-12px -12px 8px;padding:12px}
+.terminal-window,.editor-dialog{min-width:0;min-height:0;background:#f5f4f1;border:2px solid #555;border-radius:8px;padding:12px;box-shadow:none}
+.terminal-split-toggle{font-size:20px!important}
+.terminal-resize-handle,.editor-resize-handle{width:24px;height:24px;touch-action:none}
+.terminal-resize-n,.editor-resize-n{left:24px;right:24px;top:-12px;width:auto;cursor:ns-resize}
+.terminal-resize-s,.editor-resize-s{left:24px;right:24px;bottom:-12px;width:auto;cursor:ns-resize}
+.terminal-resize-e,.editor-resize-e{top:24px;bottom:24px;right:-12px;height:auto;cursor:ew-resize}
+.terminal-resize-w,.editor-resize-w{top:24px;bottom:24px;left:-12px;height:auto;cursor:ew-resize}
+.terminal-resize-ne,.editor-resize-ne{right:-12px;top:-12px;cursor:nesw-resize}
+.terminal-resize-se,.editor-resize-se{right:-12px;bottom:-12px;cursor:nwse-resize}
+.terminal-resize-sw,.editor-resize-sw{left:-12px;bottom:-12px;cursor:nesw-resize}
+.terminal-resize-nw,.editor-resize-nw{left:-12px;top:-12px;cursor:nwse-resize}
