@@ -3085,28 +3085,30 @@
       >
         <h3>Method result</h3>
         <div class="result-method">{resultDialog.method}</div>
-        <output class="result-value">{resultDialog.value}</output
-        >{#if resultDialog.objectId}<button
-            on:click={() => {
-              const object = {
-                objectId: resultDialog!.objectId!,
-                className: resultDialog!.className || "Object",
-                name: resultDialog!.className || "Object",
-              };
-              inspectObject(object);
-              resultDialog = null;
-            }}>Inspect</button
-          ><button
-            on:click={() => {
-              requestObjectOnBench({
-                objectId: resultDialog!.objectId!,
-                className: resultDialog!.className || "Object",
-                name: resultDialog!.className || "Object",
-                kind: "object",
-              });
-              resultDialog = null;
-            }}>Get</button
-          >{/if}<button on:click={() => (resultDialog = null)}>Close</button>
+        <output class="result-value">{resultDialog.value}</output>
+        <div class="result-actions">
+          {#if resultDialog.objectId}<button
+              on:click={() => {
+                const object = {
+                  objectId: resultDialog!.objectId!,
+                  className: resultDialog!.className || "Object",
+                  name: resultDialog!.className || "Object",
+                };
+                inspectObject(object);
+                resultDialog = null;
+              }}>Inspect</button
+            ><button
+              on:click={() => {
+                requestObjectOnBench({
+                  objectId: resultDialog!.objectId!,
+                  className: resultDialog!.className || "Object",
+                  name: resultDialog!.className || "Object",
+                  kind: "object",
+                });
+                resultDialog = null;
+              }}>Get</button
+            >{/if}<button on:click={() => (resultDialog = null)}>Close</button>
+        </div>
       </div>
     </div>{/if}
   {#if newProjectOpen}<div class="modal topmost-modal">
