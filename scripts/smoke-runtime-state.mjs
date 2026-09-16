@@ -40,8 +40,8 @@ open class Counter(var n: Int) {
         get() { n++; return n }
     fun ask() { n++; print("prompt: "); val text = readln(); println(text); n++ }
 }
-class Child(n: Int): Counter(n)
 ` },
+  { id: 'child', fileName: 'Child.kt', kind: 'class', revision: 1, source: 'class Child(n: Int): Counter(n)' },
   { id: 'functions', fileName: 'Actions.kt', kind: 'functions', revision: 1, source: `
 val shared = Counter(10)
 fun main() { shared.add(5) }
@@ -193,10 +193,31 @@ const semanticError = await projectClient.compile([sideEffect, file('Types.kt', 
 assert.equal(semanticError.diagnostics[0].fileName, 'Types.kt');
 assert.deepEqual(projectOutputs, [], 'semantic analysis must finish before initialization');
 assert.equal(projectClient.getSnapshot().phase, 'uncompiled');
-const declarations = await projectClient.compile([
-  file('Types.kt', 'interface Named { fun name(): String }\nclass Example: Named { override fun name(): String = "Example" }'),
-  file('Actions.kt', '/* println("not a statement") */\nvar count = 0\nval greeting = "println(\\"text\\")"\nfun main() { println("Hallo"); count += 1 }'),
+const mixedClass = await projectClient.compile([
+  sideEffect,
+  file('Mixed.kt', 'class Mixed {}\nfun main() {}'),
 ], 4);
+assert.equal(mixedClass.diagnostics.length, 1);
+assert.equal(mixedClass.diagnostics[0].fileName, 'Mixed.kt');
+assert.equal(mixedClass.diagnostics[0].line, 2);
+assert.match(mixedClass.diagnostics[0].message, /one class|top-level functions/i);
+assert.equal(mixedClass.generationId, '');
+assert.equal(projectClient.getSnapshot().phase, 'uncompiled');
+const multipleClasses = await projectClient.compile([
+  sideEffect,
+  file('Multiple.kt', 'class First {}\nclass Second {}'),
+], 5);
+assert.equal(multipleClasses.diagnostics.length, 1);
+assert.equal(multipleClasses.diagnostics[0].fileName, 'Multiple.kt');
+assert.equal(multipleClasses.diagnostics[0].line, 2);
+assert.match(multipleClasses.diagnostics[0].message, /one class/i);
+assert.equal(multipleClasses.generationId, '');
+assert.equal(projectClient.getSnapshot().phase, 'uncompiled');
+const declarations = await projectClient.compile([
+  file('Named.kt', 'interface Named { fun name(): String }'),
+  file('Example.kt', 'class Example: Named { override fun name(): String = "Example" }'),
+  file('Actions.kt', '/* println("not a statement") */\nvar count = 0\nval greeting = "println(\\"text\\")"\nfun main() { println("Hallo"); count += 1 }'),
+], 6);
 assert.deepEqual(declarations.diagnostics, []);
 assert.deepEqual(projectOutputs, [], 'declaring main does not execute it');
 for (const code of ['println("Codepad")', 'count = 2', 'for (i in 1..2) println(i)']) {

@@ -163,10 +163,8 @@
     projectInfo: "template" | "example" | null = null,
     newClassOpen = false,
     newClassName = "",
-    newClassType: "class" | "interface" | "open" | "abstract" | "data" =
+    newClassType: "class" | "interface" | "open" | "abstract" | "data" | "functions" =
       "class",
-    newFunctionsOpen = false,
-    newFunctionsName = "",
     stage: any = null,
     speed = 50,
     inheritanceMode = false,
@@ -187,6 +185,10 @@
   const editorFormatters = new Map<string, () => boolean>();
   let formatShortcutLabel = "Ctrl+Shift+I";
   let toolbarDialog: "open" | "save" | null = null;
+  let shareCodeInput = "",
+    shareCodeError = "";
+  const AUTOSAVE_KEY = "bluek.current-project.v1";
+  let autosaveReady = false;
   let inheritanceEdges: Array<{
     id: string;
     x1: number;
@@ -241,6 +243,20 @@
 
   function projectPayload() {
     return createProjectPayload(files, resources, cardPositions);
+  }
+  function saveAutosave() {
+    if (!autosaveReady) return;
+    try {
+      window.localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(projectPayload()));
+    } catch {
+      // Storage can be unavailable or full; the editor remains usable.
+    }
+  }
+  $: if (autosaveReady) {
+    files;
+    resources;
+    cardPositions;
+    saveAutosave();
   }
   function beginCardDrag(event: PointerEvent, file: ProjectFile) {
     if (event.button !== 0 || event.pointerType === "touch") return;
@@ -707,7 +723,28 @@
         error = "Could not load the BluePlay example.";
       }
     };
-    loadExample();
+    const initializeProject = async () => {
+      const hasExplicitProject = Boolean(
+        window.location.pathname.match(/^\/load\//) ||
+        new URLSearchParams(window.location.hash.slice(1)).get("bluek") ||
+        new URLSearchParams(window.location.search).get("example") === "blueplay",
+      );
+      if (!hasExplicitProject) {
+        try {
+          const saved = window.localStorage.getItem(AUTOSAVE_KEY);
+          if (saved) {
+            await loadProject(JSON.parse(saved), "Local project restored.");
+            autosaveReady = true;
+            return;
+          }
+        } catch {
+          // Ignore an invalid or unavailable autosave and start normally.
+        }
+      }
+      await loadExample();
+      autosaveReady = true;
+    };
+    initializeProject();
     const edgeTimer = window.setInterval(refreshInheritanceEdges, 250);
     refreshInheritanceEdges();
     return () => {
@@ -832,7 +869,6 @@
       else if (activeInspectorId && inspectorWindows.some((item) => item.id === activeInspectorId))
         closeInspector(activeInspectorId);
       else if (newClassOpen) newClassOpen = false;
-      else if (newFunctionsOpen) newFunctionsOpen = false;
       else if (settingsNotice) settingsNotice = false;
       else if (filesNotice) filesNotice = false;
       else if (shareLinkDialog) shareLinkDialog = null;
@@ -882,6 +918,12 @@
       error = "Bitte einen eindeutigen gültigen Kotlin-Namen angeben.";
       return;
     }
+    if (newClassType === "functions") {
+      newFile("functions", name);
+      newClassOpen = false;
+      error = "";
+      return;
+    }
     const sources = {
       class: `class ${name} {\n}\n`,
       interface: `interface ${name} {\n}\n`,
@@ -910,26 +952,6 @@
     while (files.some((file) => file.fileName === `${name}.kt`))
       name = `${base}${++number}`;
     newFile(kind, name);
-  }
-  function openFunctionsDialog() {
-    let number = 1;
-    while (files.some((file) => file.fileName === `Functions${number}.kt`))
-      number++;
-    newFunctionsName = `Functions${number}`;
-    newFunctionsOpen = true;
-  }
-  function confirmFunctions() {
-    const name = newFunctionsName.trim();
-    if (
-      !/^[A-Za-z_]\w*$/.test(name) ||
-      files.some((file) => file.fileName === `${name}.kt`)
-    ) {
-      error = "Bitte einen eindeutigen gültigen Kotlin-Namen angeben.";
-      return;
-    }
-    newFile("functions", name);
-    newFunctionsOpen = false;
-    error = "";
   }
   function openEditor(file = currentFile) {
     if (!file) return;
@@ -1995,6 +2017,25 @@
       window.setTimeout(() => (shareNotice = ""), 5000);
     }
   }
+  async function loadSharedProjectFromCode() {
+    const words = shareCodeInput.trim().toLowerCase().split(/[-\s]+/).filter(Boolean);
+    if (words.length !== 3 || words.some((word) => !/^[a-z]{4,6}$/.test(word))) {
+      shareCodeError = "Enter exactly three words, each 4–6 letters long.";
+      return;
+    }
+    try {
+      await loadProject(
+        await loadProjectFromServer(words.join("-")),
+        "Shared BlueK project loaded. Compile the project.",
+      );
+      window.history.replaceState(window.history.state, "", "/");
+      shareCodeInput = "";
+      shareCodeError = "";
+      toolbarDialog = null;
+    } catch (reason) {
+      shareCodeError = reason instanceof Error ? reason.message : "Project could not be loaded.";
+    }
+  }
   async function copySharedLink() {
     if (!shareLinkDialog) return;
     try {
@@ -2275,9 +2316,8 @@
           newClassOpen = true;
           newClassName = "";
           newClassType = "class";
-        }}>New Class</button
+        }}>New File</button
       >
-      <button on:click={openFunctionsDialog}>New Functions</button>
       <button class="sidebar-legacy-save" on:click={exportProject}
         >Save Project</button
       >
@@ -3155,7 +3195,7 @@
         >
         <fieldset>
           <legend>Type</legend
-          >{#each [["class", "Class"], ["interface", "Interface"], ["open", "Open Class"], ["abstract", "Abstract Class"], ["data", "Data Class"]] as option}<label
+          >{#each [["class", "Class"], ["interface", "Interface"], ["open", "Open Class"], ["abstract", "Abstract Class"], ["data", "Data Class"], ["functions", "Kotlin Functions"]] as option}<label
               class="new-class-option"
               ><input
                 type="radio"
@@ -3170,30 +3210,6 @@
           </div>{/if}<div class="dialog-actions"><button on:click={() => (newClassOpen = false)}
           >Cancel</button
         ><button on:click={confirmNewClass}>Create</button></div>
-      </div>
-    </div>{/if}
-  {#if newFunctionsOpen}<div class="modal topmost-modal" role="presentation">
-      <div
-        class="dialog"
-        role="dialog"
-        aria-modal="true"
-        tabindex="-1"
-        aria-labelledby="new-functions-title"
-        use:containClicks
-      >
-        <h3 id="new-functions-title">Create Functions File</h3>
-        <label
-          >Name<input
-            bind:value={newFunctionsName}
-            use:focusOnMount
-            placeholder="e.g. Main"
-            on:keydown={(event) => event.key === "Enter" && confirmFunctions()}
-          /></label
-        >{#if error}<div class="dialog-error" role="alert">
-            {error}
-          </div>{/if}<div class="dialog-actions"><button on:click={() => (newFunctionsOpen = false)}
-          >Cancel</button
-        ><button on:click={confirmFunctions}>Create</button></div>
       </div>
     </div>{/if}
 
@@ -3299,6 +3315,24 @@
           <span>Accepted: .json, .zip, or a complete project directory</span>
           <input type="file" accept=".json,.bluek.json,.zip,application/json,application/zip" webkitdirectory multiple on:change={(event) => { importProject(event); toolbarDialog = null; }} />
         </label>
+        <div class="shared-project-loader">
+          <strong>Load shared project</strong>
+          <label>
+            <span>Three words</span>
+            <input
+              aria-label="Three-word project code"
+              bind:value={shareCodeInput}
+              placeholder="green-lamp-river"
+              on:keydown={(event) => event.key === "Enter" && loadSharedProjectFromCode()}
+            />
+          </label>
+          <button
+            class="shared-project-load"
+            disabled={!shareCodeInput.trim()}
+            on:click={loadSharedProjectFromCode}>Load project</button
+          >
+          {#if shareCodeError}<div class="dialog-error" role="alert">{shareCodeError}</div>{/if}
+        </div>
         <div class="dialog-actions"><button on:click={() => (toolbarDialog = null)}>Cancel</button></div>
       </div>
     </div>{/if}

@@ -275,6 +275,21 @@ class KotliteSession {
                 return projectError(filename, location?.groupValues?.get(1)?.toIntOrNull() ?: 1,
                     location?.groupValues?.get(2)?.toIntOrNull() ?: 1, error.message ?: "Invalid Kotlin source.")
             }
+            val classDeclarations = script.nodes.filterIsInstance<ClassDeclarationNode>()
+            if (classDeclarations.isNotEmpty()) {
+                // BlueJ presents one class per source file. A file without a
+                // class may still contain any number of top-level functions
+                // and properties, but a class cannot be mixed with them (or
+                // with another class).
+                val conflictingNode = script.nodes.firstOrNull { node ->
+                    node !is ClassDeclarationNode || node !== classDeclarations.first()
+                }
+                if (conflictingNode != null) {
+                    val position = statementPosition(conflictingNode)
+                    return projectError(filename, position.lineNum, position.col,
+                        "A BlueK project file may contain one class or top-level functions and properties, but not both.")
+                }
+            }
             val statement = script.nodes.firstOrNull {
                 it !is ClassDeclarationNode && it !is FunctionDeclarationNode && it !is PropertyDeclarationNode
             }

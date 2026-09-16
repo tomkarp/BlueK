@@ -25,6 +25,13 @@ test('GUI-11 codepad works without Compile in an empty project', async ({ page }
   await evaluate(page, 'answer');
 });
 
+test('GUI-45 restores the current project from browser storage', async ({ page }) => {
+  await project(page, 'class Hund {}');
+  await expect(page.locator('.classcard')).toHaveAttribute('aria-label', 'Hund');
+  await page.goto('/');
+  await expect(page.locator('.classcard')).toHaveAttribute('aria-label', 'Hund');
+});
+
 test('GUI-24 project statements fail before execution, with file location; Codepad still runs statements', async ({ page }) => {
   const payload = { format: 'bluek-project', version: 1, files: [
     { fileName: 'Init.kt', kind: 'functions', source: 'fun initialize(): Int { println("MUST NOT RUN"); return 1 }\nval initialized = initialize()' },
@@ -186,16 +193,23 @@ test('GUI-39 editor font size is configurable in Settings', async ({ page }) => 
   })).toBe(true);
 });
 
-test('GUI-40 Settings and file creation dialogs stay above windows', async ({ page }) => {
+test('GUI-40 Settings and New File dialog stay above windows', async ({ page }) => {
   await project(page, 'class Hund {}');
   await page.locator('.classcard').dblclick();
-  for (const [button, dialogName, closeButton] of [['Settings', 'Settings', 'Close'], ['New Class', 'Create New Kotlin File', 'Cancel'], ['New Functions', 'Create Functions File', 'Cancel']] as const) {
+  for (const [button, dialogName, closeButton] of [['Settings', 'Settings', 'Close'], ['New File', 'Create New Kotlin File', 'Cancel']] as const) {
     await page.getByRole('button', { name: button, exact: true }).click();
     const dialog = page.getByRole('dialog', { name: dialogName });
     await expect(dialog).toBeVisible();
     await expect(dialog.locator('..')).toHaveCSS('z-index', '100');
     await dialog.getByRole('button', { name: closeButton, exact: true }).click();
   }
+  await expect(page.getByRole('button', { name: 'New Functions', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'New File', exact: true }).click();
+  const newFileDialog = page.getByRole('dialog', { name: 'Create New Kotlin File' });
+  await newFileDialog.getByRole('radio', { name: 'Kotlin Functions' }).check();
+  await newFileDialog.getByLabel('Name').fill('Actions');
+  await newFileDialog.getByRole('button', { name: 'Create', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Actions', exact: true })).toBeVisible();
 });
 
 test('GUI-41 project and file dialogs stay above windows', async ({ page }) => {
@@ -581,6 +595,20 @@ test('GUI-43 loading a saved project clears the load URL', async ({ page }) => {
   await page.getByRole('button', { name: 'New Project', exact: true }).click();
   await page.getByRole('dialog', { name: 'Create New Project' }).getByRole('button', { name: /^Kotlin Example/ }).click();
   await expect(page.locator('.classcard').first()).toBeVisible();
+});
+
+test('GUI-44 Open / Import loads a shared project from three words', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, files: [{ fileName: 'Geteilt.kt', kind: 'class', source: 'class Geteilt {}' }] };
+  await page.route('**/api/projects/green-lamp-river', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ project: payload }) });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open / Import', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Open / Import' });
+  await dialog.getByLabel('Three-word project code').fill('green lamp river');
+  await dialog.getByRole('button', { name: 'Load project', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator('.classcard')).toContainText('Geteilt');
 });
 
 test('GUI-05 history works immediately after execution and terminal output', async ({ page }) => {
