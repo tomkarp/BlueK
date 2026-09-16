@@ -1624,7 +1624,9 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             message = message,
             cause = null,
             stacktrace = stacktrace,
-            thisClazz = ExceptionValue.clazz,
+            // Provided-class templates are not initialized. Use the definition
+            // attached to this interpreter so catch can inspect its runtime type.
+            thisClazz = symbolTable().findClass("Exception")!!.first,
         )
         throw EvaluateRuntimeException(stacktrace = stacktrace, error = error)
     }

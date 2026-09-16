@@ -73,6 +73,7 @@ nicht im Fokus; die BluePlay-Vorlagen bleiben erhalten, sind aber vorübergehend
 | API-01 | Projekt-Kurz-Links werden ohne Benutzerkonto in SQLite gespeichert, nach 30 Tagen entfernt und mit genau drei Wörtern wieder ausgeliefert | `npm run test:share-server` grün | Abgesichert; Last-/Produktionsserver noch nicht geprüft |
 | RT-02 | Alle Projektdateien werden vor Initialisierung auf Deklarationen geprüft; Syntax-/Analysefehler verhindern Seiteneffekte; gültige Initialisierer und Codepad-Anweisungen bleiben ausführbar | Laufzeittest grün: mehrere Dateien, Aufruf/Zuweisung/Schleife/if/Literal, Syntax-/Typfehler, Initialisierung mit Eingabe, alle drei mitgelieferten Vorlagen | `test:runtime-state` |
 | RT-03 | BlueJ-Dateiformat: Eine Datei darf genau eine Klasse enthalten oder mehrere Top-Level-Funktionen/-Properties; eine Klasse mit `main` außerhalb bzw. mehrere Klassen in einer Datei wird abgelehnt | Laufzeittest grün: gemischte Klasse/Funktion und zwei Klassen mit Dateiposition; gültige Deklarationsdatei und Vorlagen bleiben geprüft | `test:runtime-state` |
+| RT-04 | Kotlite unterstützt `Thread.sleep(Int/Long)`; Timer wartet ohne Blockieren, setzt danach fort und kann per Reset beendet werden | Node/VM-Smoke: vollständiger Timer inkl. Range/Zufall, Wiederholung, Int/Long/0, negatives Argument mit catch/printStackTrace/finally, Typprüfung, synchroner Aufruf ohne verwaiste Fortsetzung. Echte Chromium-Tests: Timer, bedienbare Settings während der Wartezeit, Reset ohne alte Ausgabe | Kotlite-Smoke und beide RT-04-Browsertests grün; Benutzerbestätigung noch offen |
 | FMT-01 | Öffentliches Projekt-JSON enthält keine internen Datei-IDs oder Editor-Revisionen; `fileName` bleibt Pflichtfeld und `path` ist optional | Format-Smoke-Test prüft Export, Import, optionalen Pfad und Rückwärtskompatibilität alter Zusatzfelder | `test:project-format` |
 | ARCH-01 | Inspektoransicht verändert keine Laufzeitdaten und ruft beim Rendern keine Getter auf | Modelltest grün | `test:inspector` |
 | ARCH-02 | Parallele Getter-Refreshes nicht doppelt ausführen; alte Ergebnisse nach Reset/Schließen verwerfen | Modelltest grün | `test:inspector` |
@@ -81,6 +82,21 @@ nicht im Fokus; die BluePlay-Vorlagen bleiben erhalten, sind aber vorübergehend
 | ARCH-05 | Codepad kompiliert bei Bedarf, führt nur nach erfolgreichem Compile aus und verwirft alte Generationen | `test:codepad-flow` grün; GUI 16/16 grün | Methodenaufrufe und BluePlay bewusst nicht Teil dieses Schritts |
 
 ## Letzter Prüflauf
+
+2026-09-16: `Thread.sleep` fertiggestellt und Kotlite-Bundle neu gebaut.
+Fehlversuche bei Überladungen (unter anderem `0 until bis`) durch stabile
+Bibliotheksnamen bei erneuter Analyse behoben. Der negative Sleep-Test deckte
+eine nicht initialisierte Exception-Klassenvorlage auf; die Runtime verwendet
+nun die aktive Klassendefinition. Vollständiger Kotlite-Smoke in Node/VM grün,
+inklusive ursprünglichem Timer mit `Thread.sleep(1000)`, `try/catch` und echter
+Wartezeit. Echter Chromium-Lauf: 5/5 (RT-04 zweimal, GUI-11, GUI-12/13/15,
+GUI-14). Typecheck: 0 Fehler, 5 Warnungen; Runtime-State-Integration und
+Svelte-Produktionsbuild grün. `browser-smoke` insgesamt nicht grün: nach den
+bestandenen Architektur- und Kotlite-Tests stoppt die BluePlay-Prüfung bei
+`The bundled BluePlay template is stale for World.kt.` Dieser Vorlagenabgleich
+wurde nicht verändert. Der erste GUI-Start war durch die Sandbox-Portfreigabe
+blockiert; die tatsächlichen Browserprüfungen liefen anschließend auf dem
+separaten Testport 5194. Lokaler Entwicklungsserver 5173 unverändert.
 
 2026-09-16: Der aktuelle Projektzustand wird in `localStorage` gesichert und
 ohne expliziten Projektlink beim Start wiederhergestellt. Typecheck und der

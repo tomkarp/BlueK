@@ -47,6 +47,14 @@ und erlaubt direkte Anweisungen. Gültige Property-Initialisierer werden beim
 Laden weiterhin einmal ausgeführt, auch mit Ausgabe oder Eingabe; eine Trennung
 von Compile und Initialisierung ist nicht Teil dieser Grenze.
 
+`Thread.sleep(Int/Long)` ist eine Kotlite-Bibliotheksfunktion mit einem
+injizierten suspendierenden Host-Callback (`ExecutionEnvironment.sleepHandler`).
+BlueK setzt die Ausführung im Worker über einen Timer fort; weder Busy-Waiting
+noch zusätzliche Java-Threads sind erforderlich. Die normale asynchrone
+`start*`-API unterstützt das Warten, die alte synchrone `evaluate`-API lehnt es
+vor dem Anlegen eines Timers ab. Reset beendet wie bisher den Worker mitsamt
+wartenden Fortsetzungen. Andere Thread-APIs werden dadurch nicht bereitgestellt.
+
 ## Inspektor: Datenfluss und Lebensdauer
 
 Die Laufzeit ist die Quelle gespeicherter Feldwerte. Fenster enthalten nur ID

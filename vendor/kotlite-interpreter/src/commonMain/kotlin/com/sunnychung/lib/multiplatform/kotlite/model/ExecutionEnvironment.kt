@@ -12,6 +12,9 @@ class ExecutionEnvironment(
     private val extensionPropertyRegistrationFilter: (ExtensionProperty) -> Boolean = { true },
     private val globalPropertyRegistrationFilter: (GlobalProperty) -> Boolean = { true },
     private val classRegistrationFilter: (String) -> Boolean = { true },
+    private val sleepHandler: suspend (Long) -> Unit = {
+        throw UnsupportedOperationException("Thread.sleep is not configured for this runtime.")
+    },
 ) {
     private val builtinFunctions: MutableList<CustomFunctionDeclarationNode> = mutableListOf()
     private val extensionProperties: MutableList<ExtensionProperty> = mutableListOf()
@@ -25,6 +28,8 @@ class ExecutionEnvironment(
     init {
         registerInitClass(AnyClass.clazz)
         registerInitClass(ComparableInterface.interfaze)
+        registerClass(ThreadClass.definition())
+        ThreadClass.sleepFunctions(sleepHandler).forEach(::registerFunction)
 
         registerClass(PairClass.clazz)
         PairClass.properties.forEach {

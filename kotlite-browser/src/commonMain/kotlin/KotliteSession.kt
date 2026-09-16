@@ -22,6 +22,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.RuntimeValue
 import com.sunnychung.lib.multiplatform.kotlite.model.ScriptNode
 import com.sunnychung.lib.multiplatform.kotlite.model.SourcePosition
 import com.sunnychung.lib.multiplatform.kotlite.model.StringValue
+import com.sunnychung.lib.multiplatform.kotlite.model.ThrowableValue
 import com.sunnychung.lib.multiplatform.kotlite.model.UnitValue
 import com.sunnychung.lib.multiplatform.kotlite.model.TypeNode
 import com.sunnychung.lib.multiplatform.kotlite.model.VariableReferenceNode
@@ -78,8 +79,29 @@ class KotliteSession {
     }
 
     private fun resetInterpreter() {
-        environment = ExecutionEnvironment()
+        environment = ExecutionEnvironment(sleepHandler = { millis ->
+            // Do not leave a suspended continuation behind in legacy sync calls.
+            check(executionCompleted != null) { "Thread.sleep requires asynchronous execution (startEvaluate)." }
+            awaitRuntimeSleep(millis)
+        })
         AllStdLibModules { text -> appendOutput(text) }.modules.forEach(environment::install)
+        environment.registerFunction(CustomFunctionDefinition(
+            position = SourcePosition.BUILTIN,
+            receiverType = "Throwable",
+            functionName = "printStackTrace",
+            returnType = "Unit",
+            parameterTypes = emptyList(),
+            executable = { _, receiver, _, _ ->
+                val error = receiver as ThrowableValue
+                appendOutput(buildString {
+                    append(error.externalExceptionClassName ?: error.fullClassName)
+                    error.message?.let { append(": "); append(it) }
+                    append('\n')
+                    error.stacktrace.forEach { append("    at "); append(it); append('\n') }
+                })
+                UnitValue
+            },
+        ))
         // The published Kotlite stdlib 1.1.0 exposes collection callbacks through
         // synchronous Kotlin function types. Keep the standard library surface,
         // but provide its suspendable generated equivalent for the callback that
@@ -416,7 +438,7 @@ class KotliteSession {
         }
     }
 
-    /** Starts one execution and returns before an input wait. */
+    /** Starts one execution and returns before input waits or Thread.sleep. */
     fun startEvaluate(filename: String, source: String, onInput: (Int) -> Unit, onComplete: (String) -> Unit): String {
         if (executionCompleted != null) return errorMessage("Another runtime command is running.")
         inputRequested = onInput

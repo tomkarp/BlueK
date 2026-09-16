@@ -25,6 +25,57 @@ test('GUI-11 codepad works without Compile in an empty project', async ({ page }
   await evaluate(page, 'answer');
 });
 
+test('RT-04 original Timer sleeps and resumes while the UI remains interactive', async ({ page }) => {
+  await project(page, `class Timer {
+    var min: Int = 0
+    var max: Int = 0
+    fun starten() {
+      val bis = if (max <= min) max else min + (0..(max - min)).random()
+      for (i in 0 until bis) {
+        try { Thread.sleep(1000) }
+        catch (e: Exception) { e.printStackTrace() }
+      }
+      println("Timer abgelaufen!")
+    }
+  }`);
+  await evaluate(page, 'val timer = Timer(); timer.min = 2; timer.max = 2');
+  const input = page.getByLabel('Codepad input');
+  await input.fill('timer.starten()');
+  const started = Date.now();
+  await input.press('Enter');
+  await expect(input).toBeDisabled();
+  await expect(page.getByLabel('Program active', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  const settings = page.getByRole('dialog', { name: 'Settings' });
+  await expect(settings).toBeVisible();
+  // A visible interactive dialog while still running proves this is not a busy wait.
+  await expect(page.getByLabel('Program active', { exact: true })).toBeVisible();
+  await expect(page.locator('.codepad-entry')).toHaveCount(1);
+  await settings.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(page.locator('.terminal-output pre')).toHaveText('Timer abgelaufen!\n');
+  expect(Date.now() - started).toBeGreaterThanOrEqual(2000);
+  await expect(input).toBeEnabled();
+  await expect(page.locator('.codepad-error')).toHaveCount(0);
+  await evaluate(page, 'timer.min = 0; timer.max = 0; timer.starten()');
+  await expect(page.locator('.terminal-output pre')).toHaveText('Timer abgelaufen!\nTimer abgelaufen!\n');
+});
+
+test('RT-04 reset cancels a sleeping program without stale output', async ({ page }) => {
+  await project(page);
+  const input = page.getByLabel('Codepad input');
+  await input.fill('println("before sleep"); Thread.sleep(1000); println("stale output")');
+  await input.press('Enter');
+  await expect(page.locator('.terminal-output pre')).toHaveText('before sleep\n');
+  await expect(input).toBeDisabled();
+  await page.getByRole('button', { name: 'Reset runtime', exact: true }).click();
+  await expect(input).toBeEnabled();
+  await evaluate(page, 'println("after reset")');
+  await page.waitForTimeout(1200);
+  await expect(page.locator('.terminal-output pre')).toContainText('after reset');
+  await expect(page.locator('.terminal-output pre')).not.toContainText('stale output');
+  await expect(page.locator('.codepad-error')).toHaveCount(0);
+});
+
 test('GUI-45 restores the current project from browser storage', async ({ page }) => {
   await project(page, 'class Hund {}');
   await expect(page.locator('.classcard')).toHaveAttribute('aria-label', 'Hund');

@@ -191,6 +191,10 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         }
         val libFunctions = executionEnvironment.getBuiltinFunctions(builtinSymbolTable)
         libFunctions.forEach {
+            // Re-analysis must consume the same name counters as the first pass.
+            // Otherwise retained global-function names shift extension overload
+            // identities, which still refer to the first pass in a live runtime.
+            it.transformedRefName = null
             log.d { "Install lib function ${it.receiver?.let { "$it." } ?: ""}${it.name}" }
             it.visit()
         }

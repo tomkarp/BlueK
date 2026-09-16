@@ -50,6 +50,75 @@ if (JSON.parse(forwardReferenceSession.evaluate('<forward references>', 'uses.va
 expectOk(JSON.parse(forwardReferenceSession.evaluate('<forward references>', 'val child = Child()')), 'forward inheritance construction');
 if (JSON.parse(forwardReferenceSession.evaluate('<forward references>', 'child.child()')).display !== '5') throw new Error('Inheritance failed when the superclass was defined later in the project.');
 
+const timerSession = api.bluekCreateKotliteSession();
+expectOk(JSON.parse(timerSession.load('<timer>', `
+    class Timer {
+        var min: Int = 0
+        var max: Int = 0
+
+        fun starten() {
+            val bis = if (max <= min) max else min + (0..(max - min)).random()
+            for (i in 0 until bis) {
+                try {
+                    Thread.sleep(1000)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+            println("Timer abgelaufen!")
+        }
+    }
+`)), 'Thread.sleep timer load');
+const runTimer = (source) => new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Thread.sleep did not complete.')), 5000);
+    const complete = (value) => {
+        clearTimeout(timeout);
+        try { resolve(expectOk(JSON.parse(value), 'Thread.sleep result')); }
+        catch (error) { reject(error); }
+    };
+    try {
+        expectOk(JSON.parse(timerSession.startEvaluate('<timer>', source, () => undefined, complete)), 'Thread.sleep start');
+    } catch (error) {
+        clearTimeout(timeout);
+        reject(error);
+    }
+});
+let timerFinished = false;
+const timerStartedAt = performance.now();
+const timerRun = runTimer('val timer = Timer(); timer.min = 1; timer.max = 1; timer.starten()')
+    .then(() => { timerFinished = true; });
+await new Promise(resolve => setTimeout(resolve, 30));
+if (timerFinished) throw new Error('Thread.sleep did not suspend execution.');
+if (timerSession.takeOutput() !== '') throw new Error('Timer printed before the delay elapsed.');
+await timerRun;
+if (performance.now() - timerStartedAt < 1000) throw new Error('Thread.sleep returned before its requested delay.');
+if (timerSession.takeOutput() !== 'Timer abgelaufen!\n') throw new Error('Thread.sleep timer did not resume and print its completion.');
+
+// Re-analyze the same session: ranges/random and sleep overloads must keep their identities.
+await runTimer('timer.min = 1; timer.max = 2; timer.starten()');
+if (timerSession.takeOutput() !== 'Timer abgelaufen!\n') throw new Error('Repeated/random Timer invocation failed.');
+await runTimer('val pause: Long = 5L; Thread.sleep(pause); val shortPause: Int = 5; Thread.sleep(shortPause); Thread.sleep(0); println("resumed")');
+if (timerSession.takeOutput() !== 'resumed\n') throw new Error('Int/Long/zero sleep without try/catch failed.');
+await runTimer(`
+    try { Thread.sleep(-1) } catch (e: Exception) { e.printStackTrace() }
+    finally { println("finally") }
+    println("caught")
+`);
+const caughtOutput = timerSession.takeOutput();
+if (!caughtOutput.includes('timeout value is negative') || !caughtOutput.endsWith('finally\ncaught\n')) {
+    throw new Error('Negative sleep was not catchable or printStackTrace produced no diagnostic: ' + caughtOutput);
+}
+if (JSON.parse(timerSession.evaluate('<timer>', 'Thread.sleep("1000")')).kind !== 'error') {
+    throw new Error('Thread.sleep accepted a non-integer argument.');
+}
+const syncSleepSession = api.bluekCreateKotliteSession();
+const syncSleep = JSON.parse(syncSleepSession.evaluate('<sync sleep>', 'Thread.sleep(5); println("must not resume")'));
+if (syncSleep.kind !== 'error' || !syncSleep.display.includes('asynchronous execution')) {
+    throw new Error('Legacy synchronous evaluation must reject sleeping before scheduling a continuation.');
+}
+await new Promise(resolve => setTimeout(resolve, 20));
+if (syncSleepSession.takeOutput() !== '') throw new Error('Rejected synchronous sleep resumed in the background.');
+
 const classInputSession = api.bluekCreateKotliteSession();
 expectOk(JSON.parse(classInputSession.load('<class input>', `
     class Reader {
