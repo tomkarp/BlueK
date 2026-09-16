@@ -311,6 +311,9 @@ test('GUI-33 editor windows can be collected into tabs and ungrouped again', asy
   await page.getByLabel('Ungroup editor tabs').click();
   await expect(page.locator('.editor-tabbed-dialog')).toHaveCount(0);
   await expect(page.locator('.editor-dialog')).toHaveCount(2);
+  await page.getByLabel('Collect editor windows into tabs').last().click();
+  await page.getByLabel('Close all editors').click();
+  await expect(page.locator('.editor-dialog')).toHaveCount(0);
 });
 
 test('GUI-03 GUI-04 computed values update after every inspector edit', async ({ page }) => {

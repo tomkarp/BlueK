@@ -960,6 +960,13 @@
       if (activeWindow === "editor") activeWindow = terminalOpen ? "terminal" : null;
     }
   }
+  function closeAllEditors() {
+    editorWindows = [];
+    editorGroup = null;
+    editorTabbed = false;
+    activeEditorId = "";
+    if (activeWindow === "editor") activeWindow = terminalOpen ? "terminal" : null;
+  }
   function editorFrame(id: string): EditorWindowState | null {
     return editorTabbed ? editorGroup : editorWindows.find((item) => item.id === id) || null;
   }
@@ -2631,7 +2638,7 @@
                 aria-label="Ungroup editor tabs"
                 title="Ungroup editor tabs"
               ><svg class="window-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 10L3 3M3 9V3h6M14 10l7-7M15 3h6v6M10 14l-7 7M3 15v6h6M14 14l7 7M21 15v6h-6"/></svg></button>
-              <button on:click={() => closeEditor(activeEditorId)} aria-label="Close editor" title="Close editor">×</button>
+              <button on:click={closeAllEditors} aria-label="Close all editors" title="Close all editors">×</button>
             </div>
           </div>
           <div
