@@ -19,6 +19,7 @@
   import { KotlinFormatterClient } from "./kotlinFormatterClient";
   import { InspectorModel, inspectorFieldText, type InspectionView, type InspectorField } from "./inspectorModel";
   import { createProjectPayload, projectModelFromPayload } from "./projectFormat";
+  import { loadProjectFromServer, saveProjectToServer } from "./shareApi";
   import { compileProject, executeCodepad } from "./codepadFlow";
   import { minimalSetup } from "codemirror";
   import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
@@ -172,8 +173,10 @@
     inheritanceSelection = "",
     showInheritance = true,
     settingsNotice = false,
+    editorFontSize = 16,
     filesNotice = false,
     shareNotice = "",
+    shareLinkDialog: { url: string; code: string; copied: boolean } | null = null,
     stageWindowOpen = false,
     stageMaximized = false,
     stagePosition: { left: number; top: number } | null = null,
@@ -482,7 +485,7 @@
   }
   function codeMirror(
     node: HTMLElement,
-    options: { id: string; value: string; onChange: (value: string) => void },
+    options: { id: string; value: string; fontSize: number; onChange: (value: string) => void },
   ) {
     let current = options;
     const formatter = new KotlinFormatterClient();
@@ -530,7 +533,13 @@
             indentWithTab,
           ]),
           EditorView.theme({
-            "&": { height: "100%", fontSize: "14px" },
+            "&": {
+              height: "100%",
+              fontSize: "var(--editor-font-size, 16px)",
+            },
+            ".cm-content, .cm-line, .cm-gutters, .cm-gutterElement": {
+              fontSize: "var(--editor-font-size, 16px)",
+            },
             ".cm-scroller": {
               overflow: "auto",
               fontFamily: "Menlo, Monaco, Consolas, monospace",
@@ -555,7 +564,7 @@
     window.addEventListener("keydown", formatShortcut, true);
     view.focus();
     return {
-      update(next: { id: string; value: string; onChange: (value: string) => void }) {
+      update(next: { id: string; value: string; fontSize: number; onChange: (value: string) => void }) {
         const previousId = current.id;
         current = next;
         if (previousId !== next.id) {
@@ -566,6 +575,27 @@
           view.dispatch({
             changes: { from: 0, to: view.state.doc.length, insert: next.value },
           });
+        const fontSize = `${next.fontSize}px`;
+        view.dom.style.fontSize = fontSize;
+        view.dom.querySelector<HTMLElement>(".cm-gutters")?.style.setProperty("font-size", fontSize);
+        view.dom.querySelectorAll<HTMLElement>(".cm-gutterElement").forEach((gutter) => {
+          gutter.style.fontSize = fontSize;
+        });
+        const measure = () => view.requestMeasure();
+        measure();
+        requestAnimationFrame(() => {
+          measure();
+          requestAnimationFrame(() => {
+            const gutters = view.dom.querySelector<HTMLElement>(".cm-gutters");
+            if (!gutters) return;
+            const lines = [...view.dom.querySelectorAll<HTMLElement>(".cm-line")];
+            const numbers = [...gutters.querySelectorAll<HTMLElement>(".cm-lineNumbers .cm-gutterElement")];
+            lines.forEach((line, index) => {
+              const number = numbers.find((item) => item.textContent?.trim() === String(index + 1));
+              if (number) number.style.height = `${line.getBoundingClientRect().height}px`;
+            });
+          });
+        });
       },
       destroy() {
         ++formatRequest;
@@ -628,6 +658,19 @@
       });
     });
     const loadExample = async () => {
+      const serverMatch = window.location.pathname.match(/^\/load\/((?:[a-z]{4,6}-){2,3}[a-z]{4,6})\/?$/);
+      if (serverMatch) {
+        try {
+          await loadProject(
+            await loadProjectFromServer(serverMatch[1]),
+            "Shared BlueK project loaded. Compile the project.",
+          );
+        } catch (reason) {
+          status = "Project error";
+          error = reason instanceof Error ? reason.message : "Could not load the shared BlueK project.";
+        }
+        return;
+      }
       const shared = new URLSearchParams(window.location.hash.slice(1)).get(
         "bluek",
       );
@@ -792,6 +835,7 @@
       else if (newFunctionsOpen) newFunctionsOpen = false;
       else if (settingsNotice) settingsNotice = false;
       else if (filesNotice) filesNotice = false;
+      else if (shareLinkDialog) shareLinkDialog = null;
       else if (toolbarDialog) toolbarDialog = null;
       else if (newProjectOpen) newProjectOpen = false;
       else if (activeWindow === "terminal" && terminalOpen) {
@@ -872,10 +916,8 @@
     let number = 1;
     while (files.some((file) => file.fileName === `Functions${number}.kt`))
       number++;
-    const name = window.prompt("Name of Functions file", `Functions${number}`);
-    if (name === null) return;
-    newFunctionsName = name.trim();
-    confirmFunctions();
+    newFunctionsName = `Functions${number}`;
+    newFunctionsOpen = true;
   }
   function confirmFunctions() {
     const name = newFunctionsName.trim();
@@ -1937,6 +1979,32 @@
       window.setTimeout(() => (shareNotice = ""), 4000);
     }
   }
+  async function saveShortProject() {
+    try {
+      const { code } = await saveProjectToServer(projectPayload());
+      const url = new URL(`/load/${code}`, window.location.origin);
+      try {
+        await navigator.clipboard.writeText(url.href);
+        status = "Short project link copied";
+        shareLinkDialog = { url: url.href, code, copied: true };
+      } catch {
+        window.prompt("Copy this project link:", url.href);
+        shareLinkDialog = { url: url.href, code, copied: false };
+      }
+    } catch (reason) {
+      shareNotice = reason instanceof Error ? reason.message : "Project could not be saved on the server.";
+      window.setTimeout(() => (shareNotice = ""), 5000);
+    }
+  }
+  async function copySharedLink() {
+    if (!shareLinkDialog) return;
+    try {
+      await navigator.clipboard.writeText(shareLinkDialog.url);
+      shareLinkDialog = { ...shareLinkDialog, copied: true };
+    } catch {
+      window.prompt("Copy this project link:", shareLinkDialog.url);
+    }
+  }
   async function loadProject(payload: any, message = "Project loaded.") {
     const imported = projectModelFromPayload(payload, (index) => `project-${Date.now()}-${index}`);
     files = imported.files;
@@ -2107,7 +2175,7 @@
   class:terminal-split={terminalOpen && terminalSplit}
   class:bluek-stage-closed={!stageWindowOpen}
   class="bluek svelte-preview"
-  style={`--terminal-split-width:${terminalSplitWidth}px;--bluek-stage-height:${stageHeight}px;${stagePosition ? `--bluek-stage-left:${stagePosition.left}px;--bluek-stage-top:${stagePosition.top}px;` : ""}`}
+  style={`--editor-font-size:${editorFontSize}px;--terminal-split-width:${terminalSplitWidth}px;--bluek-stage-height:${stageHeight}px;${stagePosition ? `--bluek-stage-left:${stagePosition.left}px;--bluek-stage-top:${stagePosition.top}px;` : ""}`}
 >
   {#if stage && stageWindowOpen}
     <div
@@ -2647,7 +2715,7 @@
           <div
             class="svelte-editor-host"
             on:pointerdown={() => { activeWindow = "editor"; }}
-            use:codeMirror={{ id: activeEditorId, value: editorFile.source, onChange: (value: string) => updateSource(editorFile.id, value) }}
+            use:codeMirror={{ id: activeEditorId, value: editorFile.source, fontSize: editorFontSize, onChange: (value: string) => updateSource(editorFile.id, value) }}
           ><button
               class="editor-format"
               on:click={() => formatEditor(activeEditorId)}
@@ -2710,7 +2778,7 @@
             <div
               class="svelte-editor-host"
               on:pointerdown={() => { activeWindow = "editor"; activeEditorId = editorWindow.id; }}
-              use:codeMirror={{ id: editorWindow.id, value: editorFile.source, onChange: (value: string) => updateSource(editorFile.id, value) }}
+              use:codeMirror={{ id: editorWindow.id, value: editorFile.source, fontSize: editorFontSize, onChange: (value: string) => updateSource(editorFile.id, value) }}
             ><button
                 class="editor-format"
                 on:click={() => formatEditor(editorWindow.id)}
@@ -3068,7 +3136,7 @@
           </div>{/if}
       </div>
     </div>{/if}
-  {#if newClassOpen}<div class="modal" role="presentation">
+  {#if newClassOpen}<div class="modal topmost-modal" role="presentation">
       <div
         class="dialog new-class-dialog"
         role="dialog"
@@ -3105,7 +3173,7 @@
         ><button on:click={confirmNewClass}>Create</button></div>
       </div>
     </div>{/if}
-  {#if newFunctionsOpen}<div class="modal" role="presentation">
+  {#if newFunctionsOpen}<div class="modal topmost-modal" role="presentation">
       <div
         class="dialog"
         role="dialog"
@@ -3243,9 +3311,20 @@
           <button on:click={() => { exportProject(); toolbarDialog = null; }} disabled={!files.length}><strong>Export Project JSON</strong><span>Export the complete BlueK project as JSON.</span></button>
           <button on:click={() => { shareProject(); toolbarDialog = null; }} disabled={!files.length}><strong>Copy Full Project Link</strong><span>Share the complete project encoded in the URL.</span></button>
           <button disabled><strong>Export BlueJ Project (.zip)</strong><span>Export for BlueJ (not implemented yet).</span></button>
-          <button disabled><strong>Copy Short Link</strong><span>Create a shortened project link (not implemented yet).</span></button>
+          <button on:click={() => { void saveShortProject(); toolbarDialog = null; }} disabled={!files.length}><strong>Copy Short Link</strong><span>Save the project for 30 days and copy a short link.</span></button>
         </div>
         <div class="dialog-actions"><button on:click={() => (toolbarDialog = null)}>Cancel</button></div>
+      </div>
+    </div>{/if}
+  {#if shareLinkDialog}<div class="modal" role="presentation">
+      <div class="dialog share-link-dialog" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="share-link-title" use:containClicks>
+        <h3 id="share-link-title">Short project link</h3>
+        <p>{shareLinkDialog.copied ? "The link was copied to the clipboard. Write down these three words:" : "Write down these three words:"}</p>
+        <button class="share-link-code" aria-label="Three-word project code" title="Copy project link" on:click={() => { void copySharedLink(); }}>{shareLinkDialog.code}</button>
+        <p class="share-link-full-label">Complete link:</p>
+        <button class="share-link-value" aria-label="Complete project link" title="Copy project link" on:click={() => { void copySharedLink(); }}>{shareLinkDialog.url}</button>
+        <p class="share-link-expiry">This project will be deleted after 30 days.</p>
+        <div class="dialog-actions"><button on:click={() => (shareLinkDialog = null)}>Close</button></div>
       </div>
     </div>{/if}
   {#if filesNotice}<div class="modal" role="presentation">
@@ -3255,7 +3334,7 @@
         <div class="dialog-actions"><button on:click={() => (filesNotice = false)}>Close</button></div>
       </div>
     </div>{/if}
-  {#if settingsNotice}<div class="modal" role="presentation">
+  {#if settingsNotice}<div class="modal topmost-modal" role="presentation">
       <div
         class="dialog settings-dialog"
         role="dialog"
@@ -3265,7 +3344,14 @@
         use:containClicks
       >
         <h3 id="svelte-settings-title">Settings</h3>
-        <p>Settings are not implemented yet.</p>
+        <label class="settings-field">
+          <span>Editor font size</span>
+          <select aria-label="Editor font size" bind:value={editorFontSize}>
+            {#each Array.from({ length: 21 }, (_, index) => index + 10) as size}
+              <option value={size}>{size}px</option>
+            {/each}
+          </select>
+        </label>
         <div class="dialog-actions"><button on:click={() => (settingsNotice = false)}>Close</button></div>
       </div>
     </div>{/if}

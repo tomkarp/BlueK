@@ -54,7 +54,7 @@ test('GUI-24 project statements fail before execution, with file location; Codep
 });
 
 test('GUI-25 editor does not open automatic code completion', async ({ page }) => {
-  await project(page, 'class Hund {}');
+  await project(page, 'class Hund {\n}');
   await page.locator('.classcard').dblclick();
   const editor = page.locator('.editor-dialog .cm-editor');
   await editor.click();
@@ -155,6 +155,47 @@ test('GUI-28 editor window can be moved and resized', async ({ page }) => {
   const afterResize = await dialog.boundingBox();
   expect(afterResize?.width).toBeGreaterThan(afterMove.width + 50);
   expect(afterResize?.height).toBeGreaterThan(afterMove.height + 30);
+});
+
+test('GUI-38 editor uses 16px code font', async ({ page }) => {
+  await project(page, 'class Hund {}');
+  await page.locator('.classcard').dblclick();
+  await expect(page.locator('.editor-dialog .cm-content')).toHaveCSS('font-size', '16px');
+});
+
+test('GUI-39 editor font size is configurable in Settings', async ({ page }) => {
+  await project(page, 'class Hund {\n}');
+  await page.locator('.classcard').dblclick();
+  await page.getByLabel('Settings', { exact: true }).click();
+  const settings = page.getByRole('dialog', { name: 'Settings' });
+  const fontSize = settings.getByLabel('Editor font size');
+  await expect(fontSize.locator('option')).toHaveCount(21);
+  await expect(fontSize.locator('option').first()).toHaveAttribute('value', '10');
+  await expect(fontSize.locator('option').last()).toHaveAttribute('value', '30');
+  await fontSize.selectOption('18');
+  await expect(page.locator('.editor-dialog .cm-content')).toHaveCSS('font-size', '18px');
+  await expect(page.locator('.editor-dialog .cm-gutterElement').first()).toHaveCSS('font-size', '18px');
+  await fontSize.selectOption('30');
+  await expect.poll(() => page.locator('.editor-dialog').evaluate((editor) => {
+    const gutterLines = [...editor.querySelectorAll('.cm-lineNumbers .cm-gutterElement')];
+    const codeLines = [...editor.querySelectorAll('.cm-line')];
+    return [0, 1].every((index) => {
+      const gutter = gutterLines.find((node) => node.textContent?.trim() === String(index + 1));
+      return gutter && codeLines[index] && Math.abs(gutter.getBoundingClientRect().top - codeLines[index].getBoundingClientRect().top) < 1;
+    });
+  })).toBe(true);
+});
+
+test('GUI-40 Settings and file creation dialogs stay above windows', async ({ page }) => {
+  await project(page, 'class Hund {}');
+  await page.locator('.classcard').dblclick();
+  for (const [button, dialogName, closeButton] of [['Settings', 'Settings', 'Close'], ['New Class', 'Create New Kotlin File', 'Cancel'], ['New Functions', 'Create Functions File', 'Cancel']] as const) {
+    await page.getByRole('button', { name: button, exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: dialogName });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('..')).toHaveCSS('z-index', '100');
+    await dialog.getByRole('button', { name: closeButton, exact: true }).click();
+  }
 });
 
 test('GUI-29 editor uses terminal window chrome without a bottom gap', async ({ page }) => {
@@ -471,7 +512,7 @@ test('GUI-22 top actions are grouped, ordered and switch to icon-only mode toget
   await expect(saveDialog.getByRole('button', { name: /Project JSON/ })).toBeEnabled();
   await expect(saveDialog.getByRole('button', { name: /Full Project Link/ })).toBeEnabled();
   await expect(saveDialog.getByRole('button', { name: /BlueJ/ })).toBeDisabled();
-  await expect(saveDialog.getByRole('button', { name: /Short Link/ })).toBeDisabled();
+  await expect(saveDialog.getByRole('button', { name: /Short Link/ })).toBeEnabled();
   await saveDialog.getByRole('button', { name: 'Cancel' }).click();
   await actions.nth(3).click();
   await expect(page.getByRole('dialog', { name: 'Files' })).toContainText('not implemented');
@@ -483,6 +524,22 @@ test('GUI-22 top actions are grouped, ordered and switch to icon-only mode toget
 test('GUI-23 Save / Export is disabled for an empty project', async ({ page }) => {
   await project(page);
   await expect(page.locator('.toolbar-main-action').nth(2)).toBeDisabled();
+});
+
+test('GUI-35 short project links can be saved and loaded', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, files: [{ fileName: 'Hund.kt', kind: 'class', source: 'class Hund {}' }] };
+  await page.route('**/api/projects', async (route) => {
+    if (route.request().method() === 'POST')
+      await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ code: 'green-lamp-river', expiresAt: new Date(Date.now() + 86400000).toISOString() }) });
+    else await route.continue();
+  });
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  await expect(page.getByLabel('Codepad input')).toBeEnabled();
+  await page.getByRole('button', { name: 'Save / Export' }).click();
+  await page.getByRole('dialog', { name: 'Save / Export' }).getByRole('button', { name: /Short Link/ }).click();
+  const linkDialog = page.getByRole('dialog', { name: 'Short project link' });
+  await expect(linkDialog.getByLabel('Three-word project code')).toHaveText('green-lamp-river');
+  await expect(linkDialog.getByLabel('Complete project link')).toHaveText('http://127.0.0.1:5194/load/green-lamp-river');
 });
 
 test('GUI-05 history works immediately after execution and terminal output', async ({ page }) => {
@@ -584,6 +641,7 @@ test('GUI-06 terminal splitter spans viewport and resizes both panels', async ({
   expect(before.y).toBe(0);
   expect(before.height).toBe(page.viewportSize()!.height);
   const terminalBefore = (await page.locator('.terminal-window').boundingBox())!;
+  expect(Math.abs(before.x + before.width / 2 - terminalBefore.x)).toBeLessThan(2);
   const benchBefore = (await page.locator('.lower').boundingBox())!;
   await page.mouse.move(before.x + before.width / 2, 40);
   await page.mouse.down();
@@ -593,6 +651,20 @@ test('GUI-06 terminal splitter spans viewport and resizes both panels', async ({
   const benchAfter = (await page.locator('.lower').boundingBox())!;
   expect(Math.abs(terminalAfter.width - terminalBefore.width - 40)).toBeLessThan(3);
   expect(Math.abs(benchAfter.width - benchBefore.width + 40)).toBeLessThan(3);
+});
+
+test('GUI-37 terminal splitter stays behind an active editor window', async ({ page }) => {
+  await project(page, 'class Hund {}');
+  await page.getByLabel('Show terminal', { exact: true }).click();
+  await page.getByLabel('Split terminal to the right').click();
+  await page.locator('.classcard').dblclick();
+  const splitter = page.locator('.terminal-split-divider');
+  const editor = page.locator('.editor-dialog');
+  const dividerBox = (await splitter.boundingBox())!;
+  const editorBox = (await editor.boundingBox())!;
+  const x = dividerBox.x + dividerBox.width / 2;
+  const y = Math.max(editorBox.y + 20, Math.min(editorBox.y + editorBox.height - 20, dividerBox.y + 120));
+  await expect.poll(() => page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('.editor-dialog') !== null, { x, y })).toBe(true);
 });
 
 test('GUI-08 GUI-10 editor renames files even after empty content', async ({ page }) => {

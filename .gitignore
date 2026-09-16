@@ -9,3 +9,4 @@ kotlite-browser/.gradle/
 kotlite-browser/build/
 kotlite-browser/kotlin-js-store/
 .DS_Store
+server/data/projects.sqlite*

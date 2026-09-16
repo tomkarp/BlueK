@@ -26,7 +26,21 @@ erreichbar; es wird nichts gepusht oder auf GitHub Pages verändert.
 python3 -m http.server 4173 --directory frontend/dist
 ```
 
-Es gibt keinen Anwendungsserver, keine HTTP-/WebSocket-Runtime, keine serverseitige Kotlin-Verarbeitung und keinen Server-Fallback. Zur Laufzeit werden keine Interpreter von CDNs geladen.
+Zur Laufzeit werden keine Interpreter von CDNs geladen. Optional kann der
+schlanke SQLite-Dienst `server/share-server.mjs` Projekt-Kurz-Links für 30 Tage
+speichern. Er führt keinen Benutzeraccount und keine serverseitige Kotlin-
+Verarbeitung ein, sondern speichert nur das Projekt-JSON.
+
+Lokal werden Vite und der Dienst getrennt gestartet:
+
+```sh
+npm run share:server
+npm run dev
+```
+
+Vite leitet `/api` im Entwicklungsbetrieb an `127.0.0.1:8787` weiter. Für den
+Produktivbetrieb kann Caddy die statische Anwendung ausliefern und `/api/*` an
+denselben Dienst weiterleiten. Siehe [Serverbetrieb](docs/server-deployment.md).
 
 ## Lokale Architektur
 

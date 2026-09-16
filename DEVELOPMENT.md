@@ -18,6 +18,11 @@ python3 -m http.server 4173 --directory frontend/dist
 
 Der einzige Runtime-Ausführungspfad ist der Browser-Worker. Die langlebige Kotlite-Sitzung erhält Objektidentität und Codepad-Bindings über getrennte Eingaben hinweg; Compile, Reset und Stop beginnen mit einer neuen Sitzung beziehungsweise einem neuen Worker.
 
+Für Projekt-Kurz-Links läuft zusätzlich `npm run share:server`. Der Dienst
+verwendet SQLite, speichert ohne Benutzerverwaltung 30 Tage und wird im
+Produktivbetrieb nur lokal an Caddy gebunden. Die Einrichtung steht in
+[docs/server-deployment.md](docs/server-deployment.md).
+
 ## Prüfungen
 
 ```sh

@@ -62,3 +62,30 @@ jobs:
             -e "ssh -i ~/.ssh/bluek_deploy -p $PORT" \
             frontend/dist/ \
             "$USER@$HOST:$TARGET/"
+
+      - name: Deploy share service files
+        env:
+          HOST: ${{ secrets.BLUEK_DEPLOY_HOST }}
+          USER: ${{ secrets.BLUEK_DEPLOY_USER }}
+          PORT: ${{ secrets.BLUEK_DEPLOY_PORT }}
+        run: |
+          ssh -i ~/.ssh/bluek_deploy -p "$PORT" "$USER@$HOST" \
+            'install -d -o bluek-share -g bluek-share /opt/bluek-share/server /opt/bluek-share/data'
+          rsync -az \
+            -e "ssh -i ~/.ssh/bluek_deploy -p $PORT" \
+            server/ "$USER@$HOST:/opt/bluek-share/server/"
+          rsync -az \
+            -e "ssh -i ~/.ssh/bluek_deploy -p $PORT" \
+            data/share-words-en.txt "$USER@$HOST:/opt/bluek-share/data/"
+          rsync -az \
+            -e "ssh -i ~/.ssh/bluek_deploy -p $PORT" \
+            package.json package-lock.json "$USER@$HOST:/opt/bluek-share/"
+
+      - name: Install share service and restart it
+        env:
+          HOST: ${{ secrets.BLUEK_DEPLOY_HOST }}
+          USER: ${{ secrets.BLUEK_DEPLOY_USER }}
+          PORT: ${{ secrets.BLUEK_DEPLOY_PORT }}
+        run: |
+          ssh -i ~/.ssh/bluek_deploy -p "$PORT" "$USER@$HOST" \
+            'cd /opt/bluek-share && npm ci --omit=dev && chown -R bluek-share:bluek-share /opt/bluek-share && systemctl restart bluek-share'
