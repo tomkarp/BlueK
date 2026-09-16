@@ -5,9 +5,9 @@ export type ProjectCardPosition = { x: number; y: number };
 
 export type SavedProjectFile = {
   fileName: string;
+  path?: string;
   source: string;
   kind?: ProjectFile["kind"];
-  revision?: number;
 };
 
 export type SavedProject = {
@@ -35,15 +35,17 @@ function isKotlinFileName(value: unknown): value is string {
 function validateFiles(value: unknown): SavedProjectFile[] {
   if (!Array.isArray(value)) throw new Error("A BlueK project must contain Kotlin files.");
   const files = value.map((item) => {
-    if (!isRecord(item) || !isKotlinFileName(item.fileName) || typeof item.source !== "string")
+    if (!isRecord(item) || !isKotlinFileName(item.fileName) ||
+      (item.path !== undefined && (typeof item.path !== "string" || !item.path)) ||
+      typeof item.source !== "string")
       throw new Error("Invalid Kotlin file in project.");
     if (item.kind !== undefined && item.kind !== "class" && item.kind !== "functions")
       throw new Error("Invalid Kotlin file kind in project.");
     return {
       fileName: item.fileName,
+      path: typeof item.path === "string" ? item.path : undefined,
       source: item.source,
       kind: item.kind as ProjectFile["kind"] | undefined,
-      revision: typeof item.revision === "number" ? item.revision : undefined,
     };
   });
   if (new Set(files.map((file) => file.fileName)).size !== files.length)
@@ -95,7 +97,12 @@ export function createProjectPayload(
   return {
     format: "bluek-project",
     version: 1,
-    files,
+    files: files.map((file) => ({
+      ...(file.path ? { path: file.path } : {}),
+      fileName: file.fileName,
+      kind: file.kind,
+      source: file.source,
+    })),
     resources,
     cardPositions: Object.fromEntries(
       files
@@ -112,10 +119,11 @@ export function projectModelFromPayload(
   const payload = parseProject(value);
   const files = payload.files.map((file, index) => ({
     id: createId(index, file),
+    ...(file.path ? { path: file.path } : {}),
     fileName: file.fileName,
     kind: file.kind === "functions" ? "functions" : "class",
     source: file.source,
-    revision: Number(file.revision) || 1,
+    revision: 1,
   } satisfies ProjectFile));
   const positions = payload.cardPositions ?? {};
   return {
