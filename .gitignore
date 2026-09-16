@@ -8,5 +8,8 @@ jvm/build/
 kotlite-browser/.gradle/
 kotlite-browser/build/
 kotlite-browser/kotlin-js-store/
+vendor/kotlite-interpreter/.gradle/
+vendor/kotlite-interpreter/build/
+.gradle-local/
 .DS_Store
 server/data/projects.sqlite*
