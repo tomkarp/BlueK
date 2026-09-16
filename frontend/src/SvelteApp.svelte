@@ -665,6 +665,7 @@
             await loadProjectFromServer(serverMatch[1]),
             "Shared BlueK project loaded. Compile the project.",
           );
+          window.history.replaceState(window.history.state, "", "/");
         } catch (reason) {
           status = "Project error";
           error = reason instanceof Error ? reason.message : "Could not load the shared BlueK project.";
@@ -830,7 +831,6 @@
       else if (resultDialog) resultDialog = null;
       else if (activeInspectorId && inspectorWindows.some((item) => item.id === activeInspectorId))
         closeInspector(activeInspectorId);
-      else if (activeWindow === "editor" && editorWindows.length) closeEditor();
       else if (newClassOpen) newClassOpen = false;
       else if (newFunctionsOpen) newFunctionsOpen = false;
       else if (settingsNotice) settingsNotice = false;
@@ -841,8 +841,7 @@
       else if (activeWindow === "terminal" && terminalOpen) {
         terminalOpen = false;
         terminalSplit = false;
-      } else if (editorWindows.length) closeEditor();
-      else if (terminalOpen) {
+      } else if (terminalOpen) {
         terminalOpen = false;
         terminalSplit = false;
       } else if (stageWindowOpen) {
@@ -3070,7 +3069,7 @@
           >{/if}<button on:click={() => (resultDialog = null)}>Close</button>
       </div>
     </div>{/if}
-  {#if newProjectOpen}<div class="modal">
+  {#if newProjectOpen}<div class="modal topmost-modal">
       <div
         class="dialog new-project-dialog"
         role="dialog"
@@ -3086,7 +3085,7 @@
             <button on:click={() => chooseTemplate("kotlin")}><strong>Kotlin Example</strong><span>Start with a small Kotlin example.</span></button>
           </div>
           <div class="project-choice-with-info">
-            <button on:click={() => chooseTemplate("empty-blueplay")}><strong>BluePlay Template</strong><span>Start with the BluePlay classes.</span></button
+            <button disabled title="BluePlay is temporarily unavailable" on:click={() => chooseTemplate("empty-blueplay")}><strong>BluePlay Template</strong><span>Currently unavailable — start with the BluePlay classes later.</span></button
             ><button
             class="project-info-button"
             on:click|stopPropagation={() => (projectInfo = "template")}
@@ -3094,7 +3093,7 @@
             >
           </div>
           <div class="project-choice-with-info">
-            <button on:click={() => chooseTemplate("blueplay")}><strong>BluePlay Example</strong><span>Open a complete BluePlay example.</span></button
+            <button disabled title="BluePlay is temporarily unavailable" on:click={() => chooseTemplate("blueplay")}><strong>BluePlay Example</strong><span>Currently unavailable — open the complete BluePlay example later.</span></button
             ><button
             class="project-info-button"
             on:click|stopPropagation={() => (projectInfo = "example")}
@@ -3287,7 +3286,7 @@
       {/if}
     </div>
   {/if}
-  {#if toolbarDialog === "open"}<div class="modal" role="presentation">
+  {#if toolbarDialog === "open"}<div class="modal topmost-modal" role="presentation">
       <div class="dialog toolbar-dialog" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="open-import-title" use:containClicks>
         <h3 id="open-import-title">Open / Import</h3>
         <p>Drop a project file or directory here, or click to choose one.</p>
@@ -3303,7 +3302,7 @@
         <div class="dialog-actions"><button on:click={() => (toolbarDialog = null)}>Cancel</button></div>
       </div>
     </div>{/if}
-  {#if toolbarDialog === "save"}<div class="modal" role="presentation">
+  {#if toolbarDialog === "save"}<div class="modal topmost-modal" role="presentation">
       <div class="dialog toolbar-dialog" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="save-export-title" use:containClicks>
         <h3 id="save-export-title">Save / Export</h3>
         <p>Choose how to save or share this project:</p>
@@ -3327,7 +3326,7 @@
         <div class="dialog-actions"><button on:click={() => (shareLinkDialog = null)}>Close</button></div>
       </div>
     </div>{/if}
-  {#if filesNotice}<div class="modal" role="presentation">
+  {#if filesNotice}<div class="modal topmost-modal" role="presentation">
       <div class="dialog settings-dialog" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="svelte-files-title" use:containClicks>
         <h3 id="svelte-files-title">Files</h3>
         <p>The file manager is not implemented yet.</p>

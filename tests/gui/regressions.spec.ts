@@ -198,6 +198,34 @@ test('GUI-40 Settings and file creation dialogs stay above windows', async ({ pa
   }
 });
 
+test('GUI-41 project and file dialogs stay above windows', async ({ page }) => {
+  await project(page, 'class Hund {}');
+  await page.locator('.classcard').dblclick();
+  const dialogs = [
+    ['New Project', 'Create New Project', 'Cancel'],
+    ['Open / Import', 'Open / Import', 'Cancel'],
+    ['Save / Export', 'Save / Export', 'Cancel'],
+    ['Files', 'Files', 'Close'],
+  ] as const;
+  for (const [button, dialogName, closeButton] of dialogs) {
+    if (button === 'New Project') await page.getByRole('button', { name: button, exact: true }).click();
+    else if (button === 'Files') await page.getByRole('button', { name: button, exact: true }).click();
+    else await page.getByRole('button', { name: button, exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: dialogName });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('..')).toHaveCSS('z-index', '100');
+    await dialog.getByRole('button', { name: closeButton, exact: true }).click();
+  }
+});
+
+test('GUI-42 Escape does not close an editor window', async ({ page }) => {
+  await project(page, 'class Hund {}');
+  await page.locator('.classcard').dblclick();
+  await expect(page.locator('.editor-dialog')).toHaveCount(1);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.editor-dialog')).toHaveCount(1);
+});
+
 test('GUI-29 editor uses terminal window chrome without a bottom gap', async ({ page }) => {
   await project(page, 'class Hund {}');
   await page.locator('.classcard').dblclick();
@@ -542,6 +570,19 @@ test('GUI-35 short project links can be saved and loaded', async ({ page }) => {
   await expect(linkDialog.getByLabel('Complete project link')).toHaveText('http://127.0.0.1:5194/load/green-lamp-river');
 });
 
+test('GUI-43 loading a saved project clears the load URL', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, files: [{ fileName: 'Gespeichert.kt', kind: 'class', source: 'class Gespeichert {}' }] };
+  await page.route('**/api/projects/green-lamp-river', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ project: payload }) });
+  });
+  await page.goto('/load/green-lamp-river');
+  await expect(page.getByLabel('Codepad input')).toBeEnabled();
+  await expect(page).toHaveURL(/\/$/);
+  await page.getByRole('button', { name: 'New Project', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Create New Project' }).getByRole('button', { name: /^Kotlin Example/ }).click();
+  await expect(page.locator('.classcard').first()).toBeVisible();
+});
+
 test('GUI-05 history works immediately after execution and terminal output', async ({ page }) => {
   await project(page);
   for (const code of ['5', 'println("Hallo")']) {
@@ -559,7 +600,8 @@ test('GUI-01 new project offers all templates and can be cancelled', async ({ pa
   const dialog = page.getByRole('dialog', { name: 'Create New Project' });
   const choices = ['Empty Project', 'Kotlin Example', 'BluePlay Template', 'BluePlay Example']
     .map(name => dialog.getByRole('button', { name: new RegExp('^' + name) }));
-  for (const choice of choices) await expect(choice).toBeEnabled();
+  for (const choice of choices.slice(0, 2)) await expect(choice).toBeEnabled();
+  for (const choice of choices.slice(2)) await expect(choice).toBeDisabled();
   const boxes = await Promise.all(choices.map(choice => choice.boundingBox()));
   for (let index = 1; index < boxes.length; index++) {
     expect(boxes[index]!.y).toBeGreaterThan(boxes[index - 1]!.y);
@@ -606,7 +648,7 @@ test('GUI-02 constructor suggests numbered names', async ({ page }) => {
   }
 });
 
-for (const name of ['Empty Project', 'Kotlin Example', 'BluePlay Template', 'BluePlay Example']) {
+for (const name of ['Empty Project', 'Kotlin Example']) {
   test(`GUI-01 creates ${name}`, async ({ page }) => {
     await project(page);
     await page.getByRole('button', { name: 'New Project', exact: true }).click();

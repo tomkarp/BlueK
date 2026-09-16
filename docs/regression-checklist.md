@@ -4,7 +4,7 @@ Diese Liste wird bei jeder Änderung an einem erfassten Verhalten mitgepflegt.
 Eine Nutzerbestätigung ersetzt keinen automatisierten Test. Ein Hilfsfunktionstest
 belegt noch kein sichtbares GUI-Verhalten. Fehlgeschlagene oder nicht ausgeführte
 Prüfungen bleiben ausdrücklich offen. BluePlay-Laufzeitfunktionen sind derzeit
-nicht im Fokus; die Projektauswahl bleibt enthalten.
+nicht im Fokus; die BluePlay-Vorlagen bleiben erhalten, sind aber vorübergehend deaktiviert.
 
 ## Durchführung
 
@@ -23,7 +23,7 @@ nicht im Fokus; die Projektauswahl bleibt enthalten.
 
 | ID | Erwartetes Verhalten / Reproduktion | Bisheriger Nachweis | Automatisierung / offen |
 | --- | --- | --- | --- |
-| GUI-01 | New Project: vier Vorlagen wählbar, separate Hilfe, Cancel schließt | GUI grün: alle Vorlagen erzeugt, Cancel | Visuelle Abnahme und Hilfe-Interaktion offen |
+| GUI-01 | New Project: Empty/Kotlin wählbar, BluePlay-Vorlagen sichtbar aber deaktiviert, separate Hilfe, Cancel schließt | GUI-Test aktualisiert: Empty/Kotlin erzeugbar, BluePlay deaktiviert | Visuelle Abnahme und Hilfe-Interaktion offen |
 | GUI-02 | Neue Instanz heißt standardmäßig hund1, danach hund2 | GUI grün: beide Konstruktor-Dialoge und Bench | Abgesichert |
 | GUI-03 | Computed Property zeigt im Inspektor den Wert | Nutzerbestätigung + GUI grün mit echtem Getter | Abgesichert |
 | GUI-04 | Nach jeder Änderung im Inspektor sofort aktueller Getter-Wert, keine Änderung Verzögerung | GUI grün: 1 → 2 → 3 → 7, zusätzlich Änderung über Codepad auf 9 | Abgesichert |
@@ -63,6 +63,9 @@ nicht im Fokus; die Projektauswahl bleibt enthalten.
 | GUI-38 | Die Kotlin-Schrift im Editor ist auf 16 px eingestellt | GUI-Test grün | Abgesichert |
 | GUI-39 | Die Editor-Schriftgröße lässt sich über Settings oben rechts von 10 px bis 30 px einstellen und wirkt sofort auf Code und Zeilennummern | GUI-Test erweitert und grün | Abgesichert |
 | GUI-40 | Settings, New Class und New Functions liegen beim Öffnen über Editoren, Terminal und Objektinspektoren | GUI-Test grün; New Functions verwendet jetzt den BlueK-Dialog statt Browser-Prompt | Abgesichert |
+| GUI-41 | New Project, Open / Import, Save / Export und Files liegen beim Öffnen über Editoren, Terminal und Objektinspektoren | GUI-Test ergänzt | Abzusichern |
+| GUI-42 | Escape schließt kein geöffnetes Editorfenster | GUI-Test grün | Abgesichert |
+| GUI-43 | Nach dem Laden eines gespeicherten Projekts wird `/load/<code>` aus der URL entfernt; weitere Vorlagen funktionieren normal | GUI-Test grün | Abgesichert |
 | GUI-35 | Save / Export kann einen befristeten Wort-Kurz-Link anfordern; die drei Wörter werden separat und der vollständige Link darunter in einem schließbaren Fenster angezeigt, der 30-Tage-Löschhinweis ist sichtbar, beide Darstellungen kopieren den Link per Klick und `/load/<code>` lädt ihn wieder | Chromium-Test mit gemockter Save-API grün; API-Roundtrip-Smoke-Test grün | Abgesichert |
 | API-01 | Projekt-Kurz-Links werden ohne Benutzerkonto in SQLite gespeichert, nach 30 Tagen entfernt und mit genau drei Wörtern wieder ausgeliefert | `npm run test:share-server` grün | Abgesichert; Last-/Produktionsserver noch nicht geprüft |
 | RT-02 | Alle Projektdateien werden vor Initialisierung auf Deklarationen geprüft; Syntax-/Analysefehler verhindern Seiteneffekte; gültige Initialisierer und Codepad-Anweisungen bleiben ausführbar | Laufzeittest grün: mehrere Dateien, Aufruf/Zuweisung/Schleife/if/Literal, Syntax-/Typfehler, Initialisierung mit Eingabe, alle drei mitgelieferten Vorlagen | `test:runtime-state` |
