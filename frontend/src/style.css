@@ -217,11 +217,11 @@ footer{flex:0 0 108px}
    left, activity in the middle, and reset at the far right. */
 .workspace>footer.status-bar{display:flex;align-items:center;gap:12px;min-height:0;height:32px;padding:0 4px;color:#555;font-size:13px}
 .status-bar .current-element{flex:0 1 38%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 5px}
-.activity-bar{flex:1 1 auto;height:8px;max-width:240px;border:1px solid #aaa;border-radius:5px;background:#e2e2e2;overflow:hidden}
-.activity-bar.active::after{content:"";display:block;width:35%;height:100%;background:#168fbd;border-radius:4px;animation:bluek-activity 1s linear infinite}
+.activity-bar{position:relative;display:block;flex:1 1 auto;height:20px;max-width:240px;border:1px solid #aaa;border-radius:5px;background:#e2e2e2;overflow:hidden}
+.activity-indicator{position:absolute;top:2px;bottom:2px;left:1%;width:28%;background:#1717b8;border:1px solid #08087a;border-radius:3px;box-sizing:border-box;animation:bluek-activity 1s ease-in-out infinite alternate}
 .terminal-reopen{border:1px solid #aaa;border-radius:4px;background:#e7e5e1;color:#444;padding:3px 9px;font-size:12px;cursor:pointer}
 .terminal-reopen:hover{background:#d7d7d7}
-@keyframes bluek-activity{from{transform:translateX(-120%)}to{transform:translateX(320%)}}
+@keyframes bluek-activity{from{left:1%}to{left:71%}}
 .reset-runtime{margin-left:auto;width:32px;height:28px;border:0;background:transparent;color:#777;font-size:27px;line-height:24px;cursor:pointer;border-radius:4px}
 .reset-runtime:hover:not(:disabled){background:#d7d7d7;color:#333}
 .reset-runtime:disabled{opacity:.45;cursor:not-allowed}

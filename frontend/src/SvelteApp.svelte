@@ -51,6 +51,7 @@
     InspectedField,
     ProjectFile,
     RuntimeSnapshot,
+    RuntimeCommand,
     RuntimeValue,
   } from "../../runtime-contract/src/index";
   type Resource = { path: string; data: string };
@@ -629,6 +630,7 @@
   $: classes = runtime.classes || [];
   $: canExecute = runtime.phase === "ready";
   $: inputReady = runtime.phase === "waitingForInput";
+  $: programActive = runtime.phase === "running" || runtime.phase === "compiling" || inputReady;
   $: if (terminalOpen && inputReady)
     window.setTimeout(() => inputElement?.focus(), 0);
   $: mainEntries = classes.filter(
@@ -1310,21 +1312,31 @@
   function createObject(className: string, index = 0) {
     const meta = classes.find((item) => item.name === className),
       constructors = meta?.constructors || [];
-    if (!constructors.length) return;
+    if (!canExecute || !constructors.length) return;
+    const parameters = constructors[index]?.parameters || [],
+      typeParameters = meta?.typeParameters || [],
+      needsDialog = parameters.length > 0 || typeParameters.length > 0;
+    const name = defaultObjectName(className, bench.map((object) => object.name));
+    menu = null;
+    if (!needsDialog) {
+      void executeCreate(className, name, [], []);
+      return;
+    }
     createDialog = {
       className,
       constructors,
       constructorIndex: index,
-      typeParameters: meta?.typeParameters || [],
-      parameters: constructors[index]?.parameters || [],
+      typeParameters,
+      parameters,
     };
-    createName = defaultObjectName(className, bench.map((object) => object.name));
+    createName = name;
     createArgs = (constructors[index]?.parameters || []).map(() => "");
     createTypeArgs = (meta?.typeParameters || []).map(() => "");
     dialogError = "";
     menu = null;
   }
   async function confirmCreate() {
+    if (!canExecute) return;
     if (!createDialog || !/^[A-Za-z_]\w*$/.test(createName.trim())) {
       dialogError = "Bitte einen gültigen Instanznamen angeben.";
       return;
@@ -1341,37 +1353,38 @@
         "Bitte alle erforderlichen Kotlin-Argumente und Typargumente ausfüllen.";
       return;
     }
+    const dialog = createDialog;
+    const name = createName.trim();
+    const args = kotlinCallArguments(dialog.parameters, createArgs);
+    const typeArguments = [...createTypeArgs];
+    createDialog = null;
+    await executeCreate(dialog.className, name, args, typeArguments);
+  }
+  async function executeCreate(className: string, name: string, args: string[], typeArguments: string[]) {
+    const generation = client.getSnapshot().generationId;
     try {
       const result = await client.execute({
         op: "create",
-        className: createDialog.className,
-        name: createName.trim(),
-        typeArguments: createTypeArgs,
-        args: kotlinCallArguments(createDialog.parameters, createArgs),
+        className, name, typeArguments, args,
       });
+      if (client.getSnapshot().generationId !== generation) return;
       if (result.kind === "error")
-        dialogError = result.display || "Objekt konnte nicht erstellt werden.";
+        showCallError(result.display || "Objekt konnte nicht erstellt werden.");
       else {
         addBenchObject({
           ...result,
-          name: createName.trim(),
-          className: result.className || createDialog.className,
+          name,
+          className: result.className || className,
         });
-        createDialog = null;
       }
     } catch (reason) {
-      dialogError = reason instanceof Error ? reason.message : String(reason);
+      if (client.getSnapshot().generationId === generation) showCallError(reason);
     }
   }
   function invokeObject(object: BenchObject, original: any) {
     const method = specializeCallable(original, object, classes);
     if (method.name === "show") stageWindowOpen = true;
-    invokeDialog = { object, method };
-    invokeArgs = (method.parameters || []).map(() => "");
-    invokeTypeArgs = (method.typeParameters || []).map(() => "");
-    dialogError = "";
-    menu = null;
-    if (!invokeArgs.length && !invokeTypeArgs.length) void confirmInvoke();
+    prepareInvoke({ object, method });
   }
   function methodLabel(method: any) {
     const returnType =
@@ -1485,16 +1498,28 @@
         .catch((reason) => (error = String(reason)));
       return;
     }
-    invokeDialog = {
+    prepareInvoke({
       receiver:
         owner.kind === "object" || method.isCompanion ? `${owner.name}.` : "",
       method,
-    };
-    invokeArgs = (method.parameters || []).map(() => "");
-    invokeTypeArgs = (method.typeParameters || []).map(() => "");
-    dialogError = "";
+    });
+  }
+  function prepareInvoke(call: NonNullable<typeof invokeDialog>) {
+    if (!canExecute) return;
     menu = null;
-    if (!invokeArgs.length && !invokeTypeArgs.length) void confirmInvoke();
+    if (!call.method.parameters?.length && !call.method.typeParameters?.length) {
+      void executeInvoke(call, [], []);
+      return;
+    }
+    invokeArgs = (call.method.parameters || []).map(() => "");
+    invokeTypeArgs = (call.method.typeParameters || []).map(() => "");
+    dialogError = "";
+    invokeDialog = call;
+  }
+  function showCallError(reason: unknown) {
+    error = reason instanceof Error ? reason.message : String(reason);
+    compilerDiagnostics = [];
+    compilerDialog = true;
   }
   function showResult(result: RuntimeValue, method = "") {
     if (result.kind === "error") {
@@ -1525,8 +1550,9 @@
         }));
   }
   async function confirmInvoke() {
-    if (!invokeDialog) return;
-    const method = invokeDialog.method,
+    if (!canExecute || !invokeDialog) return;
+    const dialog = invokeDialog,
+      method = dialog.method,
       parameters = method.parameters || [];
     if (
       missingTypeArgument(invokeTypeArgs) ||
@@ -1536,48 +1562,55 @@
         "Bitte alle erforderlichen Kotlin-Argumente und Typargumente ausfüllen.";
       return;
     }
+    const args = kotlinCallArguments(parameters, invokeArgs);
+    const typeArguments = [...invokeTypeArgs];
+    invokeDialog = null;
+    await executeInvoke(dialog, args, typeArguments);
+  }
+  async function executeInvoke(dialog: NonNullable<typeof invokeDialog>, args: string[], typeArguments: string[]) {
+    const generation = client.getSnapshot().generationId;
+    const method = dialog.method;
     try {
-      const args = kotlinCallArguments(parameters, invokeArgs),
-        suffix = invokeTypeArgs.length ? `<${invokeTypeArgs.join(", ")}>` : "";
+      const suffix = typeArguments.length ? `<${typeArguments.join(", ")}>` : "";
       const propertyName = method.propertyName;
-      const request: any = invokeDialog.object
+      const request: RuntimeCommand = dialog.object
         ? method.autoGenerated && propertyName
           ? method.name.startsWith("set")
             ? {
                 op: "set",
-                objectId: invokeDialog.object.objectId,
+                objectId: dialog.object.objectId,
                 property: propertyName,
                 value: args[0],
               }
             : {
                 op: "get",
-                objectId: invokeDialog.object.objectId,
+                objectId: dialog.object.objectId,
                 property: propertyName,
               }
           : {
               op: "invoke",
-              objectId: invokeDialog.object.objectId,
+              objectId: dialog.object.objectId,
               name: method.name,
-              typeArguments: invokeTypeArgs,
+              typeArguments,
               args,
             }
         : {
-            op: "eval",
-            code: `${invokeDialog.receiver || ""}${method.name}${suffix}(${args.join(", ")})`,
-          };
+          op: "eval",
+          code: `${dialog.receiver || ""}${method.name}${suffix}(${args.join(", ")})`,
+        };
       const result = await client.execute(request);
+      if (client.getSnapshot().generationId !== generation) return;
       if (result.kind === "error")
-        dialogError = result.display || "Aufruf fehlgeschlagen.";
+        showCallError(result.display || "Aufruf fehlgeschlagen.");
       else {
         showResult(
           result,
-          `${invokeDialog.object ? invokeDialog.object.name + "." : invokeDialog.receiver || ""}${method.name}${suffix}()`,
+          `${dialog.object ? dialog.object.name + "." : dialog.receiver || ""}${method.name}${suffix}()`,
         );
-        invokeDialog = null;
         if (request.op !== "get") await refreshComputedInspectors();
       }
     } catch (reason) {
-      dialogError = reason instanceof Error ? reason.message : String(reason);
+      if (client.getSnapshot().generationId === generation) showCallError(reason);
     }
   }
   function requestObjectOnBench(value: RuntimeValue) {
@@ -2598,16 +2631,17 @@
             }}>Terminal</button
           >{/if}
         <span
-          class:active={runtime.phase === "running" ||
-            runtime.phase === "compiling" ||
-            inputReady}
+          class:active={programActive}
           class="activity-bar"
+          role="progressbar"
+          aria-busy={programActive}
+          title={programActive ? "BlueK is running" : "Ready"}
           aria-label={runtime.phase === "compiling"
             ? "Compiling"
             : runtime.phase === "running" || inputReady
               ? "Program active"
               : "Ready"}
-        ></span>
+        >{#if programActive}<span class="activity-indicator" aria-hidden="true"></span>{/if}</span>
         <button
           class="reset-runtime"
           aria-label="Reset runtime"

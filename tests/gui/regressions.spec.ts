@@ -720,9 +720,6 @@ test('GUI-02 constructor suggests numbered names', async ({ page }) => {
   for (const name of ['hund1', 'hund2']) {
     await page.locator('.classcard').click({ button: 'right' });
     await page.locator('.constructor-menu-item').click();
-    const dialog = page.getByRole('dialog', { name: 'Create Hund' });
-    await expect(dialog.getByLabel('Name of instance')).toHaveValue(name);
-    await dialog.getByRole('button', { name: 'Create', exact: true }).click();
     await expect(page.locator('.bench')).toContainText(name);
   }
 });
