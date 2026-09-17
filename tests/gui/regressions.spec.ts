@@ -488,6 +488,23 @@ test('GUI-03 GUI-04 computed values update after every inspector edit', async ({
   await expect(computed).toHaveText('90');
 });
 
+test('GUI-48 private setter stays visible but cannot be edited', async ({ page }) => {
+  await project(page, 'class Timer { var min: Int = 0\nprivate set }');
+  const entry = await evaluate(page, 'Timer()');
+  await entry.getByRole('button').click();
+  await page.getByLabel('Name of instance').fill('timer1');
+  await page.getByRole('button', { name: 'OK', exact: true }).click();
+  await page.locator('.bench .object').dblclick();
+  const inspector = page.getByRole('dialog', { name: 'Object inspector' });
+  const row = inspector.locator('.inspect-row').filter({ hasText: 'min :' });
+  const edit = row.getByRole('button', { name: 'Edit min', exact: true });
+  await expect(edit).toBeVisible();
+  await expect(edit).toBeDisabled();
+  await expect(edit).toHaveAttribute('title', 'The setter is private');
+  await row.dblclick();
+  await expect(row.getByLabel('Value of min')).toHaveCount(0);
+});
+
 test('GUI-07 every value can be placed on the bench', async ({ page }) => {
   await project(page);
   for (const [code, name, display] of [['5', 'zahl', '5 : Int'], ['"Hallo"', 'text', '"Hallo" : String']]) {
@@ -720,6 +737,10 @@ test('GUI-02 constructor suggests numbered names', async ({ page }) => {
   for (const name of ['hund1', 'hund2']) {
     await page.locator('.classcard').click({ button: 'right' });
     await page.locator('.constructor-menu-item').click();
+    const dialog = page.getByRole('dialog', { name: 'Create Hund' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByLabel('Name of instance')).toHaveValue(name);
+    await dialog.getByRole('button', { name: 'Create', exact: true }).click();
     await expect(page.locator('.bench')).toContainText(name);
   }
 });

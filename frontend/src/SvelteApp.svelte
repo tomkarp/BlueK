@@ -1314,14 +1314,9 @@
       constructors = meta?.constructors || [];
     if (!canExecute || !constructors.length) return;
     const parameters = constructors[index]?.parameters || [],
-      typeParameters = meta?.typeParameters || [],
-      needsDialog = parameters.length > 0 || typeParameters.length > 0;
+      typeParameters = meta?.typeParameters || [];
     const name = defaultObjectName(className, bench.map((object) => object.name));
     menu = null;
-    if (!needsDialog) {
-      void executeCreate(className, name, [], []);
-      return;
-    }
     createDialog = {
       className,
       constructors,
