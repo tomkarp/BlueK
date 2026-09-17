@@ -728,6 +728,7 @@
             await decodeProjectLink(shared),
             "Shared BlueK project loaded. Compile the project.",
           );
+          window.history.replaceState(window.history.state, "", "/");
         } catch (reason) {
           status = "Project error";
           error =

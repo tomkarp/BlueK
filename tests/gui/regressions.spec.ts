@@ -683,6 +683,15 @@ test('GUI-43 loading a saved project clears the load URL', async ({ page }) => {
   await expect(page.locator('.classcard').first()).toBeVisible();
 });
 
+test('GUI-50 loading a full project link clears the link URL', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, files: [{ fileName: 'Vollstaendig.kt', kind: 'class', source: 'class Vollstaendig {}' }] };
+  const link = '/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url');
+  await page.goto(link);
+  await expect(page.getByLabel('Codepad input')).toBeEnabled();
+  await expect(page.locator('.classcard')).toContainText('Vollstaendig');
+  await expect(page).toHaveURL(/\/$/);
+});
+
 test('GUI-44 Open / Import loads a shared project from three words', async ({ page }) => {
   const payload = { format: 'bluek-project', version: 1, files: [{ fileName: 'Geteilt.kt', kind: 'class', source: 'class Geteilt {}' }] };
   await page.route('**/api/projects/green-lamp-river', async (route) => {

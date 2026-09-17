@@ -67,6 +67,7 @@ nicht im Fokus; die BluePlay-Vorlagen bleiben erhalten, sind aber vorübergehend
 | GUI-42 | Escape schließt kein geöffnetes Editorfenster | GUI-Test grün | Abgesichert |
 | GUI-43 | Nach dem Laden eines gespeicherten Projekts wird `/load/<code>` aus der URL entfernt; weitere Vorlagen funktionieren normal | GUI-Test grün | Abgesichert |
 | GUI-44 | Open / Import kann einen dreiteiligen Wortcode eingeben und lädt das entsprechende gespeicherte Projekt | GUI-Test grün | Abgesichert |
+| GUI-50 | Nach dem Laden eines vollständigen `#bluek=...`-Projektlinks wird der Link aus der URL entfernt; das geladene Projekt bleibt sichtbar | Chromium-GUI-Test grün | Abgesichert |
 | GUI-45 | Nach einem Neustart ohne Projektlink wird der zuletzt bearbeitete Projektzustand aus dem Browser-Speicher wiederhergestellt | GUI-Test grün: Projekt laden, URL ohne Link öffnen, Klasse bleibt sichtbar | Abgesichert |
 | GUI-46 | Method result trennt Methodenname, Rückgabewert und Aktionen sichtbar und ohne Überlappung | Produktionsbuild grün; visuelle Prüfung anhand des Fehlerbilds noch offen | GUI-Test offen |
 | GUI-47 | Parameterlose Funktionen, Methoden und Konstruktoren öffnen keinen Eingabedialog; nach dem Start zeigt der animierte Aktivitätsbalken den laufenden Prozess. Dialoge mit Parametern schließen nach Invoke/Create und bleiben nicht abbrechbar | Chromium-Test für parameterlose Konstruktoren/Methoden und den laufenden Status; bestehende Parameterdialog- und Escape-Tests grün | Gezielte Chromium-Tests grün; vollständiger GUI-Lauf offen |
@@ -88,6 +89,11 @@ nicht im Fokus; die BluePlay-Vorlagen bleiben erhalten, sind aber vorübergehend
 | ARCH-05 | Codepad kompiliert bei Bedarf, führt nur nach erfolgreichem Compile aus und verwirft alte Generationen | `test:codepad-flow` grün; GUI 16/16 grün | Methodenaufrufe und BluePlay bewusst nicht Teil dieses Schritts |
 
 ## Letzter Prüflauf
+
+2026-09-17: Vollständige `#bluek=...`-Projektlinks werden nach erfolgreichem
+Laden wie Kurzlinks aus der URL entfernt. Typecheck: 0 Fehler, 5 bestehende
+Svelte-Warnungen. Die betroffenen Chromium-Tests GUI-43 und GUI-50 bestanden
+gemeinsam mit 2/2.
 
 2026-09-17: Referenzverwaltung strukturell überarbeitet. Unveränderliche
 Analyse-Historie mit expliziten Freigabeereignissen ersetzt das Löschen alter
