@@ -60,20 +60,24 @@ open class ClassInstance(
                     }
                 },
                 writer = { interpreter, value ->
-                    with(interpreter!!) {
-                        val function = it.value.setter ?: return@with backing.assign(this, value)
-                        FunctionCallNode(
-                            function,
-                            listOf(
-                                FunctionCallArgumentNode(
-                                    SourcePosition.NONE, index = 0, value = ValueNode(
-                                        SourcePosition.NONE, value
+                    if (it.value.setterIsDefault) {
+                        backing.assign(interpreter, value)
+                    } else {
+                        with(interpreter!!) {
+                            val function = it.value.setter ?: return@with backing.assign(this, value)
+                            FunctionCallNode(
+                                function,
+                                listOf(
+                                    FunctionCallArgumentNode(
+                                        SourcePosition.NONE, index = 0, value = ValueNode(
+                                            SourcePosition.NONE, value
+                                        )
                                     )
-                                )
-                            ),
-                            emptyList(),
-                            SourcePosition("", 1, 1)
-                        ).evalClassMemberAnyFunctionCall(this@ClassInstance, function, extraScopePropertyHolders = mapOf("field" to backing))
+                                ),
+                                emptyList(),
+                                SourcePosition("", 1, 1)
+                            ).evalClassMemberAnyFunctionCall(this@ClassInstance, function, extraScopePropertyHolders = mapOf("field" to backing))
+                        }
                     }
                 },
                 backing = backing,

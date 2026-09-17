@@ -1772,6 +1772,7 @@
     const property = data && fieldProperty(data, field);
     return (
       canExecute &&
+      field.setterPrivate !== true &&
       property?.mutable === true &&
       property?.visibility === "public"
     );
@@ -2991,10 +2992,12 @@
                 <output title={fieldValue(inspector.data, field)}
                   >{fieldValue(inspector.data, field)}</output
                 >
-                {#if editable}<button
+                {#if editable || field.setterPrivate}<button
                     class="inspect-edit"
+                    class:inspect-edit-disabled={!editable}
+                    disabled={!editable}
                     aria-label={`Edit ${field.name}`}
-                    title="Edit"
+                    title={field.setterPrivate ? "The setter is private" : "Edit"}
                     on:click={() => beginFieldEdit(field, inspector.data)}
                     >✎</button
                   >{/if}

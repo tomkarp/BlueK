@@ -510,6 +510,8 @@ class PropertyAccessorsNode(
     val type: TypeNode,
     val getter: FunctionDeclarationNode?,
     val setter: FunctionDeclarationNode?,
+    val setterIsPrivate: Boolean = false,
+    val setterIsDefault: Boolean = false,
 ) : ASTNode {
     override fun toMermaid(): String {
         val self = "${generateId()}[\"Navigation Node\"]"

@@ -1758,19 +1758,32 @@ open class Parser(protected val lexer: Lexer) {
             return token
         }
 
-        val nextToken = currentTokenExcludingNL()
+        var nextToken = currentTokenExcludingNL()
+        val setterIsPrivate = nextToken.type == TokenType.Identifier && nextToken.value == "private"
+        if (setterIsPrivate) {
+            repeatedNL()
+            eat(TokenType.Identifier, "private")
+            repeatedNL()
+            nextToken = currentTokenExcludingNL()
+        }
         val accessors = when (nextToken.value.takeIf { nextToken.type == TokenType.Identifier }) {
             "get" -> {
                 repeatedNL()
                 val accessorType = type ?: inferredAccessorType(initialValue)
                 val getter = getter(accessorType, isProcessBody)
                 val next = nextNonNLSemiToken()
-                val setter = if (next.type == TokenType.Identifier && next.value == "set") {
+                val privateSetter = next.type == TokenType.Identifier && next.value == "private"
+                if (privateSetter) {
+                    repeatedNL()
+                    eat(TokenType.Identifier, "private")
+                    repeatedNL()
+                }
+                val setter = if (privateSetter || next.type == TokenType.Identifier && next.value == "set") {
                     repeatedNL()
                     if (isSemi()) semi()
                     setter(accessorType, isProcessBody)
                 } else null
-                PropertyAccessorsNode(nextToken.position, accessorType, getter, setter)
+                PropertyAccessorsNode(nextToken.position, accessorType, getter, setter, privateSetter)
             }
             "set" -> {
                 repeatedNL()
@@ -1782,7 +1795,7 @@ open class Parser(protected val lexer: Lexer) {
                     if (isSemi()) semi()
                     getter(accessorType, isProcessBody)
                 } else null
-                PropertyAccessorsNode(nextToken.position, accessorType, getter, setter)
+                PropertyAccessorsNode(nextToken.position, accessorType, getter, setter, setterIsPrivate, setterIsPrivate && setter.body?.statements?.isEmpty() == true)
             }
             else -> null
         }
@@ -1819,12 +1832,16 @@ open class Parser(protected val lexer: Lexer) {
     fun setter(type: TypeNode, isProcessBody: Boolean = true): FunctionDeclarationNode {
         val t = eat(TokenType.Identifier, "set")
         repeatedNL()
-        eat(TokenType.Operator, "(")
-        repeatedNL()
-        val parameterName = userDefinedIdentifier()
-        repeatedNL()
-        eat(TokenType.Operator, ")")
-        repeatedNL()
+        val hasParameterList = isCurrentTokenExcludingNL(TokenType.Operator, "(")
+        val parameterName = if (hasParameterList) {
+            eat(TokenType.Operator, "(")
+            repeatedNL()
+            userDefinedIdentifier().also {
+                repeatedNL()
+                eat(TokenType.Operator, ")")
+                repeatedNL()
+            }
+        } else "value"
         val returnType = if (false /* Kotlin only permits Unit as return type. No point to support this syntax */
                 && isCurrentToken(TokenType.Symbol, ":")) {
             eat(TokenType.Symbol, ":")
@@ -1833,7 +1850,7 @@ open class Parser(protected val lexer: Lexer) {
         } else {
             TypeNode(t.position, "Unit", null, false)
         }
-        val body = if (isProcessBody) functionBody() else dummyBlockNode()
+        val body = if (isProcessBody && hasParameterList) functionBody() else dummyBlockNode()
         return FunctionDeclarationNode(
             position = t.position,
             name = "set",

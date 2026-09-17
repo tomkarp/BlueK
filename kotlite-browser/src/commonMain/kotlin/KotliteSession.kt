@@ -57,6 +57,7 @@ class KotliteSession {
     private val bindingNames = linkedMapOf<String, String>()
     private val propertyNames = linkedMapOf<String, MutableList<String>>()
     private val computedPropertyNames = linkedMapOf<String, MutableSet<String>>()
+    private val privateSetterNames = linkedMapOf<String, MutableSet<String>>()
     private var nextHandle = 1
     private var analysisSource = ""
     private var analyzedScript: ScriptNode? = null
@@ -349,10 +350,10 @@ class KotliteSession {
                 "[{\"id\":\"${escape(declaration.name)}.constructor\",\"parameters\":$parameters}]"
             }
             val primaryProperties = declaration.primaryConstructor?.parameters.orEmpty().filter { it.isProperty }.map { parameter ->
-                jsonProperty(declaration.name, parameter.parameter.name, parameter.parameter.type, parameter.isMutable, parameter.modifiers.any { it.name == "private" }, false, false)
+                jsonProperty(declaration.name, parameter.parameter.name, parameter.parameter.type, parameter.isMutable, parameter.modifiers.any { it.name == "private" }, false, false, false)
             }
             val bodyProperties = declaration.declarations.filterIsInstance<PropertyDeclarationNode>().map { property ->
-                jsonProperty(declaration.name, property.name, property.type, property.isMutable, property.modifiers.any { it.name == "private" }, property.accessors?.getter != null, property.accessors?.setter != null)
+                jsonProperty(declaration.name, property.name, property.type, property.isMutable, property.modifiers.any { it.name == "private" }, property.accessors?.getter != null, property.accessors?.setter != null, property.accessors?.setterIsPrivate == true)
             }
             val properties = (primaryProperties + bodyProperties).distinctBy { it.substringBefore("\",\"name\":") }.joinToString(",", "[", "]")
             val methods = declaration.declarations.filterIsInstance<FunctionDeclarationNode>().mapIndexed { index, function -> jsonFunction(declaration.name, function, index) }.joinToString(",", "[", "]")
@@ -370,10 +371,10 @@ class KotliteSession {
     private fun parameterJson(parameter: com.sunnychung.lib.multiplatform.kotlite.model.FunctionValueParameterNode): String =
         "{\"name\":\"${escape(parameter.name)}\",\"type\":${jsonType(parameter.type)},\"hasDefault\":${parameter.defaultValue != null}}"
 
-    private fun jsonProperty(owner: String, name: String, type: TypeNode, mutable: Boolean, private: Boolean, getter: Boolean, setter: Boolean): String =
-        "{\"id\":\"${escape(owner)}.${escape(name)}\",\"name\":\"${escape(name)}\",\"type\":${jsonType(type)},\"mutable\":$mutable,\"visibility\":\"${if (private) "private" else "public"}\",\"getter\":$getter,\"setter\":$setter}"
+    private fun jsonProperty(owner: String, name: String, type: TypeNode, mutable: Boolean, private: Boolean, getter: Boolean, setter: Boolean, setterPrivate: Boolean): String =
+        "{\"id\":\"${escape(owner)}.${escape(name)}\",\"name\":\"${escape(name)}\",\"type\":${jsonType(type)},\"mutable\":$mutable,\"visibility\":\"${if (private) "private" else "public"}\",\"getter\":$getter,\"setter\":$setter,\"setterPrivate\":$setterPrivate}"
 
-    private fun visibility(modifiers: Set<*>): String = when {
+   private fun visibility(modifiers: Set<*>): String = when {
         modifiers.any { it.toString() == "private" } -> "private"
         modifiers.any { it.toString() == "protected" } -> "protected"
         else -> "public"
@@ -485,11 +486,13 @@ class KotliteSession {
             if (!visiting.add(declaration.name)) return
             declaration.superInvocations.orEmpty().mapNotNull(::superName).mapNotNull(byName::get).forEach { record(it, visiting) }
             val names = propertyNames.getOrPut(declaration.name) { mutableListOf() }
+            val privateSetters = privateSetterNames.getOrPut(declaration.name) { linkedSetOf() }
             declaration.primaryConstructor?.parameters.orEmpty().filter { it.isProperty }.forEach { parameter ->
                 if (parameter.parameter.name !in names) names += parameter.parameter.name
             }
             declaration.declarations.filterIsInstance<PropertyDeclarationNode>().forEach { property ->
                 if (property.name !in names) names += property.name
+                if (property.accessors?.setterIsPrivate == true) privateSetters += property.name
                 // A custom setter does not make a property computed: its
                 // default getter still reads the backing field. Only an
                 // explicitly declared getter must stay unevaluated during
@@ -502,6 +505,9 @@ class KotliteSession {
                 }
                 computedPropertyNames[parent.name].orEmpty().forEach { computed ->
                     computedPropertyNames.getOrPut(declaration.name) { linkedSetOf() } += computed
+                }
+                privateSetterNames[parent.name].orEmpty().forEach { privateSetter ->
+                    privateSetterNames.getOrPut(declaration.name) { linkedSetOf() } += privateSetter
                 }
             }
             visiting.remove(declaration.name)
@@ -587,12 +593,13 @@ class KotliteSession {
         // getter may contain arbitrary student code and must not run during
         // inspection.
         val fields = propertyNames[value.type().name].orEmpty().joinToString(",", "[", "]") { name ->
+            val setterPrivate = name in privateSetterNames[value.type().name].orEmpty()
             if (name in computedPropertyNames[value.type().name].orEmpty()) {
-                "{\"name\":\"${escape(name)}\",\"value\":\"<computed>\"}"
+                "{\"name\":\"${escape(name)}\",\"value\":\"<computed>\",\"setterPrivate\":$setterPrivate}"
             } else {
                 val member = value.readBackingPropertyByDeclaredName(name)
                 val display = member?.convertToString() ?: "<uninitialized>"
-                "{\"name\":\"${escape(name)}\",\"value\":\"${escape(display)}\",\"type\":${member?.let { jsonType(it.type().toTypeNode()) } ?: "null"}}"
+                "{\"name\":\"${escape(name)}\",\"value\":\"${escape(display)}\",\"type\":${member?.let { jsonType(it.type().toTypeNode()) } ?: "null"},\"setterPrivate\":$setterPrivate}"
             }
         }
         return "{\"kind\":\"inspect\",\"objectId\":\"${escape(objectId)}\",\"className\":\"${escape(value.type().toTypeNode().descriptiveName())}\",\"fields\":$fields}"
@@ -622,6 +629,7 @@ class KotliteSession {
         analyzedScript = null
         propertyNames.clear()
         computedPropertyNames.clear()
+        privateSetterNames.clear()
         nextHandle = 1
         stageSnapshot = ""
         pendingSounds.clear()

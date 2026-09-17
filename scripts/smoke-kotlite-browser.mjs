@@ -119,6 +119,37 @@ if (syncSleep.kind !== 'error' || !syncSleep.display.includes('asynchronous exec
 await new Promise(resolve => setTimeout(resolve, 20));
 if (syncSleepSession.takeOutput() !== '') throw new Error('Rejected synchronous sleep resumed in the background.');
 
+const privateSetterSession = api.bluekCreateKotliteSession();
+expectOk(JSON.parse(privateSetterSession.load('<private setter>', `
+    class Timer {
+        private val maxDiff: Int = 30
+        var min: Int = 0
+            private set
+        var max: Int = 0
+            private set
+        val zeitspanne: Int
+            get() { return max - min }
+        fun setzeBereich(neuesMin: Int, neuesMax: Int) {
+            if (neuesMin >= 0 && (neuesMax - neuesMin) <= maxDiff) {
+                min = neuesMin
+                max = neuesMax
+            }
+        }
+    }
+`)), 'private setter load');
+expectOk(JSON.parse(privateSetterSession.evaluate('<private setter>', 'val privateTimer = Timer(); privateTimer.setzeBereich(5, 10)')), 'private setter internal write');
+if (JSON.parse(privateSetterSession.evaluate('<private setter>', 'privateTimer.zeitspanne')).display !== '5') {
+    throw new Error('A private setter did not permit writes from inside its class.');
+}
+if (JSON.parse(privateSetterSession.evaluate('<private setter>', 'privateTimer.min = 8')).kind !== 'error') {
+    throw new Error('A private setter allowed an external write.');
+}
+const privateTimerValue = expectOk(JSON.parse(privateSetterSession.evaluate('<private setter>', 'privateTimer')), 'private setter inspection handle');
+const privateTimerInspection = expectOk(JSON.parse(privateSetterSession.inspect(privateTimerValue.objectId)), 'private setter inspection');
+if (!privateTimerInspection.fields.some(field => field.name === 'min' && field.setterPrivate === true)) {
+    throw new Error('Private setter metadata was not exposed to the inspector.');
+}
+
 const classInputSession = api.bluekCreateKotliteSession();
 expectOk(JSON.parse(classInputSession.load('<class input>', `
     class Reader {

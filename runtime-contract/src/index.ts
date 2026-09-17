@@ -26,7 +26,7 @@ export interface CompileResult{generationId:string;sourceRevision:number;classes
 
 /** A session has exactly one phase, shared by every UI surface. */
 export type Phase = 'uncompiled' | 'compiling' | 'ready' | 'running' | 'waitingForInput' | 'faulted';
-export interface InspectedField { name: string; value: string; type?: TypeRef | null }
+export interface InspectedField { name: string; value: string; type?: TypeRef | null; setterPrivate?: boolean }
 export interface RuntimeValue {
   kind: 'unit' | 'null' | 'scalar' | 'object' | 'inspect' | 'error';
   display?: string;

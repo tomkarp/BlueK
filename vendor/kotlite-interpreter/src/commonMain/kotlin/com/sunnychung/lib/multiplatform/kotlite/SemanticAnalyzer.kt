@@ -1829,6 +1829,9 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                         throw SemanticException(position, "val `$memberName` cannot be reassigned")
                     }
                     if (isCheckWriteAccess) {
+                        if (accessor.setterIsPrivate && currentClassName() != clazz.findMemberPropertyOwnerName(memberName)) {
+                            throw SemanticException(position, "Private setter for `$memberName` cannot be accessed here")
+                        }
                         if (accessor.setter == null && accessor.getter == null) {
                             throw SemanticException(position, "Setter for `$memberName` is not declared")
                         }
