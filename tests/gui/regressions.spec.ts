@@ -499,7 +499,7 @@ test('GUI-48 private fields are readable and private setters stay visible but ca
   const privateRow = inspector.locator('.inspect-row').filter({ hasText: 'secret :' });
   await expect(privateRow).toHaveClass(/private-field/);
   await expect(privateRow).toHaveCSS('background-color', 'rgb(222, 222, 222)');
-  await expect(privateRow.locator('output')).toHaveCSS('color', 'rgb(34, 34, 34)');
+  await expect(privateRow.locator('output')).toHaveCSS('color', 'rgb(102, 102, 102)');
   const row = inspector.locator('.inspect-row').filter({ hasText: 'min :' });
   const edit = row.getByRole('button', { name: 'Edit min', exact: true });
   await expect(edit).toBeVisible();

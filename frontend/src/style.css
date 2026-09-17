@@ -380,7 +380,7 @@ footer{flex:0 0 108px}
 .inspect-row span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .inspect-row output{grid-column:2}
 .inspect-row.private-field{background:#dedede;border-color:#999}
-.inspect-row.private-field>span,.inspect-row.private-field>output{color:#222}
+.inspect-row.private-field>span,.inspect-row.private-field>output{color:#666}
 .inspect-row.private-field>output{background:#ededed;border-left-color:#999}
 .inspect-row input{grid-column:2 / -1;width:100%;min-width:0;padding:7px;border:1px solid #888;font:16px monospace}
 .inspect-row.editable output{cursor:text}
