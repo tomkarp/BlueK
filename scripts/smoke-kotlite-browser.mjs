@@ -150,6 +150,15 @@ if (!privateTimerInspection.fields.some(field => field.name === 'min' && field.s
     throw new Error('Private setter metadata was not exposed to the inspector.');
 }
 
+const bluekApiSession = api.bluekCreateKotliteSession();
+if (JSON.parse(bluekApiSession.evaluate('<BlueK API>', 'BlueK.beep()')).display !== 'Unit') {
+    throw new Error('BlueK.beep() did not return Unit.');
+}
+const beepEffects = JSON.parse(bluekApiSession.takeEffects());
+if (beepEffects.length !== 1 || beepEffects[0].type !== 'sound' || beepEffects[0].name !== 'beep') {
+    throw new Error('BlueK.beep() did not produce the expected sound effect.');
+}
+
 const classInputSession = api.bluekCreateKotliteSession();
 expectOk(JSON.parse(classInputSession.load('<class input>', `
     class Reader {

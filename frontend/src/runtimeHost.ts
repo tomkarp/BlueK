@@ -26,6 +26,7 @@ export interface KotliteSessionBridge {
   setClick(x: number, y: number): string;
   takeOutput(): string;
   takeStage(): string;
+  takeEffects(): string;
 }
 
 type Emit = (message: WorkerReply | RuntimeEvent) => void;
@@ -48,6 +49,8 @@ export class RuntimeHost {
     response.output = this.session?.takeOutput() || '';
     const stage = this.session?.takeStage();
     if (stage) { const parsed = JSON.parse(stage); response.stage = parsed.stage || parsed; }
+    const effects = this.session?.takeEffects();
+    if (effects) response.effects = JSON.parse(effects);
     this.snapshot = { ...this.snapshot, revision: this.snapshot.revision + 1, inspections, error: response.kind === 'error' ? response.display || 'Runtime error' : null };
     if (response.fatal) this.snapshot.phase = 'faulted';
     return { id, generationId: this.snapshot.generationId, response, snapshot: this.snapshot };

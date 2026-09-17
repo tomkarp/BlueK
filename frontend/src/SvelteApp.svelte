@@ -126,6 +126,7 @@
     terminalPosition: { left: number; top: number } | null = null,
     terminalSize = { width: 780, height: 520 };
   let activeWindow: "terminal" | "editor" | null = null;
+  let audioContext: AudioContext | null = null;
   let editorWindows: EditorWindowState[] = [],
     activeEditorId = "",
     editorTabbed = false,
@@ -649,6 +650,22 @@
       stage = refreshed;
   }
 
+  function playBlueKBeep() {
+    try {
+      audioContext ||= new AudioContext();
+      const oscillator = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      oscillator.frequency.value = 880;
+      gain.gain.setValueAtTime(0.08, audioContext.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.15);
+      oscillator.connect(gain).connect(audioContext.destination);
+      oscillator.start();
+      oscillator.stop(audioContext.currentTime + 0.15);
+    } catch {
+      // Audio is optional; a browser audio failure must not fail the program.
+    }
+  }
+
   onMount(() => {
     formatShortcutLabel = /Mac/i.test(navigator.platform) ? "Cmd+Shift+I" : "Ctrl+Shift+I";
     client = new LocalRuntimeClient();
@@ -664,6 +681,9 @@
         terminal = appendTerminal(terminal, value.output);
         window.setTimeout(renderTerminal, 0);
       }
+      value.effects?.forEach((effect) => {
+        if (effect.type === "sound" && effect.name === "beep") playBlueKBeep();
+      });
     });
     const unsubscribeStage = client.stageStream((value) => {
       if (!value.stage) return;

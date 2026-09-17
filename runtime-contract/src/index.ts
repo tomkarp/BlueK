@@ -23,6 +23,7 @@ export interface ManifestClass{
 export interface SymbolManifest{ version:1; classes:ManifestClass[]; functions:(ManifestCallable & {sourceLine:number})[] }
 export interface Diagnostic { fileName?:string; line:number; column:number; severity:'error'|'warning'; message:string }
 export interface CompileResult{generationId:string;sourceRevision:number;classes:ClassMeta[];diagnostics:Diagnostic[]}
+export interface RuntimeEffect { type: 'sound'; name: string }
 
 /** A session has exactly one phase, shared by every UI surface. */
 export type Phase = 'uncompiled' | 'compiling' | 'ready' | 'running' | 'waitingForInput' | 'faulted';
@@ -40,6 +41,7 @@ export interface RuntimeValue {
   fatal?: boolean;
   output?: string;
   stage?: any;
+  effects?: RuntimeEffect[];
 }
 export interface RuntimeSnapshot {
   generationId: string;

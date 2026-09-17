@@ -63,6 +63,7 @@ class KotliteSession {
     private var analyzedScript: ScriptNode? = null
     private var stageSnapshot = ""
     private val pendingSounds = mutableListOf<String>()
+    private val pendingEffects = mutableListOf<String>()
     private val inputLines = mutableListOf<String>()
     private var inputContinuation: Continuation<RuntimeValue>? = null
     private var inputNullable = false
@@ -85,6 +86,8 @@ class KotliteSession {
             check(executionCompleted != null) { "Thread.sleep requires asynchronous execution (startEvaluate)." }
             awaitRuntimeSleep(millis)
         })
+        environment.registerClass(BlueKClass.definition())
+        environment.registerFunction(BlueKClass.beepFunction { pendingEffects += "beep" })
         AllStdLibModules { text -> appendOutput(text) }.modules.forEach(environment::install)
         environment.registerFunction(CustomFunctionDefinition(
             position = SourcePosition.BUILTIN,
@@ -633,6 +636,7 @@ class KotliteSession {
         nextHandle = 1
         stageSnapshot = ""
         pendingSounds.clear()
+        pendingEffects.clear()
         inputLines.clear()
         faulted = false
         keysDown.clear()
@@ -657,6 +661,12 @@ class KotliteSession {
         stageSnapshot = ""
         pendingSounds.clear()
         return snapshot
+    }
+
+    fun takeEffects(): String {
+        val effects = pendingEffects.joinToString(",", "[", "]") { "{\"type\":\"sound\",\"name\":\"${escape(it)}\"}" }
+        pendingEffects.clear()
+        return effects
     }
 
     fun setKey(key: String, pressed: Boolean): String {
