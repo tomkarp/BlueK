@@ -11,6 +11,7 @@
     "browser-smoke": "node scripts/smoke-static-architecture.mjs && node scripts/smoke-svelte-architecture.mjs && node scripts/smoke-kotlite-browser.mjs && node scripts/smoke-blueplay-browser.mjs && npm run test:runtime-state",
     "typecheck": "tsc && svelte-check --tsconfig ./tsconfig.json --threshold error",
     "test:runtime-state": "node scripts/smoke-runtime-state.mjs",
+    "test:references": "node scripts/smoke-references.mjs",
     "test:ui": "node scripts/smoke-ui-behavior.mjs",
     "test:gui": "playwright test",
     "test:inspector": "node scripts/smoke-inspector-model.mjs",
@@ -18,7 +19,7 @@
     "test:codepad-flow": "node scripts/smoke-codepad-flow.mjs",
     "share:server": "node server/share-server.mjs",
     "test:share-server": "node scripts/smoke-share-server.mjs",
-    "test:regression": "npm run typecheck && npm run test:ui && npm run test:runtime-state && npm run test:inspector && npm run test:project-format && npm run test:codepad-flow && npm run test:gui"
+    "test:regression": "npm run typecheck && npm run test:ui && npm run test:runtime-state && npm run test:references && npm run test:inspector && npm run test:project-format && npm run test:codepad-flow && npm run test:gui"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",

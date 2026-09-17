@@ -43,12 +43,21 @@ export interface RuntimeValue {
   stage?: any;
   effects?: RuntimeEffect[];
 }
+export interface RuntimeReference {
+  name: string;
+  objectId: string | null;
+  className: string;
+  origin: 'interactive' | 'persistent';
+  onBench: boolean;
+}
 export interface RuntimeSnapshot {
   generationId: string;
   revision: number;
   phase: Phase;
   classes: ClassMeta[];
   inspections: Record<string, RuntimeValue>;
+  references: RuntimeReference[];
+  liveObjectIds: string[];
   error: string | null;
 }
 export type RuntimeCommand = { generationId?: string } & (
@@ -60,6 +69,7 @@ export type RuntimeCommand = { generationId?: string } & (
   | { op: 'set'; objectId: string; property: string; value: string }
   | { op: 'inspect'; objectId: string }
   | { op: 'bind'; objectId: string; name: string }
+  | { op: 'remove'; objectId: string; name: string }
   | { op: 'input'; text: string; inputRequestId?: number; eof?: boolean }
   | { op: 'key'; key: string; pressed: boolean }
   | { op: 'click'; x: number; y: number }

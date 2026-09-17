@@ -2,7 +2,7 @@ import type { CompileResult, Diagnostic, ProjectFile } from '../../runtime-contr
 import type { RuntimeCommand, RuntimeEvent, RuntimeSnapshot, RuntimeValue, WorkerCommand, WorkerReply } from '../../runtime-contract/src/index';
 
 type Pending = { resolve: (reply: WorkerReply) => void; reject: (error: Error) => void };
-const initial = (): RuntimeSnapshot => ({ generationId: '', revision: 0, phase: 'uncompiled', classes: [], inspections: {}, error: null });
+const initial = (): RuntimeSnapshot => ({ generationId: '', revision: 0, phase: 'uncompiled', classes: [], inspections: {}, references: [], liveObjectIds: [], error: null });
 
 /** Single command gateway and observable runtime state for every UI surface. */
 export class LocalRuntimeClient {

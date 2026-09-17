@@ -27,7 +27,9 @@ object IterableInterface {
             ),
             executable = { interpreter, receiver, args, typeArgs ->
                 val delegatedValue = (receiver as DelegatedValue<*>).value as Iterable<RuntimeValue>
-                IteratorValue(delegatedValue.iterator(), typeArgs["T"]!!, interpreter.symbolTable())
+                IteratorValue(delegatedValue.iterator(), typeArgs["T"]!!, interpreter.symbolTable()).also {
+                    it.retainedRuntimeValues = listOf(receiver)
+                }
             },
             position = SourcePosition(BuiltinFilename.BUILTIN, 1, 1),
         ),

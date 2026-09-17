@@ -12,7 +12,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.*
  * here, not in an application adapter or UI.
  */
 object ReplAnalyzer {
-    fun analyze(filename: String, source: String, environment: ExecutionEnvironment): ScriptNode {
+    fun analyze(filename: String, source: String, environment: ExecutionEnvironment, retiredProperties: Map<Int, List<String>> = emptyMap()): ScriptNode {
         val moved = mutableListOf<String>()
         while (true) {
             var script = Parser(Lexer(filename, source)).script()
@@ -21,7 +21,17 @@ object ReplAnalyzer {
                 script = ScriptNode(script.position, listOf(declaration) + script.nodes.filterNot { it === declaration })
             }
             try {
-                SemanticAnalyzer(script, environment).analyze()
+                // Retire a name at its historical boundary, not before analyzing
+                // the initializer of an older alias. Never delete source: symbol
+                // numbering must remain identical to the persistent interpreter.
+                val retireBeforeNode = linkedMapOf<Int, MutableList<String>>()
+                retiredProperties.entries.sortedBy { it.key }.forEach { (offset, names) ->
+                    val index = script.nodes.indexOfFirst { node ->
+                        node.position.index >= offset && !(node is ClassDeclarationNode && node.name in moved)
+                    }.let { if (it < 0) script.nodes.size else it }
+                    retireBeforeNode.getOrPut(index) { mutableListOf() }.addAll(names)
+                }
+                SemanticAnalyzer(script, environment, retireBeforeNode).analyze()
                 return script
             } catch (error: Throwable) {
                 val message = error.message.orEmpty()

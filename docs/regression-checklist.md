@@ -79,6 +79,7 @@ nicht im Fokus; die BluePlay-Vorlagen bleiben erhalten, sind aber vorübergehend
 | RT-04 | Kotlite unterstützt `Thread.sleep(Int/Long)`; Timer wartet ohne Blockieren, setzt danach fort und kann per Reset beendet werden | Node/VM-Smoke: vollständiger Timer inkl. Range/Zufall, Wiederholung, Int/Long/0, negatives Argument mit catch/printStackTrace/finally, Typprüfung, synchroner Aufruf ohne verwaiste Fortsetzung. Echte Chromium-Tests: Timer, bedienbare Settings während der Wartezeit, Reset ohne alte Ausgabe | Kotlite-Smoke und beide RT-04-Browsertests grün; Benutzerbestätigung noch offen |
 | RT-05 | Kotlite unterstützt Kotlin-Property-Setter mit eigener Sichtbarkeit (`private set`); interne Schreibzugriffe funktionieren, externe Schreibzugriffe werden abgewiesen | Kotlite-Smoke-Test mit `Timer.min/max`, `private set`, `zeitspanne` und `setzeBereich`; zusätzlich bestehende Setter mit eigenem Body im Runtime-State-Test | Kotlite-Smoke und Runtime-State-Integration grün |
 | RT-06 | BlueK stellt für Schülercode `BlueK.beep()` als eingebaute Host-Funktion bereit; der Aufruf erzeugt einen optionalen Sound-Effekt ohne die Programmausführung zu blockieren | Kotlite-Smoke-Test prüft den typisierten Sound-Effekt; Typecheck und Browser-UI-Prüfung | Implementierung in diesem Schritt; visuelle Tonprüfung geräteabhängig |
+| RT-07 | Gemeinsamer Laufzeit-Namensraum; entfernte interaktive Namen sind wieder frei; Codepad-Aliase und indirekte Referenzen bleiben gültig; Objektbank-Ansichten folgen `var`; nicht mehr erreichbare alte Handles sind gesperrt | `test:references`: Timer-Fall inkl. unabhängigem `val a = 5`, Entfernen/Wiederverwenden, stabile Symbole/keine wiederholten Seiteneffekte, Konflikte, persistente Ansichten, Felder/Collections/Lambda-Captures/Iteratoren/Zyklen/Reset. `test:runtime-state`: echte Client-/Host-/Session-Snapshots. Drei echte Chromium-Tests in `references.spec.ts` | Gezielte Laufzeit-/Integrationstests und 3/3 Browsertests grün; Benutzerabnahme dieses Umbaus offen. Grenzen opaker Host-Datentypen siehe Architektur |
 | FMT-01 | Öffentliches Projekt-JSON enthält keine internen Datei-IDs oder Editor-Revisionen; `fileName` bleibt Pflichtfeld und `path` ist optional | Format-Smoke-Test prüft Export, Import, optionalen Pfad und Rückwärtskompatibilität alter Zusatzfelder | `test:project-format` |
 | ARCH-01 | Inspektoransicht verändert keine Laufzeitdaten und ruft beim Rendern keine Getter auf | Modelltest grün | `test:inspector` |
 | ARCH-02 | Parallele Getter-Refreshes nicht doppelt ausführen; alte Ergebnisse nach Reset/Schließen verwerfen | Modelltest grün | `test:inspector` |
@@ -87,6 +88,34 @@ nicht im Fokus; die BluePlay-Vorlagen bleiben erhalten, sind aber vorübergehend
 | ARCH-05 | Codepad kompiliert bei Bedarf, führt nur nach erfolgreichem Compile aus und verwirft alte Generationen | `test:codepad-flow` grün; GUI 16/16 grün | Methodenaufrufe und BluePlay bewusst nicht Teil dieses Schritts |
 
 ## Letzter Prüflauf
+
+2026-09-17: Referenzverwaltung strukturell überarbeitet. Unveränderliche
+Analyse-Historie mit expliziten Freigabeereignissen ersetzt das Löschen alter
+Quelltextblöcke. Namensbindungen/Herkunft und Handle-Lebensdauer gehören der
+Kotlin-Session; Objektbank und Host beziehen sie ausschließlich aus Snapshots.
+Globale Lambda-Captures behalten ihren Holder; der passive Referenzgraph
+berücksichtigt Felder, Collections, Captures und explizite Host-Referenzen.
+
+Ergebnisse: Kotlin-Browser-Build, `test:references`, `test:runtime-state`,
+Kotlite-Bundle-Smoke, UI-/Inspector-/Projektformat-/Codepad-Helfertests,
+Typecheck (0 Fehler, 5 bestehende Svelte-A11y-Warnungen) und Svelte-Build grün.
+Chromium: 3/3 neue Referenztests grün; zusammen mit `regressions.spec.ts`
+50/51 grün. GUI-08/GUI-10 scheitert an einer unveränderten Layout-Assertion,
+die Close am unteren Editor-Rand erwartet, obwohl es oben im Fensterkopf liegt.
+`browser-smoke` besteht Architektur und Kotlite, scheitert anschließend an
+der bereits in HEAD veralteten eingebetteten BluePlay-Vorlage (`World.kt`);
+Runtime-State wurde deshalb zusätzlich separat erfolgreich ausgeführt.
+Diese beiden nicht referenzbezogenen Testprobleme wurden nicht kaschiert oder
+durch Änderungen an Editor/BluePlay behoben.
+
+Zwischenläufe: Ein Kotlin-Build scheiterte zunächst an `toSortedMap` im
+Multiplattform-Code (durch sortierte Entries ersetzt). Die neue Lambda-
+Regression entdeckte fehlende globale Captures (behoben). Zwei neue Browser-
+Tests hatten zunächst einen falschen Inspektor-Selektor; ein weiterer Check
+verwendete einen dynamischen `last()`-Locator statt der ursprünglichen History-
+Zeile (Tests korrigiert). Cache-/Testserver-Zugriff erforderte Sandbox-Freigabe.
+Entwicklungsserver unverändert auf 5173; echte Browsertests separat auf 5194.
+Keine neue Benutzerbestätigung oder Safari-Abnahme behauptet.
 
 2026-09-16: `Thread.sleep` fertiggestellt und Kotlite-Bundle neu gebaut.
 Fehlversuche bei Überladungen (unter anderem `0 until bis`) durch stabile

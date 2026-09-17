@@ -70,11 +70,21 @@ Kotlite ist auf `io.github.sunny-chung:kotlite-interpreter:1.1.2` und `io.github
 
 Pro Compile wird ein neuer Worker und damit eine neue Kotlite-Sitzung gestartet. Innerhalb einer Sitzung bleibt ein `Interpreter` bestehen. Projektdateien werden gemeinsam analysiert und einschließlich ihrer Top-Level-Initialisierungen ausgewertet. Eine neue Codepad-Eingabe wird gegen den bisherigen Quelltext analysiert, aber nur ihr neuer Quelltextbereich ausgeführt. Dadurch werden frühere Konstruktoren und Seiteneffekte nicht wiederholt. Analysefehler sind korrigierbar; nach einem Laufzeitfehler ist ein Reset oder Compile erforderlich, da bereits ausgeführte Seiteneffekte nicht zurückgerollt werden.
 
-Objekte bleiben echte Kotlite-Instanzen. Die Objektbank speichert nur Handles auf dieselben Instanzen. Bench-Namen werden als Kotlin-Bindings in derselben Sitzung angelegt, sodass Codepad, Objektbank und spätere Host-Aufrufe dieselbe Objektidentität und denselben Feldzustand sehen. Remove entfernt ausschließlich die Darstellung auf der Bank. Inspektoren lesen Backing-Felder passiv; berechnete Getter werden nicht automatisch aufgerufen. `Stop`, `Reset` und `Compile` verwerfen Worker beziehungsweise Sitzung; verspätete Antworten alter Worker werden nicht weiterverwendet. Reset lädt die zuletzt kompilierten Projektdateien neu.
+Objekte bleiben echte Kotlite-Instanzen. Codepad und Objektbank verwenden einen gemeinsamen Namensraum. Die Runtime besitzt die Namensbindungen; die Oberfläche zeigt ihren Snapshot an und verwaltet keine unabhängige Referenzliste.
+
+- Ein über die Objektbank erzeugter Name ist auch im Codepad verfügbar. Entfernen löscht diese Namensbindung und gibt den Namen frei.
+- Codepad-Variablen bleiben bis Compile/Reset bestehen. Übernimmt man ein Ergebnis unter einem bereits vorhandenen Namen für **dasselbe Objekt**, wird nur die Objektbank-Ansicht eingeblendet. Entfernen blendet diese Ansicht aus, löscht aber nicht die Codepad-Variable.
+- Ein neuer Name erzeugt eine zusätzliche, unabhängig entfernbare Referenz. Ein vorhandener Name für ein anderes Objekt oder einen anderen Wert wird abgewiesen.
+- Bei `var` folgt die Objektbank-Ansicht dem aktuellen Wert der Variablen. Ein anderer Alias behält seinen eigenen Wert.
+- Weitere Referenzen – auch über Objektfelder, unterstützte Collections oder eingefangene Lambda-Variablen – halten das Objekt erreichbar. Erst wenn keine solche Referenz mehr existiert, werden seine alten UI-Handles ungültig: Inspektoren schließen sich und alte Codepad-Ergebnisse können das Objekt nicht wiederherstellen. Neue Ausdrucksergebnisse können zunächst übernommen werden; das gilt auch für einen gerade zurückgegebenen Wert wie bei `items.removeAt(0)`, ohne alte Ergebnis-Schaltflächen wieder zu aktivieren.
+
+Beispiel: Nach interaktivem Erzeugen von `timer1` und `val t3 = timer1` kann `timer1` entfernt werden. `t3` funktioniert weiter, ebenso eine unabhängige Eingabe wie `val a = 5`. Ein später neu erzeugtes `timer1` ist eine neue Referenz und verändert `t3` nicht. Details zur Analyse-Historie und zu Host-Datentypen stehen in [docs/architecture.md](docs/architecture.md).
+
+Inspektoren lesen Backing-Felder passiv; berechnete Getter werden nicht beim Rendern ausgeführt. `Stop`, `Reset` und `Compile` verwerfen Worker beziehungsweise Sitzung; verspätete Antworten alter Worker werden nicht weiterverwendet. Reset lädt die zuletzt kompilierten Projektdateien neu.
 
 ## Bedienung
 
-`Compile` analysiert alle Kotlin-Dateien gemeinsam und aktualisiert die Klassenkarten. Über den Konstruktor-Dialog der Klassenkarten lassen sich Objekte erzeugen; Rechtsklick auf ein Objekt bietet Methoden, Inspektion und Entfernen. Codepad-Eingaben werden einzeln ausgeführt, und Variablen aus früheren Eingaben bleiben bis zum Reset verfügbar. Projektdateien und Medien werden lokal geöffnet, gespeichert und eingebettet.
+`Compile` analysiert alle Kotlin-Dateien gemeinsam und aktualisiert die Klassenkarten. Über den Konstruktor-Dialog der Klassenkarten lassen sich benannte Objekte erzeugen; Rechtsklick auf ein Objekt bietet Methoden, Inspektion und Entfernen. Codepad-Ergebnisse können unter einem neuen Namen oder – falls der Name bereits dieselbe Referenz bezeichnet – als vorhandene Referenz in die Objektbank übernommen werden. Codepad-Eingaben werden einzeln ausgeführt, und Variablen aus früheren Eingaben bleiben bis zum Reset verfügbar. Projektdateien und Medien werden lokal geöffnet, gespeichert und eingebettet.
 
 ## Tests
 
@@ -83,6 +93,7 @@ Die Tests umfassen außerdem `init`-Blöcke ohne Wiederholung sowie Safe-Call/El
 ```sh
 npm run typecheck
 npm run browser-smoke
+npm run test:references
 ```
 
 Die Smoke-Tests prüfen getrennte Sitzungsaktionen, Objekt-Handles, Alias-Identität, getrennte Instanzen, Vererbung, dynamischen Dispatch, Host-Aufrufe, Sichtbarkeit privater Properties, Reset und die Ablehnung einer `val`-Neuzuweisung. `npm run test:runtime-state` prüft zusätzlich den echten Client und Host mit dem gebauten Kotlite-Bundle: gemeinsame Objektzustände, passive Inspektion, Fehlerphasen, konkurrierende Befehle und verspätete Worker-Antworten. Die Browser-Abnahme prüft außerdem den realen Compile-/Main-Dialog, `waitingForInput`, Fortsetzung nach Return sowie Reset während einer offenen Eingabe.

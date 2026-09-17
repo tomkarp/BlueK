@@ -55,6 +55,74 @@ noch zusätzliche Java-Threads sind erforderlich. Die normale asynchrone
 vor dem Anlegen eines Timers ab. Reset beendet wie bisher den Worker mitsamt
 wartenden Fortsetzungen. Andere Thread-APIs werden dadurch nicht bereitgestellt.
 
+## Objekt- und Referenzmodell
+
+Es gibt drei getrennte Dinge: **Namensbindung**, **Objektidentität** und
+**UI-Handle**. `KotliteSession` hält für jeden Namen nur das stabile Kotlite-
+Symbol, seine Herkunft (`interactive` oder `persistent`) und `onBench`.
+Der aktuelle Wert wird immer aus dem Interpreter gelesen, nicht in einer
+zweiten Alias-Tabelle gespeichert. Deshalb folgt eine Objektbank-Ansicht auch
+einer späteren `var`-Zuweisung. Codepad- und Projekt-Properties sind persistent.
+
+Interaktives Erzeugen deklariert den eingegebenen Namen direkt. `bind` auf
+denselben Namen und dieselbe Instanz ist idempotent und ändert die Herkunft
+nicht; ein freier Name legt einen interaktiven Alias an, ein anderer Wert ist
+ein Konflikt. `remove` entfernt interaktive Bindungen aus dem Interpreter;
+bei persistenten Bindungen setzt es nur `onBench = false`. Ein veralteter
+Remove-Auftrag mit falscher Objektidentität wird abgewiesen.
+
+`referenceSnapshot()` liefert den gemeinsamen Namensraum und die gültigen
+Handles. `RuntimeHost` veröffentlicht daraus `RuntimeSnapshot.references`,
+`liveObjectIds` und passive Inspektionen. Svelte leitet die Objektbank daraus
+ab. Es gibt keine zweite Liste löschbarer Namen oder Host-eigene Handle-Liste.
+Alte Ergebnis-Schaltflächen werden deaktiviert und verwaiste Inspektoren
+geschlossen. Nach Namenswechsel wird der Inspektortitel aus den noch gültigen
+Referenzen abgeleitet, nicht als alte Namensbindung weiterverwendet.
+
+### Analyse-Historie und Namensfreigabe
+
+Erfolgreich ausgeführter Quelltext bleibt **unveränderlich** in der Historie,
+auch Anweisungen und Blöcke mit lokalen Variablen. Das erhält Kotlites laufende
+Symbolnummern. Nur der neue Quelltextbereich wird ausgeführt; alte Initialisierer
+und Seiteneffekte werden nicht wiederholt. Das Löschen alter Quelltextblöcke
+oder erneutes Ausführen von Alias-Initialisierern ist ausdrücklich falsch.
+
+Eine Namensfreigabe wird zusätzlich als Analyse-Ereignis an der aktuellen
+Quelltextgrenze gespeichert. `ReplAnalyzer`/`SemanticAnalyzer` analysieren alte
+Verwendungen noch unter ihrer damaligen Bindung und entfernen anschließend
+den Namen samt Symbolabbildung aus dem Analyseskopus. Eine spätere Deklaration
+desselben Namens bekommt eine neue Symbolnummer. `val t3 = timer1` bleibt damit
+historisch analysierbar, während neue direkte Zugriffe auf das gelöschte
+`timer1` abgewiesen werden. Analysefehler übernehmen weder Quelltext noch neue
+Bindings. Die vollständige Historie wird erst bei Reset/Compile verworfen;
+lange Sitzungen verursachen entsprechend zunehmenden Analyseaufwand.
+
+### Erreichbarkeit
+
+Handles werden anhand echter Identität (`===`, niemals Schüler-`equals`)
+kanonisiert. Namenslose Ergebnisse sind zunächst übernehmbar. Sobald ein Wert
+über den Namensraum erreichbar war, ist sein Handle nur noch eine Ansicht und
+kein zusätzlicher Eigentümer. Nach abgeschlossenen Ausführungen und Remove
+wird die Erreichbarkeit aus den aktuellen Namensbindungen neu bestimmt.
+Ein frisches Ergebnis wie `items.removeAt(0)` darf einen gerade abgetrennten
+Wert erneut anbieten. Dafür wird ein neues vorläufiges Handle vergeben;
+frühere Ergebnis-Handles bleiben ungültig.
+
+`RuntimeReachability` verfolgt Backing-Felder einschließlich Vererbung,
+Lambda-Captures, native Collections/Maps/Arrays/Paare und explizite Referenzen
+von Host-Wrappern. Identitätsbasierte Zyklenerkennung verhindert Endlosschleifen;
+Getter, Schüler-`equals` und lazy Iteratoren werden dabei nicht ausgeführt.
+Globale Lambda-Captures halten wie lokale Captures ihren Property-Holder,
+auch wenn der ursprüngliche interaktive Name entfernt oder neu vergeben wird.
+Der Iterator-Wrapper hält seine Quell-Collection über `retainedRuntimeValues`.
+Weitere opake Host-/Bibliothekswrapper (etwa lazy Sequenzen) müssen ihre
+internen Referenzen ebenfalls explizit über diesen Vertrag offenlegen;
+beliebige native Closures lassen sich nicht automatisch passiv traversieren.
+
+Regressionen: `test:references` (echtes Kotlin/JS-Bundle in Node),
+`test:runtime-state` (Client/Host/Session-Integration) und
+`tests/gui/references.spec.ts` (echter Browser).
+
 ## Inspektor: Datenfluss und Lebensdauer
 
 Die Laufzeit ist die Quelle gespeicherter Feldwerte. Fenster enthalten nur ID

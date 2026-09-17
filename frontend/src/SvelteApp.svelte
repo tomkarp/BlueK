@@ -108,6 +108,8 @@
     phase: "uncompiled",
     classes: [],
     inspections: {},
+    references: [],
+    liveObjectIds: [],
     error: null,
   };
   let files: ProjectFile[] = [],
@@ -150,7 +152,10 @@
     void runtime;
     void inspectorRevision;
     inspectorViews = inspectorWindows.map(item => ({
-    ...item, data: inspectorModel?.view(item.id),
+    ...item,
+    referenceName: runtime.references.find(reference => reference.name === item.referenceName && reference.objectId === item.id)?.name
+      || runtime.references.find(reference => reference.objectId === item.id)?.name || "<object>",
+    data: inspectorModel?.view(item.id),
     })).filter((item): item is typeof item & { data: InspectionView } => Boolean(item.data));
   }
   $: inspected = inspectorViews.find(item => item.id === activeInspectorId)?.data || null;
@@ -223,6 +228,7 @@
     } | null = null,
     objectNamePrompt: RuntimeValue | null = null,
     objectName = "",
+    objectNameError = "",
     editingField = "",
     fieldDraft = "",
     fieldError = "";
@@ -672,6 +678,9 @@
     inspectorModel = new InspectorModel(client, () => { inspectorRevision += 1; });
     const unsubscribe = client.subscribe(() => {
       runtime = client.getSnapshot();
+      if (runtime.phase === "ready") {
+        inspectorWindows.filter((item) => !runtime.liveObjectIds.includes(item.id)).forEach((item) => closeInspector(item.id));
+      }
       if (runtime.phase === "waitingForInput" || runtime.phase === "faulted")
         terminalOpen = true;
     });
@@ -869,7 +878,6 @@
     resultDialog = null;
     invokeDialog = null;
     createDialog = null;
-    bench = [];
     activeInspectorId = "";
     inspectorWindows = [];
     history = [];
@@ -1146,7 +1154,6 @@
         : file,
     );
     client?.invalidate();
-    bench = [];
     activeInspectorId = "";
     inspectorWindows = [];
     history = [];
@@ -1190,7 +1197,6 @@
     compilerDialog = false;
     compilerDiagnostics = [];
     history = [];
-    bench = [];
     activeInspectorId = "";
     inspectorWindows = [];
     const result = await compileProject(client, files, Date.now());
@@ -1308,14 +1314,8 @@
     if (!inputReady) return;
     await client.sendEof();
   }
-  function addBenchObject(value: RuntimeValue) {
-    if (!value.objectId) return;
-    bench = [...bench, {
-      objectId: value.objectId,
-      className: value.className || "Object",
-      name: value.name || `object${bench.length + 1}`,
-    }];
-  }
+  $: bench = runtime.references.flatMap((reference) => reference.onBench && reference.objectId
+    ? [{ objectId: reference.objectId, name: reference.name, className: reference.className }] : []);
 
 
 
@@ -1335,7 +1335,7 @@
     if (!canExecute || !constructors.length) return;
     const parameters = constructors[index]?.parameters || [],
       typeParameters = meta?.typeParameters || [];
-    const name = defaultObjectName(className, bench.map((object) => object.name));
+    const name = defaultObjectName(className, runtime.references.map((reference) => reference.name));
     menu = null;
     createDialog = {
       className,
@@ -1356,7 +1356,7 @@
       dialogError = "Bitte einen gültigen Instanznamen angeben.";
       return;
     }
-    if (bench.some((object) => object.name === createName.trim())) {
+    if (runtime.references.some((reference) => reference.name === createName.trim())) {
       dialogError = "Dieser Instanzname ist bereits vergeben.";
       return;
     }
@@ -1385,13 +1385,6 @@
       if (client.getSnapshot().generationId !== generation) return;
       if (result.kind === "error")
         showCallError(result.display || "Objekt konnte nicht erstellt werden.");
-      else {
-        addBenchObject({
-          ...result,
-          name,
-          className: result.className || className,
-        });
-      }
     } catch (reason) {
       if (client.getSnapshot().generationId === generation) showCallError(reason);
     }
@@ -1631,6 +1624,7 @@
   function requestObjectOnBench(value: RuntimeValue) {
     if (!value.objectId) return;
     objectNamePrompt = value;
+    objectNameError = "";
     objectName =
       value.name ||
       (value.className || "object")
@@ -1638,7 +1632,7 @@
         .replace(/^./, (letter) => letter.toLowerCase());
   }
   function getLastCodepadObject() {
-    const entry = [...history].reverse().find((item) => item.objectId);
+    const entry = [...history].reverse().find((item) => item.objectId && runtime.liveObjectIds.includes(item.objectId));
     if (entry?.objectId)
       requestObjectOnBench({
         kind: "object",
@@ -1650,8 +1644,7 @@
   async function confirmObjectOnBench() {
     if (
       !objectNamePrompt?.objectId ||
-      !/^[A-Za-z_]\w*$/.test(objectName.trim()) ||
-      bench.some((item) => item.name === objectName.trim())
+      !/^[A-Za-z_]\w*$/.test(objectName.trim())
     )
       return;
     const result = await client.execute({
@@ -1660,13 +1653,8 @@
       name: objectName.trim(),
     });
     if (result.kind !== "error") {
-      addBenchObject({
-        ...objectNamePrompt,
-        ...result,
-        name: objectName.trim(),
-      });
       objectNamePrompt = null;
-    }
+    } else objectNameError = result.display || "The reference could not be added.";
   }
   async function inspectObject(object: BenchObject) {
     menu = null;
@@ -1752,10 +1740,15 @@
     window.addEventListener("pointerup", stop);
     event.preventDefault();
   }
-  function removeObject(object: BenchObject) {
-    bench = bench.filter((item) => item.name !== object.name);
-    if (!bench.some((item) => item.objectId === object.objectId))
-      closeInspector(object.objectId);
+  async function removeObject(object: BenchObject) {
+    const result = await client.execute({
+      op: "remove",
+      objectId: object.objectId,
+      name: object.name,
+    });
+    if (result.kind === "error") {
+      showCallError(result.display || "The object reference could not be removed.");
+    }
     menu = null;
   }
   function fieldProperty(data: RuntimeValue, field: InspectedField) {
@@ -1940,7 +1933,6 @@
     stage = null;
     stageWindowOpen = false;
     stageMaximized = false;
-    bench = [];
     activeInspectorId = "";
     inspectorWindows = [];
     history = [];
@@ -2591,7 +2583,7 @@
                   {#if entry.objectResult || entry.objectId}
                     <button
                       class="codepad-object-result svelte-codepad-object-result"
-                      disabled={!entry.objectId}
+                      disabled={!entry.objectId || !runtime.liveObjectIds.includes(entry.objectId)}
                       on:click={() =>
                         entry.objectId &&
                         requestObjectOnBench({
@@ -3465,11 +3457,12 @@
               if (event.key === "Enter") confirmObjectOnBench();
             }}
           /></label
-        ><div class="dialog-actions"><button on:click={() => (objectNamePrompt = null)}>Cancel</button
+        >
+        {#if objectNameError}<p role="alert">{objectNameError}</p>{/if}
+        <div class="dialog-actions"><button on:click={() => (objectNamePrompt = null)}>Cancel</button
         ><button
           on:click={confirmObjectOnBench}
-          disabled={!/^[A-Za-z_]\w*$/.test(objectName.trim()) ||
-            bench.some((item) => item.name === objectName.trim())}>OK</button></div>
+          disabled={!/^[A-Za-z_]\w*$/.test(objectName.trim())}>OK</button></div>
       </div>
     </div>{/if}
   {#if codepadMenu}<div

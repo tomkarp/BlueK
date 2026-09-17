@@ -22,3 +22,21 @@ BlueK adds `ClassInstance.readBackingPropertyByDeclaredName`, a passive
 inspection hook that reads a backing field without invoking a student-defined
 getter. This is needed to display ordinary fields and properties with only a
 custom setter in the BlueK object inspector.
+
+BlueK's persistent REPL retains immutable analysis source and records property
+retirement boundaries. `ReplAnalyzer` translates those boundaries to top-level
+analysis steps; `SemanticAnalyzer` retires declared names and their transformed
+symbol mappings only after older source has been analyzed. This preserves
+symbol identities and old alias initializers while allowing name reuse without
+reexecuting history.
+
+Lambda captures include global property holders, which may outlive a retired
+REPL name. Callback execution carries the captured symbol table as well.
+`reachableRuntimeValues` provides passive, identity-based traversal of fields,
+captures and standard native containers. Opaque delegated values can expose
+their owned references through `retainedRuntimeValues`; iterable iterators
+use this to retain their source. The host uses this graph to invalidate UI
+handles, not to implement the JavaScript garbage collector.
+
+Coverage: `npm run test:references`, `npm run test:runtime-state`,
+`node scripts/smoke-kotlite-browser.mjs` and `tests/gui/references.spec.ts`.

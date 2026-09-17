@@ -19,6 +19,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.LambdaValue
 import com.sunnychung.lib.multiplatform.kotlite.model.NullValue
 import com.sunnychung.lib.multiplatform.kotlite.model.PropertyDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.model.RuntimeValue
+import com.sunnychung.lib.multiplatform.kotlite.model.reachableRuntimeValues
 import com.sunnychung.lib.multiplatform.kotlite.model.ScriptNode
 import com.sunnychung.lib.multiplatform.kotlite.model.SourcePosition
 import com.sunnychung.lib.multiplatform.kotlite.model.StringValue
@@ -47,14 +48,21 @@ import kotlin.coroutines.startCoroutine
  * execution visits only the newly submitted interval. Project initializers run
  * once when the session is loaded.
  */
+private data class BlueKReference(val symbol: String, val interactive: Boolean, var onBench: Boolean)
+
 @OptIn(ExperimentalJsExport::class)
 @JsExport
 class KotliteSession {
+
     private val output = StringBuilder()
     private var environment = ExecutionEnvironment()
     private lateinit var interpreter: Interpreter
     private val handles = linkedMapOf<String, RuntimeValue>()
     private val bindingNames = linkedMapOf<String, String>()
+    private val references = linkedMapOf<String, BlueKReference>()
+    private val managedHandles = linkedSetOf<String>()
+    // Immutable history plus semantic lifetime boundaries, never source deletion.
+    private val retiredProperties = linkedMapOf<Int, MutableList<String>>()
     private val propertyNames = linkedMapOf<String, MutableList<String>>()
     private val computedPropertyNames = linkedMapOf<String, MutableSet<String>>()
     private val privateSetterNames = linkedMapOf<String, MutableSet<String>>()
@@ -404,22 +412,26 @@ class KotliteSession {
      * cannot be rolled back. A runtime failure requires a fresh session.
      */
     fun evaluate(filename: String, source: String): String {
+        return evaluateWithBindings(filename, source, emptySet())
+    }
+
+    private fun evaluateWithBindings(filename: String, source: String, interactiveNames: Set<String>): String {
         // Legacy synchronous callers must retain their historical contract;
         // interactive start* calls install the yielding scheduler explicitly.
         val hook = interpreter.checkpointHook
         interpreter.checkpointHook = null
         return try {
-            interpreter.runImmediately { evaluateSuspended(filename, source) }
+            interpreter.runImmediately { evaluateSuspended(filename, source, interactiveNames) }
         } finally {
             interpreter.checkpointHook = hook
         }
     }
 
-    private suspend fun evaluateSuspended(filename: String, source: String): String {
+    private suspend fun evaluateSuspended(filename: String, source: String, interactiveNames: Set<String> = emptySet()): String {
         if (faulted) return errorMessage("Runtime failed. Reset or compile before running more code.", "runtime", true)
         val boundary = analysisSource.length + 1
         val analyzed = try {
-            ReplAnalyzer.analyze("<BlueK project>", analysisSource + "\n" + source, environment)
+            ReplAnalyzer.analyze("<BlueK project>", analysisSource + "\n" + source, environment, retiredProperties)
         } catch (error: Throwable) {
             return error(error, "analysis")
         }
@@ -428,13 +440,25 @@ class KotliteSession {
             for (node in analyzed.nodes.filter { it.position.index >= boundary }) {
                 value = interpreter.evaluateNode(node) as? RuntimeValue ?: UnitValue
             }
+            val newNodes = analyzed.nodes.filter { it.position.index >= boundary }
             analysisSource += "\n" + source
+            newNodes.filterIsInstance<PropertyDeclarationNode>().forEach { declaration ->
+                if (!declaration.name.startsWith("__bluek_")) {
+                    val interactive = declaration.name in interactiveNames
+                    references[declaration.name] = BlueKReference(declaration.transformedRefName!!, interactive, interactive)
+                }
+            }
             analyzedScript = analyzed
             recordPropertyNames()
             // Kotlin values are objects from BlueK's point of view. Keep every
             // non-Unit expression addressable by the Codepad object control,
             // including values such as Int and String.
-            val objectId = if (value !== UnitValue) registerExpressionValue(value) else null
+            var objectId = if (value !== UnitValue) registerExpressionValue(value) else null
+            reconcileReferences()
+            // A fresh expression may return the value it just detached (e.g.
+            // list.removeAt). Its old history handles stay invalid, but this
+            // new result is transferable under a fresh provisional handle.
+            if (objectId != null && objectId !in handles) objectId = registerExpressionValue(value)
             result("value", value, objectId)
         } catch (error: Throwable) {
             faulted = true
@@ -444,10 +468,14 @@ class KotliteSession {
 
     /** Starts one execution and returns before input waits or Thread.sleep. */
     fun startEvaluate(filename: String, source: String, onInput: (Int) -> Unit, onComplete: (String) -> Unit): String {
+        return startEvaluateInternal(filename, source, onInput, onComplete, emptySet())
+    }
+
+    private fun startEvaluateInternal(filename: String, source: String, onInput: (Int) -> Unit, onComplete: (String) -> Unit, interactiveNames: Set<String>): String {
         if (executionCompleted != null) return errorMessage("Another runtime command is running.")
         inputRequested = onInput
         executionCompleted = onComplete
-        (suspend { evaluateSuspended(filename, source) }).startCoroutine(object : Continuation<String> {
+        (suspend { evaluateSuspended(filename, source, interactiveNames) }).startCoroutine(object : Continuation<String> {
             override val context = kotlin.coroutines.EmptyCoroutineContext
             override fun resumeWith(result: Result<String>) {
                 inputContinuation = null
@@ -467,8 +495,8 @@ class KotliteSession {
         // expression a second time. The declaration is intentionally added
         // without an initializer; the already evaluated object is assigned
         // directly above.
-        analysisSource += "\nval $binding: ${value.type().toTypeNode().descriptiveName()}"
-        val script = ReplAnalyzer.analyze("<BlueK project>", analysisSource, environment)
+        val syntheticSource = "val $binding: ${value.type().toTypeNode().descriptiveName()}"
+        val script = ReplAnalyzer.analyze("<BlueK project>", analysisSource + "\n" + syntheticSource, environment, retiredProperties)
         val declaration = script.nodes.filterIsInstance<PropertyDeclarationNode>()
             .last { it.name == binding }
         val transformedBinding = declaration.transformedRefName
@@ -479,7 +507,43 @@ class KotliteSession {
         val id = "object-${nextHandle++}"
         handles[id] = value
         bindingNames[id] = binding
+        analysisSource += "\n" + syntheticSource
         return id
+    }
+
+    private fun referenceValue(reference: BlueKReference): RuntimeValue? =
+        runCatching { interpreter.symbolTable().read(reference.symbol) }.getOrNull()
+
+    private fun retire(name: String) {
+        interpreter.symbolTable().undeclarePropertyByDeclaredName(name)
+        retiredProperties.getOrPut(analysisSource.length + 1) { mutableListOf() }.add(name)
+    }
+
+    /** Bindings own values; handles are views and do not keep named objects alive. */
+    private fun reconcileReferences() {
+        val roots = references.values.mapNotNull(::referenceValue)
+        // Give every named value a canonical handle, including mutable Codepad variables.
+        roots.forEach(::registerExpressionValue)
+        val reachable = reachableRuntimeValues(roots)
+        handles.toList().forEach { (id, value) ->
+            if (reachable.any { it === value }) managedHandles += id
+            else if (id in managedHandles) {
+                bindingNames.remove(id)?.let(::retire)
+                handles.remove(id)
+                managedHandles.remove(id)
+            }
+        }
+    }
+
+    /** Authoritative namespace and live views; passive and safe during output callbacks. */
+    fun referenceSnapshot(): String {
+        val entries = references.map { (name, reference) ->
+            val value = referenceValue(reference)
+            val id = handles.entries.firstOrNull { it.value === value }?.key
+            "{\"name\":\"${escape(name)}\",\"origin\":\"${if (reference.interactive) "interactive" else "persistent"}\",\"onBench\":${reference.onBench},\"objectId\":${id?.let { "\"${escape(it)}\"" } ?: "null"},\"className\":\"${escape(value?.type()?.toTypeNode()?.descriptiveName() ?: "")}\"}"
+        }.joinToString(",", "[", "]")
+        val ids = handles.keys.joinToString(",", "[", "]") { "\"${escape(it)}\"" }
+        return "{\"references\":$entries,\"liveObjectIds\":$ids}"
     }
 
     private fun recordPropertyNames() {
@@ -519,47 +583,59 @@ class KotliteSession {
     }
 
     fun create(className: String, argumentsSource: String, requestedName: String): String {
-        if (!requestedName.matches(Regex("[A-Za-z_]\\w*"))) return errorMessage("Invalid object name.")
-        if (runCatching { interpreter.symbolTable().findPropertyByDeclaredName(requestedName) }.getOrNull() != null) return errorMessage("An object or variable with this name already exists.")
-        val handleName = "__bluek_handle_${nextHandle++}"
-        val expression = "val $handleName = $className($argumentsSource)\nval $requestedName = $handleName"
-        val evaluated = evaluate("<BlueK constructor>", expression)
+        if (!validReferenceName(requestedName)) return errorMessage("Invalid object name.")
+        val evaluated = evaluateWithBindings("<BlueK constructor>", "val $requestedName = $className($argumentsSource)", setOf(requestedName))
         if (evaluated.startsWith("{\"kind\":\"error\"")) return evaluated
-        val value = interpreter.symbolTable().findPropertyByDeclaredName(handleName)
-            ?: return errorMessage("Constructor did not create an object.")
-        val id = "object-${nextHandle++}"
-        handles[id] = value
-        bindingNames[id] = handleName
-        return result("object", value, id, requestedName)
+        return createdReference(requestedName)
+    }
+
+    private fun validReferenceName(name: String): Boolean =
+        name.matches(Regex("[A-Za-z_]\\w*")) && !name.startsWith("__bluek_") &&
+            runCatching { (parse("<name>", "val $name: Int").nodes.single() as PropertyDeclarationNode).name == name }.getOrDefault(false)
+
+    private fun createdReference(name: String): String {
+        val value = referenceValue(references.getValue(name)) ?: return errorMessage("Constructor did not create an object.")
+        return result("object", value, registerExpressionValue(value), name)
     }
 
     fun startCreate(className: String, argumentsSource: String, requestedName: String, onInput: (Int) -> Unit, onComplete: (String) -> Unit): String {
-        if (!requestedName.matches(Regex("[A-Za-z_]\\w*"))) return errorMessage("Invalid object name.")
-        if (runCatching { interpreter.symbolTable().findPropertyByDeclaredName(requestedName) }.getOrNull() != null) return errorMessage("An object or variable with this name already exists.")
-        val handleName = "__bluek_handle_${nextHandle++}"
-        val expression = "val $handleName = $className($argumentsSource)\nval $requestedName = $handleName"
-        return startEvaluate("<BlueK constructor>", expression, onInput) { evaluated ->
-            if (evaluated.startsWith("{\"kind\":\"error\"")) { onComplete(evaluated); return@startEvaluate }
-            val value = interpreter.symbolTable().findPropertyByDeclaredName(handleName)
-            if (value == null) { onComplete(errorMessage("Constructor did not create an object.")); return@startEvaluate }
-            val id = "object-${nextHandle++}"; handles[id] = value; bindingNames[id] = handleName
-            onComplete(result("object", value, id, requestedName))
-        }
+        if (!validReferenceName(requestedName)) return errorMessage("Invalid object name.")
+        val expression = "val $requestedName = $className($argumentsSource)"
+        return startEvaluateInternal("<BlueK constructor>", expression, onInput, { evaluated ->
+            if (evaluated.startsWith("{\"kind\":\"error\"")) { onComplete(evaluated); return@startEvaluateInternal }
+            onComplete(createdReference(requestedName))
+        }, setOf(requestedName))
     }
 
     /** Bind an existing handle; the object itself is never copied or recreated. */
     fun bind(objectId: String, name: String): String {
         val value = handles[objectId] ?: return errorMessage("Object handle is no longer available.")
         val binding = bindingNames[objectId] ?: return errorMessage("Object handle is no longer available.")
-        if (!name.matches(Regex("[A-Za-z_]\\w*"))) return errorMessage("Invalid object name.")
+        if (!validReferenceName(name)) return errorMessage("Invalid object name.")
         val existing = runCatching { interpreter.symbolTable().findPropertyByDeclaredName(name) }.getOrNull()
         if (existing != null) {
-            return if (existing === value) result("object", value, objectId, name)
-            else errorMessage("An object or variable with this name already exists.")
+            if (existing !== value) return errorMessage("An object or variable with this name already exists.")
+            references.getValue(name).onBench = true
+            return result("object", value, objectId, name)
         }
-        val bound = evaluate("<BlueK object binding>", "val $name = $binding")
+        val bound = bindValue(binding, name)
         if (bound.startsWith("{\"kind\":\"error\"")) return bound
         return result("object", value, objectId, name)
+    }
+
+    private fun bindValue(binding: String, name: String): String =
+        evaluateWithBindings("<BlueK object binding>", "val $name = $binding", setOf(name))
+
+    fun remove(objectId: String, name: String): String {
+        val value = handles[objectId] ?: return errorMessage("Object handle is no longer available.")
+        val reference = references[name] ?: return errorMessage("This name is no longer available.")
+        if (!reference.onBench || referenceValue(reference) !== value) return errorMessage("This object-bench reference has changed.")
+        if (reference.interactive) {
+            retire(name)
+            references.remove(name)
+        } else reference.onBench = false
+        reconcileReferences()
+        return result("unit", UnitValue)
     }
 
     fun invoke(objectId: String, methodName: String, argumentsSource: String): String {
@@ -628,12 +704,14 @@ class KotliteSession {
         inputRequested = null
         handles.clear()
         bindingNames.clear()
+        references.clear()
+        managedHandles.clear()
+        retiredProperties.clear()
         analysisSource = ""
         analyzedScript = null
         propertyNames.clear()
         computedPropertyNames.clear()
         privateSetterNames.clear()
-        nextHandle = 1
         stageSnapshot = ""
         pendingSounds.clear()
         pendingEffects.clear()

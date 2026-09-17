@@ -367,6 +367,14 @@ open class SymbolTable(
         undeclareProperty(findTransformedNameByDeclaredName(declaredName))
     }
 
+    /** Analysis-only REPL boundary. Already analyzed ASTs keep their stable IDs. */
+    internal fun retireAnalyzedProperty(name: String) {
+        val transformed = transformedSymbolsByDeclaredName[IdentifierClassifier.Property to name]
+        undeclareProperty(name)
+        if (transformed != null) unregisterTransformedSymbol(IdentifierClassifier.Property, transformed, name)
+        propertyOwners.remove(name)
+    }
+
     /**
      * Only use in SemanticAnalyzer
      */

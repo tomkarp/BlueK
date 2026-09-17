@@ -65,6 +65,34 @@ const ok = async command => {
   return value;
 };
 const field = (objectId, name = 'n') => client.getSnapshot().inspections[objectId].fields.find(field => field.name === name).value;
+// End-to-end gateway/host snapshots: no independently maintained UI bindings.
+{
+  const refs = new LocalRuntimeClient(() => new TestWorker());
+  await refs.compile(files, 1);
+  const run = async command => {
+    const result = await refs.execute(command);
+    assert.notEqual(result.kind, 'error', result.display);
+    return result;
+  };
+  const first = await run({ op: 'create', className: 'Counter', name: 'counter', args: ['7'] });
+  await run({ op: 'eval', code: 'var alias = counter' });
+  await run({ op: 'bind', objectId: first.objectId, name: 'alias' });
+  await run({ op: 'remove', objectId: first.objectId, name: 'counter' });
+  await run({ op: 'eval', code: 'val unrelated = 5' });
+  assert.equal((await run({ op: 'eval', code: 'alias.n' })).display, '7');
+  await run({ op: 'eval', code: 'alias = Counter(20)' });
+  const view = refs.getSnapshot().references.find(r => r.name === 'alias');
+  assert.equal(view.onBench, true);
+  assert.notEqual(view.objectId, first.objectId);
+  assert.equal(refs.getSnapshot().liveObjectIds.includes(first.objectId), false);
+  assert.equal(refs.getSnapshot().inspections[first.objectId], undefined);
+  await run({ op: 'remove', objectId: view.objectId, name: 'alias' });
+  assert.equal(refs.getSnapshot().references.find(r => r.name === 'alias').onBench, false);
+  assert.equal((await run({ op: 'eval', code: 'alias.n' })).display, '20');
+  await refs.reset();
+  assert.deepEqual(refs.getSnapshot().references.map(r => r.name), ['shared']);
+  refs.invalidate();
+}
 assert.equal((await client.compile(files, 1)).diagnostics.length, 0);
 assert.equal(client.getSnapshot().phase, 'ready');
 assert.ok(client.getSnapshot().classes.find(c => c.id === 'Actions.kt').methods.some(m => m.name === 'main'));
@@ -122,7 +150,8 @@ assert.equal(askResult.kind, 'unit');
 assert.equal(field(first.objectId), '15');
 assert.equal((await client.reset()).diagnostics.length, 0);
 assert.equal(client.getSnapshot().phase, 'ready');
-assert.deepEqual(client.getSnapshot().inspections, {});
+assert.deepEqual(client.getSnapshot().references.map(r => r.name), ['shared']);
+assert.equal(client.getSnapshot().references.some(r => r.onBench), false);
 assert.equal((await ok({ op: 'eval', code: 'shared.n' })).display, '10');
 await ok({ op: 'create', className: 'Counter', name: 'child', args: ['0'] });
 

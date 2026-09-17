@@ -107,7 +107,7 @@ import com.sunnychung.lib.multiplatform.kotlite.util.ClassMemberResolver
 import com.sunnychung.lib.multiplatform.kotlite.util.ClassSemanticAnalyzer
 import com.sunnychung.lib.multiplatform.kotlite.util.FunctionAndTypes
 
-open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: ExecutionEnvironment) {
+open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: ExecutionEnvironment, private val retiredProperties: Map<Int, List<String>> = emptyMap()) {
     val builtinSymbolTable = SemanticAnalyzerSymbolTable(scopeLevel = 0, scopeName = ":builtin", scopeType = ScopeType.Script, parentScope = null)
     val symbolTable = SemanticAnalyzerSymbolTable(scopeLevel = 1, scopeName = ":global", scopeType = ScopeType.Script, parentScope = builtinSymbolTable)
     var currentScope = builtinSymbolTable
@@ -444,7 +444,11 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     }
 
     fun ScriptNode.visit(modifier: Modifier = Modifier()) {
-        nodes.forEach { it.visit(modifier = modifier) }
+        nodes.forEachIndexed { index, node ->
+            retiredProperties[index].orEmpty().forEach { currentScope.retireAnalyzedProperty(it) }
+            node.visit(modifier = modifier)
+        }
+        retiredProperties[nodes.size].orEmpty().forEach { currentScope.retireAnalyzedProperty(it) }
     }
 
     fun TypeNode.visit(modifier: Modifier = Modifier()) {
@@ -776,7 +780,9 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             currentScope.findPropertyOwner(transformedRefName!!)?.let {
                 ownerRef = it
             }
-            if (symbolRecorders.isNotEmpty() && isLocalAndNotCurrentScope(l)) {
+            // A REPL may retire a global name. Closures keep its holder, just
+            // like local captures, instead of looking it up in a future scope.
+            if (symbolRecorders.isNotEmpty() && (l == 1 || isLocalAndNotCurrentScope(l))) {
                 val symbols = symbolRecorders.last()
                 symbols.properties += ownerRef?.ownerRefName ?: transformedRefName!!
             }

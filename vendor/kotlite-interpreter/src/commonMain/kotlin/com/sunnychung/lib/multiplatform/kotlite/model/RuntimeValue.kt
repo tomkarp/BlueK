@@ -131,6 +131,7 @@ class LambdaValue(val value: LambdaLiteralNode, private val resolvedType: Functi
             functionNode = value,
             extraScopeParameters = emptyMap(),
             extraTypeResolutions = emptyList(),
+            extraSymbols = symbolRefs,
         ).result
     }
 

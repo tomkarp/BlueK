@@ -6,6 +6,7 @@ class RequestError extends Error {}
 export interface KotliteSessionBridge {
   load(filename: string, source: string): string;
   manifest(): string;
+  referenceSnapshot(): string;
   evaluate(filename: string, source: string): string;
   startEvaluate(filename: string, source: string, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
   startLoadProject(filenames: string[], sources: string[], onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
@@ -19,6 +20,7 @@ export interface KotliteSessionBridge {
   get(objectId: string, property: string): string;
   set(objectId: string, property: string, value: string): string;
   bind(objectId: string, name: string): string;
+  remove(objectId: string, name: string): string;
   inspect(objectId: string): string;
   enqueueInput(text: string): string;
   enqueueEof(): string;
@@ -33,36 +35,32 @@ type Emit = (message: WorkerReply | RuntimeEvent) => void;
 
 export class RuntimeHost {
   private session: KotliteSessionBridge | null = null;
-  private handles = new Set<string>();
-  private snapshot: RuntimeSnapshot = { generationId: '', revision: 0, phase: 'uncompiled', classes: [], inspections: {}, error: null };
+  private snapshot: RuntimeSnapshot = { generationId: '', revision: 0, phase: 'uncompiled', classes: [], inspections: {}, references: [], liveObjectIds: [], error: null };
   private sequence = 0;
   private active: { executionId: number; inputRequestId?: number } | null = null;
   constructor(private readonly createSession: () => KotliteSessionBridge) {}
 
   private publish(id: number, response: RuntimeValue): WorkerReply {
-    if (response.objectId) this.handles.add(response.objectId);
-    const inspections: Record<string, RuntimeValue> = {};
-    for (const handle of this.handles) {
-      try { inspections[handle] = JSON.parse(this.session!.inspect(handle)); }
-      catch { inspections[handle] = { kind: 'error', objectId: handle, display: 'Inspection unavailable.' }; }
-    }
+    this.refreshSnapshot();
     response.output = this.session?.takeOutput() || '';
     const stage = this.session?.takeStage();
     if (stage) { const parsed = JSON.parse(stage); response.stage = parsed.stage || parsed; }
     const effects = this.session?.takeEffects();
     if (effects) response.effects = JSON.parse(effects);
-    this.snapshot = { ...this.snapshot, revision: this.snapshot.revision + 1, inspections, error: response.kind === 'error' ? response.display || 'Runtime error' : null };
+    this.snapshot = { ...this.snapshot, error: response.kind === 'error' ? response.display || 'Runtime error' : null };
     if (response.fatal) this.snapshot.phase = 'faulted';
     return { id, generationId: this.snapshot.generationId, response, snapshot: this.snapshot };
   }
 
   private refreshSnapshot() {
     const inspections: Record<string, RuntimeValue> = {};
-    for (const handle of this.handles) {
+    const references: Pick<RuntimeSnapshot, 'references' | 'liveObjectIds'> = this.session
+      ? JSON.parse(this.session.referenceSnapshot()) : { references: [], liveObjectIds: [] };
+    for (const handle of references.liveObjectIds) {
       try { inspections[handle] = JSON.parse(this.session!.inspect(handle)); }
       catch { inspections[handle] = { kind: 'error', objectId: handle, display: 'Inspection unavailable.' }; }
     }
-    this.snapshot = { ...this.snapshot, revision: this.snapshot.revision + 1, inspections };
+    this.snapshot = { ...this.snapshot, ...references, revision: this.snapshot.revision + 1, inspections };
   }
 
   private emitEvent(executionId: number, kind: RuntimeEvent['kind'], emit: Emit, extra: Partial<RuntimeEvent> = {}) {
@@ -82,8 +80,8 @@ export class RuntimeHost {
   dispatch(id: number, command: WorkerCommand, emit: Emit): void {
     try {
       if (command.op === 'compile') {
-        this.active = null; this.handles.clear(); this.sequence = 0;
-        this.snapshot = { generationId: command.generationId, revision: 0, phase: 'compiling', classes: [], inspections: {}, error: null };
+        this.active = null; this.sequence = 0;
+        this.snapshot = { generationId: command.generationId, revision: 0, phase: 'compiling', classes: [], inspections: {}, references: [], liveObjectIds: [], error: null };
         this.session = this.createSession();
         const executionId = id;
         this.active = { executionId };
@@ -121,6 +119,11 @@ export class RuntimeHost {
       if (this.active || this.snapshot.phase !== 'ready') throw new RequestError('Another runtime command is running.');
       if (command.op === 'inspect') { emit(this.publish(id, JSON.parse(this.session.inspect(command.objectId)))); return; }
       if (command.op === 'bind') { emit(this.publish(id, JSON.parse(this.session.bind(command.objectId, command.name)))); return; }
+      if (command.op === 'remove') {
+        const response = JSON.parse(this.session.remove(command.objectId, command.name));
+        emit(this.publish(id, response));
+        return;
+      }
       if (command.op === 'key') { emit(this.publish(id, JSON.parse(this.session.setKey(command.key, !!command.pressed)))); return; }
       if (command.op === 'click') { emit(this.publish(id, JSON.parse(this.session.setClick(command.x, command.y)))); return; }
 

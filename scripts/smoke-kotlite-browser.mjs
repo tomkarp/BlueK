@@ -299,6 +299,21 @@ if (counterMeta?.methods[0]?.parameters[0]?.name !== 'step' || !counterMeta.meth
 if (childMeta?.supertypes?.[0]?.classifier !== 'Counter') throw new Error('Kotlite manifest lost superclass metadata.');
 const benchObject = expectOk(JSON.parse(session.create('Child', '5', 'bench')), 'bench construction');
 if (evaluate('bench.value', 'bench binding').display !== '5') throw new Error('Bench object is not available in the codepad.');
+
+const referencesSession = api.bluekCreateKotliteSession();
+expectOk(JSON.parse(referencesSession.load('<references>', 'class Box(var value: Int)')), 'reference class load');
+const firstBox = expectOk(JSON.parse(referencesSession.create('Box', '1', 'box')), 'first reference construction');
+const aliasBox = expectOk(JSON.parse(referencesSession.bind(firstBox.objectId, 'alias')), 'second reference binding');
+if (JSON.parse(referencesSession.referenceSnapshot()).references.find(r => r.name === 'alias')?.origin !== 'interactive') throw new Error('A new object-bench alias was not marked as a removable reference.');
+if (JSON.parse(referencesSession.evaluate('<references>', 'box.value')).display !== '1') throw new Error('The original reference could not be used before removal.');
+const removedBox = expectOk(JSON.parse(referencesSession.remove(firstBox.objectId, 'box')), 'first reference removal');
+if (!JSON.parse(referencesSession.referenceSnapshot()).liveObjectIds.includes(firstBox.objectId)) throw new Error('Removing one of two references released the object too early.');
+if (JSON.parse(referencesSession.create('Box', '2', 'box')).kind === 'error') throw new Error('Removing an object-bench reference did not free its name.');
+if (JSON.parse(referencesSession.evaluate('<references>', 'val unrelated = 5')).kind === 'error') throw new Error('A later unrelated Codepad declaration still depended on the removed reference.');
+expectOk(JSON.parse(referencesSession.remove(aliasBox.objectId, 'alias')), 'last reference removal');
+if (JSON.parse(referencesSession.inspect(aliasBox.objectId)).kind !== 'error') throw new Error('Removing the last reference retained an old object handle.');
+if (JSON.parse(referencesSession.create('Box', '3', 'alias')).kind === 'error') throw new Error('Removing the last reference did not free its name.');
+
 const inheritedInspection = expectOk(JSON.parse(session.inspect(benchObject.objectId)), 'inherited inspection');
 if (!inheritedInspection.fields.some(field => field.name === 'value')) throw new Error('Primary-constructor properties were not exposed to inspection.');
 evaluate('bench.increment()', 'bench mutation');
