@@ -505,6 +505,19 @@ test('GUI-48 private setter stays visible but cannot be edited', async ({ page }
   await expect(row.getByLabel('Value of min')).toHaveCount(0);
 });
 
+test('GUI-49 context-menu method names stay on one line', async ({ page }) => {
+  await project(page, 'class Timer { fun setzeSehrLangenBereich(neuesMinimum: Int, neuesMaximum: Int) {} }');
+  const entry = await evaluate(page, 'Timer()');
+  await entry.getByRole('button').click();
+  await page.getByLabel('Name of instance').fill('timer1');
+  await page.getByRole('button', { name: 'OK', exact: true }).click();
+  await page.locator('.bench .object').click({ button: 'right' });
+  const method = page.locator('.method-menu-item').filter({ hasText: 'setzeSehrLangenBereich' });
+  await expect(method).toBeVisible();
+  await expect(method).toHaveCSS('white-space', 'nowrap');
+  expect((await method.boundingBox())!.height).toBeLessThan(40);
+});
+
 test('GUI-07 every value can be placed on the bench', async ({ page }) => {
   await project(page);
   for (const [code, name, display] of [['5', 'zahl', '5 : Int'], ['"Hallo"', 'text', '"Hallo" : String']]) {
