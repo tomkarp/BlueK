@@ -2950,12 +2950,16 @@
           class:inspect-no-fields={!inspector.data.fields?.length}
         >
           {#each inspector.data.fields || [] as field}
+            {@const property = fieldProperty(inspector.data, field)}
             {@const editable = canEditField(field, inspector.data)}
+            {@const privateField = property?.visibility === "private"}
             {@const editing =
               editingField === field.name &&
               inspected?.objectId === inspector.id}
             <div
               class:editable
+              class:private-field={privateField}
+              class:private-setter={field.setterPrivate === true}
               class="inspect-row"
               role="group"
               on:dblclick={() =>

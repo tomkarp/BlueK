@@ -488,19 +488,24 @@ test('GUI-03 GUI-04 computed values update after every inspector edit', async ({
   await expect(computed).toHaveText('90');
 });
 
-test('GUI-48 private setter stays visible but cannot be edited', async ({ page }) => {
-  await project(page, 'class Timer { var min: Int = 0\nprivate set }');
+test('GUI-48 private fields are readable and private setters stay visible but cannot be edited', async ({ page }) => {
+  await project(page, 'class Timer { private val secret: Int = 7\nvar min: Int = 0\nprivate set }');
   const entry = await evaluate(page, 'Timer()');
   await entry.getByRole('button').click();
   await page.getByLabel('Name of instance').fill('timer1');
   await page.getByRole('button', { name: 'OK', exact: true }).click();
   await page.locator('.bench .object').dblclick();
   const inspector = page.getByRole('dialog', { name: 'Object inspector' });
+  const privateRow = inspector.locator('.inspect-row').filter({ hasText: 'secret :' });
+  await expect(privateRow).toHaveClass(/private-field/);
+  await expect(privateRow).toHaveCSS('background-color', 'rgb(222, 222, 222)');
+  await expect(privateRow.locator('output')).toHaveCSS('color', 'rgb(34, 34, 34)');
   const row = inspector.locator('.inspect-row').filter({ hasText: 'min :' });
   const edit = row.getByRole('button', { name: 'Edit min', exact: true });
   await expect(edit).toBeVisible();
   await expect(edit).toBeDisabled();
   await expect(edit).toHaveAttribute('title', 'The setter is private');
+  await expect(edit).toHaveCSS('color', 'rgb(119, 119, 119)');
   await row.dblclick();
   await expect(row.getByLabel('Value of min')).toHaveCount(0);
 });
