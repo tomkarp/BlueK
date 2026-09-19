@@ -259,9 +259,36 @@ assert.notEqual((await projectClient.execute({ op: 'main', fileName: 'Actions.kt
 assert.equal(projectOutputs.splice(0).join(''), 'Hallo\n');
 for (const template of ['kotlin-example', 'blueplay-empty', 'blueplay']) {
   const payload = JSON.parse(await readFile(`frontend/public/examples/${template}.bluek.json`, 'utf8'));
-  const result = await projectClient.compile(payload.files.map(entry => ({ ...entry, id: entry.fileName })), 5);
+  const builtinFiles = new Set(['World.kt', 'Actor.kt', 'Image.kt', 'BluePlayFunctions.kt', 'BluePlayHelpers.kt']);
+  const projectFiles = payload.library?.id === 'blueplay'
+    ? payload.files.filter(entry => !builtinFiles.has(entry.fileName))
+    : payload.files;
+  const result = await projectClient.compile(projectFiles.map(entry => ({ ...entry, id: entry.fileName })), 5, payload.library);
   assert.deepEqual(result.diagnostics, [], `${template} must still compile through the project loader`);
 }
+const nativePayload = JSON.parse(await readFile('frontend/public/examples/blueplay.bluek.json', 'utf8'));
+const builtinFiles = new Set(['World.kt', 'Actor.kt', 'Image.kt', 'BluePlayFunctions.kt', 'BluePlayHelpers.kt']);
+const nativeProjectFiles = nativePayload.files
+  .filter(entry => !builtinFiles.has(entry.fileName))
+  .map(entry => ({ ...entry, id: entry.fileName }));
+const nativeClient = new LocalRuntimeClient(() => new TestWorker());
+const nativeStages = [];
+nativeClient.stageStream(value => nativeStages.push(value));
+const nativeCompile = await nativeClient.compile(nativeProjectFiles, 1, nativePayload.library, nativePayload.resources);
+assert.deepEqual(nativeCompile.diagnostics, []);
+await nativeClient.execute({ op: 'main', fileName: 'Main.kt' });
+await nativeClient.simulation('step');
+assert.equal(nativeStages.at(-1)?.objects[0]?.x, 101, 'native scheduler must dispatch one BluePlay step');
+await nativeClient.simulation('setSpeed', 80);
+assert.equal(nativeClient.getSnapshot().simulation, 'paused');
+await nativeClient.simulation('start');
+assert.equal(nativeClient.getSnapshot().simulation, 'running');
+await new Promise(resolve => setTimeout(resolve, 20));
+await nativeClient.simulation('stop');
+assert.ok(['paused', 'stopping'].includes(nativeClient.getSnapshot().simulation));
+await nativeClient.reset();
+assert.equal(nativeClient.getSnapshot().simulation, 'paused');
+nativeClient.invalidate();
 projectClient.invalidate();
 console.log('Runtime state integration passed: shared identity, main, inspectors, input, reset, concurrency, stale replies and transport failure.');
 console.log('Project validation passed: declarations only, source positions, no effects on rejection, recovery and executable Codepad.');

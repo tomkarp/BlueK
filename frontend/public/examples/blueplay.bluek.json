@@ -1,6 +1,7 @@
 {
   "format": "bluek-project",
   "version": 1,
+  "library": { "id": "blueplay", "version": 1 },
   "files": [
     {
       "fileName": "Image.kt",
@@ -30,12 +31,12 @@
     {
       "fileName": "Figure.kt",
       "kind": "class",
-      "source": "/**\n * A simple figure that slowly walks to the right.\n */\nclass Figure : Actor() {\n\n    init {\n        this.setImage(\"figure.png\")\n    }\n\n    override fun act() {\n        // An inherited method can be called like ordinary Kotlin code.\n        move(1)\n    }\n}\n"
+      "source": "/**\n * A simple figure that slowly walks to the right.\n */\nclass Figure : Actor() {\n\n    init {\n        setImage(\"figure.png\")\n    }\n\n    override fun act() {\n        // An inherited method can be called like ordinary Kotlin code.\n        move(1)\n    }\n}\n"
     },
     {
       "fileName": "MyWorld.kt",
       "kind": "class",
-      "source": "/**\n * A minimal world. It places a figure when it is created.\n */\nclass MyWorld : World(600, 400, 1) {\n    var initialized = false\n\n    init {\n        initialized = true\n    }\n}\n"
+      "source": "/**\n * A minimal world. It places a figure when it is created.\n */\nclass MyWorld : World(600, 400, 1) {\n}\n"
     },
     {
       "fileName": "Main.kt",

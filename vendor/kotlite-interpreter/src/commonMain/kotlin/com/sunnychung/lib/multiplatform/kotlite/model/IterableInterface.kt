@@ -9,7 +9,7 @@ object IterableInterface {
     val clazz = ProvidedClassDefinition(
         fullQualifiedName = "Iterable",
         isInterface = true,
-        typeParameters = listOf(TypeParameter(name = "T", typeUpperBound = null)),
+        typeParameters = listOf(TypeParameter(name = "T", typeUpperBound = null).also { it.variance = Variance.Covariant }),
         isInstanceCreationAllowed = false,
         primaryConstructorParameters = emptyList(),
         constructInstance = { _, _, _ -> throw UnsupportedOperationException() },

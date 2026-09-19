@@ -32,6 +32,10 @@ open class SymbolTable(
         }
     }
 
+    // Invocation tokens captured by inline lambdas. Tokens contain no runtime objects.
+    internal val returnTargets = mutableMapOf<String, Any>()
+    internal fun findReturnTarget(id: String): Any? = returnTargets[id] ?: parentScope?.findReturnTarget(id)
+
     private val propertyDeclarations = mutableMapOf<String, PropertyType>()
     internal val propertyValues = mutableMapOf<String, RuntimeValueAccessor>()
     internal val propertyOwners = mutableMapOf<String, PropertyOwnerInfo>() // only use in SemanticAnalyzer
@@ -504,9 +508,9 @@ open class SymbolTable(
         }
         log.v { "declareExtensionFunction($position, $name, ${node.receiver?.let { "$it." } ?: ""}${node.name})" }
         val receiverType = receiverType ?: run {
-            val dedicatedSymbolTable = if (node.typeParameters.isNotEmpty()) {
+            val dedicatedSymbolTable = if ((node.typeParameters + node.extraTypeParameters).isNotEmpty()) {
                 createTempSymbolTable().also { symbolTable ->
-                    node.typeParameters.forEach {
+                    (node.typeParameters + node.extraTypeParameters).forEach {
                         symbolTable.declareTypeAlias(it.position, it.name, it.typeUpperBound)
                     }
                 }
@@ -754,6 +758,7 @@ open class SymbolTable(
 
     fun mergeFrom(position: SourcePosition, other: SymbolTable) { // this is only involved in runtime
         log.d { "Merge from other SymbolTable" }
+        returnTargets.putAll(other.returnTargets)
         other.propertyValues.forEach {
             putPropertyHolder(it.key, false /* TODO review */, it.value)
         }

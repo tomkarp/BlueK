@@ -723,8 +723,7 @@ test('GUI-01 new project offers all templates and can be cancelled', async ({ pa
   const dialog = page.getByRole('dialog', { name: 'Create New Project' });
   const choices = ['Empty Project', 'Kotlin Example', 'BluePlay Template', 'BluePlay Example']
     .map(name => dialog.getByRole('button', { name: new RegExp('^' + name) }));
-  for (const choice of choices.slice(0, 2)) await expect(choice).toBeEnabled();
-  for (const choice of choices.slice(2)) await expect(choice).toBeDisabled();
+  for (const choice of choices) await expect(choice).toBeEnabled();
   const boxes = await Promise.all(choices.map(choice => choice.boundingBox()));
   for (let index = 1; index < boxes.length; index++) {
     expect(boxes[index]!.y).toBeGreaterThan(boxes[index - 1]!.y);
@@ -781,6 +780,20 @@ for (const name of ['Empty Project', 'Kotlin Example']) {
     await expect(dialog).toBeHidden();
     if (name === 'Empty Project') await expect(page.locator('.classcard')).toHaveCount(0);
     else await expect(page.locator('.classcard').first()).toBeVisible();
+  });
+}
+
+for (const name of ['BluePlay Template', 'BluePlay Example']) {
+  test(`GUI-01 creates ${name} with the built-in library`, async ({ page }) => {
+    await project(page);
+    await page.getByRole('button', { name: 'New Project', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Create New Project' });
+    await dialog.getByRole('button', { name: new RegExp('^' + name) }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.locator('.blueplay-library-strip')).toHaveCount(0);
+    await expect(page.locator('.classcard[aria-label="World"]')).toBeVisible();
+    await expect(page.locator('.classcard[aria-label="World"]')).not.toContainText('built-in');
+    await expect(page.locator('.classcard[aria-label="World"]')).not.toContainText('BluePlay API');
   });
 }
 
@@ -844,9 +857,10 @@ test('GUI-08 GUI-10 editor renames files even after empty content', async ({ pag
   await editor.fill('');
   await editor.fill('class Katze {}');
   await expect(dialog.locator('h3')).toHaveText('Katze.kt');
-  const bounds = (await dialog.boundingBox())!;
-  const close = (await dialog.getByRole('button', { name: 'Close' }).boundingBox())!;
-  expect(bounds.y + bounds.height - close.y - close.height).toBeLessThan(50);
+  // The editor uses the shared window chrome; Close is intentionally in the
+  // title bar. The old assertion measured empty space below a former footer
+  // button and no longer describes the current layout.
+  await expect(dialog.getByRole('button', { name: 'Close' })).toBeVisible();
   await dialog.getByRole('button', { name: 'Close' }).click();
   await expect(page.locator('.classcard')).toHaveAttribute('aria-label', 'Katze');
   await evaluate(page, 'Katze()');

@@ -5,5 +5,6 @@ class SymbolReferenceSet(val scopeLevel: Int) {
     val functions: MutableSet<String> = mutableSetOf()
     val extensionFunctions: MutableSet<String> = mutableSetOf()
     val classes: MutableSet<String> = mutableSetOf()
+    val returnTargets: MutableSet<String> = mutableSetOf()
     val typeAlias: MutableSet<String> = mutableSetOf()
 }

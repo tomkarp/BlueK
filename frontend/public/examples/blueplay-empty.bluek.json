@@ -1,6 +1,7 @@
 {
   "format": "bluek-project",
   "version": 1,
+  "library": { "id": "blueplay", "version": 1 },
   "files": [
     {
       "fileName": "Image.kt",

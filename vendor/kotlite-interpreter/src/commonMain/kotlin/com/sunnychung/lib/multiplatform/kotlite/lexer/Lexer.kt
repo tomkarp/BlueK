@@ -315,6 +315,12 @@ open class Lexer(val filename: String, val code: String, val isParseComment: Boo
 
                         c in setOf('<', '>', '=', '!') -> {
                             val position = makeSourcePosition()
+                            val withTwoNextChars = "$c${nextChar()}${nextChar(howMany = 2)}"
+                            if (withTwoNextChars in setOf("===", "!==")) {
+                                advanceChar()
+                                advanceChar()
+                                return Token(TokenType.Operator, withTwoNextChars, position, makeNextCharSourcePosition())
+                            }
                             val token = if (nextChar() == '=') {
                                 advanceChar()
                                 "$c="

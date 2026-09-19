@@ -29,3 +29,7 @@ data class FindCallableResult(
         append(")")
     }
 }
+
+/** Receiver-derived type parameters are not explicit call-site arguments. */
+val FindCallableResult.extraTypeParameters: List<TypeParameterNode>
+    get() = (definition as? FunctionDeclarationNode)?.extraTypeParameters ?: emptyList()

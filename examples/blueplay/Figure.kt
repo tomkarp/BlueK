@@ -4,7 +4,7 @@
 class Figure : Actor() {
 
     init {
-        this.setImage("figure.png")
+        setImage("figure.png")
     }
 
     override fun act() {

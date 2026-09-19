@@ -69,7 +69,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.WhenSubjectNode
 import com.sunnychung.lib.multiplatform.kotlite.model.WhileNode
 
 val ACCEPTED_MODIFIERS = setOf(
-    "open", "override", "private", "operator", "vararg", "enum", "abstract", "infix", "nullaware"
+    "open", "override", "private", "operator", "vararg", "enum", "abstract", "infix", "nullaware", "inline", "noinline", "crossinline"
 )
 
 /**
@@ -344,7 +344,7 @@ open class Parser(protected val lexer: Lexer) {
      */
     fun postfixUnaryExpression(label: LabelNode? = null): ASTNode {
         var result = primaryExpression(label) // TODO complete expression
-        while (currentTokenExcludingNL().type in setOf(TokenType.Operator, TokenType.Symbol)) {
+        while (currentTokenExcludingNL().type in setOf(TokenType.Operator, TokenType.Symbol) || isCurrentTokenLabel()) {
             val newResult = postfixUnarySuffix(result)
             if (newResult == result) break
             result = newResult
@@ -442,6 +442,7 @@ open class Parser(protected val lexer: Lexer) {
      *     | navigationSuffix
      */
     fun postfixUnarySuffix(subject: ASTNode): ASTNode {
+        if (isCurrentTokenLabel()) return callSuffix(subject)
         val originalTokenIndex = tokenIndex
         val t = currentToken
         when (val op = t.value as? String) { // TODO complete
@@ -487,7 +488,7 @@ open class Parser(protected val lexer: Lexer) {
             label()
         } else null
         if (isCurrentToken(TokenType.Symbol, "{")) {
-            val lambda = lambdaLiteral()
+            val lambda = lambdaLiteral(label)
             arguments += FunctionCallArgumentNode(
                 position = lambda.position,
                 index = arguments.size,
@@ -598,6 +599,7 @@ open class Parser(protected val lexer: Lexer) {
         } else {
             controlStructureBody(ScopeType.If)
         }
+        val beforeSemicolon = tokenIndex
         var hasEatSemicolonAfterCondition = if (isCurrentToken(TokenType.Semicolon, ";")) {
             eat(TokenType.Semicolon, ";")
             true
@@ -613,6 +615,10 @@ open class Parser(protected val lexer: Lexer) {
                 controlStructureBody(ScopeType.If)
             }
         } else null
+        if (trueBlock != null && falseBlock == null && hasEatSemicolonAfterCondition) {
+            // Keep the separator for statements() when it does not introduce else.
+            resetTokenToIndex(beforeSemicolon)
+        }
         if (trueBlock == null && falseBlock == null) {
             if (!hasEatSemicolonAfterCondition) throw ExpectTokenMismatchException(";", lastToken().position)
         }
@@ -1366,7 +1372,7 @@ open class Parser(protected val lexer: Lexer) {
                     eat(TokenType.Symbol, "@")
                     eat(TokenType.Identifier).value as String
                 } else ""
-                val expr = if (!isSemi()) {
+                val expr = if (!isSemi() && !isCurrentToken(TokenType.Symbol, "}")) {
                     expression()
                 } else null
                 return ReturnNode(position = t.position, value = expr, returnToLabel = label, returnToAddress = "")
@@ -1453,6 +1459,11 @@ open class Parser(protected val lexer: Lexer) {
     fun typeParameter(): TypeParameterNode {
         repeatedNL()
         val t = currentToken
+        val isReified = currentToken.type == TokenType.Identifier && currentToken.value == "reified"
+        if (isReified) {
+            eat(TokenType.Identifier, "reified")
+            repeatedNL()
+        }
         val name = userDefinedIdentifier()
         val typeUpperBound = if (isCurrentTokenExcludingNL(TokenType.Symbol, ":")) {
             repeatedNL()
@@ -1460,7 +1471,7 @@ open class Parser(protected val lexer: Lexer) {
             repeatedNL()
             type()
         } else null
-        return TypeParameterNode(position = t.position, name = name, typeUpperBound = typeUpperBound)
+        return TypeParameterNode(position = t.position, name = name, typeUpperBound = typeUpperBound, isReified = isReified)
     }
 
     /**
@@ -1917,6 +1928,8 @@ open class Parser(protected val lexer: Lexer) {
     fun Set<String>.toFunctionValueParameterModifiers() = this.map {
         when (it) {
             "vararg" -> FunctionValueParameterModifier.vararg
+            "noinline" -> FunctionValueParameterModifier.noinline
+            "crossinline" -> FunctionValueParameterModifier.crossinline
             else -> throw ParseException("Modifier `$it` cannot be applied to function value parameters")
         }
     }.toSet()
@@ -2045,6 +2058,7 @@ open class Parser(protected val lexer: Lexer) {
             "abstract" -> FunctionModifier.abstract
             "infix" -> FunctionModifier.infix
             "nullaware" -> FunctionModifier.nullaware
+            "inline" -> FunctionModifier.inline
             else -> throw ParseException("Modifier `$it` cannot be applied to function")
         }
     }.toSet()

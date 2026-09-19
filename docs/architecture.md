@@ -55,6 +55,88 @@ noch zusätzliche Java-Threads sind erforderlich. Die normale asynchrone
 vor dem Anlegen eines Timers ab. Reset beendet wie bisher den Worker mitsamt
 wartenden Fortsetzungen. Andere Thread-APIs werden dadurch nicht bereitgestellt.
 
+## BluePlay-Library und World-Scheduler
+
+BluePlay ist eine versionierte Projekt-Library (`{ id: "blueplay", version: 1 }`)
+und kein Satz editierbarer Framework-Dateien. Beim Laden kombiniert die Kotlin-
+Session die eingebaute Deklaration von `World`, `Actor`, `Image` und den
+Top-Level-Funktionen mit den Schülerdateien. Alte BluePlay-Projekte dürfen die
+historischen Framework-Dateien noch enthalten; der Projektimport filtert sie
+bei ausgewiesener Library heraus. Fremde oder fehlende Library-Versionen werden
+im typisierten Projektformat abgewiesen.
+
+Die Session bleibt die einzige Quelle von World-, Actor-, Bild- und
+Kollisionszustand. `runtime-contract` transportiert einen typed
+`BluePlayStage`-Snapshot sowie den Simulationszustand; die Svelte-Oberfläche
+leitet daraus die Built-in-Karten, API-Doku und den Canvas-Frame ab. Medien
+bleiben projektbezogene, validierte Data-URL-Ressourcen und werden nicht in die
+Kotlin-Library kopiert.
+
+`RuntimeHost` besitzt den einzigen Scheduler: `step`, `start`, `stop`, `reset`
+und `setSpeed` sind versionierte Runtime-Kommandos. Der Worker plant den
+nächsten Schritt mit `max(1, 100 - speed)` Millisekunden; der Client hält keinen
+zweiten Simulationstimer. Während eines laufenden Schritts bleiben Tastatur-
+und Mausereignisse zulässig, normale Codepad-/Objektoperationen werden bis zum
+Pause-Zustand abgewiesen. Reset stoppt zunächst, ruft danach das
+parameterlose `main()` direkt in derselben Session auf und meldet einen
+verständlichen Fehler, falls es fehlt oder mehrdeutig ist.
+
+Die sichtbare World ist ein einzelnes BlueJ-artiges Fenster aus Titelleiste,
+Canvas und eingebetteter Steuerleiste. Die Titelleiste verschiebt den gesamten
+Container; `Run`, `Pause` und der per Drag bedienbare Speed-Regler verwenden
+weiterhin ausschließlich den Worker-Scheduler. Ein normales `World.show()`
+setzt kein Stop-Signal; nur die fachliche `stop()`-Aktion beendet den nächsten
+Lauf. Pointerkoordinaten werden aus den tatsächlichen Canvas-Grenzen und
+`cellSize` berechnet. Der Browser prüft Actor in umgekehrter Zeichenreihenfolge,
+transformiert den Weltpunkt unter Berücksichtigung der Rotation in das lokale
+Bild und übergibt die stabile Treffer-ID nur bei einem sichtbaren Pixel.
+Bilder und Zeichenoperationen werden erst im UI aus dem typed Frame und
+Projektressourcen gerendert. Nicht geladene Bilder erhalten einen
+deterministischen, vollständig treffbaren Platzhalter.
+
+Die Canvas-CSS-Größe entspricht dabei immer `width * cellSize` und
+`height * cellSize`; das World-Fenster skaliert kleine oder große Welten nicht
+automatisch. Der umgebende Body ist scrollbar und erhält bei einer Welt, die
+kleiner als die Steuerleiste ist, einen grauen Surround. Seine Breite wächst
+dynamisch mit Welt und Steuerleiste bis knapp an die Browsergrenzen, sodass
+große Welten den verfügbaren Platz möglichst vollständig nutzen, bevor der
+Body scrollen muss. Der Maximieren-Modus setzt das Fenster auf den vollständigen
+Browser-Viewport (`100vw`/`100vh`); auch dort bleibt die Canvas unskaliert und
+der verfügbare Body kann bei kleinen Welten grau sichtbar bleiben.
+Der World-Body zentriert die unvergrößerte Canvas horizontal und vertikal; bei
+ausreichender Breite wird kein pauschaler zusätzlicher Seitenrand reserviert.
+
+Die vier BluePlay-Bibliothekselemente erscheinen im Kartenbereich als normale
+Karten, sind aber keine Schülerdateien und werden nicht kompiliert. Ihre
+virtuellen Karten nehmen an Dragging, Vererbungsdarstellung und der
+Positionierung neuer Schülerklassen teil. Doppelklick und Kontextmenü öffnen
+jeweils nur die API-Dokumentation der gewählten Bibliotheksdatei.
+
+Bildressourcen werden vor dem Compile einmal im Browser dekodiert. Nur Breite,
+Höhe und die Alpha-Maske gelangen als flüchtige Runtime-Metadaten in den
+Worker; Export und Autosave enthalten weiterhin ausschließlich Pfad und
+Data-URL. `intersects`/`isTouching` verwenden nach einem gedrehten AABB-
+Schnelltest dieselbe Weltpixel-Geometrie, inverse Rotation, Skalierung und den
+effektiven Alpha-Schwellwert `> 16`. Transparente PNG-Bereiche lösen daher
+weder Klicks noch Kollisionen aus. Die stabile Actor-ID und die kanonische
+Identität über Kotlites Vererbungsteile erlauben außerdem, dass ein Actor in
+seinem eigenen `act()` sicher `world.removeObject(this)` ausführt.
+
+Die API-Matrix des eingebauten Vertrags sieht derzeit so aus:
+
+| Einheit | Öffentliche Oberfläche | Status/Nachweis |
+| --- | --- | --- |
+| `World` | `World(width, height, cellSize = 1)`, `background: Image`, `show`, `act`, `addObject`, `removeObject`, `allObjects`, `getObjects<T>`, `getObjectsAt`, `numberOfObjects`, `isClicked`, `setBackground`, `showText` | Native Bibliothek, studentische Unterklassen, World-Callback, Objektlebensdauer, Text/Bild-Frames in `smoke-blueplay-browser.mjs` |
+| `Actor` | `x`, `y`, `rotation`, `image: Image?`, `world`, `act`, `setImage`, `getImage`, `move`, `turn`, `turnTowards`, `distanceTo`, `intersects`, `isTouching`, `getIntersecting<T>`, `getOneIntersecting<T>`, `removeTouching<T>`, `isAtEdge`, `isClicked` | Native Unterklasse, direkter dynamischer `act`-Aufruf, Reified-Suche, Input und Identität im Browser-Smoke |
+| `Image` | `Image(width, height)`, `Image(fileName)`, `Image(other)`, `width`, `height`, `path`, `transparency`, `setColor`, `fill`, `fillRect`, `drawRect`, `fillOval`, `drawOval`, `drawLine`, `drawString`, `drawImage`, `clear`, `scale`, `setTransparency` | Copy-/Shared-Instanz, Zeichenoperationen, Skalierung, Transparenz und Canvas-Frame geprüft |
+| Funktionen | `currentWorld`, `activeWorld`, `showWorld`, `show`, `isKeyDown`, `start`, `stop`, `step`, `getSpeed`, `setSpeed`, `playSound` | Native Bridge, Input-/Sound-Effekt, Scheduler- und Reset-Smokes |
+
+Die Matrix beschreibt die vorhandene Oberfläche, nicht eine Zusage für JVM-
+Interna. Für geladene Rasterressourcen sind Alpha, Rotation und Skalierung
+pixelgenau abgedeckt; die einfachen `Image`-Zeichenoperationen verwenden eine
+äquivalente geometrische Maske. Eine 60-Sekunden-/100-Actor-Performance-
+Messung steht noch aus.
+
 ## Objekt- und Referenzmodell
 
 Es gibt drei getrennte Dinge: **Namensbindung**, **Objektidentität** und
@@ -148,3 +230,18 @@ Event-Bus und kein zweiter Laufzeit-Store.
 
 Absicherung: `docs/regression-checklist.md`; Modelltests für Lebensdauer und
 Nebenläufigkeit, echte Browsertests für sichtbare Aktualisierung und Bedienung.
+
+## Generische Funktionen und Inline-Kontrollfluss
+
+Typauflösung, lexikalische Captures und Inline-Parameterregeln gehören zum
+vendorten Kotlite-Interpreter. Svelte und Worker-Protokoll erhalten dafür keine
+zusätzlichen Typkopien oder Quelltext-Ersetzungen. Die konkrete Host-Schnittstelle
+ist in `docs/kotlite-generics.md` beschrieben.
+
+Der Analyzer ordnet Returns lexikalischen Callables zu. Zur Ausführung erhält
+jeder Aufruf ein eigenes Rücksprung-Token; Lambdas erfassen benötigte Tokens
+zusammen mit ihren Variablen und Typaliasen. Nur der passende Aufruf fängt den
+Kontrollfluss ab. Dadurch bleiben Rekursion und Suspendierung korrekt, und
+Kotlin-`catch` fängt keinen internen Return ab; `finally` wird trotzdem ausgeführt.
+`GenericCollectionsModule` und `StdlibInlineMetadata` kapseln allgemeine
+Bibliotheksfunktionen bzw. die fehlenden Inline-Metadaten der alten Binärbibliothek.

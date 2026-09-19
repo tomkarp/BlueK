@@ -210,11 +210,11 @@ open class VariableReferenceNode(override val position: SourcePosition, val vari
  * Member names are the exact identifiers in Kotlin code
  */
 enum class FunctionModifier {
-    operator, open, override, abstract, infix, nullaware
+    operator, open, override, abstract, infix, nullaware, inline
 }
 
 enum class FunctionValueParameterModifier {
-    vararg
+    vararg, noinline, crossinline
 }
 
 enum class ClassModifier {
@@ -260,6 +260,7 @@ interface CallableNode {
     val receiverType: TypeNode?
     val name: String?
     val labelName: String?
+    val returnTargetId: String get() = "${position.filename}:${position.lineNum}:${position.col}:${name ?: "lambda"}"
 
     suspend fun execute(interpreter: Interpreter, receiver: RuntimeValue?, arguments: List<RuntimeValue>, typeArguments: Map<String, DataType>): RuntimeValue
 }
@@ -317,6 +318,7 @@ open class FunctionDeclarationNode(
         body: BlockNode? = this.body,
         transformedRefName: String? = this.transformedRefName,
         inferredReturnType: TypeNode? = this.inferredReturnType,
+        extraTypeParameters: List<TypeParameterNode> = this.extraTypeParameters,
     ): FunctionDeclarationNode {
         if (this::class != FunctionDeclarationNode::class) {
             throw UnsupportedOperationException("Copying subclasses is not supported")
@@ -327,6 +329,7 @@ open class FunctionDeclarationNode(
             receiver = receiver,
             declaredReturnType = declaredReturnType,
             typeParameters = typeParameters,
+            extraTypeParameters = extraTypeParameters,
             valueParameters = valueParameters,
             declaredModifiers = modifiers,
             body = body,
@@ -357,6 +360,7 @@ data class FunctionCallNode(
     @ModifyByAnalyzer var isSpecialFunction: Boolean? = null,
     @ModifyByAnalyzer var inferredTypeArguments: List<TypeNode?>? = null,
     @ModifyByAnalyzer var modifierFilter: SearchFunctionModifier? = null,
+    @ModifyByAnalyzer var resolvedInvoke: FunctionCallNode? = null,
 ) : ASTNode {
     val typeArguments: List<TypeNode>
         get() = declaredTypeArguments.emptyToNull() ?: inferredTypeArguments?.let { args ->
@@ -376,6 +380,7 @@ data class FunctionCallNode(
 }
 
 data class ReturnNode(override val position: SourcePosition, val value: ASTNode?, val returnToLabel: String, @ModifyByAnalyzer var returnToAddress: String) : ASTNode {
+    @ModifyByAnalyzer var isNonLocal: Boolean = false
     override fun toMermaid(): String {
         val self = "${generateId()}[\"Return Node `$returnToLabel`\"]"
         return "$self${if (value != null) "-->${value.toMermaid()}" else "" }\n"
@@ -549,10 +554,12 @@ data class LambdaLiteralNode(
     @ModifyByAnalyzer var returnTypeUpperBound: TypeNode? = null,
     @ModifyByAnalyzer override var receiverType: TypeNode? = null,
 ) : ASTNode, CallableNode {
+    @ModifyByAnalyzer var permitsNonLocalReturn: Boolean = false
+    @ModifyByAnalyzer var implicitLabel: String? = null
     @ModifyByAnalyzer var valueParameterIt: FunctionValueParameterNode? = null
 
     override val labelName: String?
-        get() = label?.label
+        get() = label?.label ?: implicitLabel
 
     override val typeParameters: List<TypeParameterNode> = emptyList()
     override val valueParameters: List<FunctionValueParameterNode>
@@ -638,7 +645,13 @@ class AsOpNode(override val position: SourcePosition, val isNullable: Boolean, v
     }
 }
 
-class TypeParameterNode(override val position: SourcePosition, val name: String, val typeUpperBound: TypeNode?): ASTNode {
+class TypeParameterNode(
+    override val position: SourcePosition,
+    val name: String,
+    val typeUpperBound: TypeNode?,
+    val isReified: Boolean = false,
+    val variance: Variance = Variance.Invariant,
+): ASTNode {
     override fun toMermaid(): String = "${generateId()}[\"Type Parameter Node `$name`\"]" +
         (typeUpperBound?.let { "--type upper bound -->${it.toMermaid()}" } ?: "")
 }

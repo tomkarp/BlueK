@@ -11,7 +11,6 @@ import com.sunnychung.lib.multiplatform.kotlite.model.FunctionCallNode
 import com.sunnychung.lib.multiplatform.kotlite.model.BooleanValue
 import com.sunnychung.lib.multiplatform.kotlite.model.CustomFunctionDefinition
 import com.sunnychung.lib.multiplatform.kotlite.model.CustomFunctionParameter
-import com.sunnychung.lib.multiplatform.kotlite.model.DelegatedValue
 import com.sunnychung.lib.multiplatform.kotlite.model.ExecutionEnvironment
 import com.sunnychung.lib.multiplatform.kotlite.model.FunctionDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.model.IntValue
@@ -28,7 +27,9 @@ import com.sunnychung.lib.multiplatform.kotlite.model.UnitValue
 import com.sunnychung.lib.multiplatform.kotlite.model.TypeNode
 import com.sunnychung.lib.multiplatform.kotlite.model.VariableReferenceNode
 import com.sunnychung.lib.multiplatform.kotlite.model.NavigationNode
+import com.sunnychung.lib.multiplatform.kotlite.model.DelegatedValue
 import com.sunnychung.lib.multiplatform.kotlite.stdlib.AllStdLibModules
+import com.sunnychung.lib.multiplatform.kotlite.model.GenericCollectionsModule
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -49,6 +50,8 @@ import kotlin.coroutines.startCoroutine
  * once when the session is loaded.
  */
 private data class BlueKReference(val symbol: String, val interactive: Boolean, var onBench: Boolean)
+private data class BluePlayResourceMask(val width: Int, val height: Int, val alphaHex: String)
+private data class BluePlayActorBounds(val left: Double, val top: Double, val right: Double, val bottom: Double)
 
 @OptIn(ExperimentalJsExport::class)
 @JsExport
@@ -83,9 +86,51 @@ class KotliteSession {
     private val keysDown = linkedSetOf<String>()
     private var clickX: Int? = null
     private var clickY: Int? = null
+    private var clickActorId: String? = null
+    private var bluePlayEnabled = false
+    private var bluePlayWorld: ClassInstance? = null
+    private val bluePlayActors = mutableListOf<Pair<ClassInstance, ClassInstance>>()
+    private val bluePlayActorIds = mutableListOf<Pair<ClassInstance, String>>()
+    private val bluePlayResources = linkedMapOf<String, BluePlayResourceMask>()
+    private var nextBluePlayActorId = 1
+    private var bluePlayActorHint: ClassInstance? = null
+    private var bluePlaySpeed = 50
+    private var bluePlayFrameVersion = 0
+    private var bluePlayIntent = ""
+    private var bluePlayGeneration = ""
+    private val projectFunctionRanges = mutableListOf<Triple<String, Int, Int>>()
 
     init {
         resetInterpreter()
+    }
+
+    fun configureBluePlay(enabled: Boolean, generationId: String = "") {
+        bluePlayEnabled = enabled
+        bluePlayGeneration = generationId
+        bluePlayWorld = null
+        bluePlayActors.clear()
+        bluePlayActorIds.clear()
+        bluePlayResources.clear()
+        nextBluePlayActorId = 1
+        bluePlayActorHint = null
+        bluePlaySpeed = 50
+        bluePlayFrameVersion = 0
+        bluePlayIntent = ""
+        projectFunctionRanges.clear()
+        resetInterpreter()
+    }
+
+    fun setBluePlayResources(manifest: String) {
+        bluePlayResources.clear()
+        manifest.lines().filter { it.isNotEmpty() }.forEach { line ->
+            val fields = line.split('\u0000')
+            if (fields.size == 4) {
+                val width = fields[1].toIntOrNull()
+                val height = fields[2].toIntOrNull()
+                if (width != null && height != null && width > 0 && height > 0 && fields[3].length >= width * height * 2)
+                    bluePlayResources[fields[0]] = BluePlayResourceMask(width, height, fields[3])
+            }
+        }
     }
 
     private fun resetInterpreter() {
@@ -97,6 +142,7 @@ class KotliteSession {
         environment.registerClass(BlueKClass.definition())
         environment.registerFunction(BlueKClass.beepFunction { pendingEffects += "beep" })
         AllStdLibModules { text -> appendOutput(text) }.modules.forEach(environment::install)
+        environment.install(GenericCollectionsModule)
         environment.registerFunction(CustomFunctionDefinition(
             position = SourcePosition.BUILTIN,
             receiverType = "Throwable",
@@ -185,10 +231,27 @@ class KotliteSession {
             receiverType = null,
             functionName = "bluekIsActorClicked",
             returnType = "Boolean",
+            parameterTypes = listOf(CustomFunctionParameter("actor", "Any"), CustomFunctionParameter("x", "Int"), CustomFunctionParameter("y", "Int")),
+            executable = { interpreter, _, args, _ ->
+                val actor = args[0] as ClassInstance
+                val actorId = bluePlayActorIds.firstOrNull { sameBluePlayInstance(it.first, actor) }?.second
+                val matches = if (!clickActorId.isNullOrEmpty()) clickActorId == actorId else
+                    clickX == (args[1] as IntValue).value && clickY == (args[2] as IntValue).value
+                if (matches) { clickX = null; clickY = null; clickActorId = null }
+                BooleanValue(matches, interpreter.symbolTable())
+            }
+        ))
+        // Compatibility overload for projects exported before the native
+        // BluePlay library started passing a stable actor identity.
+        environment.registerFunction(CustomFunctionDefinition(
+            position = SourcePosition.BUILTIN,
+            receiverType = null,
+            functionName = "bluekIsActorClicked",
+            returnType = "Boolean",
             parameterTypes = listOf(CustomFunctionParameter("x", "Int"), CustomFunctionParameter("y", "Int")),
             executable = { interpreter, _, args, _ ->
-                val matches = clickX == (args[0] as IntValue).value && clickY == (args[1] as IntValue).value
-                if (matches) { clickX = null; clickY = null }
+                val matches = clickActorId.isNullOrEmpty() && clickX == (args[0] as IntValue).value && clickY == (args[1] as IntValue).value
+                if (matches) { clickX = null; clickY = null; clickActorId = null }
                 BooleanValue(matches, interpreter.symbolTable())
             }
         ))
@@ -200,7 +263,7 @@ class KotliteSession {
             parameterTypes = emptyList(),
             executable = { interpreter, _, _, _ ->
                 val matches = clickX != null && clickY != null
-                if (matches) { clickX = null; clickY = null }
+                if (matches) { clickX = null; clickY = null; clickActorId = null }
                 BooleanValue(matches, interpreter.symbolTable())
             }
         ))
@@ -267,8 +330,401 @@ class KotliteSession {
                 IntValue((sin(radians) * distance).roundToInt(), interpreter.symbolTable())
             }
         ))
+        if (bluePlayEnabled) registerBluePlayNativeFunctions()
         interpreter = KotliteInterpreter("<BlueK>", "", environment)
         interpreter.checkpointHook = { awaitRuntimeCheckpoint() }
+    }
+
+    private fun registerBluePlayNativeFunctions() {
+        fun definition(name: String, returnType: String, parameters: List<CustomFunctionParameter>, executable: (Interpreter, List<RuntimeValue>) -> RuntimeValue) =
+            environment.registerFunction(CustomFunctionDefinition(
+                position = SourcePosition.BUILTIN,
+                receiverType = null,
+                functionName = name,
+                returnType = returnType,
+                parameterTypes = parameters,
+                executable = { currentInterpreter, _, args, _ -> executable(currentInterpreter, args) },
+            ))
+        // These bridge functions deliberately use Any: the student-defined
+        // BluePlay classes are added to the environment after this runtime
+        // setup, so resolving World/Actor here would fail for an empty symbol
+        // table. The combined library source still provides the typed public API.
+        definition("bluekImageWidth", "Int", listOf(CustomFunctionParameter("path", "String"))) { currentInterpreter, args ->
+            IntValue(resourceMask((args[0] as StringValue).value)?.width ?: 30, currentInterpreter.symbolTable())
+        }
+        definition("bluekImageHeight", "Int", listOf(CustomFunctionParameter("path", "String"))) { currentInterpreter, args ->
+            IntValue(resourceMask((args[0] as StringValue).value)?.height ?: 30, currentInterpreter.symbolTable())
+        }
+        definition("bluekShowWorld", "Unit", listOf(CustomFunctionParameter("world", "Any"))) { _, args ->
+            bluePlayWorld = args[0] as ClassInstance
+            UnitValue
+        }
+        definition("bluekRenderWorld", "Unit", listOf(CustomFunctionParameter("world", "Any"))) { _, args ->
+            val world = args[0] as ClassInstance
+            if (bluePlayWorld === world) stageSnapshot = renderBluePlayStage(world)
+            UnitValue
+        }
+        definition("bluekRenderActor", "Unit", listOf(CustomFunctionParameter("actor", "Any"))) { _, args ->
+            val actor = args[0] as ClassInstance
+            bluePlayActors.firstOrNull { sameBluePlayInstance(it.second, actor) }?.first?.let { world ->
+                if (bluePlayWorld === world) stageSnapshot = renderBluePlayStage(world)
+            }
+            UnitValue
+        }
+        definition("bluekWorldAddObject", "Unit", listOf(
+            CustomFunctionParameter("world", "Any"),
+            CustomFunctionParameter("actor", "Any"),
+            CustomFunctionParameter("x", "Int"),
+            CustomFunctionParameter("y", "Int"),
+        )) { currentInterpreter, args ->
+            val world = args[0] as ClassInstance
+            val actor = args[1] as ClassInstance
+            val previousWorld = bluePlayActors.firstOrNull { sameBluePlayInstance(it.second, actor) }?.first
+            if (previousWorld != null && previousWorld !== world) removeBluePlayActorFromWorld(previousWorld, actor)
+            bluePlayActors.removeAll { sameBluePlayInstance(it.second, actor) }
+            bluePlayActors += world to actor
+            bluePlayActorId(actor)
+            val worldWidth = intMember(world, "width", 1)
+            val worldHeight = intMember(world, "height", 1)
+            val x = (args[2] as IntValue).value.coerceIn(0, worldWidth - 1)
+            val y = (args[3] as IntValue).value.coerceIn(0, worldHeight - 1)
+            fun assignInt(name: String, value: Int) {
+                currentInterpreter.runImmediately { actor.assign(currentInterpreter, name, IntValue(value, currentInterpreter.symbolTable())) }
+            }
+            assignInt("worldWidth", worldWidth)
+            assignInt("worldHeight", worldHeight)
+            assignInt("worldCellSize", intMember(world, "cellSize", 1))
+            assignInt("x", x)
+            assignInt("y", y)
+            UnitValue
+        }
+        definition("bluekObjectX", "Int", listOf(CustomFunctionParameter("actor", "Any"))) { currentInterpreter, args ->
+            IntValue(intMember(args[0] as ClassInstance, "x"), currentInterpreter.symbolTable())
+        }
+        definition("bluekObjectY", "Int", listOf(CustomFunctionParameter("actor", "Any"))) { currentInterpreter, args ->
+            IntValue(intMember(args[0] as ClassInstance, "y"), currentInterpreter.symbolTable())
+        }
+        definition("bluekWorldRemoveObject", "Unit", listOf(
+            CustomFunctionParameter("world", "Any"), CustomFunctionParameter("actor", "Any"),
+        )) { currentInterpreter, args ->
+            val world = args[0] as ClassInstance
+            val requestedActor = args[1] as ClassInstance
+            val actor = bluePlayActors.firstOrNull { it.first === world && sameBluePlayInstance(it.second, requestedActor) }?.second
+                ?: bluePlayActorHint?.takeIf { hinted -> bluePlayActors.any { it.first === world && it.second === hinted } }
+                ?: requestedActor
+            bluePlayActors.removeAll { it.first === world && sameBluePlayInstance(it.second, actor) }
+            removeBluePlayActorFromWorld(world, actor)
+            bluePlayActorHint = null
+            fun assignInt(name: String, value: Int) {
+                currentInterpreter.runImmediately { actor.assign(currentInterpreter, name, IntValue(value, currentInterpreter.symbolTable())) }
+            }
+            assignInt("worldWidth", 0)
+            assignInt("worldHeight", 0)
+            assignInt("worldCellSize", 1)
+            UnitValue
+        }
+        definition("bluekActorWorld", "Any", listOf(CustomFunctionParameter("actor", "Any"))) { _, args ->
+            val actor = args[0] as ClassInstance
+            val entry = bluePlayActors.firstOrNull { sameBluePlayInstance(it.second, actor) }
+                ?: throw IllegalStateException("The actor is not in a world (add it with addObject first).")
+            bluePlayActorHint = entry.second
+            entry.first
+        }
+        definition("bluekIntersects", "Boolean", listOf(
+            CustomFunctionParameter("first", "Any"), CustomFunctionParameter("second", "Any"),
+        )) { currentInterpreter, args ->
+            val first = args[0] as ClassInstance
+            val second = args[1] as ClassInstance
+            BooleanValue(bluePlayIntersects(first, second), currentInterpreter.symbolTable())
+        }
+        val tickDefinition = CustomFunctionDefinition(
+            position = SourcePosition.BUILTIN,
+            receiverType = null,
+            functionName = "bluekWorldTick",
+            returnType = "Unit",
+            parameterTypes = listOf(CustomFunctionParameter("world", "Any")),
+            executable = { _, _, _, _ -> UnitValue },
+        )
+        tickDefinition.suspendExecutable = { currentInterpreter, _, args, _ ->
+            val world = args[0] as ClassInstance
+            suspend fun invokeMember(target: ClassInstance, name: String) {
+                val function = target.findMemberFunctionByDeclaredName(name) ?: return
+                with(currentInterpreter) {
+                    FunctionCallNode(function, emptyList(), emptyList(), function.position)
+                        .evalClassMemberAnyFunctionCall(target, function)
+                }
+            }
+            invokeMember(world, "act")
+            bluePlayActors.filter { it.first === world }.map { it.second }.forEach { actor ->
+                if (bluePlayActors.any { it.first === world && it.second === actor }) invokeMember(actor, "act")
+            }
+            UnitValue
+        }
+        environment.registerFunction(tickDefinition)
+        definition("bluekSimulationStart", "Unit", emptyList()) { _, _ -> bluePlayIntent = "start"; UnitValue }
+        definition("bluekSimulationStop", "Unit", emptyList()) { _, _ -> bluePlayIntent = "stop"; UnitValue }
+        definition("bluekGetSpeed", "Int", emptyList()) { currentInterpreter, _ -> IntValue(bluePlaySpeed, currentInterpreter.symbolTable()) }
+        definition("bluekSetSpeed", "Unit", listOf(CustomFunctionParameter("speed", "Int"))) { _, args ->
+            setBluePlaySpeed((args[0] as IntValue).value)
+            UnitValue
+        }
+    }
+
+    private fun member(instance: ClassInstance, name: String): RuntimeValue? =
+        runCatching { instance.readBackingPropertyByDeclaredName(name) }.getOrNull()
+
+    private fun intMember(instance: ClassInstance, name: String, fallback: Int = 0): Int =
+        (member(instance, name) as? IntValue)?.value ?: fallback
+
+    private fun stringMember(instance: ClassInstance, name: String, fallback: String = ""): String =
+        (member(instance, name) as? StringValue)?.value ?: fallback
+
+    private fun sameBluePlayInstance(first: ClassInstance, second: ClassInstance): Boolean {
+        var firstPart: ClassInstance? = first
+        while (firstPart != null) {
+            var secondPart: ClassInstance? = second
+            while (secondPart != null) {
+                if (firstPart === secondPart) return true
+                secondPart = secondPart.parentInstance
+            }
+            firstPart = firstPart.parentInstance
+        }
+        return false
+    }
+
+    private fun resourceMask(path: String): BluePlayResourceMask? =
+        bluePlayResources[path] ?: bluePlayResources.entries.firstOrNull { it.key.endsWith("/$path") }?.value
+
+    private fun bluePlayActorId(actor: ClassInstance): String =
+        bluePlayActorIds.firstOrNull { sameBluePlayInstance(it.first, actor) }?.second ?: "actor-${nextBluePlayActorId++}".also { id ->
+            bluePlayActorIds += actor to id
+        }
+
+    private fun runtimeList(value: RuntimeValue?): List<RuntimeValue> =
+        (value as? DelegatedValue<*>)?.value as? List<RuntimeValue> ?: emptyList()
+
+    private fun removeBluePlayActorFromWorld(world: ClassInstance, actor: ClassInstance) {
+        val actors = (member(world, "actors") as? DelegatedValue<*>)?.value as? MutableList<RuntimeValue> ?: return
+        actors.removeAll { value -> value is ClassInstance && sameBluePlayInstance(value, actor) }
+    }
+
+    private fun imageFrame(image: ClassInstance?): String {
+        if (image == null) return "{\"width\":30,\"height\":30,\"opacity\":1,\"operations\":[]}"
+        val path = stringMember(image, "path")
+        val width = intMember(image, "imageWidth", 30)
+        val height = intMember(image, "imageHeight", 30)
+        val transparency = intMember(image, "transparency", 255)
+        val operations = stringMember(image, "drawingJson", "[]")
+        // drawingJson is a computed property in the adapter; call its backing
+        // data instead so stage publication stays passive.
+        val rawOperations = runtimeList(member(image, "drawingOperations")).joinToString(",", "[", "]") { value ->
+            "\"${escape((value as? StringValue)?.value ?: "")}\""
+        }
+        return "{\"resourcePath\":\"${escape(path)}\",\"width\":$width,\"height\":$height,\"opacity\":${transparency.toDouble() / 255.0},\"operations\":$rawOperations}"
+    }
+
+    private fun actorBounds(actor: ClassInstance): BluePlayActorBounds {
+        val image = member(actor, "image") as? ClassInstance
+        val width = intMember(image ?: actor, "imageWidth", 30).toDouble().coerceAtLeast(1.0)
+        val height = intMember(image ?: actor, "imageHeight", 30).toDouble().coerceAtLeast(1.0)
+        val cell = intMember(actor, "worldCellSize", 1).coerceAtLeast(1)
+        val centerX = (intMember(actor, "x") + 0.5) * cell
+        val centerY = (intMember(actor, "y") + 0.5) * cell
+        val radians = intMember(actor, "rotation") * PI / 180.0
+        val halfWidth = (kotlin.math.abs(cos(radians)) * width + kotlin.math.abs(sin(radians)) * height) / 2.0
+        val halfHeight = (kotlin.math.abs(sin(radians)) * width + kotlin.math.abs(cos(radians)) * height) / 2.0
+        return BluePlayActorBounds(centerX - halfWidth, centerY - halfHeight, centerX + halfWidth, centerY + halfHeight)
+    }
+
+    private fun operationPixelVisible(operation: String, x: Double, y: Double): Boolean {
+        val parts = operation.split('|')
+        fun number(index: Int): Double = parts.getOrNull(index)?.toDoubleOrNull() ?: 0.0
+        return when (parts.firstOrNull()) {
+            "fill" -> true
+            "fillRect", "drawImage" -> x >= number(if (parts[0] == "drawImage") 2 else 1) &&
+                y >= number(if (parts[0] == "drawImage") 3 else 2) &&
+                x < number(if (parts[0] == "drawImage") 2 else 1) + number(if (parts[0] == "drawImage") 4 else 3) &&
+                y < number(if (parts[0] == "drawImage") 3 else 2) + number(if (parts[0] == "drawImage") 5 else 4)
+            "drawRect" -> {
+                val left = number(1); val top = number(2); val right = left + number(3); val bottom = top + number(4)
+                x >= left - 1 && y >= top - 1 && x <= right + 1 && y <= bottom + 1 &&
+                    (x <= left + 1 || x >= right - 1 || y <= top + 1 || y >= bottom - 1)
+            }
+            "fillOval", "drawOval" -> {
+                val width = number(3); val height = number(4)
+                if (width <= 0 || height <= 0) false else {
+                    val dx = (x - number(1) - width / 2) / (width / 2)
+                    val dy = (y - number(2) - height / 2) / (height / 2)
+                    val distance = dx * dx + dy * dy
+                    if (parts[0] == "fillOval") distance <= 1.0 else distance in 0.78..1.22
+                }
+            }
+            "drawLine" -> {
+                val x1 = number(1); val y1 = number(2); val x2 = number(3); val y2 = number(4)
+                val lengthSquared = (x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1)
+                val amount = if (lengthSquared == 0.0) 0.0 else (((x - x1) * (x2 - x1) + (y - y1) * (y2 - y1)) / lengthSquared).coerceIn(0.0, 1.0)
+                val nearestX = x1 + amount * (x2 - x1); val nearestY = y1 + amount * (y2 - y1)
+                (x - nearestX) * (x - nearestX) + (y - nearestY) * (y - nearestY) <= 2.25
+            }
+            "drawString" -> x >= number(2) && x <= number(2) + (parts.getOrNull(1)?.length ?: 0) * 8 && y >= number(3) - 12 && y <= number(3) + 3
+            else -> false
+        }
+    }
+
+    private fun actorPixelVisible(actor: ClassInstance, worldX: Double, worldY: Double): Boolean {
+        val image = member(actor, "image") as? ClassInstance ?: return true
+        val width = intMember(image, "imageWidth", 30).coerceAtLeast(1)
+        val height = intMember(image, "imageHeight", 30).coerceAtLeast(1)
+        val transparency = intMember(image, "transparency", 255).coerceIn(0, 255)
+        if (transparency <= 16) return false
+        val cell = intMember(actor, "worldCellSize", 1).coerceAtLeast(1)
+        val centerX = (intMember(actor, "x") + 0.5) * cell
+        val centerY = (intMember(actor, "y") + 0.5) * cell
+        val radians = intMember(actor, "rotation") * PI / 180.0
+        val dx = worldX - centerX; val dy = worldY - centerY
+        val localX = cos(radians) * dx + sin(radians) * dy + width / 2.0
+        val localY = -sin(radians) * dx + cos(radians) * dy + height / 2.0
+        if (localX < 0 || localY < 0 || localX >= width || localY >= height) return false
+        val path = stringMember(image, "path")
+        val mask = if (path.isEmpty()) null else resourceMask(path)
+        if (mask != null) {
+            val sourceX = ((localX / width) * mask.width).toInt().coerceIn(0, mask.width - 1)
+            val sourceY = ((localY / height) * mask.height).toInt().coerceIn(0, mask.height - 1)
+            val offset = (sourceY * mask.width + sourceX) * 2
+            val alpha = mask.alphaHex.substring(offset, offset + 2).toIntOrNull(16) ?: 0
+            return alpha * transparency / 255 > 16
+        }
+        if (path.isNotEmpty()) return true
+        val operations = runtimeList(member(image, "drawingOperations")).mapNotNull { (it as? StringValue)?.value }
+        return operations.any { operationPixelVisible(it, localX, localY) }
+    }
+
+    private fun bluePlayIntersects(first: ClassInstance, second: ClassInstance): Boolean {
+        val firstBounds = actorBounds(first); val secondBounds = actorBounds(second)
+        val left = kotlin.math.max(firstBounds.left, secondBounds.left)
+        val top = kotlin.math.max(firstBounds.top, secondBounds.top)
+        val right = kotlin.math.min(firstBounds.right, secondBounds.right)
+        val bottom = kotlin.math.min(firstBounds.bottom, secondBounds.bottom)
+        if (left >= right || top >= bottom) return false
+        var y = kotlin.math.floor(top).toInt()
+        val lastY = kotlin.math.ceil(bottom).toInt()
+        while (y < lastY) {
+            var x = kotlin.math.floor(left).toInt()
+            val lastX = kotlin.math.ceil(right).toInt()
+            while (x < lastX) {
+                if (actorPixelVisible(first, x + 0.5, y + 0.5) && actorPixelVisible(second, x + 0.5, y + 0.5)) return true
+                x += 1
+            }
+            y += 1
+        }
+        return false
+    }
+
+    private fun renderBluePlayStage(world: ClassInstance): String {
+        val width = intMember(world, "width", 1)
+        val height = intMember(world, "height", 1)
+        val cellSize = intMember(world, "cellSize", 1)
+        val background = member(world, "background") as? ClassInstance
+        val objects = bluePlayActors.filter { it.first === world }.joinToString(",", "[", "]") { (_, actor) ->
+            val image = member(actor, "image") as? ClassInstance
+            val frame = imageFrame(image)
+            val objectId = handles.entries.firstOrNull { it.value === actor }?.key
+            "{\"objectId\":${objectId?.let { "\"${escape(it)}\"" } ?: "null"},\"hitId\":\"${bluePlayActorId(actor)}\",\"className\":\"${escape(actor.type().toTypeNode().descriptiveName())}\",\"x\":${intMember(actor, "x")},\"y\":${intMember(actor, "y")},\"rotation\":${intMember(actor, "rotation")},\"image\":$frame}"
+        }
+        val textX = runtimeList(member(world, "textX"))
+        val textY = runtimeList(member(world, "textY"))
+        val textValues = runtimeList(member(world, "textValues"))
+        val texts = textValues.indices.joinToString(",", "[", "]") { index ->
+            "{\"x\":${(textX.getOrNull(index) as? IntValue)?.value ?: 0},\"y\":${(textY.getOrNull(index) as? IntValue)?.value ?: 0},\"text\":\"${escape((textValues[index] as? StringValue)?.value ?: "")}\"}"
+        }
+        val bgPath = background?.let { stringMember(it, "path") } ?: stringMember(world, "backgroundPath")
+        val bgOps = background?.let { runtimeList(member(it, "drawingOperations")).joinToString(",", "[", "]") { value -> "\"${escape((value as? StringValue)?.value ?: "")}\"" } } ?: "[]"
+        return "{\"stage\":{\"worldId\":${handles.entries.firstOrNull { it.value === world }?.key?.let { "\"${escape(it)}\"" } ?: "null"},\"frameVersion\":${++bluePlayFrameVersion},\"width\":$width,\"height\":$height,\"cellSize\":$cellSize,\"backgroundColor\":\"${escape(stringMember(world, "backgroundColor", "rgb(255,255,255)"))}\",\"backgroundPath\":\"${escape(bgPath)}\",\"backgroundOperations\":$bgOps,\"speed\":$bluePlaySpeed,\"simulation\":\"paused\",\"objects\":$objects,\"texts\":$texts}}"
+    }
+
+    fun takeBluePlayIntent(): String = bluePlayIntent.also { bluePlayIntent = "" }
+
+    fun setBluePlaySpeed(value: Int): String {
+        bluePlaySpeed = value.coerceIn(1, 100)
+        bluePlayWorld?.let { world ->
+            interpreter.runImmediately {
+                world.assign(interpreter, "speed", IntValue(bluePlaySpeed, interpreter.symbolTable()))
+            }
+            stageSnapshot = renderBluePlayStage(world)
+        }
+        return result("unit", UnitValue)
+    }
+
+    private suspend fun invokeDirect(instance: ClassInstance, name: String): RuntimeValue {
+        val function = instance.findMemberFunctionByDeclaredName(name)
+            ?: throw IllegalStateException("BluePlay member $name is not available.")
+        return with(interpreter) {
+            FunctionCallNode(function, emptyList(), emptyList(), function.position)
+                .evalClassMemberAnyFunctionCall(instance, function)
+        }
+    }
+
+    /** Run one native-scheduled step without creating a Codepad history item. */
+    fun startBluePlayStep(onInput: (Int) -> Unit, onComplete: (String) -> Unit): String {
+        val world = bluePlayWorld ?: return errorMessage("No BluePlay world has been shown yet.")
+        if (executionCompleted != null) return errorMessage("Another runtime command is running.")
+        inputRequested = onInput
+        executionCompleted = onComplete
+        (suspend {
+            invokeDirect(world, "act")
+            val actors = bluePlayActors.filter { it.first === world }.map { it.second }
+            actors.forEach { actor ->
+                if (bluePlayActors.any { it.first === world && it.second === actor }) invokeDirect(actor, "act")
+            }
+            invokeDirect(world, "show")
+            UnitValue
+        }).startCoroutine(object : Continuation<UnitValue> {
+            override val context = kotlin.coroutines.EmptyCoroutineContext
+            override fun resumeWith(outcome: Result<UnitValue>) {
+                inputContinuation = null
+                inputRequested = null
+                val response = try {
+                    result("unit", outcome.getOrThrow())
+                } catch (throwable: Throwable) {
+                    error(throwable, "runtime", true)
+                }
+                executionCompleted?.invoke(response)
+                executionCompleted = null
+            }
+        })
+        return result("started", UnitValue)
+    }
+
+    fun startBluePlayMain(onInput: (Int) -> Unit, onComplete: (String) -> Unit): String {
+        val main = analyzedScript?.nodes?.filterIsInstance<FunctionDeclarationNode>()
+            ?.singleOrNull { it.name == "main" && it.valueParameters.isEmpty() }
+            ?: return errorMessage("BluePlay Reset needs an unambiguous parameterless main().")
+        if (executionCompleted != null) return errorMessage("Another runtime command is running.")
+        inputRequested = onInput
+        executionCompleted = onComplete
+        (suspend {
+            val call = FunctionCallNode(VariableReferenceNode(main.position, "main"), emptyList(), emptyList(), main.position)
+            interpreter.evalFunctionCall(
+                callNode = call,
+                functionNode = main,
+                extraScopeParameters = emptyMap(),
+                extraTypeResolutions = emptyList(),
+            ).result
+        }).startCoroutine(object : Continuation<RuntimeValue> {
+            override val context = kotlin.coroutines.EmptyCoroutineContext
+            override fun resumeWith(outcome: Result<RuntimeValue>) {
+                inputContinuation = null
+                inputRequested = null
+                val response = try {
+                    result("unit", outcome.getOrThrow())
+                } catch (throwable: Throwable) {
+                    error(throwable, "runtime", true)
+                }
+                executionCompleted?.invoke(response)
+                executionCompleted = null
+            }
+        })
+        return result("started", UnitValue)
     }
 
     /** Preserve BlueJ's form-feed terminal clear semantics for the UI. */
@@ -296,9 +752,15 @@ class KotliteSession {
     /** Project files contain declarations, unlike executable Codepad snippets.
      * Parse every file before evaluating even the first property initializer.
      */
-    fun startLoadProject(filenames: Array<String>, sources: Array<String>, onInput: (Int) -> Unit, onComplete: (String) -> Unit): String {
+    fun startLoadProject(filenames: Array<String>, sources: Array<String>, libraryId: String?, libraryVersion: Int, onInput: (Int) -> Unit, onComplete: (String) -> Unit): String {
         if (executionCompleted != null) return errorMessage("Another runtime command is running.")
         if (filenames.size != sources.size) return errorMessage("Project filenames and sources must match.")
+        if (libraryId == BluePlayLibrary.id && libraryVersion == BluePlayLibrary.version) {
+            bluePlayEnabled = true
+        }
+        if (bluePlayEnabled && filenames.any { it in setOf("World.kt", "Actor.kt", "Image.kt", "BluePlayFunctions.kt") }) {
+            return errorMessage("BluePlay supplies World.kt, Actor.kt, Image.kt and BluePlayFunctions.kt as a built-in library. Remove the framework source files from this project.", "analysis")
+        }
         for (index in sources.indices) {
             val filename = filenames[index]
             val script = try {
@@ -334,7 +796,16 @@ class KotliteSession {
             }
         }
         // Keep the existing combined-source positions used by manifest/diagnostic mapping.
-        val source = sources.indices.joinToString("\n\n") { "// BlueK file: ${filenames[it]}\n${sources[it]}" }
+        val projectSource = sources.indices.joinToString("\n\n") { "// BlueK file: ${filenames[it]}\n${sources[it]}" }
+        projectFunctionRanges.clear()
+        var lineCursor = 2 + if (bluePlayEnabled) BluePlayLibrary.source.split('\n').size + 1 else 0
+        sources.indices.forEach { index ->
+            val first = lineCursor + 1
+            val last = first + sources[index].split('\n').size - 1
+            projectFunctionRanges += Triple(filenames[index], first, last)
+            lineCursor = last + 2
+        }
+        val source = if (bluePlayEnabled) BluePlayLibrary.source + "\n\n" + projectSource else projectSource
         return startEvaluate("<BlueK project>", source, onInput, onComplete)
     }
 
@@ -371,10 +842,13 @@ class KotliteSession {
             val supers = declaration.superInvocations.orEmpty().mapNotNull(::superName).joinToString(",", "[", "]") { jsonTypeName(it) }
             val kind = if (declaration.isInterface) "interface" else if (declaration.modifiers.any { it.name == "abstract" }) "abstract" else "class"
             val typeParameters = declaration.typeParameters.joinToString(",", "[", "]") { parameter -> "\"${escape(parameter.name)}\"" }
-            "{\"id\":\"${escape(declaration.name)}\",\"name\":\"${escape(declaration.name)}\",\"kind\":\"$kind\",\"modifiers\":${declaration.modifiers.joinToString(",", "[", "]") { modifier -> "\"${modifier.name}\"" }},\"typeParameters\":$typeParameters,\"supertypes\":$supers,\"constructors\":$constructors,\"properties\":$properties,\"methods\":$methods}"
+            "{\"id\":\"${escape(declaration.name)}\",\"name\":\"${escape(declaration.name)}\",\"kind\":\"$kind\",\"modifiers\":${declaration.modifiers.joinToString(",", "[", "]") { modifier -> "\"${modifier.name}\"" }},\"typeParameters\":$typeParameters,\"supertypes\":$supers,\"constructors\":$constructors,\"properties\":$properties,\"methods\":$methods${if (bluePlayEnabled && declaration.name in setOf("World", "Actor", "Image")) ",\"builtin\":true" else ""}}"
         }
-        val functionJson = functions.mapIndexed { index, function -> jsonFunction("<top-level>", function, index) }.joinToString(",", "[", "]")
-        "{\"version\":1,\"classes\":$classJson,\"functions\":$functionJson}"
+        val functionJson = functions.mapIndexed { index, function ->
+            val sourceFile = projectFunctionRanges.firstOrNull { function.position.lineNum in it.second..it.third }?.first
+            jsonFunction("<top-level>", function, index, sourceFile, sourceFile == null && bluePlayEnabled)
+        }.joinToString(",", "[", "]")
+        "{\"version\":1,\"classes\":$classJson,\"functions\":$functionJson${if (bluePlayEnabled) ",\"library\":{\"id\":\"blueplay\",\"version\":1}" else ""}}"
     } catch (error: Throwable) {
         "{\"version\":1,\"classes\":[],\"error\":\"${escape(error.message ?: "Could not create Kotlite manifest.")}\"}"
     }
@@ -391,8 +865,8 @@ class KotliteSession {
         else -> "public"
     }
 
-    private fun jsonFunction(owner: String, function: FunctionDeclarationNode, index: Int): String =
-        "{\"sourceLine\":${function.position.lineNum},\"id\":\"${escape(owner)}.${escape(function.name)}.$index\",\"name\":\"${escape(function.name)}\",\"declaringType\":\"${escape(owner)}\",\"parameters\":${function.valueParameters.joinToString(",", "[", "]", transform = ::parameterJson)},\"returnType\":${jsonType(function.returnType)},\"visibility\":\"${visibility(function.modifiers)}\"}"
+    private fun jsonFunction(owner: String, function: FunctionDeclarationNode, index: Int, sourceFile: String? = null, builtin: Boolean = false): String =
+        "{\"sourceLine\":${function.position.lineNum},\"id\":\"${escape(owner)}.${escape(function.name)}.$index\",\"name\":\"${escape(function.name)}\",\"declaringType\":\"${escape(owner)}\",\"parameters\":${function.valueParameters.joinToString(",", "[", "]", transform = ::parameterJson)},\"returnType\":${jsonType(function.returnType)},\"visibility\":\"${visibility(function.modifiers)}\"${sourceFile?.let { ",\"sourceFile\":\"${escape(it)}\"" } ?: ""}${if (builtin) ",\"builtin\":true" else ""}}"
     private fun jsonType(type: TypeNode): String =
         "{\"classifier\":\"${escape(type.name)}\",\"arguments\":${type.arguments.orEmpty().joinToString(",", "[", "]", transform = ::jsonType)},\"nullable\":${type.isNullable},\"displayName\":\"${escape(type.descriptiveName())}\"}"
 
@@ -412,7 +886,9 @@ class KotliteSession {
      * cannot be rolled back. A runtime failure requires a fresh session.
      */
     fun evaluate(filename: String, source: String): String {
-        return evaluateWithBindings(filename, source, emptySet())
+        return evaluateWithBindings(filename, source, emptySet()).also {
+            bluePlayWorld?.let { world -> stageSnapshot = renderBluePlayStage(world) }
+        }
     }
 
     private fun evaluateWithBindings(filename: String, source: String, interactiveNames: Set<String>): String {
@@ -720,6 +1196,12 @@ class KotliteSession {
         keysDown.clear()
         clickX = null
         clickY = null
+        bluePlayWorld = null
+        bluePlayActors.clear()
+        bluePlaySpeed = 50
+        bluePlayFrameVersion = 0
+        bluePlayIntent = ""
+        projectFunctionRanges.clear()
         resetInterpreter()
         output.clear()
         return result("reset", UnitValue)
@@ -741,6 +1223,10 @@ class KotliteSession {
         return snapshot
     }
 
+    fun renderBluePlay() {
+        bluePlayWorld?.let { world -> stageSnapshot = renderBluePlayStage(world) }
+    }
+
     fun takeEffects(): String {
         val effects = pendingEffects.joinToString(",", "[", "]") { "{\"type\":\"sound\",\"name\":\"${escape(it)}\"}" }
         pendingEffects.clear()
@@ -752,9 +1238,10 @@ class KotliteSession {
         return result("value", UnitValue)
     }
 
-    fun setClick(x: Int, y: Int): String {
+    fun setClick(x: Int, y: Int, actorId: String): String {
         clickX = x
         clickY = y
+        clickActorId = actorId.ifEmpty { null }
         return result("value", UnitValue)
     }
 

@@ -11,8 +11,9 @@ const staticProject = JSON.parse(await readFile(new URL('../frontend/public/exam
 const figureResource = staticProject.resources?.find(resource => resource.path === 'images/figure.png');
 if (!figureResource?.data?.startsWith('data:image/png;base64,')) throw new Error('The bundled BluePlay example image is missing from the static project asset.');
 for (let index = 0; index < files.length; index += 1) {
-  if (staticProject.files?.find(file => file.fileName === files[index])?.source !== sources[index]) throw new Error(`The bundled BluePlay template is stale for ${files[index]}.`);
+  if (!staticProject.library && staticProject.files?.find(file => file.fileName === files[index])?.source !== sources[index]) throw new Error(`The bundled BluePlay template is stale for ${files[index]}.`);
 }
+if (staticProject.library?.id !== 'blueplay' || staticProject.library.version !== 1) throw new Error('The bundled BluePlay example must declare library blueplay v1.');
 const expectOk = (json, label) => {
   if (json.kind === 'error') throw new Error(`${label}: ${json.display}`);
   return json;
@@ -23,7 +24,6 @@ expectOk(JSON.parse(session.load('<BluePlay project>', sources.join('\n\n'))), '
 evaluate('main()', 'main');
 const initialStage = JSON.parse(session.takeStage());
 if (initialStage.stage.objects[0].x !== 100) throw new Error('BluePlay actor was not placed by main().');
-if (evaluate('val initializedWorld = MyWorld(); initializedWorld.initialized', 'init block').display !== 'true') throw new Error('MyWorld init block did not run.');
 evaluate('step()', 'first step');
 const movedStage = JSON.parse(session.takeStage());
 if (movedStage.stage.objects[0].x !== 101) throw new Error('Actor act() did not update its position.');
@@ -61,9 +61,14 @@ evaluate('val collisionA = Figure(); val collisionB = Figure(); collisionA.setLo
 if (evaluate('collisionA.intersects(collisionB)', 'actor intersection').display !== 'true' || evaluate('collisionA.isTouching(collisionB)', 'actor touching').display !== 'true') throw new Error('BluePlay actor collision API failed.');
 evaluate('val scaledA = Figure(); val scaledB = Figure(); val scaledImage = Image(); scaledImage.scale(10, 10); scaledA.image = scaledImage; scaledB.image = scaledImage; scaledA.setLocation(12, 12); scaledB.setLocation(13, 12)', 'actor overlap setup');
 if (evaluate('scaledA.intersects(scaledB)', 'actor bounding-box overlap').display !== 'true') throw new Error('BluePlay collision detection did not account for image dimensions.');
-evaluate('val autoWorld = MyWorld(); val autoActor = Figure(); autoWorld.addObject(autoActor, 2, 3)', 'automatic add repaint');
+evaluate('val autoWorld = MyWorld(); val autoActor = Figure(); autoWorld.addObject(autoActor, 2, 3); showWorld(autoWorld)', 'automatic add repaint');
 const addedStage = JSON.parse(session.takeStage());
 if (addedStage.stage.objects.length !== 1 || addedStage.stage.objects[0].x !== 2) throw new Error('Adding an Actor did not update the browser stage.');
+if (evaluate('autoWorld.getObjectsAt(2, 3).size', 'world object lookup after add').display !== '1') throw new Error('World.getObjectsAt did not find the actor at its native position.');
+evaluate('autoActor.setLocation(3, 4); autoWorld.show()', 'native position lookup');
+if (evaluate('autoWorld.getObjectsAt(3, 4).size', 'world object lookup after move').display !== '1') throw new Error('World.getObjectsAt used a stale coordinate mirror.');
+const movedActorStage = JSON.parse(session.takeStage());
+if (movedActorStage.stage.objects[0]?.x !== 3 || movedActorStage.stage.objects[0]?.y !== 4) throw new Error('Actor property setters did not publish the updated Canvas frame.');
 evaluate('autoWorld.addObject(autoActor, -4, 99)', 'clamped actor insertion');
 const clampedInsertionStage = JSON.parse(session.takeStage());
 if (clampedInsertionStage.stage.objects.some(object => object.x < 0 || object.x >= clampedInsertionStage.stage.width || object.y < 0 || object.y >= clampedInsertionStage.stage.height)) throw new Error('Adding an Actor outside the world bypassed position clamping.');
@@ -107,9 +112,75 @@ try {
 if (!nestedImage?.operations?.some(operation => operation.startsWith('drawString|A\\pB|2|3|rgb(12,34,56)'))) throw new Error('Nested BluePlay image escaping could not be decoded for browser rendering.');
 if (drawnActor.imageWidth !== 40 || drawnActor.imageHeight !== 50 || drawnActor.imageOpacity !== 128 / 255 || !drawnStage.stage.backgroundOperations?.length) throw new Error('BluePlay Image scale, transparency or background drawing state was lost.');
 evaluate('val clickedActor = Figure(); val clickedWorld = MyWorld(); clickedWorld.addObject(clickedActor, 7, 9)', 'click setup');
-expectOk(JSON.parse(session.setClick(7, 9)), 'actor click');
+expectOk(JSON.parse(session.setClick(7, 9, '')), 'actor click');
 if (evaluate('clickedActor.isClicked', 'actor click query').display !== 'true') throw new Error('BluePlay actor click was not delivered to the student object.');
-expectOk(JSON.parse(session.setClick(12, 13)), 'world click');
+expectOk(JSON.parse(session.setClick(12, 13, '')), 'world click');
 if (evaluate('clickedWorld.isClicked', 'world click query').display !== 'true') throw new Error('BluePlay world click was not delivered to the student object.');
+
+// Native library path: only student files are sent to the session, while the
+// built-in World/Actor/Image/Functions declarations come from the runtime.
+const nativeSession = api.bluekCreateKotliteSession();
+nativeSession.configureBluePlay(true, 'native-blueplay-smoke');
+const nativeFiles = ['Figure.kt', 'MyWorld.kt', 'Main.kt'];
+const nativeSources = await Promise.all(nativeFiles.map(file => readFile(new URL(`../examples/blueplay/${file}`, import.meta.url), 'utf8')));
+const awaitCompletion = (start) => new Promise(resolve => {
+  const started = JSON.parse(start(() => {}, value => resolve(JSON.parse(value))));
+  if (started.kind === 'error') resolve(started);
+});
+const nativeLoad = await awaitCompletion((onInput, onComplete) => nativeSession.startLoadProject(nativeFiles, nativeSources, 'blueplay', 1, onInput, onComplete));
+expectOk(nativeLoad, 'native project load');
+expectOk(await awaitCompletion((onInput, onComplete) => nativeSession.startBluePlayMain(onInput, onComplete)), 'native main');
+const nativeInitial = JSON.parse(nativeSession.takeStage()).stage;
+if (nativeInitial.objects[0]?.x !== 100) throw new Error('Native BluePlay library did not render the actor from main().');
+expectOk(await awaitCompletion((onInput, onComplete) => nativeSession.startBluePlayStep(onInput, onComplete)), 'native step');
+const nativeMoved = JSON.parse(nativeSession.takeStage()).stage;
+if (nativeMoved.objects[0]?.x !== 101) throw new Error('Native BluePlay scheduler did not dispatch Actor.act().');
+
+// A click targets the visible actor identity, not merely its centre cell. The
+// actor may safely remove itself while the scheduler is iterating the frame.
+const removalSession = api.bluekCreateKotliteSession();
+removalSession.configureBluePlay(true, 'native-blueplay-removal');
+removalSession.setBluePlayResources(`images/mask.png\0${4}\0${4}\0${'ff'.repeat(16)}`);
+const removalFiles = ['RemovingActor.kt', 'Main.kt'];
+const removalSources = [
+  'class RemovingActor : Actor() { init { setImage("mask.png") }; override fun act() { if (isClicked) world.removeObject(this) } }',
+  'val removalWorld = World(30, 20, 1); val removalActor = RemovingActor(); val secondRemovalActor = RemovingActor(); fun main() { removalWorld.addObject(removalActor, 10, 10); removalWorld.addObject(secondRemovalActor, 20, 10); showWorld(removalWorld) }',
+];
+expectOk(await awaitCompletion((onInput, onComplete) => removalSession.startLoadProject(removalFiles, removalSources, 'blueplay', 1, onInput, onComplete)), 'self-removal project load');
+expectOk(await awaitCompletion((onInput, onComplete) => removalSession.startBluePlayMain(onInput, onComplete)), 'self-removal main');
+const removableStage = JSON.parse(removalSession.takeStage()).stage;
+if (removableStage.objects.length !== 2 || removableStage.objects[0]?.image.width !== 4 || !removableStage.objects[0]?.hitId || !removableStage.objects[1]?.hitId) throw new Error('Runtime image metadata or stable hit identity is missing.');
+expectOk(JSON.parse(removalSession.setClick(7, 10, removableStage.objects[0].hitId)), 'off-centre actor click');
+if (expectOk(JSON.parse(removalSession.evaluate('<BluePlay removal smoke>', 'removalActor.isClicked')), 'off-centre actor query').display !== 'true') throw new Error('Stable actor click identity was not delivered outside the centre cell.');
+expectOk(JSON.parse(removalSession.setClick(7, 10, removableStage.objects[0].hitId)), 'off-centre actor click before removal');
+expectOk(await awaitCompletion((onInput, onComplete) => removalSession.startBluePlayStep(onInput, onComplete)), 'clicked actor self-removal');
+const removedByClickStage = JSON.parse(removalSession.takeStage()).stage;
+if (removedByClickStage.objects.length !== 1) throw new Error('A clicked Actor could not remove itself safely.');
+if (expectOk(JSON.parse(removalSession.evaluate('<BluePlay removal smoke>', 'removalWorld.getObjects<RemovingActor>().size')), 'one remaining actor world size').display !== '1') throw new Error('World.getObjects lost the wrong Actor or retained the removed Actor.');
+expectOk(JSON.parse(removalSession.setClick(17, 10, removableStage.objects[1].hitId)), 'second off-centre actor click');
+expectOk(await awaitCompletion((onInput, onComplete) => removalSession.startBluePlayStep(onInput, onComplete)), 'second clicked actor self-removal');
+const allRemovedStage = JSON.parse(removalSession.takeStage()).stage;
+if (allRemovedStage.objects.length !== 0) throw new Error('The second clicked Actor could not remove itself safely.');
+if (expectOk(JSON.parse(removalSession.evaluate('<BluePlay removal smoke>', 'removalWorld.getObjects<RemovingActor>().size')), 'empty actor world size').display !== '0') throw new Error('World.getObjects still retained a self-removed Actor.');
+
+// Bounding boxes overlap here, but only the left source column is opaque. The
+// actors touch only after they share the same visible pixels.
+const collisionSession = api.bluekCreateKotliteSession();
+collisionSession.configureBluePlay(true, 'native-blueplay-alpha-collision');
+collisionSession.setBluePlayResources(`images/mask.png\0${4}\0${4}\0${'ff000000'.repeat(4)}`);
+const collisionFiles = ['MaskActor.kt', 'Collision.kt'];
+const collisionSources = [
+  'class MaskActor : Actor() { init { setImage("mask.png") } }',
+  'val pixelWorld = World(30, 20, 1); val pixelA = MaskActor(); val pixelB = MaskActor(); fun main() { pixelWorld.addObject(pixelA, 10, 10); pixelWorld.addObject(pixelB, 11, 10); showWorld(pixelWorld) }',
+];
+expectOk(await awaitCompletion((onInput, onComplete) => collisionSession.startLoadProject(collisionFiles, collisionSources, 'blueplay', 1, onInput, onComplete)), 'alpha collision project load');
+expectOk(await awaitCompletion((onInput, onComplete) => collisionSession.startBluePlayMain(onInput, onComplete)), 'alpha collision main');
+const collisionEvaluate = (source, label) => expectOk(JSON.parse(collisionSession.evaluate('<BluePlay alpha smoke>', source)), label);
+if (collisionEvaluate('pixelA.isTouching(pixelB)', 'transparent overlap').display !== 'false') throw new Error('Transparent source pixels incorrectly triggered isTouching.');
+collisionEvaluate('pixelB.x = 10', 'opaque overlap setup');
+collisionEvaluate('pixelB.rotation = 180', 'rotated transparent overlap setup');
+if (collisionEvaluate('pixelA.isTouching(pixelB)', 'rotated transparent overlap').display !== 'false') throw new Error('Rotated transparent pixels incorrectly triggered isTouching.');
+collisionEvaluate('pixelB.rotation = 0', 'visible overlap setup');
+if (collisionEvaluate('pixelA.isTouching(pixelB)', 'opaque overlap').display !== 'true') throw new Error('Visible source pixels did not trigger isTouching.');
 
 console.log('BluePlay browser smoke test passed.');

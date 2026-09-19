@@ -24,8 +24,9 @@ class CustomFunctionDeclarationNode(
     receiver = receiver ?: definition.receiverType?.toTypeNode(definition.position.filename),
     declaredReturnType = returnType ?: definition.returnType.toTypeNode(definition.position.filename),
     typeParameters = typeParameters ?: definition.typeParameters.map {
-        TypeParameterNode(definition.position, it.name, it.typeUpperBound?.toTypeNode(definition.position.filename))
+        it.toTypeParameterNode(definition.position)
     },
+    extraTypeParameters = definition.extraTypeParameters.toTypeParameterNodes(definition.position),
     valueParameters = valueParameters ?: definition.parameterTypes.map {
         FunctionValueParameterNode(
             position = definition.position,
@@ -54,6 +55,7 @@ class CustomFunctionDeclarationNode(
         body: BlockNode?,
         transformedRefName: String?,
         inferredReturnType: TypeNode?,
+        extraTypeParameters: List<TypeParameterNode>,
     ): FunctionDeclarationNode {
         if (this::class != CustomFunctionDeclarationNode::class) {
             throw UnsupportedOperationException("Copying subclasses is not supported")

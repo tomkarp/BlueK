@@ -13,6 +13,7 @@ import com.sunnychung.lib.multiplatform.kotlite.extension.isValidIntegerLiteralA
 import com.sunnychung.lib.multiplatform.kotlite.extension.resolveGenericParameterTypeArguments
 import com.sunnychung.lib.multiplatform.kotlite.extension.resolveGenericParameterTypeToUpperBound
 import com.sunnychung.lib.multiplatform.kotlite.model.ASTNode
+import com.sunnychung.lib.multiplatform.kotlite.model.acceptsRuntimeType
 import com.sunnychung.lib.multiplatform.kotlite.model.AsOpNode
 import com.sunnychung.lib.multiplatform.kotlite.model.AssignmentNode
 import com.sunnychung.lib.multiplatform.kotlite.model.BinaryOpNode
@@ -299,6 +300,11 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 }
                 return BooleanValue(r1 != r2)
             }
+            "===", "!==" -> {
+                val r1 = node1.eval() as RuntimeValue
+                val r2 = node2.eval() as RuntimeValue
+                BooleanValue(if (operator == "===") r1 === r2 else r1 !== r2)
+            }
 
             "||" -> {
                 val a = node1.eval() as BooleanValue
@@ -538,6 +544,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
     }
 
     suspend fun FunctionCallNode.eval(replaceArguments: Map<Int, RuntimeValue> = emptyMap()): RuntimeValue {
+        resolvedInvoke?.let { return it.eval(replaceArguments) }
         // TODO move to semantic analyzer
         when (function) {
             is VariableReferenceNode, is TypeNode -> {
@@ -815,11 +822,13 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             scopeType = scopeType,
             callPosition = callPosition,
         )
+        val returnTarget = Any()
         try {
             val symbolTable = callStack.currentSymbolTable()
             extraSymbols?.let{
                 symbolTable.mergeFrom(callPosition, it)
             }
+            symbolTable.returnTargets[functionNode.returnTargetId] = returnTarget
             extraScopeParameters.forEach {
                 symbolTable.declareProperty(callPosition, it.key, TypeNode(callPosition, it.value.type().name, null, false), false) // TODO change to use DataType directly
                 symbolTable.assign(it.key, it.value)
@@ -923,7 +932,10 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                     result
                 }
             } catch (r: NormalReturnException) {
-                if (r.returnToLabel.isEmpty()) {
+                if (r.target != null && r.target !== returnTarget) throw r
+                if (r.target != null) {
+                    // Exact lexical invocation matched (also through recursive inline calls).
+                } else if (r.returnToLabel.isEmpty()) {
                     if (functionNode.labelName != null) {
                         throw RuntimeException("Returning to a non-function callable")
                     }
@@ -939,7 +951,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             }
 
             log.v { "Fun Return $returnValue; symbolTable = $symbolTable" }
-            if (!returnType.isCastableFrom(returnValue.type())) {
+            if (!returnType.acceptsRuntimeType(returnValue.type())) {
                 throw RuntimeException("Return value's type ${returnValue.type().descriptiveName} cannot be casted to ${returnType.descriptiveName} in function `${functionNode.name}` at ${functionNode.position}")
             }
 
@@ -1229,7 +1241,9 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
 
     suspend fun ReturnNode.eval() {
         val value = (value?.eval() ?: UnitValue) as RuntimeValue
-        throw NormalReturnException(returnToAddress = returnToAddress, returnToLabel = returnToLabel, value = value)
+        throw NormalReturnException(returnToAddress = returnToAddress, returnToLabel = returnToLabel, value = value,
+            target = if (returnToAddress.isEmpty()) null else symbolTable().findReturnTarget(returnToAddress)
+                ?: error("Return target is no longer active: $returnToAddress"))
     }
 
     suspend fun BreakNode.eval() {
@@ -1508,7 +1522,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
     suspend fun AsOpNode.eval(): RuntimeValue {
         val value = expression.eval() as RuntimeValue
         val targetType = symbolTable().typeNodeToDataType(type) ?: throw RuntimeException("Unknown type `${type.descriptiveName()}`")
-        return if (targetType.isCastableFrom(value.type())) {
+        return if (targetType.acceptsRuntimeType(value.type())) {
             value
         } else if (isNullable) {
             NullValue
@@ -1521,6 +1535,10 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         val refs = this.accessedRefs!!
         val currentSymbolTable = callStack.currentSymbolTable()
         val runtimeRefs = SymbolTable(Int.MAX_VALUE, "lambda-symbol-ref", ScopeType.Closure, currentSymbolTable.rootScope)
+        refs.returnTargets.forEach { id ->
+            runtimeRefs.returnTargets[id] = currentSymbolTable.findReturnTarget(id)
+                ?: error("Missing lexical return target: $id")
+        }
         refs.properties.forEach {
             runtimeRefs.putPropertyHolder(it, false /* TODO review */, currentSymbolTable.getPropertyHolder(it))
         }
@@ -1578,7 +1596,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             }
             "is", "!is" -> {
                 val type = symbolTable().assertToDataType(node2 as TypeNode)
-                val isType = type.isAssignableFrom(n1.type())
+                val isType = type.acceptsRuntimeType(n1.type())
                 BooleanValue(if (functionName == "is") isType else !isType)
             }
             else -> throw RuntimeException("Unknown infix function `$functionName`")
@@ -1640,6 +1658,8 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                     return catch.eval(e.error)
                 }
             }
+            throw e
+        } catch (e: com.sunnychung.lib.multiplatform.kotlite.error.controlflow.NormalControlFlowException) {
             throw e
         } catch (e: Throwable) {
             for (catch in catchBlocks) {

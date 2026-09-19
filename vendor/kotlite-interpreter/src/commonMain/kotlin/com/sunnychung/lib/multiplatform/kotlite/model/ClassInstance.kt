@@ -89,6 +89,10 @@ open class ClassInstance(
         hasInitialized = true
     }
 
+    /** Host/runtime bridge access to a declared member without exposing the class internals. */
+    fun findMemberFunctionByDeclaredName(declaredName: String): FunctionDeclarationNode? =
+        clazz?.findMemberFunctionsByDeclaredName(declaredName)?.values?.firstOrNull()
+
     internal fun assignBacking(name: String, interpreter: Interpreter, value: RuntimeValue) {
         (memberPropertyValues[name] as? RuntimeValueDelegate)?.backing?.assign(interpreter, value)
             ?: throw RuntimeException("Property $name has no backing field")

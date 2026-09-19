@@ -19,6 +19,7 @@
   import { KotlinFormatterClient } from "./kotlinFormatterClient";
   import { InspectorModel, inspectorFieldText, type InspectionView, type InspectorField } from "./inspectorModel";
   import { createProjectPayload, projectModelFromPayload } from "./projectFormat";
+  import { prepareRuntimeResources } from "./imageAlpha";
   import { loadProjectFromServer, saveProjectToServer } from "./shareApi";
   import { compileProject, executeCodepad } from "./codepadFlow";
   import { minimalSetup } from "codemirror";
@@ -53,8 +54,10 @@
     RuntimeSnapshot,
     RuntimeCommand,
     RuntimeValue,
+    ProjectLibrary,
+    ProjectResource,
   } from "../../runtime-contract/src/index";
-  type Resource = { path: string; data: string };
+  type Resource = ProjectResource;
   type BenchObject = { objectId: string; className: string; name: string };
   type HistoryEntry = {
     code: string;
@@ -65,6 +68,122 @@
     className?: string;
   };
   type CardPosition = { x: number; y: number };
+  type BluePlayApiDoc = {
+    title: string;
+    summary: string;
+    members: string[];
+  };
+  const bluePlayFrameworkNames = [
+    "BluePlayFunctions.kt",
+    "World.kt",
+    "Actor.kt",
+    "Image.kt",
+  ];
+  const bluePlayFrameworkFiles: ProjectFile[] = [
+    {
+      id: "blueplay-framework-BluePlayFunctions.kt",
+      fileName: "BluePlayFunctions.kt",
+      kind: "functions",
+      source: "",
+      revision: 1,
+    },
+    {
+      id: "blueplay-framework-World.kt",
+      fileName: "World.kt",
+      kind: "class",
+      source: "open class World(val width: Int, val height: Int, val cellSize: Int = 1)",
+      revision: 1,
+    },
+    {
+      id: "blueplay-framework-Actor.kt",
+      fileName: "Actor.kt",
+      kind: "class",
+      source: "open class Actor",
+      revision: 1,
+    },
+    {
+      id: "blueplay-framework-Image.kt",
+      fileName: "Image.kt",
+      kind: "class",
+      source: "class Image(val path: String = \"\")",
+      revision: 1,
+    },
+  ];
+  const bluePlayApiDocs: Record<string, BluePlayApiDoc> = {
+    "BluePlayFunctions.kt": {
+      title: "BluePlayFunctions API",
+      summary: "Top-level functions for showing, controlling and interacting with a BluePlay world.",
+      members: [
+        "showWorld(world: World)",
+        "show()",
+        "start()",
+        "stop()",
+        "step()",
+        "setSpeed(value: Int)",
+        "getSpeed(): Int",
+        "isKeyDown(key: String): Boolean",
+        "playSound(fileName: String)",
+      ],
+    },
+    "World.kt": {
+      title: "World API",
+      summary: "A two-dimensional world that contains actors, a background and optional text.",
+      members: [
+        "World(width: Int, height: Int, cellSize: Int = 1)",
+        "width: Int",
+        "height: Int",
+        "cellSize: Int",
+        "background: Image",
+        "addObject(actor: Actor, x: Int, y: Int)",
+        "removeObject(actor: Actor)",
+        "getObjects<T>(): List<T>",
+        "getObjectsAt(x: Int, y: Int): List<Actor>",
+        "numberOfObjects: Int",
+        "showText(text: String, x: Int, y: Int)",
+        "act()",
+      ],
+    },
+    "Actor.kt": {
+      title: "Actor API",
+      summary: "The base class for objects that can be placed, drawn and animated in a World.",
+      members: [
+        "x: Int",
+        "y: Int",
+        "rotation: Int",
+        "image: Image?",
+        "setImage(image: Image)",
+        "setImage(fileName: String)",
+        "move(distance: Int)",
+        "turn(degrees: Int)",
+        "turnTowards(x: Int, y: Int)",
+        "isAtEdge: Boolean",
+        "isClicked: Boolean",
+        "isTouching(actor: Actor): Boolean",
+        "act()",
+      ],
+    },
+    "Image.kt": {
+      title: "Image API",
+      summary: "An image or drawing surface used for world backgrounds and actor images.",
+      members: [
+        "Image(width: Int, height: Int)",
+        "Image(fileName: String)",
+        "width: Int",
+        "height: Int",
+        "setColor(red: Int, green: Int, blue: Int)",
+        "fill()",
+        "fillRect(x: Int, y: Int, width: Int, height: Int)",
+        "drawRect(x: Int, y: Int, width: Int, height: Int)",
+        "drawOval(x: Int, y: Int, width: Int, height: Int)",
+        "drawLine(x1: Int, y1: Int, x2: Int, y2: Int)",
+        "drawString(text: String, x: Int, y: Int)",
+        "drawImage(image: Image, x: Int, y: Int)",
+        "clear()",
+        "scale(width: Int, height: Int)",
+        "setTransparency(value: Int)",
+      ],
+    },
+  };
   type EditorWindowState = {
     id: string;
     fileId: string;
@@ -93,14 +212,14 @@
         stage.height) /
       Math.max(stage.width, 1)
     : 0;
+  $: stageWindowWidth = stage
+    ? Math.min(
+        Math.max(320, viewportWidth - 24),
+        Math.max(600, (stage.width || 1) * (stage.cellSize || 1) + 4),
+      )
+    : 760;
   afterUpdate(() => {
-    const world = document.querySelector<HTMLElement>(".game-stage");
-    if (!world) return;
-    const bounds = world.getBoundingClientRect();
-    const root = document.querySelector<HTMLElement>(".svelte-preview");
-    root?.style.setProperty("--bluek-controls-top", `${bounds.bottom + 8}px`);
-    root?.style.setProperty("--bluek-controls-left", `${bounds.left}px`);
-    root?.style.setProperty("--bluek-controls-width", `${bounds.width}px`);
+    drawStageCanvas();
   });
   let runtime: RuntimeSnapshot = {
     generationId: "",
@@ -111,8 +230,10 @@
     references: [],
     liveObjectIds: [],
     error: null,
+    simulation: "inactive",
   };
   let files: ProjectFile[] = [],
+    library: ProjectLibrary | undefined,
     resources: Resource[] = [],
     resourceSizes: Record<string, { width: number; height: number }> = {},
     selected = 0,
@@ -173,11 +294,13 @@
     newClassType: "class" | "interface" | "open" | "abstract" | "data" | "functions" =
       "class",
     stage: any = null,
+    stageCanvas: HTMLCanvasElement | null = null,
     speed = 50,
     inheritanceMode = false,
     inheritanceSelection = "",
     showInheritance = true,
     settingsNotice = false,
+    bluePlayApiFile: ProjectFile | null = null,
     editorFontSize = 16,
     filesNotice = false,
     shareNotice = "",
@@ -232,7 +355,9 @@
     editingField = "",
     fieldDraft = "",
     fieldError = "";
-  $: stageRunning = Boolean(stage?.running);
+  $: stageRunning = library?.id === "blueplay"
+    ? runtime.simulation === "running" || runtime.simulation === "stopping" || runtime.simulation === "waiting"
+    : Boolean(stage?.running);
   let inputElement: HTMLInputElement;
   let cardDrag: { id: string; dx: number; dy: number } | null = null;
   const defaultCardPosition = (index: number): CardPosition => ({
@@ -248,9 +373,34 @@
     "Figure.kt": { x: 310, y: 202 },
     "MyWorld.kt": { x: 590, y: 202 },
   };
+  let displayFiles: ProjectFile[] = files;
+  let displayCardPositions: CardPosition[] = [];
+  $: displayFiles = library?.id === "blueplay"
+    ? [...bluePlayFrameworkFiles, ...files]
+    : files;
+  $: {
+    cardPositions;
+    displayCardPositions = displayFiles.map((file, index) => cardPosition(file, index));
+  }
+  function isBluePlayFrameworkFile(file: ProjectFile) {
+    return library?.id === "blueplay" && bluePlayFrameworkNames.includes(file.fileName);
+  }
+  function cardPosition(file: ProjectFile, index: number) {
+    return cardPositions[file.id] || bluePlayCardPositions[file.fileName] || defaultCardPosition(index);
+  }
+  function openBluePlayApi(file: ProjectFile) {
+    bluePlayApiFile = file;
+    menu = null;
+  }
 
   function projectPayload() {
-    return createProjectPayload(files, resources, cardPositions);
+    return createProjectPayload(
+      files,
+      resources,
+      cardPositions,
+      library,
+      library?.id === "blueplay" ? bluePlayFrameworkFiles : [],
+    );
   }
   function saveAutosave() {
     if (!autosaveReady) return;
@@ -262,27 +412,38 @@
   }
   $: if (autosaveReady) {
     files;
+    library;
     resources;
     cardPositions;
     saveAutosave();
   }
-  function beginCardDrag(event: PointerEvent, file: ProjectFile) {
-    if (event.button !== 0 || event.pointerType === "touch") return;
+  function beginCardDrag(event: MouseEvent | PointerEvent, file: ProjectFile) {
+    if (event.button !== 0 || ("pointerType" in event && event.pointerType === "touch")) return;
     const canvas = (event.currentTarget as HTMLElement).closest(".canvas");
     if (!canvas) return;
     const bounds = canvas.getBoundingClientRect();
-    const position =
-      cardPositions[file.id] || defaultCardPosition(files.indexOf(file));
+    const position = cardPosition(file, displayFiles.indexOf(file));
     cardDrag = {
       id: file.id,
       dx: event.clientX - bounds.left - position.x,
       dy: event.clientY - bounds.top - position.y,
     };
-    (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+    const move = (next: MouseEvent | PointerEvent) => moveCard(next, file);
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+      endCardDrag();
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("mousemove", move);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
   }
-  function moveCard(event: PointerEvent, file: ProjectFile) {
+  function moveCard(event: MouseEvent | PointerEvent, file: ProjectFile) {
     if (!cardDrag || cardDrag.id !== file.id) return;
-    const canvas = (event.currentTarget as HTMLElement).closest(".canvas");
+    const canvas = document.querySelector<HTMLElement>(".canvas");
     if (!canvas) return;
     const bounds = canvas.getBoundingClientRect();
     cardPositions = {
@@ -343,32 +504,43 @@
     if (!stage) return;
     event.preventDefault();
     const bounds = target.getBoundingClientRect();
-    const x = Math.round(
-      ((event.clientX - bounds.left) / bounds.width) *
-        Math.max((stage.width || 1) - 1, 0),
+    const worldPixelX = ((event.clientX - bounds.left) / Math.max(bounds.width, 1)) * (stage.width || 1) * (stage.cellSize || 1);
+    const worldPixelY = ((event.clientY - bounds.top) / Math.max(bounds.height, 1)) * (stage.height || 1) * (stage.cellSize || 1);
+    const x = Math.max(0, Math.min((stage.width || 1) - 1, Math.floor(worldPixelX / Math.max(stage.cellSize || 1, 1))));
+    const y = Math.max(0, Math.min((stage.height || 1) - 1, Math.floor(worldPixelY / Math.max(stage.cellSize || 1, 1))));
+    const actor = [...(stage.objects || [])].reverse().find((object: any) =>
+      actorContainsVisiblePixel(object, worldPixelX, worldPixelY, stage.cellSize || 1),
     );
-    const y = Math.round(
-      ((event.clientY - bounds.top) / bounds.height) *
-        Math.max((stage.height || 1) - 1, 0),
-    );
-    client?.sendClick(x, y).catch(() => undefined);
+    client?.sendClick(x, y, actor?.hitId || actor?.objectId).catch(() => undefined);
   }
 
-  function bluePlayAction(code: string) {
-    if (
-      !client ||
-      !canExecute ||
-      (code === "step()" && stageRunning) ||
-      (code === "start()" && stageRunning) ||
-      (code === "stop()" && !stageRunning)
-    )
+  function bluePlayAction(action: "step" | "start" | "stop" | "setSpeed") {
+    if (!client || library?.id !== "blueplay" || !stage || runtime.phase === "faulted") return;
+    if (action === "step" && (stageRunning || !canExecute)) return;
+    if (action === "start" && stageRunning) return;
+    if (action === "stop" && !stageRunning) return;
+    if (action === "setSpeed" && runtime.phase !== "ready" && runtime.phase !== "waitingForInput") return;
+    if (library?.id === "blueplay") {
+      client.simulation(action, action === "setSpeed" ? Number(speed) : undefined)
+        .then((result) => {
+          if (result.kind === "error") {
+            error = result.display || "BluePlay action failed.";
+            status = "BluePlay error";
+          } else if (action === "start") status = "Running…";
+          else if (action === "stop") status = "Paused";
+          else if (action === "step") status = "Ready";
+        })
+        .catch((reason) => {
+          error = reason instanceof Error ? reason.message : String(reason);
+          status = "BluePlay error";
+        });
       return;
-    client.execute({ op: "eval", code }).catch(() => undefined);
+    }
   }
   async function resetGame() {
     if (!canExecute) return;
     await resetRuntime();
-    if (canExecute) await runMain();
+    if (library?.id !== "blueplay" && canExecute) await runMain();
   }
   function beginStageDrag(event: PointerEvent) {
     if (
@@ -377,7 +549,7 @@
       (event.target as HTMLElement).closest("button")
     )
       return;
-    const stageElement = document.querySelector(".game-stage");
+    const stageElement = (event.currentTarget as HTMLElement).closest(".stage-window");
     if (!stageElement) return;
     const bounds = stageElement.getBoundingClientRect();
     const startX = event.clientX,
@@ -447,9 +619,9 @@
     }
     const bounds = canvas.getBoundingClientRect();
     const next: typeof inheritanceEdges = [];
-    files.forEach((child, index) => {
+    displayFiles.forEach((child, index) => {
       const parent = sourceSuperclass(child.source);
-      const parentIndex = files.findIndex(
+      const parentIndex = displayFiles.findIndex(
         (file) => file.fileName.replace(/\.kt$/, "") === parent,
       );
       if (parentIndex < 0 || !elements[index] || !elements[parentIndex]) return;
@@ -635,7 +807,7 @@
   }
   $: currentFile = files[selected];
   $: classes = runtime.classes || [];
-  $: canExecute = runtime.phase === "ready";
+  $: canExecute = runtime.phase === "ready" && (runtime.simulation === "inactive" || runtime.simulation === "paused");
   $: inputReady = runtime.phase === "waitingForInput";
   $: programActive = runtime.phase === "running" || runtime.phase === "compiling" || inputReady;
   $: if (terminalOpen && inputReady)
@@ -695,11 +867,10 @@
       });
     });
     const unsubscribeStage = client.stageStream((value) => {
-      if (!value.stage) return;
-      stage = decorateStage(value.stage);
+      stage = decorateStage(value);
       stageWindowOpen = true;
-      speed = Number(value.stage.speed) || speed;
-      (value.stage.sounds || []).forEach((sound: string) => {
+      speed = Number(value.speed) || speed;
+      (value.sounds || []).forEach((sound: string) => {
         const data = resourceData(`sounds/${sound}`);
         if (data) new Audio(data).play().catch(() => undefined);
       });
@@ -836,41 +1007,184 @@
     return {
       ...value,
       objects: (value.objects || []).map((object: any) => {
-        const resource = object.imagePath
+        const rawImage = object.image;
+        const image = rawImage && typeof rawImage === "object" ? rawImage : {};
+        const imagePath = object.imagePath || image.resourcePath;
+        const operations = object.imageOperations || image.operations;
+        const resource = imagePath
           ? resources.find(
               (item) =>
-                item.path === `images/${object.imagePath}` ||
-                item.path.endsWith(`/images/${object.imagePath}`),
+                item.path === `images/${imagePath}` ||
+                item.path.endsWith(`/images/${imagePath}`),
             )
           : undefined;
         const size = resource ? resourceSizes[resource.path] : undefined;
-        const width = size?.width || object.imageWidth || 30,
-          height = size?.height || object.imageHeight || 30;
+        const width = size?.width || image.width || object.imageWidth || 30,
+          height = size?.height || image.height || object.imageHeight || 30;
         return {
           ...object,
-          image:
+          image: {
+            ...image,
+            resourcePath: imagePath,
+            operations,
+            width,
+            height,
+            opacity: object.imageOpacity ?? image.opacity ?? 1,
+          },
+          imageData:
+            object.imageData ||
+            (typeof rawImage === "string" ? rawImage : undefined) ||
             resource?.data ||
-            drawnImageDataUrl(object.imageOperations, width, height, resources),
+            drawnImageDataUrl(operations, width, height, resources),
+          imagePath,
+          imageOperations: operations,
           imageWidth: width,
           imageHeight: height,
+          imageOpacity: object.imageOpacity ?? image.opacity ?? 1,
         };
       }),
     };
   }
 
   function stageStyle(value: any) {
-    const image = resourceData(
-      value?.backgroundPath ? `images/${value.backgroundPath}` : undefined,
+    const width = Math.max(1, (value.width || 1) * (value.cellSize || 1));
+    const height = Math.max(1, (value.height || 1) * (value.cellSize || 1));
+    return `--bluek-world-width:${width}px;--bluek-world-height:${height}px;aspect-ratio:${width}/${height};background-color:${value.backgroundColor || "#fff"}`;
+  }
+  const canvasImages = new Map<string, HTMLImageElement>();
+  const canvasAlphaMasks = new Map<string, { width: number; height: number; alpha: Uint8ClampedArray }>();
+  function canvasImage(data: string) {
+    let image = canvasImages.get(data);
+    if (!image) {
+      image = new Image();
+      image.onload = () => drawStageCanvas();
+      image.src = data;
+      canvasImages.set(data, image);
+    }
+    return image;
+  }
+  function canvasAlphaMask(data: string) {
+    const cached = canvasAlphaMasks.get(data);
+    if (cached) return cached;
+    const image = canvasImage(data);
+    if (!image.complete || !image.naturalWidth || !image.naturalHeight) return undefined;
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) return undefined;
+      context.drawImage(image, 0, 0);
+      const rgba = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      const alpha = new Uint8ClampedArray(canvas.width * canvas.height);
+      for (let source = 3, target = 0; source < rgba.length; source += 4, target += 1)
+        alpha[target] = rgba[source];
+      const mask = { width: canvas.width, height: canvas.height, alpha };
+      canvasAlphaMasks.set(data, mask);
+      return mask;
+    } catch {
+      return undefined;
+    }
+  }
+  function actorContainsVisiblePixel(object: any, worldX: number, worldY: number, cellSize: number) {
+    const frame = object.image && typeof object.image === "object" ? object.image : {};
+    const width = Math.max(1, Number(object.imageWidth || frame.width || 30));
+    const height = Math.max(1, Number(object.imageHeight || frame.height || 30));
+    const opacity = Math.max(0, Math.min(1, Number(object.imageOpacity ?? frame.opacity ?? 1)));
+    if (opacity * 255 <= 16) return false;
+    const centerX = (Number(object.x || 0) + 0.5) * cellSize;
+    const centerY = (Number(object.y || 0) + 0.5) * cellSize;
+    const radians = (Number(object.rotation || 0) * Math.PI) / 180;
+    const cosine = Math.cos(radians), sine = Math.sin(radians);
+    const deltaX = worldX - centerX, deltaY = worldY - centerY;
+    const localX = cosine * deltaX + sine * deltaY + width / 2;
+    const localY = -sine * deltaX + cosine * deltaY + height / 2;
+    if (localX < 0 || localY < 0 || localX >= width || localY >= height) return false;
+    const imageData = object.imageData || (typeof object.image === "string" ? object.image : undefined);
+    if (!imageData) return true;
+    const mask = canvasAlphaMask(imageData);
+    if (!mask) return false;
+    const sourceX = Math.min(mask.width - 1, Math.floor((localX / width) * mask.width));
+    const sourceY = Math.min(mask.height - 1, Math.floor((localY / height) * mask.height));
+    return mask.alpha[sourceY * mask.width + sourceX] * opacity > 16;
+  }
+  function canvasDataUrl(value: string | undefined) {
+    if (!value) return undefined;
+    const match = value.match(/^url\(["']?(.*?)["']?\)$/);
+    return match?.[1] || value;
+  }
+  function drawStageCanvas() {
+    const canvas = stageCanvas;
+    const value = stage;
+    if (!canvas || !value) return;
+    const logicalWidth = Math.max(1, (value.width || 1) * (value.cellSize || 1));
+    const logicalHeight = Math.max(1, (value.height || 1) * (value.cellSize || 1));
+    const pixelRatio = Math.max(1, window.devicePixelRatio || 1);
+    if (canvas.width !== Math.round(logicalWidth * pixelRatio) || canvas.height !== Math.round(logicalHeight * pixelRatio)) {
+      canvas.width = Math.round(logicalWidth * pixelRatio);
+      canvas.height = Math.round(logicalHeight * pixelRatio);
+    }
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    context.clearRect(0, 0, logicalWidth, logicalHeight);
+    context.fillStyle = value.backgroundColor || "#fff";
+    context.fillRect(0, 0, logicalWidth, logicalHeight);
+    const drawImage = (data: string | undefined, x: number, y: number, width: number, height: number, rotation = 0, opacity = 1) => {
+      if (!data) return false;
+      const image = canvasImage(data);
+      if (!image.complete || !image.naturalWidth) return false;
+      context.save();
+      context.globalAlpha = Math.max(0, Math.min(1, opacity));
+      context.translate(x + width / 2, y + height / 2);
+      context.rotate((rotation * Math.PI) / 180);
+      context.drawImage(image, -width / 2, -height / 2, width, height);
+      context.restore();
+      return true;
+    };
+    const backgroundResource = value.backgroundPath ? resourceData(`images/${value.backgroundPath}`) : undefined;
+    const backgroundSvg = backgroundDataUrl(
+      value.backgroundOperations || [],
+      logicalWidth,
+      logicalHeight,
+      resources,
     );
-    const background = image
-      ? `url("${image}")`
-      : backgroundDataUrl(
-          value?.backgroundOperations || [],
-          value.width * value.cellSize,
-          value.height * value.cellSize,
-          resources,
-        );
-    return `aspect-ratio:${value.width || 1}/${value.height || 1};background-color:${value.backgroundColor || "#fff"};background-image:${background || "none"};background-size:100% 100%`;
+    drawImage(backgroundResource || canvasDataUrl(backgroundSvg), 0, 0, logicalWidth, logicalHeight);
+    (value.objects || []).forEach((object: any) => {
+      const frame = object.image && typeof object.image === "object" ? object.image : {};
+      const width = Number(object.imageWidth || frame.width || 30);
+      const height = Number(object.imageHeight || frame.height || 30);
+      const centerX = (Number(object.x || 0) + 0.5) * (value.cellSize || 1);
+      const centerY = (Number(object.y || 0) + 0.5) * (value.cellSize || 1);
+      const imageData = object.imageData || (typeof object.image === "string" ? object.image : undefined);
+      if (!drawImage(imageData, centerX - width / 2, centerY - height / 2, width, height, Number(object.rotation || 0), Number(object.imageOpacity ?? frame.opacity ?? 1))) {
+        context.save();
+        context.fillStyle = "#f33142";
+        context.strokeStyle = "#111";
+        context.lineWidth = 2;
+        context.fillRect(centerX - width / 2, centerY - height / 2, width, height);
+        context.strokeRect(centerX - width / 2, centerY - height / 2, width, height);
+        context.fillStyle = "#fff";
+        context.font = "bold 14px Arial";
+        context.textAlign = "center";
+        context.textBaseline = "middle";
+        context.fillText(String(object.className || object.type || "?").slice(0, 1), centerX, centerY);
+        context.restore();
+      }
+    });
+    context.save();
+    context.font = `${Math.max(12, value.cellSize || 16)}px Arial`;
+    context.textBaseline = "middle";
+    context.fillStyle = "#fff";
+    context.strokeStyle = "#000";
+    context.lineWidth = 3;
+    (value.texts || []).forEach((text: any) => {
+      const x = Number(text.x || 0) * (value.cellSize || 1);
+      const y = Number(text.y || 0) * (value.cellSize || 1);
+      context.strokeText(String(text.text || ""), x, y);
+      context.fillText(String(text.text || ""), x, y);
+    });
+    context.restore();
   }
   function markUncompiled() {
     client?.invalidate();
@@ -888,6 +1202,7 @@
   function handleWindowKeydown(event: KeyboardEvent) {
     if (event.key === "Escape") {
       if (projectInfo) projectInfo = null;
+      else if (bluePlayApiFile) bluePlayApiFile = null;
       else if (compilerDialog) compilerDialog = false;
       else if (createDialog) {
         createDialog = null;
@@ -1200,7 +1515,7 @@
     history = [];
     activeInspectorId = "";
     inspectorWindows = [];
-    const result = await compileProject(client, files, Date.now());
+    const result = await compileProject(client, files, Date.now(), library, await prepareRuntimeResources(resources));
     compilerDiagnostics = result.diagnostics;
     if (!result.ok) {
         status = "Compile error";
@@ -1239,7 +1554,7 @@
     if (!client || !code) return;
     codepad = "";
     codepadHistoryIndex = -1;
-    const result = await executeCodepad(client, files, Date.now(), code);
+    const result = await executeCodepad(client, files, Date.now(), code, library, await prepareRuntimeResources(resources));
     if (result.kind === "compile-error") {
       compilerDiagnostics = result.compile.diagnostics;
       status = "Compile error";
@@ -1941,15 +2256,16 @@
     status = "Resetting…";
     try {
       const result = await client.reset();
-      if (result.diagnostics.length) {
+      const diagnostics = result.diagnostics || [];
+      if (diagnostics.length) {
         status = "Compile error";
-        error = result.diagnostics
+        error = diagnostics
           .map(
             (item) =>
               `${item.fileName || ""}:${item.line}:${item.column}: ${item.message}`,
           )
           .join("\n");
-        compilerDiagnostics = result.diagnostics;
+        compilerDiagnostics = diagnostics;
         compilerDialog = true;
       } else status = "Compiled";
     } catch (reason) {
@@ -1987,11 +2303,12 @@
   }
   function selectCard(file: ProjectFile, index: number) {
     if (!inheritanceMode) {
-      selected = index;
+      if (!isBluePlayFrameworkFile(file)) selected = files.findIndex((item) => item.id === file.id);
       return;
     }
     if (file.kind !== "class") return;
     if (!inheritanceSelection) {
+      if (isBluePlayFrameworkFile(file)) return;
       inheritanceSelection = file.id;
       status = "Select superclass";
       return;
@@ -2089,7 +2406,11 @@
   }
   async function loadProject(payload: any, message = "Project loaded.") {
     const imported = projectModelFromPayload(payload, (index) => `project-${Date.now()}-${index}`);
-    files = imported.files;
+    const frameworkFiles = new Set(["World.kt", "Actor.kt", "Image.kt", "BluePlayFunctions.kt", "BluePlayHelpers.kt"]);
+    files = imported.library?.id === "blueplay"
+      ? imported.files.filter((file) => !frameworkFiles.has(file.fileName))
+      : imported.files;
+    library = imported.library;
     resources = imported.resources;
     cardPositions = imported.cardPositions;
     selected = 0;
@@ -2257,27 +2578,85 @@
   class:terminal-split={terminalOpen && terminalSplit}
   class:bluek-stage-closed={!stageWindowOpen}
   class="bluek svelte-preview"
-  style={`--editor-font-size:${editorFontSize}px;--terminal-split-width:${terminalSplitWidth}px;--bluek-stage-height:${stageHeight}px;${stagePosition ? `--bluek-stage-left:${stagePosition.left}px;--bluek-stage-top:${stagePosition.top}px;` : ""}`}
+  style={`--editor-font-size:${editorFontSize}px;--terminal-split-width:${terminalSplitWidth}px;--bluek-stage-height:${stageHeight}px;--bluek-stage-window-width:${stageWindowWidth}px;${stagePosition ? `--bluek-stage-left:${stagePosition.left}px;--bluek-stage-top:${stagePosition.top}px;` : ""}`}
 >
   {#if stage && stageWindowOpen}
     <div
       class:maximized={stageMaximized}
-      class="stage-window-chrome"
-      role="toolbar"
-      tabindex="0"
-      on:pointerdown={beginStageDrag}
+      class:stage-compact={(stage.width || 1) * (stage.cellSize || 1) < 560}
+      class="stage-window"
+      role="dialog"
+      aria-label="BluePlay – World"
+      data-library={library?.id || ""}
+      data-phase={runtime.phase}
+      data-simulation={runtime.simulation}
     >
-      <span>BluePlay – World</span>
-      <div>
+      <div
+        class="stage-window-chrome"
+        role="toolbar"
+        tabindex="0"
+        on:pointerdown={beginStageDrag}
+      >
+        <span>BluePlay – World</span>
+        <div>
+          <button
+            on:click|stopPropagation={() => (stageMaximized = !stageMaximized)}
+            aria-label={stageMaximized ? "Restore BluePlay world" : "Maximize BluePlay world"}
+            >{stageMaximized ? "❐" : "□"}</button
+          >
+          <button
+            on:click|stopPropagation={() => {
+              stageWindowOpen = false;
+              stageMaximized = false;
+            }}
+            aria-label="Close BluePlay world"
+            >×</button
+          >
+        </div>
+      </div>
+      <div class="stage-window-body">
+        <canvas
+          bind:this={stageCanvas}
+          class="game-stage"
+          class:game-canvas={true}
+          role="button"
+          aria-label="BluePlay world"
+          tabindex="0"
+          style={stageStyle(stage)}
+          on:click={stageClick}
+        ></canvas>
+      </div>
+      <div class="game-controls" aria-label="BluePlay controls">
+        {#if mainEntries.length}<button
+            on:click={resetGame}
+            disabled={!canExecute}
+            aria-label="Reset BluePlay world">Reset</button
+          >{/if}
         <button
-          on:click|stopPropagation={() => (stageMaximized = !stageMaximized)}
-          >{stageMaximized ? "❐" : "□"}</button
+          on:click={() => bluePlayAction("step")}
+          disabled={!canExecute || stageRunning}
+          aria-label="Act once">Act</button
         >
         <button
-          on:click|stopPropagation={() => {
-            stageWindowOpen = false;
-            stageMaximized = false;
-          }}>×</button
+          on:click={() => bluePlayAction("start")}
+          disabled={!canExecute || stageRunning}
+          aria-label="Run BluePlay world">Run</button
+        >
+        <button
+          on:click={() => bluePlayAction("stop")}
+          disabled={!stageRunning}
+          aria-label="Pause BluePlay world">Pause</button
+        >
+        <label
+          >Speed <input
+            aria-label="Speed"
+            type="range"
+            min="1"
+            max="100"
+            bind:value={speed}
+            disabled={runtime.phase !== "ready" && runtime.phase !== "waitingForInput"}
+            on:input={() => bluePlayAction("setSpeed")}
+          /></label
         >
       </div>
     </div>
@@ -2365,7 +2744,7 @@
       >
       <button
         class:active-tool={inheritanceMode}
-        disabled={files.filter((file) => file.kind === "class").length < 2}
+        disabled={displayFiles.filter((file) => file.kind === "class").length < 2}
         on:click={() => {
           inheritanceMode = !inheritanceMode;
           inheritanceSelection = "";
@@ -2397,64 +2776,6 @@
     >
       <div class="panels">
         <div class="canvas">
-          {#if stage}
-            <div
-              class="game-stage"
-              role="button" aria-label="BluePlay world"
-              tabindex="0"
-              style={stageStyle(stage)}
-              on:mousedown={stageClick}
-            >
-              {#each stage.objects || [] as object}
-                <div
-                  class:image={Boolean(object.image)}
-                  class="game-actor"
-                  title={object.type}
-                  style={`left:${((object.x + 0.5) / Math.max(stage.width, 1)) * 100}%;top:${((object.y + 0.5) / Math.max(stage.height, 1)) * 100}%;width:${(object.imageWidth / (stage.width * stage.cellSize)) * 100}%;height:${(object.imageHeight / (stage.height * stage.cellSize)) * 100}%;opacity:${object.imageOpacity ?? 1};transform:translate(-50%,-50%) rotate(${object.rotation || 0}deg)`}
-                >
-                  {#if object.image}<img
-                      class="game-actor-image"
-                      src={object.image}
-                      alt=""
-                      draggable="false"
-                    />{:else}{object.type?.slice(0, 1)}{/if}
-                </div>
-              {/each}
-              {#each stage.texts || [] as text}<span
-                  class="game-text"
-                  style={`left:${(text.x / Math.max(stage.width - 1, 1)) * 100}%;top:${(text.y / Math.max(stage.height - 1, 1)) * 100}%`}
-                  >{text.text}</span
-                >{/each}
-            </div>
-            <div class="game-controls">
-              {#if mainEntries.length}<button
-                  on:click={resetGame}
-                  disabled={!canExecute}>Reset</button
-                >{/if}
-              <button
-                on:click={() => bluePlayAction("step()")}
-                disabled={!canExecute || stageRunning}>Act</button
-              >
-              <button
-                on:click={() => bluePlayAction("start()")}
-                disabled={!canExecute || stageRunning}>Run</button
-              >
-              <button
-                on:click={() => bluePlayAction("stop()")}
-                disabled={!canExecute || !stageRunning}>Pause</button
-              >
-              <label
-                >Speed <input
-                  type="range"
-                  min="1"
-                  max="100"
-                  bind:value={speed}
-                  disabled={!canExecute}
-                  on:input={() => bluePlayAction(`setSpeed(${speed})`)}
-                /></label
-              >
-            </div>
-          {/if}
           {#if showInheritance}
             <svg class="inheritance-layer" aria-hidden="true"
               ><defs
@@ -2479,19 +2800,17 @@
             </svg>
           {/if}
           <div class="cards">
-            {#each files as file, index (file.id)}
-              {@const position =
-                cardPositions[file.id] || defaultCardPosition(index)}
+            {#each displayFiles as file, index (file.id)}
+              {@const position = displayCardPositions[index]}
               <div
                 role="button"
                 tabindex="0"
                 aria-label={file.fileName.replace(".kt", "")}
-                class:framework-card={file.fileName === "BluePlayFunctions.kt"}
                 class:uncompiled={runtime.phase === "uncompiled"}
                 class:inheritance-selected={inheritanceSelection === file.id}
                 class="classcard"
                 style={`left:${position.x}px;top:${position.y}px;--card-left:${position.x}px;--card-top:${position.y}px`}
-                on:pointerdown={(event) => {
+                on:mousedown={(event) => {
                   if (!inheritanceMode) beginCardDrag(event, file);
                 }}
                 on:pointermove={(event) => moveCard(event, file)}
@@ -2499,7 +2818,9 @@
                 on:pointercancel={endCardDrag}
                 on:click={() => selectCard(file, index)}
                 on:dblclick={() => {
-                  if (!inheritanceMode) openEditor(file);
+                  if (inheritanceMode) return;
+                  if (isBluePlayFrameworkFile(file)) openBluePlayApi(file);
+                  else openEditor(file);
                 }}
                 on:contextmenu={(event) => openMenu(event, file)}
                 on:keydown={(event) => {
@@ -3176,7 +3497,7 @@
             <button on:click={() => chooseTemplate("kotlin")}><strong>Kotlin Example</strong><span>Start with a small Kotlin example.</span></button>
           </div>
           <div class="project-choice-with-info">
-            <button disabled title="BluePlay is temporarily unavailable" on:click={() => chooseTemplate("empty-blueplay")}><strong>BluePlay Template</strong><span>Currently unavailable — start with the BluePlay classes later.</span></button
+            <button on:click={() => chooseTemplate("empty-blueplay")}><strong>BluePlay Template</strong><span>Start with the built-in World, Actor and Image library.</span></button
             ><button
             class="project-info-button"
             on:click|stopPropagation={() => (projectInfo = "template")}
@@ -3184,7 +3505,7 @@
             >
           </div>
           <div class="project-choice-with-info">
-            <button disabled title="BluePlay is temporarily unavailable" on:click={() => chooseTemplate("blueplay")}><strong>BluePlay Example</strong><span>Currently unavailable — open the complete BluePlay example later.</span></button
+            <button on:click={() => chooseTemplate("blueplay")}><strong>BluePlay Example</strong><span>Open a small runnable World and Actor project.</span></button
             ><button
             class="project-info-button"
             on:click|stopPropagation={() => (projectInfo = "example")}
@@ -3224,6 +3545,22 @@
               rel="noreferrer">View BluePlay on GitHub</a
             >
           </div>{/if}
+      </div>
+    </div>{/if}
+  {#if bluePlayApiFile}{@const api = bluePlayApiDocs[bluePlayApiFile.fileName]}<div class="modal topmost-modal">
+      <div
+        class="dialog blueplay-api-dialog"
+        role="dialog"
+        aria-modal="true"
+        tabindex="-1"
+        aria-labelledby="blueplay-api-title"
+      >
+        <h3 id="blueplay-api-title">{api.title}</h3>
+        <p>{api.summary}</p>
+        <ul class="blueplay-api-members">
+          {#each api.members as member}<li><code>{member}</code></li>{/each}
+        </ul>
+        <div class="dialog-actions"><button on:click={() => (bluePlayApiFile = null)}>Close</button></div>
       </div>
     </div>{/if}
   {#if newClassOpen}<div class="modal topmost-modal" role="presentation">
@@ -3274,7 +3611,9 @@
       <div class="popup-title">
         {menu.object?.className || menu.file?.fileName.replace(".kt", "")}
       </div>
-      {#if menu.file}
+      {#if menu.file && isBluePlayFrameworkFile(menu.file)}
+        <button on:click={() => openBluePlayApi(menu!.file!)}>Show API documentation</button>
+      {:else if menu.file}
         {#each classes.find((item) => item.name === menu!.file!.fileName.replace(".kt", ""))?.constructors || [] as constructor, index}
           <button
             class="constructor-menu-item"

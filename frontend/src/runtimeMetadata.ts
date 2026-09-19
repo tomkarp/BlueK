@@ -5,18 +5,14 @@ export function manifestClasses(manifest: SymbolManifest, files: ProjectFile[]):
   if (!Array.isArray(manifest.classes) || !Array.isArray(manifest.functions)) {
     throw new Error('Kotlite returned an invalid manifest.');
   }
-  let line = 2; // Kotlite session adds one leading newline.
   const cards = files.flatMap(file => {
-    const first = line + 1; // BlueK file header
-    const last = first + file.source.split('\n').length - 1;
-    line = last + 2;
     if (file.kind !== 'functions') return [];
     return [{ id: file.fileName, name: file.fileName.replace(/\.kt$/, ''), kind: 'functions',
       constructors: [], properties: [], supertypes: [], typeParameters: [],
-      methods: manifest.functions.filter(m => m.sourceLine >= first && m.sourceLine <= last),
+      methods: manifest.functions.filter(m => m.sourceFile === file.fileName || (!m.sourceFile && m.sourceLine >= 0 && !m.builtin)),
     }];
   });
-  const all: ClassMeta[] = [...manifest.classes, ...cards];
+  const all: ClassMeta[] = [...manifest.classes.map(item => ({ ...item, builtin: item.builtin || false })), ...cards];
   const byName = new Map(all.map(value => [value.name, value]));
   const visit = (item: ClassMeta, path: Set<string>): ClassMeta => {
     if (path.has(item.name)) throw new Error('Cyclic class inheritance in manifest.');

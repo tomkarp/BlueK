@@ -8,14 +8,15 @@ async function load(page: Page, source: string, kind: 'class' | 'functions' = 'c
 }
 
 async function watchDialogs(page: Page) {
-  // Observe insertions, including dialogs removed again before the next assertion.
+  // The object-name dialog is required by GUI-02. This test observes only
+  // method argument dialogs, which are the dialogs relevant to GUI-47.
   await page.evaluate(() => {
-    document.body.dataset.callDialogInsertions = '0';
+    document.body.dataset.methodDialogInsertions = '0';
     new MutationObserver(records => {
       for (const record of records) for (const node of record.addedNodes) {
-        if (node instanceof Element && (node.matches('.method-dialog, .create-object-dialog') ||
-          node.querySelector('.method-dialog, .create-object-dialog'))) {
-          document.body.dataset.callDialogInsertions = String(Number(document.body.dataset.callDialogInsertions) + 1);
+        if (node instanceof Element && (node.matches('.method-dialog') ||
+          node.querySelector('.method-dialog'))) {
+          document.body.dataset.methodDialogInsertions = String(Number(document.body.dataset.methodDialogInsertions) + 1);
         }
       }
     }).observe(document.body, { subtree: true, childList: true });
@@ -41,7 +42,7 @@ async function checkActivity(page: Page) {
 
 for (const kind of ['constructor', 'method', 'function'] as const) {
   for (const withParameter of [false, true]) {
-    test(`GUI-47 ${kind} ${withParameter ? 'closes after confirmation' : 'never inserts a parameter dialog'} and shows moving activity`, async ({ page }) => {
+    test(`GUI-47 ${kind} ${withParameter ? 'closes after confirmation' : 'uses no parameter dialog'} and shows moving activity`, async ({ page }) => {
       const params = withParameter ? 'millis: Int' : '';
       const body = `Thread.sleep(${withParameter ? 'millis' : '2000'}); println("done")`;
       const source = kind === 'constructor' ? `class Timer(${params}) { init { ${body} } }`
@@ -51,6 +52,7 @@ for (const kind of ['constructor', 'method', 'function'] as const) {
       if (kind === 'method') {
         await page.locator('.classcard').click({ button: 'right' });
         await page.locator('.constructor-menu-item').click();
+        await page.locator('.create-object-dialog').getByRole('button', { name: 'Create', exact: true }).click();
         await expect(page.locator('.bench .object')).toHaveCount(1);
       }
       await watchDialogs(page);
@@ -62,6 +64,10 @@ for (const kind of ['constructor', 'method', 'function'] as const) {
         await expect(page.getByLabel('Ready', { exact: true })).toBeVisible();
         await dialog.getByLabel('millis: Int', { exact: true }).fill('2000');
         await dialog.getByRole('button', { name: kind === 'constructor' ? 'Create' : 'Invoke', exact: true }).click();
+      } else if (kind === 'constructor') {
+        // Creating an object always requires its name confirmation, even when
+        // the constructor itself has no parameters.
+        await page.locator('.create-object-dialog').getByRole('button', { name: 'Create', exact: true }).click();
       }
       await checkActivity(page);
       if (kind === 'method' && !withParameter) {
@@ -70,7 +76,7 @@ for (const kind of ['constructor', 'method', 'function'] as const) {
       await expect(page.locator('.terminal-output pre')).toHaveText('done\n');
       await expect(page.getByRole('progressbar', { name: 'Ready', exact: true })).toBeVisible();
       await expect(page.locator('.activity-indicator')).toHaveCount(0);
-      if (!withParameter) await expect(page.locator('body')).toHaveAttribute('data-call-dialog-insertions', '0');
+      if (!withParameter) await expect(page.locator('body')).toHaveAttribute('data-method-dialog-insertions', '0');
       if (kind === 'constructor') await expect(page.locator('.bench .object')).toHaveCount(1);
     });
   }
@@ -80,6 +86,7 @@ test('GUI-47 failed argument is visible after Invoke closes; reset discards a pe
   await load(page, 'class Timer { fun starten(millis: Int) { Thread.sleep(millis); println("stale") } }');
   await page.locator('.classcard').click({ button: 'right' });
   await page.locator('.constructor-menu-item').click();
+  await page.locator('.create-object-dialog').getByRole('button', { name: 'Create', exact: true }).click();
   await expect(page.locator('.bench .object')).toHaveCount(1);
   await page.locator('.bench .object').click({ button: 'right' });
   await page.locator('.method-menu-item').filter({ hasText: 'starten' }).click();

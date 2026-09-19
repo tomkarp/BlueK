@@ -1,6 +1,7 @@
 package com.sunnychung.lib.multiplatform.kotlite.model
 
 import com.sunnychung.lib.multiplatform.kotlite.error.IdentifierClassifier
+import com.sunnychung.lib.multiplatform.kotlite.extension.emptyToNull
 import com.sunnychung.lib.multiplatform.kotlite.extension.resolveGenericParameterTypeToUpperBound
 import com.sunnychung.lib.multiplatform.kotlite.log
 import com.sunnychung.lib.multiplatform.kotlite.util.ClassMemberResolver
@@ -61,7 +62,11 @@ class SemanticAnalyzerSymbolTable(
         while (scope != null) {
             if (scope.scopeType == ScopeType.Class) {
                 val clazz = findClass(scope.scopeName)?.first ?: return null
-                return assertToDataType(TypeNode(SourcePosition.NONE, clazz.fullQualifiedName, null, false))
+                val arguments = clazz.typeParameters.map { parameter ->
+                    val alias = currentSymbolTable.findTypeAlias(parameter.name)?.first
+                    TypeParameterType(parameter.name, false, alias ?: AnyType(isNullable = true))
+                }
+                return ObjectType(clazz, arguments, false, emptyList())
             }
             scope = scope.parentScope
         }
@@ -118,7 +123,14 @@ class SemanticAnalyzerSymbolTable(
                     arguments = it.first.primaryConstructor?.parameters?.map { it.parameter } ?: emptyList(),
                     typeParameters = it.first.typeParameters,
                     receiverType = null,
-                    returnType = TypeNode(SourcePosition.NONE, it.first.fullQualifiedName, null, false),
+                    returnType = TypeNode(
+                        SourcePosition.NONE,
+                        it.first.fullQualifiedName,
+                        it.first.typeParameters.map { parameter ->
+                            TypeNode(SourcePosition.NONE, parameter.name, null, false)
+                        }.emptyToNull(),
+                        false,
+                    ),
                     signature = it.first.fullQualifiedName,
                     definition = it.first,
                     scope = this
@@ -235,15 +247,19 @@ class SemanticAnalyzerSymbolTable(
                 }
             }
             .filter { callable ->
-                declareTempTypeAlias(callable.typeParameters.map {
+                declareTempTypeAlias((callable.typeParameters + callable.extraTypeParameters).map {
                     it.name to it.typeUpperBoundOrAny()
                 })
                 try {
                     if (callable.isVararg) {
                         val functionArgType = currentSymbolTable.typeNodeToDataType(
-                            (callable.arguments.first() as FunctionValueParameterNode).type.resolveGenericParameterTypeToUpperBound(
-                                callable.typeParameters + (receiverClass?.typeParameters ?: emptyList())
-                            )
+                            // Keep callable type parameters as placeholders
+                            // while matching. Resolving `Pair<K, V>` to
+                            // `Pair<Any?, Any?>` first would make the
+                            // invariant Pair arguments look incompatible with
+                            // a concrete pair, even though K and V are meant
+                            // to be inferred from that argument.
+                            (callable.arguments.first() as FunctionValueParameterNode).type
                         )!!
                         return@filter arguments.all { functionArgType.isConvertibleFrom(it.type) }
                     }
@@ -282,7 +298,7 @@ class SemanticAnalyzerSymbolTable(
                                     functionArg.defaultValue != null
                                 } else {
                                     currentSymbolTable.typeNodeToDataType(functionArg.type)?.isConvertibleFrom(callArg.type) == true
-                                        || currentSymbolTable.assertToDataType(functionArg.type.resolveGenericParameterTypeToUpperBound(callable.typeParameters + (receiverClass?.typeParameters ?: emptyList()) )).isConvertibleFrom(callArg.type)
+                                        || currentSymbolTable.assertToDataType(functionArg.type.resolveGenericParameterTypeToUpperBound(callable.typeParameters + callable.extraTypeParameters + (receiverClass?.typeParameters ?: emptyList()) )).isConvertibleFrom(callArg.type)
                                     // TODO filter whether same type parameter always map to same argument
                                 }
                             }
@@ -366,15 +382,15 @@ class SemanticAnalyzerSymbolTable(
             .let { callables ->
                 modifierFilter.returnType?.let { requiredReturnType ->
                     callables.filter {
-                        requiredReturnType.isConvertibleFrom(assertToDataTypeWithTypeParameters(it.returnType, it.typeParameters))
+                        requiredReturnType.isConvertibleFrom(assertToDataTypeWithTypeParameters(it.returnType, it.typeParameters + it.extraTypeParameters))
                     }
                 } ?: callables
             }
             .let { callables -> // subclass callables override superclass
                 callables.filterNot { callable ->
                     if (callable.receiverType != null) {
-                        val callableReceiverType = assertToDataTypeWithTypeParameters(callable.receiverType, callable.typeParameters)
-                        callables.any { it.receiverType != null && assertToDataTypeWithTypeParameters(it.receiverType, it.typeParameters).isSubTypeOf(callableReceiverType) }
+                        val callableReceiverType = assertToDataTypeWithTypeParameters(callable.receiverType, callable.typeParameters + callable.extraTypeParameters)
+                        callables.any { it.receiverType != null && assertToDataTypeWithTypeParameters(it.receiverType, it.typeParameters + it.extraTypeParameters).isSubTypeOf(callableReceiverType) }
                     } else {
                         false
                     }
@@ -383,8 +399,8 @@ class SemanticAnalyzerSymbolTable(
             .let { callables -> // class member functions override extension methods
                 callables.filterNot { callable ->
                     if (callable.receiverType != null && callable.type == CallableType.ExtensionFunction) {
-                        val callableReceiverType = assertToDataTypeWithTypeParameters(callable.receiverType, callable.typeParameters)
-                        callables.any { it.receiverType != null && assertToDataTypeWithTypeParameters(it.receiverType, it.typeParameters) == callableReceiverType && it.type == CallableType.ClassMemberFunction }
+                        val callableReceiverType = assertToDataTypeWithTypeParameters(callable.receiverType, callable.typeParameters + callable.extraTypeParameters)
+                        callables.any { it.receiverType != null && assertToDataTypeWithTypeParameters(it.receiverType, it.typeParameters + it.extraTypeParameters) == callableReceiverType && it.type == CallableType.ClassMemberFunction }
                     } else {
                         false
                     }
@@ -396,8 +412,8 @@ class SemanticAnalyzerSymbolTable(
                     callables.any { otherCallable ->
                         if (callable === otherCallable) return@any false
                         if (callable.arguments.size != otherCallable.arguments.size) return@any false
-                        val valueParameterTypes = callable.arguments.map { toDataType(it, callable.typeParameters) }
-                        val otherValueParameterTypes = otherCallable.arguments.map { toDataType(it, otherCallable.typeParameters) }
+                        val valueParameterTypes = callable.arguments.map { toDataType(it, callable.typeParameters + callable.extraTypeParameters) }
+                        val otherValueParameterTypes = otherCallable.arguments.map { toDataType(it, otherCallable.typeParameters + otherCallable.extraTypeParameters) }
                         var isOtherMoreSpecific = false
                         valueParameterTypes.indices.forEach {  i ->
                             if (!otherValueParameterTypes[i].isConvertibleTo(valueParameterTypes[i])) {

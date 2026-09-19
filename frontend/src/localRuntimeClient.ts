@@ -1,8 +1,8 @@
-import type { CompileResult, Diagnostic, ProjectFile } from '../../runtime-contract/src/index';
+import type { CompileResult, Diagnostic, ProjectFile, ProjectLibrary, ProjectResource, BluePlayStage } from '../../runtime-contract/src/index';
 import type { RuntimeCommand, RuntimeEvent, RuntimeSnapshot, RuntimeValue, WorkerCommand, WorkerReply } from '../../runtime-contract/src/index';
 
 type Pending = { resolve: (reply: WorkerReply) => void; reject: (error: Error) => void };
-const initial = (): RuntimeSnapshot => ({ generationId: '', revision: 0, phase: 'uncompiled', classes: [], inspections: {}, references: [], liveObjectIds: [], error: null });
+const initial = (): RuntimeSnapshot => ({ generationId: '', revision: 0, phase: 'uncompiled', classes: [], inspections: {}, references: [], liveObjectIds: [], error: null, simulation: 'inactive' });
 
 /** Single command gateway and observable runtime state for every UI surface. */
 export class LocalRuntimeClient {
@@ -13,24 +13,21 @@ export class LocalRuntimeClient {
   private snapshot = initial();
   private listeners = new Set<() => void>();
   private responseListeners = new Set<(value: RuntimeValue) => void>();
-  private stageListeners = new Set<(value: any) => void>();
+  private stageListeners = new Set<(value: BluePlayStage) => void>();
   private project: ProjectFile[] = [];
-  private timer: ReturnType<typeof setTimeout> | null = null;
-  private simulationRunning = false;
+  private library?: ProjectLibrary;
+  private resources: ProjectResource[] = [];
   private inputRequestId: number | undefined;
 
   constructor(private readonly workerFactory = () => new Worker(new URL('./localRuntimeWorker.ts', import.meta.url), { type: 'module' })) {}
   getSnapshot = () => this.snapshot;
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   onResponse(listener: (value: RuntimeValue) => void) { this.responseListeners.add(listener); return () => { this.responseListeners.delete(listener); }; }
-  stageStream(listener: (value: any) => void) { this.stageListeners.add(listener); return () => { this.stageListeners.delete(listener); }; }
+  stageStream(listener: (value: BluePlayStage) => void) { this.stageListeners.add(listener); return () => { this.stageListeners.delete(listener); }; }
   private update(snapshot: RuntimeSnapshot) { this.snapshot = snapshot; this.listeners.forEach(listener => listener()); }
 
   invalidate(reason = 'Runtime generation replaced.') {
     this.epoch++;
-    if (this.timer !== null) clearTimeout(this.timer);
-    this.timer = null;
-    this.simulationRunning = false;
     this.worker?.terminate();
     this.worker = null;
     for (const pending of this.pending.values()) pending.reject(new Error(reason));
@@ -48,6 +45,7 @@ export class LocalRuntimeClient {
         this.update(runtimeEvent.snapshot);
         if (runtimeEvent.kind === 'inputRequested') this.inputRequestId = runtimeEvent.inputRequestId;
         if (runtimeEvent.output) this.responseListeners.forEach(listener => listener({ kind: 'unit', output: runtimeEvent.output, display: 'Unit' }));
+        if (runtimeEvent.snapshot.stage) this.stageListeners.forEach(listener => listener(runtimeEvent.snapshot.stage!));
         return;
       }
       const pending = this.pending.get(event.data.id);
@@ -78,23 +76,21 @@ export class LocalRuntimeClient {
     if (epoch !== this.epoch || reply.generationId !== this.snapshot.generationId) throw new Error('Stale runtime response.');
     this.update(reply.snapshot);
     this.responseListeners.forEach(listener => listener(reply.response));
-    if (reply.response.stage) {
-      this.stageListeners.forEach(listener => listener(reply.response));
-      this.simulationRunning = Boolean(reply.response.stage.running);
-    }
-    if (reply.snapshot.phase !== 'ready') this.simulationRunning = false;
-    this.scheduleTick();
+    if (reply.response.stage) this.stageListeners.forEach(listener => listener(reply.response.stage!));
+    if (reply.snapshot.stage) this.stageListeners.forEach(listener => listener(reply.snapshot.stage!));
     return reply.response;
   }
-  async compile(files: ProjectFile[], revision: number): Promise<CompileResult> {
+  async compile(files: ProjectFile[], revision: number, library?: ProjectLibrary, resources: ProjectResource[] = []): Promise<CompileResult> {
     this.invalidate();
     const epoch = this.epoch;
     const generationId = crypto.randomUUID();
     this.project = files.map(file => ({ ...file }));
+    this.library = library;
+    this.resources = resources.map(resource => ({ ...resource }));
     this.update({ ...initial(), generationId, phase: 'compiling' });
     try {
       this.start();
-      const reply = await this.request({ op: 'compile', files: this.project, generationId });
+      const reply = await this.request({ op: 'compile', files: this.project, library, resources, generationId });
       const response = this.accept(reply, epoch);
       const diagnostics = response.kind === 'error' ? response.diagnostics ?? [this.diagnostic(response.display || 'Compilation failed.', files)] : [];
       return { generationId: diagnostics.length ? '' : generationId, sourceRevision: revision, classes: reply.snapshot.classes, diagnostics };
@@ -116,13 +112,19 @@ export class LocalRuntimeClient {
   }
   async execute(command: RuntimeCommand): Promise<RuntimeValue> {
     const inputCommand = command.op === 'input';
-    if (this.snapshot.phase !== 'ready' && !(inputCommand && this.snapshot.phase === 'waitingForInput') && !(this.snapshot.phase === 'faulted' && command.op === 'inspect' && this.worker)) {
+    const simulationCommand = command.op === 'simulation';
+    const passiveDuringSimulation = command.op === 'key' || command.op === 'click' || command.op === 'inspect' || command.op === 'simulation' || inputCommand;
+    if (!passiveDuringSimulation && this.snapshot.simulation !== 'inactive' && this.snapshot.simulation !== 'paused') {
+      throw new Error('BluePlay simulation is running. Stop it before executing code.');
+    }
+    const simulationPhaseAllowed = simulationCommand && (this.snapshot.phase === 'ready' || this.snapshot.phase === 'running' || this.snapshot.phase === 'waitingForInput');
+    if (this.snapshot.phase !== 'ready' && !simulationPhaseAllowed && !(inputCommand && this.snapshot.phase === 'waitingForInput') && !(this.snapshot.phase === 'faulted' && command.op === 'inspect' && this.worker)) {
       throw new Error(this.snapshot.phase === 'running' ? 'Another runtime command is running.' : 'Reset or compile the project before running code.');
     }
     if (command.generationId && command.generationId !== this.snapshot.generationId) throw new Error('Stale runtime command.');
     const epoch = this.epoch;
     const previous = this.snapshot;
-    if (!inputCommand) this.update({ ...previous, phase: 'running' });
+    if (!inputCommand && !simulationCommand) this.update({ ...previous, phase: 'running' });
     try {
       const reply = await this.request({ ...command, generationId: previous.generationId, ...(inputCommand ? { inputRequestId: this.inputRequestId } : {}) });
       return this.accept(reply, epoch);
@@ -134,18 +136,13 @@ export class LocalRuntimeClient {
   async sendInput(text: string) { return this.execute({ op: 'input', text, inputRequestId: this.inputRequestId }); }
   async sendEof() { return this.execute({ op: 'input', text: '', eof: true, inputRequestId: this.inputRequestId }); }
   async sendKey(key: string, pressed: boolean) { return this.execute({ op: 'key', key, pressed }); }
-  async sendClick(x: number, y: number) { return this.execute({ op: 'click', x, y }); }
+  async sendClick(x: number, y: number, actorId?: string) { return this.execute({ op: 'click', x, y, actorId }); }
+  async simulation(action: 'step' | 'start' | 'stop' | 'reset' | 'setSpeed', speed?: number) {
+    return this.execute({ op: 'simulation', action, speed });
+  }
   async stop() { this.invalidate(); }
-  async reset() { return this.compile(this.project, Date.now()); }
-
-  private scheduleTick() {
-    if (!this.simulationRunning || this.timer !== null) return;
-    this.timer = setTimeout(async () => {
-      this.timer = null;
-      if (!this.simulationRunning) return;
-      if (this.snapshot.phase !== 'ready') { this.scheduleTick(); return; }
-      try { await this.execute({ op: 'eval', code: 'step()', filename: '<BluePlay>' }); }
-      catch { this.simulationRunning = false; }
-    }, 50);
+  async reset() {
+    if (this.library?.id === 'blueplay') return this.simulation('reset');
+    return this.compile(this.project, Date.now(), this.library, this.resources);
   }
 }

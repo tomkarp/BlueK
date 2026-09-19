@@ -2,6 +2,12 @@ package com.sunnychung.lib.multiplatform.kotlite.model
 
 import com.sunnychung.lib.multiplatform.kotlite.extension.emptyToNull
 
+enum class Variance {
+    Invariant,
+    Covariant,
+    Contravariant,
+}
+
 sealed interface DataType {
 
     val name: String // fully qualified name
@@ -204,12 +210,16 @@ open class ObjectType(val clazz: ClassDefinition, val arguments: List<DataType>,
         if (otherType.arguments.size != arguments.size) throw RuntimeException("runtime type argument mismatch")
         return arguments.withIndex().all {
             val otherTypeArg = otherType.arguments[it.index]
-            it.value == StarType || it.value == otherTypeArg
-                || (otherTypeArg is RepeatedType && it.value.isAssignableFrom(otherTypeArg))
-                || (it.value is TypeParameterType && (
-                    (otherTypeArg is TypeParameterType && otherTypeArg.nameWithNullable == it.value.nameWithNullable)
-                    || (it.value as TypeParameterType).upperBound.isAssignableFrom(otherTypeArg))
-                )
+            when (clazz.typeParameters.getOrNull(it.index)?.variance ?: Variance.Invariant) {
+                Variance.Covariant -> it.value == StarType || it.value.isAssignableFrom(otherTypeArg)
+                Variance.Contravariant -> it.value == StarType || otherTypeArg.isAssignableFrom(it.value)
+                Variance.Invariant -> it.value == StarType || it.value == otherTypeArg
+                    || (otherTypeArg is RepeatedType && it.value.isAssignableFrom(otherTypeArg))
+                    || (it.value is TypeParameterType && (
+                        (otherTypeArg is TypeParameterType && otherTypeArg.nameWithNullable == it.value.nameWithNullable)
+                        || (it.value as TypeParameterType).upperBound.isAssignableFrom(otherTypeArg)
+                    ))
+            }
         }
 //        return other is ObjectType &&
 //                other.clazz.fullQualifiedName == clazz.fullQualifiedName &&
@@ -269,7 +279,18 @@ open class ObjectType(val clazz: ClassDefinition, val arguments: List<DataType>,
             return true
         }
         return otherType == null || arguments.withIndex().all {
-            it.value.isConvertibleFrom(otherType.arguments[it.index])
+            val otherTypeArg = otherType.arguments[it.index]
+            when (clazz.typeParameters.getOrNull(it.index)?.variance ?: Variance.Invariant) {
+                Variance.Covariant -> it.value.isConvertibleFrom(otherTypeArg)
+                Variance.Contravariant -> otherTypeArg.isConvertibleFrom(it.value)
+                // Invariant concrete arguments must still match exactly. A
+                // generic callable receiver such as `MutableList<T>` is a
+                // different case: its `T` is an unresolved placeholder while
+                // matching the callable and must be checked against its bound.
+                Variance.Invariant -> it.value == otherTypeArg
+                    || (it.value is TypeParameterType && (it.value as TypeParameterType).upperBound.isConvertibleFrom(otherTypeArg))
+                    || (otherTypeArg is TypeParameterType && it.value.isConvertibleFrom(otherTypeArg.upperBound))
+            }
         }
     }
 

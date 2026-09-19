@@ -1,7 +1,6 @@
-import type { ProjectFile } from "../../runtime-contract/src/index";
+import type { ProjectFile, ProjectLibrary, ProjectResource, ProjectCardPosition } from "../../runtime-contract/src/index";
 
-export type ProjectResource = { path: string; data: string };
-export type ProjectCardPosition = { x: number; y: number };
+export type { ProjectResource, ProjectCardPosition };
 
 export type SavedProjectFile = {
   fileName: string;
@@ -13,6 +12,7 @@ export type SavedProjectFile = {
 export type SavedProject = {
   format: "bluek-project";
   version: 1;
+  library?: ProjectLibrary;
   files: SavedProjectFile[];
   resources?: ProjectResource[];
   cardPositions?: Record<string, ProjectCardPosition>;
@@ -20,6 +20,7 @@ export type SavedProject = {
 
 export type ProjectModel = {
   files: ProjectFile[];
+  library?: ProjectLibrary;
   resources: ProjectResource[];
   cardPositions: Record<string, ProjectCardPosition>;
 };
@@ -61,10 +62,17 @@ function validateResources(value: unknown): ProjectResource[] | undefined {
       item.path.split("/").includes("..") || typeof item.data !== "string" ||
       !/^data:[^;]+;base64,/.test(item.data);
   })) throw new Error("The project contains invalid media resources.");
-  const resources = value as ProjectResource[];
+  const resources = (value as ProjectResource[]).map(({ path, data }) => ({ path, data }));
   if (new Set(resources.map((resource) => resource.path)).size !== resources.length)
     throw new Error("The project contains duplicate media resources.");
   return resources;
+}
+
+function validateLibrary(value: unknown): ProjectLibrary | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value) || value.id !== "blueplay" || value.version !== 1)
+    throw new Error("The project contains an unknown BlueK library.");
+  return { id: "blueplay", version: 1 };
 }
 
 function validateCardPositions(value: unknown): Record<string, ProjectCardPosition> | undefined {
@@ -83,6 +91,7 @@ export function parseProject(value: unknown): SavedProject {
   return {
     format: "bluek-project",
     version: 1,
+    library: validateLibrary(value.library),
     files: validateFiles(value.files),
     resources: validateResources(value.resources),
     cardPositions: validateCardPositions(value.cardPositions),
@@ -93,19 +102,23 @@ export function createProjectPayload(
   files: ProjectFile[],
   resources: ProjectResource[],
   cardPositions: Record<string, ProjectCardPosition>,
+  library?: ProjectLibrary,
+  additionalCardFiles: ProjectFile[] = [],
 ): SavedProject {
+  const positionedFiles = [...files, ...additionalCardFiles];
   return {
     format: "bluek-project",
     version: 1,
+    ...(library ? { library } : {}),
     files: files.map((file) => ({
       ...(file.path ? { path: file.path } : {}),
       fileName: file.fileName,
       kind: file.kind,
       source: file.source,
     })),
-    resources,
+    resources: resources.map(({ path, data }) => ({ path, data })),
     cardPositions: Object.fromEntries(
-      files
+      positionedFiles
         .filter((file) => cardPositions[file.id])
         .map((file) => [file.fileName, cardPositions[file.id]]),
     ),
@@ -126,13 +139,32 @@ export function projectModelFromPayload(
     revision: 1,
   } satisfies ProjectFile));
   const positions = payload.cardPositions ?? {};
+  const bluePlayFrameworkNames = new Set([
+    "BluePlayFunctions.kt",
+    "World.kt",
+    "Actor.kt",
+    "Image.kt",
+  ]);
   return {
     files,
+    library: payload.library,
     resources: payload.resources ?? [],
     cardPositions: Object.fromEntries(
       files
         .filter((file) => positions[file.fileName])
-        .map((file) => [file.id, positions[file.fileName]]),
+        .map((file) => [
+          payload.library?.id === "blueplay" && bluePlayFrameworkNames.has(file.fileName)
+            ? `blueplay-framework-${file.fileName}`
+            : file.id,
+          positions[file.fileName],
+        ])
+        .concat(
+          payload.library?.id === "blueplay"
+            ? Array.from(bluePlayFrameworkNames)
+                .filter((fileName) => positions[fileName])
+                .map((fileName) => [`blueplay-framework-${fileName}`, positions[fileName]] as const)
+            : [],
+        ),
     ),
   };
 }

@@ -13,6 +13,7 @@ import com.sunnychung.lib.multiplatform.kotlite.extension.unboxRepeatedType
 import com.sunnychung.lib.multiplatform.kotlite.extension.unboxTypeParameterType
 import com.sunnychung.lib.multiplatform.kotlite.model.ASTNode
 import com.sunnychung.lib.multiplatform.kotlite.model.AnyType
+import com.sunnychung.lib.multiplatform.kotlite.model.CallableNode
 import com.sunnychung.lib.multiplatform.kotlite.model.AsOpNode
 import com.sunnychung.lib.multiplatform.kotlite.model.AssignmentNode
 import com.sunnychung.lib.multiplatform.kotlite.model.BinaryOpNode
@@ -41,6 +42,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.DoubleNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ElvisOpNode
 import com.sunnychung.lib.multiplatform.kotlite.model.EnumEntryNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ExecutionEnvironment
+import com.sunnychung.lib.multiplatform.kotlite.model.extraTypeParameters
 import com.sunnychung.lib.multiplatform.kotlite.model.ExtensionProperty
 import com.sunnychung.lib.multiplatform.kotlite.model.ForNode
 import com.sunnychung.lib.multiplatform.kotlite.model.FunctionBodyFormat
@@ -115,6 +117,22 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     var variableDefIndex = 0
     val symbolRecorders = mutableListOf<SymbolReferenceSet>()
     private val smartCastNonNullVariables = mutableSetOf<String>()
+    private val activeReifiedTypeParameters = mutableMapOf<String, Boolean>()
+    private data class CallableContext(val node: CallableNode, val returnType: DataType?)
+    private data class InlineParameter(val owner: CallableNode, val crossinline: Boolean)
+    private val callableContexts = mutableListOf<CallableContext>()
+    private val inlineParameters = mutableMapOf<String, InlineParameter>()
+    private val permittedInlineReferences = mutableSetOf<VariableReferenceNode>()
+
+    private fun checkInlineInvocation(symbol: String?, position: SourcePosition) {
+        val parameter = inlineParameters[symbol] ?: return
+        val ownerIndex = callableContexts.indexOfLast { it.node === parameter.owner }
+        if (!parameter.crossinline && callableContexts.drop(ownerIndex + 1).any {
+                (it.node as? LambdaLiteralNode)?.permitsNonLocalReturn != true
+            }) {
+            throw SemanticException(position, "Inline parameter cannot be invoked in an escaping context; use crossinline")
+        }
+    }
 
     // a cache of common types for optimization. not a must to use them
     val typeRegistry = listOf(
@@ -458,6 +476,14 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             throw SemanticException(position, e.message ?: e.toString() ?: "")
         }
             ?: throw SemanticException(position, "Unknown type `${this.descriptiveName()}`")
+
+        // A lambda is evaluated later, after the generic call scope has been
+        // left. Keep referenced type aliases (including reified parameters)
+        // in its closure so a concrete call-site type is not replaced by the
+        // parameter's upper bound at runtime.
+        if (symbolRecorders.isNotEmpty() && currentScope.findTypeAlias(name) != null) {
+            symbolRecorders.last().typeAlias += name
+        }
     }
 
     fun UnaryOpNode.visit(modifier: Modifier = Modifier()) {
@@ -793,6 +819,9 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             }
         }
 
+        if (!modifier.isSkipGenerics && transformedRefName in inlineParameters && this !in permittedInlineReferences) {
+            throw SemanticException(position, "Inline parameter cannot be used as a value; use noinline")
+        }
         evaluateAndRegisterReturnType(this)
     }
 
@@ -822,6 +851,23 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
         if (FunctionModifier.nullaware in modifiers) {
             throw UnsupportedOperationException("The modifier `nullaware` is not for runtime use")
+        }
+        if (typeParameters.any { it.isReified } && FunctionModifier.inline !in modifiers) {
+            throw SemanticException(position, "Only inline functions can declare reified type parameters")
+        }
+
+        if (FunctionModifier.inline in modifiers &&
+            (FunctionModifier.open in modifiers || FunctionModifier.override in declaredModifiers || FunctionModifier.abstract in modifiers)) {
+            throw SemanticException(position, "Inline functions cannot be virtual or overridden")
+        }
+        valueParameters.forEach { parameter ->
+            val modes = parameter.modifiers.intersect(setOf(FunctionValueParameterModifier.noinline, FunctionValueParameterModifier.crossinline))
+            if (modes.isNotEmpty() && (FunctionModifier.inline !in modifiers || parameter.type !is FunctionTypeNode || modes.size > 1)) {
+                throw SemanticException(parameter.position, "noinline/crossinline require a function parameter of an inline function and cannot be combined")
+            }
+            if (FunctionModifier.inline in modifiers && parameter.type is FunctionTypeNode && parameter.type.isNullable && FunctionValueParameterModifier.noinline !in parameter.modifiers) {
+                throw SemanticException(parameter.position, "Nullable inline parameters must be noinline")
+            }
         }
 
         val isVararg = valueParameters.isNotEmpty() &&
@@ -895,7 +941,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             currentScope.registerTransformedSymbol(position, IdentifierClassifier.Property, "field", "field")
         }
 
-        typeParameters.forEach {
+        (typeParameters + extraTypeParameters).forEach {
             currentScope.declareTypeAlias(position, it.name, it.typeUpperBound)
         }
 
@@ -967,7 +1013,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             copyReceiverIntoCurrentScope(
                 position = position,
                 receiver = receiver,
-                typeParameters = typeParameters,
+                typeParameters = typeParameters + extraTypeParameters,
             )
 
             pushScope("$name(valueParameters)", ScopeType.FunctionParameters)
@@ -1007,7 +1053,22 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
         smartCastNonNullVariables.clear()
         if (body != null) {
-            body.visit(modifier = modifier)
+            body.returnTypeUpperBound = declaredReturnType
+            val previousReified = activeReifiedTypeParameters.toMap()
+            typeParameters.forEach { activeReifiedTypeParameters[it.name] = it.isReified }
+            callableContexts += CallableContext(this, (declaredReturnType ?: inferredReturnType)?.resolveGenericParameterType(typeParameters)?.toDataType())
+            val addedInlineParameters = valueParameters.filter {
+                FunctionModifier.inline in modifiers && it.type is FunctionTypeNode && FunctionValueParameterModifier.noinline !in it.modifiers
+            }
+            addedInlineParameters.forEach { inlineParameters[it.transformedRefName!!] = InlineParameter(this, FunctionValueParameterModifier.crossinline in it.modifiers) }
+            try {
+                body.visit(modifier = modifier)
+            } finally {
+                addedInlineParameters.forEach { inlineParameters.remove(it.transformedRefName) }
+                callableContexts.removeLast()
+                activeReifiedTypeParameters.clear()
+                activeReifiedTypeParameters.putAll(previousReified)
+            }
 
             // TODO check for return statement
 
@@ -1118,6 +1179,19 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     }
 
     fun FunctionCallNode.visit(modifier: Modifier = Modifier(), isSkipConstructionSecurityCheck: Boolean = false, isSuperClassInvocation: Boolean = false) {
+        // Function values have no class member table. Route explicit invoke through
+        // the same resolution and inline-escape checks as the ordinary f(...) form.
+        val navigation = function as? NavigationNode
+        if (navigation?.operator == "." && navigation.member.name == "invoke" && navigation.subject is VariableReferenceNode) {
+            navigation.subject.visit(modifier.copy(isSkipGenerics = true))
+            if (navigation.subject.type() is FunctionTypeNode) {
+                val direct = copy(function = navigation.subject, resolvedInvoke = null)
+                direct.visit(modifier, isSkipConstructionSecurityCheck, isSuperClassInvocation)
+                resolvedInvoke = direct
+                returnType = direct.returnType
+                return
+            }
+        }
         arguments.forEachIndexed { i, _ ->
             arguments.forEachIndexed { j, _ ->
                 if (i < j && arguments[i].name != null && arguments[j].name != null && arguments[i].name == arguments[j].name) {
@@ -1139,6 +1213,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
         class FunctionInfo(val valueParameters: List<Any>, val typeParameters: List<TypeParameterNode>, val receiverType: TypeNode?, val returnType: TypeNode)
 
+        var resolvedDeclaration: FunctionDeclarationNode? = null
         var extraTypeResolutions = emptyMap<String, TypeNode>()
 
         val functionArgumentAndReturnTypeDeclarations = when (function) {
@@ -1165,6 +1240,8 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 }
                 functionRefName = resolution.transformedName
                 callableType = resolution.type
+                resolvedDeclaration = resolution.definition as? FunctionDeclarationNode
+                if (resolution.type == CallableType.Property) checkInlineInvocation(resolution.transformedName, position)
 
                 if (callableType == CallableType.Constructor) {
                     val clazz = resolution.definition as ClassDefinition
@@ -1181,7 +1258,8 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 if (symbolRecorders.isNotEmpty() && isLocalAndNotCurrentScope(resolution.scope.scopeLevel)) {
                     val symbols = symbolRecorders.last()
                     when (resolution.type) {
-                        CallableType.Function, CallableType.Property -> {
+                        CallableType.Property -> { symbols.properties += resolution.owner ?: resolution.transformedName }
+                        CallableType.Function -> {
                             if (resolution.owner == null) {
                                 symbols.functions += resolution.transformedName
                             } else {
@@ -1282,9 +1360,19 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 //                                ) { it.name }
 //                            }; subjectType.arguments=${subjectType.arguments.joinToString(",") { it.descriptiveName }}; before r=${r.descriptiveName()}"
 //                        }
-                        val namedTypeArguments = classTypeParameters.mapIndexed { index, it ->
-                            it.name to subjectType.arguments[index].toTypeNode()
-                        }.toMap().toMutableMap()
+                        // Extension-function type parameters are independent of
+                        // the receiver class' type parameters. In particular,
+                        // `Iterable<S>.filterIsInstance<T>()` must not let a
+                        // receiver such as `List<Entity>` resolve its `T`
+                        // through `List<T>` before the call-site argument is
+                        // applied. Class members still need the class mapping.
+                        val namedTypeArguments = if (resolution.type == CallableType.ExtensionFunction) {
+                            mutableMapOf()
+                        } else {
+                            classTypeParameters.mapIndexed { index, it ->
+                                it.name to subjectType.arguments[index].toTypeNode()
+                            }.toMap().toMutableMap()
+                        }
 
                         // the subject value itself can be a type argument as well. it has a higher priority. try to resolve it.
                         fun resolve(typeParameterName: String, declaredReceiverType: TypeNode, actualReceiverType: TypeNode) {
@@ -1303,7 +1391,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                             }
                         }
                         val subjectTypeNode = subjectType.toTypeNode()
-                        resolution.typeParameters.forEach {
+                        (resolution.typeParameters + resolution.extraTypeParameters).forEach {
                             if (it.name == resolution.receiverType?.name) {
                                 namedTypeArguments[it.name] = subjectTypeNode.let {
                                     if (resolution.receiverType.isNullable || function.operator == "?.") {
@@ -1346,6 +1434,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     }
                 }
 
+                resolvedDeclaration = resolution.definition as? FunctionDeclarationNode
                 FunctionInfo(
                     valueParameters = resolution.arguments,
                     typeParameters = resolution.typeParameters,
@@ -1391,6 +1480,24 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         declaredTypeArguments.forEach {
             it.visit(modifier = modifier)
         }
+
+        fun findErasedTypeParameter(type: TypeNode): String? {
+            if (currentScope.findTypeAlias(type.name) != null && activeReifiedTypeParameters[type.name] != true) {
+                return type.name
+            }
+            // Nested arguments are erased even inside a reified classifier (List<T>).
+            return if (type.name == "Nothing") "Nothing" else null
+        }
+        functionArgumentAndReturnTypeDeclarations.typeParameters
+            .zip(declaredTypeArguments)
+            .firstOrNull { (parameter, argument) -> parameter.isReified && findErasedTypeParameter(argument) != null }
+            ?.let { (_, argument) ->
+                val erased = findErasedTypeParameter(argument)!!
+                throw SemanticException(
+                    argument.position,
+                    "Cannot pass erased type parameter `$erased` to reified type parameter",
+                )
+            }
 
         functionArgumentAndReturnTypeDeclarations.typeParameters.forEach {
             currentScope.declareTypeAlias(it.position, it.name, it.typeUpperBound)
@@ -1581,13 +1688,35 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 }
                 callArgument.value.returnTypeUpperBound = functionArgumentType.returnType.toTypeNode()
                 callArgument.value.receiverType = functionArgumentType.receiverType?.toTypeNode()
+                val parameter = functionArgumentAndReturnTypeDeclarations.valueParameters[callArgumentMappedIndexes[i]] as? FunctionValueParameterNode
+                callArgument.value.permitsNonLocalReturn = resolvedDeclaration?.modifiers?.contains(FunctionModifier.inline) == true &&
+                    parameter != null && FunctionValueParameterModifier.noinline !in parameter.modifiers && FunctionValueParameterModifier.crossinline !in parameter.modifiers
+                callArgument.value.implicitLabel = when (val called = function) {
+                    is VariableReferenceNode -> called.variableName
+                    is NavigationNode -> (called.member as? ClassMemberReferenceNode)?.name
+                    else -> null
+                }
             }
         }
 
         // revisit to resolve generic lambda type parameters
         // visit argument must before evaluating type
-        arguments.forEach {
-            it.visit(modifier = modifier.copy(isSkipGenerics = false))
+        arguments.forEachIndexed { i, argument ->
+            val reference = argument.value as? VariableReferenceNode
+            val symbol = reference?.let { if (currentScope.hasProperty(it.variableName)) checkPropertyReadAccessAndGetScopeLevelAndTransformedName(it, it.variableName).second else null }
+            val source = inlineParameters[symbol]
+            if (source != null) {
+                val parameter = functionArgumentAndReturnTypeDeclarations.valueParameters[callArgumentMappedIndexes[i]] as? FunctionValueParameterNode
+                if (resolvedDeclaration?.modifiers?.contains(FunctionModifier.inline) != true || parameter == null ||
+                    FunctionValueParameterModifier.noinline in parameter.modifiers ||
+                    (!source.crossinline && FunctionValueParameterModifier.crossinline in parameter.modifiers)) {
+                    throw SemanticException(argument.position, "Inline parameter cannot escape into this argument; use noinline/crossinline")
+                }
+                checkInlineInvocation(symbol, argument.position)
+                permittedInlineReferences += reference!!
+            }
+            try { argument.visit(modifier = modifier.copy(isSkipGenerics = false)) }
+            finally { if (reference != null) permittedInlineReferences.remove(reference) }
         }
 
         // use resolved type parameters in generic lambda arguments to resolve function type parameters
@@ -1605,6 +1734,11 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         if (typeArguments.size != typeParameters.size) {
             val missing = (typeParameters.indices - (inferredTypeArguments?.withIndex()?.filter { it.value != null }?.map { it.index }?.toSet() ?: emptySet())).map { typeParameters[it].name }
             throw CannotInferTypeException(position, "type: ${missing.joinToString(", ")}")
+        }
+        functionArgumentAndReturnTypeDeclarations.typeParameters.zip(typeArguments).forEach { (parameter, argument) ->
+            if (parameter.isReified && findErasedTypeParameter(argument) != null) {
+                throw SemanticException(argument.position, "Cannot pass erased type parameter `${argument.name}` to reified type parameter")
+            }
         }
         tpResolutions = typeArguments.mapIndexed { index, t ->
             typeParameters[index].name to t
@@ -1712,29 +1846,24 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     }
 
     fun ReturnNode.visit(modifier: Modifier = Modifier()) {
-        var s: SymbolTable = currentScope
-        while (s.scopeType != ScopeType.Function) {
-            if (s.scopeType == ScopeType.Script || s.parentScope == null) {
-                throw SemanticException(position, "`return` statement should be within a function")
+        val target = callableContexts.asReversed().firstOrNull { context ->
+            val lambda = context.node as? LambdaLiteralNode
+            if (returnToLabel.isNotEmpty() && lambda?.labelName == returnToLabel) return@firstOrNull true
+            if (lambda == null) {
+                if (returnToLabel.isNotEmpty()) throw SemanticException(position, "Return label `$returnToLabel` not found")
+                return@firstOrNull true
             }
-            if (s.scopeType == ScopeType.Closure) {
-                if (returnToLabel.isEmpty()) {
-                    throw SemanticException(position, "Direct `return` statement cannot live inside a lambda")
-                } else {
-                    if (s.scopeName != "$returnToLabel@") {
-                        throw SemanticException(position, "Return label `$returnToLabel` does not match the enclosing lambda label")
-                    }
-                    break
-                }
+            if (!lambda.permitsNonLocalReturn) {
+                throw SemanticException(position, "Non-local return is only allowed through inline lambda parameters (not noinline/crossinline)")
             }
-            s = s.parentScope!!
+            false
+        } ?: throw SemanticException(position, "`return` statement should be within a function")
+        returnToAddress = target.node.returnTargetId
+        isNonLocal = target !== callableContexts.last()
+        if (target !== callableContexts.last() && symbolRecorders.isNotEmpty()) {
+            symbolRecorders.last().returnTargets += returnToAddress
         }
-        if (returnToLabel.isNotEmpty() && s.scopeType != ScopeType.Closure) {
-            throw SemanticException(position, "Return label `$returnToLabel` not found")
-        }
-        // TODO block return in lambda
-        // s.scopeType == ScopeType.Function
-        val declaredReturnType = s.returnType
+        val declaredReturnType = target.returnType
         if (declaredReturnType is FunctionType && value is LambdaLiteralNode) {
             value.parameterTypesUpperBound = declaredReturnType.arguments.map { it.toTypeNode() }
             value.returnTypeUpperBound = declaredReturnType.returnType.toTypeNode()
@@ -1743,7 +1872,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         value?.visit(modifier = modifier)
         val valueType = value?.type()?.toDataType() ?: UnitType()
         if (declaredReturnType != null && valueType !is NothingType && !declaredReturnType.isAssignableFrom(valueType)) {
-            throw TypeMismatchException(position, s.returnType!!.descriptiveName, valueType.descriptiveName)
+            throw TypeMismatchException(position, declaredReturnType.descriptiveName, valueType.descriptiveName)
         }
     }
 
@@ -1915,6 +2044,16 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     }
 
     fun ClassDeclarationNode.visit(modifier: Modifier = Modifier()) {
+        val previousReified = activeReifiedTypeParameters.toMap()
+        typeParameters.forEach { activeReifiedTypeParameters[it.name] = false }
+        try { visitClassBody(modifier) } finally {
+            activeReifiedTypeParameters.clear()
+            activeReifiedTypeParameters.putAll(previousReified)
+        }
+    }
+
+    private fun ClassDeclarationNode.visitClassBody(modifier: Modifier) {
+        if (typeParameters.any { it.isReified }) throw SemanticException(position, "Class type parameters cannot be reified")
         val fullQualifiedClassName = fullQualifiedName
         val classType = TypeNode(
             position = position,
@@ -2316,7 +2455,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
         symbolRecorders += SymbolReferenceSet(scopeLevel = currentScope.scopeLevel)
         pushScope(
-            scopeName = label?.label?.let { "$it@" } ?: "<lambda>",
+            scopeName = labelName?.let { "$it@" } ?: "<lambda>",
             scopeType = ScopeType.Closure,
             returnType = returnTypeUpperBound?.toDataType() //type.returnType.toDataType(),
         )
@@ -2344,9 +2483,10 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         // TODO provide receiver to scope if exists
 
         body.returnTypeUpperBound = returnTypeUpperBound
-        body.visit(modifier = modifier)
+        callableContexts += CallableContext(this, returnTypeUpperBound?.toDataType() ?: AnyType(true))
+        try { body.visit(modifier = modifier) } finally { callableContexts.removeLast() }
 
-        if (returnTypeUpperBound?.toDataType()?.isConvertibleFrom(body.type().toDataType()) == false) {
+        if (returnTypeUpperBound?.name != "Unit" && body.type().name != "Nothing" && returnTypeUpperBound?.toDataType()?.isConvertibleFrom(body.type().toDataType()) == false) {
             throw SemanticException(position, "Lambda return type ${body.type().descriptiveName()} cannot be converted to ${returnTypeUpperBound!!.descriptiveName()}")
         }
 
@@ -2372,6 +2512,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                         isLocalAndNotCurrentScope(it)
                     } ?: false
                 }
+            symbols.returnTargets += this.accessedRefs!!.returnTargets.filter { it != callableContexts.lastOrNull()?.node?.returnTargetId }
             symbols.classes += this.accessedRefs!!.classes
             symbols.typeAlias += this.accessedRefs!!.typeAlias
         }
@@ -2412,7 +2553,23 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         this.node2.visit(modifier = modifier)
 
         when (functionName) {
-            in setOf("to", "is", "!is") -> {}
+            in setOf("to") -> {}
+            in setOf("is", "!is") -> {
+                val testedType = node2 as? TypeNode
+                    ?: throw SemanticException(node2.position, "Type test requires a type")
+                if (testedType.arguments.orEmpty().any { it.name != "*" }) {
+                    val target = testedType.toDataType() as? ObjectType
+                    val source = node1.type().toDataType() as? ObjectType
+                    val known = if (target != null && source != null) {
+                        val corresponding = if (source.name == target.name) source else source.findSuperType(target.name)
+                        corresponding != null && target.copyOf(true).isAssignableFrom(corresponding)
+                    } else false
+                    if (!known) throw SemanticException(testedType.position, "Cannot check for instance of erased type `${testedType.descriptiveName()}`; use star projections")
+                }
+                if (currentScope.findTypeAlias(testedType.name) != null && activeReifiedTypeParameters[testedType.name] != true) {
+                    throw SemanticException(testedType.position, "Cannot check for instance of erased type parameter `${testedType.name}`; make it reified")
+                }
+            }
             in setOf("in", "!in") -> {
                 call = assertInOperatorCall(modifier = modifier, position = position, subject = node1, iterable = node2)
             }
@@ -2807,7 +2964,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     }
                 }
 
-                "==", "!=" -> {
+                "==", "!=", "===", "!==" -> {
                     if (
                         (t1 isPrimitiveTypeOf PrimitiveTypeName.Byte && !(t2 isPrimitiveTypeOf PrimitiveTypeName.Byte))
                         || (!(t1 isPrimitiveTypeOf PrimitiveTypeName.Byte) && t2 isPrimitiveTypeOf PrimitiveTypeName.Byte)
@@ -2993,7 +3150,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     }
 
     fun ReturnNode.type(modifier: ResolveTypeModifier = ResolveTypeModifier()): TypeNode {
-        return value?.type(modifier = modifier) ?: typeRegistry["Unit"]!!
+        return if (isNonLocal) typeRegistry["Nothing"]!! else value?.type(modifier = modifier) ?: typeRegistry["Unit"]!!
     }
 
     fun IfNode.type(modifier: ResolveTypeModifier = ResolveTypeModifier()): TypeNode {
@@ -3011,7 +3168,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     fun LambdaLiteralNode.type(modifier: ResolveTypeModifier = ResolveTypeModifier()): TypeNode {
         if (modifier.isSkipGenerics) return FunctionTypeNode(position = position, parameterTypes = null, returnType = null, isNullable = false)
         type?.let { return it }
-        return FunctionTypeNode(position = position, parameterTypes = valueParameters.map { it.type(modifier = modifier) }, returnType = body.type(), isNullable = false)
+        return FunctionTypeNode(position = position, parameterTypes = valueParameters.map { it.type(modifier = modifier) }, returnType = if (returnTypeUpperBound != null && returnTypeUpperBound?.name == "Unit") returnTypeUpperBound else body.type(), isNullable = false)
             .also { type = it }
     }
 

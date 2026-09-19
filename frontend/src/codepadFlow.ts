@@ -1,8 +1,8 @@
-import type { CompileResult, ProjectFile, RuntimeCommand, RuntimeSnapshot, RuntimeValue } from "../../runtime-contract/src/index";
+import type { CompileResult, ProjectFile, ProjectLibrary, ProjectResource, RuntimeCommand, RuntimeSnapshot, RuntimeValue } from "../../runtime-contract/src/index";
 
 export type CodepadClient = {
   getSnapshot(): RuntimeSnapshot;
-  compile(files: ProjectFile[], revision: number): Promise<CompileResult>;
+  compile(files: ProjectFile[], revision: number, library?: ProjectLibrary, resources?: ProjectResource[]): Promise<CompileResult>;
   execute(command: RuntimeCommand): Promise<RuntimeValue>;
 };
 
@@ -17,9 +17,11 @@ export async function compileProject(
   client: CodepadClient,
   files: ProjectFile[],
   revision: number,
+  library?: ProjectLibrary,
+  resources: ProjectResource[] = [],
 ): Promise<CompileFlowResult> {
   try {
-    const result = await client.compile(files, revision);
+    const result = await client.compile(files, revision, library, resources);
     return {
       ok: result.diagnostics.length === 0,
       generationId: result.generationId,
@@ -46,10 +48,12 @@ export async function executeCodepad(
   files: ProjectFile[],
   revision: number,
   code: string,
+  library?: ProjectLibrary,
+  resources: ProjectResource[] = [],
 ): Promise<CodepadFlowResult> {
   let generationId = client.getSnapshot().generationId;
   if (client.getSnapshot().phase === "uncompiled") {
-    const compile = await compileProject(client, files, revision);
+    const compile = await compileProject(client, files, revision, library, resources);
     if (!compile.ok) return { kind: "compile-error", compile };
     generationId = compile.generationId;
   }
