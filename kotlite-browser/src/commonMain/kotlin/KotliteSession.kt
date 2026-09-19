@@ -96,6 +96,7 @@ class KotliteSession {
     private var bluePlayActorHint: ClassInstance? = null
     private var bluePlaySpeed = 50
     private var bluePlayFrameVersion = 0
+    private var bluePlayBatching = false
     private var bluePlayIntent = ""
     private var bluePlayGeneration = ""
     private val projectFunctionRanges = mutableListOf<Triple<String, Int, Int>>()
@@ -115,6 +116,7 @@ class KotliteSession {
         bluePlayActorHint = null
         bluePlaySpeed = 50
         bluePlayFrameVersion = 0
+        bluePlayBatching = false
         bluePlayIntent = ""
         projectFunctionRanges.clear()
         resetInterpreter()
@@ -361,13 +363,15 @@ class KotliteSession {
         }
         definition("bluekRenderWorld", "Unit", listOf(CustomFunctionParameter("world", "Any"))) { _, args ->
             val world = args[0] as ClassInstance
-            if (bluePlayWorld === world) stageSnapshot = renderBluePlayStage(world)
+            if (!bluePlayBatching && bluePlayWorld === world) stageSnapshot = renderBluePlayStage(world)
             UnitValue
         }
         definition("bluekRenderActor", "Unit", listOf(CustomFunctionParameter("actor", "Any"))) { _, args ->
             val actor = args[0] as ClassInstance
-            bluePlayActors.firstOrNull { sameBluePlayInstance(it.second, actor) }?.first?.let { world ->
-                if (bluePlayWorld === world) stageSnapshot = renderBluePlayStage(world)
+            if (!bluePlayBatching) {
+                bluePlayActors.firstOrNull { sameBluePlayInstance(it.second, actor) }?.first?.let { world ->
+                    if (bluePlayWorld === world) stageSnapshot = renderBluePlayStage(world)
+                }
             }
             UnitValue
         }
@@ -650,7 +654,7 @@ class KotliteSession {
             interpreter.runImmediately {
                 world.assign(interpreter, "speed", IntValue(bluePlaySpeed, interpreter.symbolTable()))
             }
-            stageSnapshot = renderBluePlayStage(world)
+            if (!bluePlayBatching) stageSnapshot = renderBluePlayStage(world)
         }
         return result("unit", UnitValue)
     }
@@ -670,17 +674,20 @@ class KotliteSession {
         if (executionCompleted != null) return errorMessage("Another runtime command is running.")
         inputRequested = onInput
         executionCompleted = onComplete
+        bluePlayBatching = true
         (suspend {
             invokeDirect(world, "act")
             val actors = bluePlayActors.filter { it.first === world }.map { it.second }
             actors.forEach { actor ->
                 if (bluePlayActors.any { it.first === world && it.second === actor }) invokeDirect(actor, "act")
             }
+            bluePlayBatching = false
             invokeDirect(world, "show")
             UnitValue
         }).startCoroutine(object : Continuation<UnitValue> {
             override val context = kotlin.coroutines.EmptyCoroutineContext
             override fun resumeWith(outcome: Result<UnitValue>) {
+                bluePlayBatching = false
                 inputContinuation = null
                 inputRequested = null
                 val response = try {
@@ -702,6 +709,7 @@ class KotliteSession {
         if (executionCompleted != null) return errorMessage("Another runtime command is running.")
         inputRequested = onInput
         executionCompleted = onComplete
+        bluePlayBatching = true
         (suspend {
             val call = FunctionCallNode(VariableReferenceNode(main.position, "main"), emptyList(), emptyList(), main.position)
             interpreter.evalFunctionCall(
@@ -713,6 +721,8 @@ class KotliteSession {
         }).startCoroutine(object : Continuation<RuntimeValue> {
             override val context = kotlin.coroutines.EmptyCoroutineContext
             override fun resumeWith(outcome: Result<RuntimeValue>) {
+                bluePlayBatching = false
+                bluePlayWorld?.let { stageSnapshot = renderBluePlayStage(it) }
                 inputContinuation = null
                 inputRequested = null
                 val response = try {
@@ -1200,6 +1210,7 @@ class KotliteSession {
         bluePlayActors.clear()
         bluePlaySpeed = 50
         bluePlayFrameVersion = 0
+        bluePlayBatching = false
         bluePlayIntent = ""
         projectFunctionRanges.clear()
         resetInterpreter()
@@ -1224,6 +1235,7 @@ class KotliteSession {
     }
 
     fun renderBluePlay() {
+        if (bluePlayBatching) return
         bluePlayWorld?.let { world -> stageSnapshot = renderBluePlayStage(world) }
     }
 

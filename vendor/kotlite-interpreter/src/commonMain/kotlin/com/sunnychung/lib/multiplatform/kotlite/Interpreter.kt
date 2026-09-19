@@ -771,7 +771,9 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             ?.takeIf { it.transformedRefName != null }
             ?.let { function ->
                 val subjectType = subject?.type() as? ObjectType
-                subjectType?.let { subjectType ->
+                // No class type substitutions are needed for a non-generic
+                // hierarchy. Function type parameters are still resolved below.
+                subjectType?.takeIf { it.arguments.isNotEmpty() || it.superTypes.any { parent -> parent.arguments.isNotEmpty() } }?.let { subjectType ->
                     ClassMemberResolver.create(symbolTable(), subjectType.clazz, subjectType.arguments.map { it.toTypeNode() })
                 }
             }
@@ -830,7 +832,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             }
             symbolTable.returnTargets[functionNode.returnTargetId] = returnTarget
             extraScopeParameters.forEach {
-                symbolTable.declareProperty(callPosition, it.key, TypeNode(callPosition, it.value.type().name, null, false), false) // TODO change to use DataType directly
+                symbolTable.declareProperty(callPosition, it.key, it.value.type(), false)
                 symbolTable.assign(it.key, it.value)
             }
             extraScopePropertyHolders.forEach { (name, holder) ->
@@ -860,7 +862,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                             .also { arguments[index] = it }
                     )
                 } else if (isVararg) {
-                    val argumentType = varargListValueArgument!!.type().toTypeNode()
+                    val argumentType = varargListValueArgument!!.type()
                     symbolTable.declareProperty(callPosition, it.transformedRefName!!, argumentType, false)
                     symbolTable.assign(
                         name = it.transformedRefName!!,
@@ -1174,24 +1176,24 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 var clazz: ClassDefinition? = (subject.type() as ObjectType).clazz
                 while (clazz != null) {
                     declaredThisClassNames += clazz.fullQualifiedName
-                    symbolTable.declareProperty(position, "this/${clazz.fullQualifiedName}", subject.type().toTypeNode(), false)
+                    symbolTable.declareProperty(position, "this/${clazz.fullQualifiedName}", subject.type(), false)
                     symbolTable.assign("this/${clazz.fullQualifiedName}", subject)
                     clazz = clazz.superClass
                 }
             } else {
                 declaredThisClassNames += subject.type().name
-                symbolTable.declareProperty(position, "this/${subject.type().name}", subject.type().toTypeNode(), false)
+                symbolTable.declareProperty(position, "this/${subject.type().name}", subject.type(), false)
                 symbolTable.assign("this/${subject.type().name}", subject)
             }
             if (receiverType != null) {
                 val receiverIdentifier = receiverType.resolveGenericParameterTypeToUpperBound(function.typeParameters).descriptiveName()
                 if (!declaredThisClassNames.contains(receiverIdentifier)) {
                     declaredThisClassNames += receiverIdentifier
-                    symbolTable.declareProperty(position, "this/$receiverIdentifier", subject.type().toTypeNode(), false)
+                    symbolTable.declareProperty(position, "this/$receiverIdentifier", subject.type(), false)
                     symbolTable.assign("this/$receiverIdentifier", subject)
                 }
             }
-            symbolTable.declareProperty(position, "this", subject.type().toTypeNode(), false)
+            symbolTable.declareProperty(position, "this", subject.type(), false)
             symbolTable.assign("this", subject)
 //            symbolTable.registerTransformedSymbol(position, IdentifierClassifier.Property, "this", "this")
             symbolTable.registerTransformedSymbol(position, IdentifierClassifier.Property, "this/${subject.type().name}", "this")
@@ -1199,7 +1201,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             if (subject is ClassInstance) {
                 // a hack to resolve "super". See documentation
                 val parentInstance = subject.parentInstance ?: subject
-                symbolTable.declareProperty(position, "super", subject.type().toTypeNode(), false)
+                symbolTable.declareProperty(position, "super", subject.type(), false)
                 symbolTable.assign("super", subject)
                 symbolTable.registerTransformedSymbol(position, IdentifierClassifier.Property, "super", "super")
             }
@@ -1784,7 +1786,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
 
         try {
-            symbolTable().declareProperty(subject.position, "#subject", subjectValue.type().toTypeNode(), false)
+            symbolTable().declareProperty(subject.position, "#subject", subjectValue.type(), false)
             symbolTable().assign("#subject", subjectValue)
 
             // TODO move the call lookups to Semantic Analyzer. Currently impossible because runtime class type member always has higher priority than compile-time type
@@ -1800,7 +1802,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 position = position,
                 callableType = CallableType.ExtensionFunction,
             ).enrichIterableCall(subjectValue.type()).eval()
-            symbolTable().declareProperty(subject.position, "#iterator", iteratorValue.type().toTypeNode(), false)
+            symbolTable().declareProperty(subject.position, "#iterator", iteratorValue.type(), false)
             symbolTable().assign("#iterator", iteratorValue)
             val hasNextCall = FunctionCallNode(
                 function = NavigationNode(

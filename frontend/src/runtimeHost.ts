@@ -45,24 +45,36 @@ export class RuntimeHost {
   private session: KotliteSessionBridge | null = null;
   private snapshot: RuntimeSnapshot = initialSnapshot();
   private sequence = 0;
+  private lastOutputPublishAt = -Infinity;
+  private outputTimer: ReturnType<typeof setTimeout> | null = null;
   private active: { executionId: number; inputRequestId?: number } | null = null;
   private lastStage: BluePlayStage | undefined;
   private simulation: { state: SimulationState; speed: number; emit: Emit | null; timer: ReturnType<typeof setTimeout> | null } = { state: 'inactive', speed: 50, emit: null, timer: null };
 
   constructor(private readonly createSession: () => KotliteSessionBridge) {}
 
-  private refreshSnapshot() {
+  private refreshSnapshot(includeInspections = true) {
     const inspections: Record<string, RuntimeValue> = {};
     const references = this.session ? JSON.parse(this.session.referenceSnapshot()) : { references: [], liveObjectIds: [] };
-    for (const handle of references.liveObjectIds) {
-      try { inspections[handle] = JSON.parse(this.session!.inspect(handle)); }
-      catch { inspections[handle] = { kind: 'error', objectId: handle, display: 'Inspection unavailable.' }; }
+    if (includeInspections) {
+      for (const handle of references.liveObjectIds) {
+        try { inspections[handle] = JSON.parse(this.session!.inspect(handle)); }
+        catch { inspections[handle] = { kind: 'error', objectId: handle, display: 'Inspection unavailable.' }; }
+      }
     }
-    this.snapshot = { ...this.snapshot, ...references, revision: this.snapshot.revision + 1, inspections, simulation: this.simulation.state, stage: this.lastStage };
+    this.snapshot = {
+      ...this.snapshot,
+      ...references,
+      revision: this.snapshot.revision + 1,
+      inspections: includeInspections ? inspections : this.snapshot.inspections,
+      simulation: this.simulation.state,
+      stage: this.lastStage,
+    };
   }
 
-  private publish(id: number, response: RuntimeValue): WorkerReply {
-    this.refreshSnapshot();
+  private publish(id: number, response: RuntimeValue, includeInspections = true): WorkerReply {
+    this.clearOutputTimer();
+    this.refreshSnapshot(includeInspections);
     response.output = this.session?.takeOutput() || '';
     this.session?.renderBluePlay();
     const stage = this.session?.takeStage();
@@ -74,7 +86,13 @@ export class RuntimeHost {
     return { id, generationId: this.snapshot.generationId, response, snapshot: this.snapshot };
   }
 
+  private publishInputState(id: number, response: RuntimeValue): WorkerReply {
+    this.snapshot = { ...this.snapshot, simulation: this.simulation.state };
+    return { id, generationId: this.snapshot.generationId, response, snapshot: this.snapshot };
+  }
+
   private emitEvent(executionId: number, kind: RuntimeEvent['kind'], emit: Emit, extra: Partial<RuntimeEvent> = {}) {
+    this.clearOutputTimer();
     const output = this.session?.takeOutput() || '';
     this.refreshSnapshot();
     if (output) emit({ type: 'event', generationId: this.snapshot.generationId, executionId, sequence: ++this.sequence, kind: 'output', output, snapshot: this.snapshot });
@@ -82,14 +100,37 @@ export class RuntimeHost {
   }
 
   private emitSimulationSnapshot(executionId: number, emit: Emit, response: RuntimeValue) {
-    const reply = this.publish(0, response);
+    const reply = this.publish(0, response, false);
     if (reply.response.output) emit({ type: 'event', generationId: reply.generationId, executionId, sequence: ++this.sequence, kind: 'output', output: reply.response.output, snapshot: reply.snapshot });
     emit({ type: 'event', generationId: reply.generationId, executionId, sequence: ++this.sequence, kind: 'snapshot', snapshot: reply.snapshot });
   }
 
+  private clearOutputTimer() {
+    if (this.outputTimer !== null) clearTimeout(this.outputTimer);
+    this.outputTimer = null;
+  }
+
   private emitStreamingOutput(executionId: number, emit: Emit) {
+    // println can run thousands of times per second. Keep output streaming,
+    // but do not flood the UI with one full snapshot per line. Remaining text
+    // is drained by a trailing timer, or immediately at input/completion.
+    const now = performance.now();
+    const remaining = 16 - (now - this.lastOutputPublishAt);
+    if (remaining > 0) {
+      if (this.outputTimer === null) {
+        const generationId = this.snapshot.generationId;
+        this.outputTimer = setTimeout(() => {
+          this.outputTimer = null;
+          if (this.snapshot.generationId === generationId && this.active?.executionId === executionId)
+            this.emitStreamingOutput(executionId, emit);
+        }, remaining);
+      }
+      return;
+    }
+    this.clearOutputTimer();
     const output = this.session?.takeOutput() || '';
     if (!output) return;
+    this.lastOutputPublishAt = now;
     this.refreshSnapshot();
     emit({ type: 'event', generationId: this.snapshot.generationId, executionId, sequence: ++this.sequence, kind: 'output', output, snapshot: this.snapshot });
   }
@@ -99,7 +140,7 @@ export class RuntimeHost {
       if (command.op === 'compile') {
         if (this.simulation.timer !== null) clearTimeout(this.simulation.timer);
         this.simulation = { state: 'inactive', speed: 50, emit: null, timer: null };
-        this.lastStage = undefined; this.active = null; this.sequence = 0;
+        this.lastStage = undefined; this.active = null; this.sequence = 0; this.lastOutputPublishAt = -Infinity;
         this.snapshot = { ...initialSnapshot(), generationId: command.generationId, phase: 'compiling' };
         this.session = this.createSession();
         this.session.configureBluePlay(command.library?.id === 'blueplay', command.generationId);
@@ -130,8 +171,8 @@ export class RuntimeHost {
       }
       if (!this.session || command.generationId !== this.snapshot.generationId) throw new RequestError('Stale or missing runtime generation.');
       if (command.op === 'simulation') { this.dispatchSimulation(id, command, emit); return; }
-      if (command.op === 'key') { emit(this.publish(id, JSON.parse(this.session.setKey(command.key, !!command.pressed)))); return; }
-      if (command.op === 'click') { emit(this.publish(id, JSON.parse(this.session.setClick(command.x, command.y, command.actorId || '')))); return; }
+      if (command.op === 'key') { emit(this.publishInputState(id, JSON.parse(this.session.setKey(command.key, !!command.pressed)))); return; }
+      if (command.op === 'click') { emit(this.publishInputState(id, JSON.parse(this.session.setClick(command.x, command.y, command.actorId || '')))); return; }
       if (command.op === 'input') {
         if (!this.active || this.snapshot.phase !== 'waitingForInput' || command.inputRequestId !== this.active.inputRequestId) throw new RequestError('Stale or duplicate input response.');
         this.active.inputRequestId = undefined; this.snapshot.phase = 'running';
@@ -158,6 +199,7 @@ export class RuntimeHost {
       }
       const executionId = id;
       this.active = { executionId }; this.snapshot.phase = 'running';
+      this.lastOutputPublishAt = -Infinity;
       this.session.setOutputCallback(() => this.emitStreamingOutput(executionId, emit)); this.emitEvent(executionId, 'started', emit);
       const onInput = (inputRequestId: number) => {
         if (!this.active || this.active.executionId !== executionId) return;
@@ -199,7 +241,7 @@ export class RuntimeHost {
         this.simulation.timer = null;
         this.scheduleSimulationStep();
       }
-      emit(this.publish(id, JSON.parse(this.session.setBluePlaySpeed(this.simulation.speed)))); return;
+      emit(this.publish(id, JSON.parse(this.session.setBluePlaySpeed(this.simulation.speed)), false)); return;
     }
     if (command.action === 'stop') {
       if (this.simulation.timer !== null) {
@@ -232,6 +274,7 @@ export class RuntimeHost {
 
   private runSimulationStep(id: number, emit: Emit, automatic: boolean) {
     if (!this.session) return;
+    const startedAt = performance.now();
     const executionId = automatic ? ++this.sequence : id; this.active = { executionId };
     const onInput = (inputRequestId: number) => {
       if (!this.active || this.active.executionId !== executionId) return;
@@ -244,14 +287,16 @@ export class RuntimeHost {
       if (response.fatal) this.simulation.state = 'faulted'; else if (intent === 'stop' || this.simulation.state === 'stopping') this.simulation.state = 'paused'; else this.simulation.state = automatic ? 'running' : 'paused';
       this.snapshot.phase = response.fatal ? 'faulted' : 'ready';
       if (automatic) this.emitSimulationSnapshot(executionId, emit, response); else emit(this.publish(id, response));
-      if (automatic && this.simulation.state === 'running') this.scheduleSimulationStep();
+      if (automatic && this.simulation.state === 'running') this.scheduleSimulationStep(performance.now() - startedAt);
     };
     const started = this.session.startBluePlayStep(onInput, onComplete); const initial = JSON.parse(started) as RuntimeValue;
     if (initial.kind === 'error') { this.active = null; this.simulation.state = 'faulted'; if (automatic) this.emitSimulationSnapshot(executionId, emit, initial); else emit(this.publish(id, initial)); }
   }
 
-  private scheduleSimulationStep() {
+  private scheduleSimulationStep(elapsed = 0) {
     if (this.simulation.timer !== null || this.simulation.state !== 'running' || this.active || !this.simulation.emit) return;
-    this.simulation.timer = setTimeout(() => { this.simulation.timer = null; if (this.simulation.state === 'running') this.runSimulationStep(0, this.simulation.emit!, true); }, Math.max(1, 100 - this.simulation.speed));
+    // Speed defines the interval between ticks, not an extra sleep after work.
+    // Never catch up with a burst of queued ticks when a step exceeds its budget.
+    this.simulation.timer = setTimeout(() => { this.simulation.timer = null; if (this.simulation.state === 'running') this.runSimulationStep(0, this.simulation.emit!, true); }, Math.max(1, 100 - this.simulation.speed - elapsed));
   }
 }

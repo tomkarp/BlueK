@@ -94,7 +94,7 @@ object BluePlayLibrary {
             fun show() { bluekShowWorld(this); bluekRenderWorld(this) }
             open fun act() {}
             fun addObject(actor: Any, x: Int, y: Int) {
-                if (actors.filter { it == actor }.size == 0) actors.add(actor)
+                if (!actors.contains(actor)) actors.add(actor)
                 bluekWorldAddObject(this, actor, x, y)
                 bluekRenderWorld(this)
             }
@@ -103,7 +103,7 @@ object BluePlayLibrary {
                 bluekWorldRemoveObject(this, actor)
                 bluekRenderWorld(this)
             }
-            fun allObjects(): List<Any> = actors.map { it }
+            fun allObjects(): List<Any> = actors.toList()
             inline fun <reified T> getObjects(): List<T> = allObjects().filterIsInstance<T>()
             fun getObjectsAt(x: Int, y: Int): List<Any> = actors.filter { bluekObjectX(it) == x && bluekObjectY(it) == y }
             val numberOfObjects: Int get() = actors.size
@@ -163,7 +163,7 @@ object BluePlayLibrary {
             fun turnTowards(targetX: Int, targetY: Int) { rotation = bluekHeading(x, y, targetX, targetY) }
             fun distanceTo(other: Actor): Int = bluekDistance(x, y, other.x, other.y)
             fun intersects(other: Actor): Boolean = bluekIntersects(this, other)
-            fun isTouching(other: Actor): Boolean = intersects(other)
+            fun isTouching(other: Actor): Boolean = bluekIntersects(this, other)
             inline fun <reified T : Actor> getIntersecting(): List<T> = world.getObjects<Actor>().filter { it != this && it is T && intersects(it) }.filterIsInstance<T>()
             inline fun <reified T : Actor> getOneIntersecting(): T? = getIntersecting<T>().firstOrNull()
             inline fun <reified T : Actor> isTouching(): Boolean = getIntersecting<T>().size > 0

@@ -360,6 +360,7 @@
     ? runtime.simulation === "running" || runtime.simulation === "stopping" || runtime.simulation === "waiting"
     : Boolean(stage?.running);
   let inputElement: HTMLInputElement;
+  const stageKeysDown = new Set<string>();
   let cardDrag: { id: string; dx: number; dy: number } | null = null;
   let cardLayers: Record<string, number> = {};
   let nextCardLayer = 100;
@@ -492,22 +493,14 @@
         } as Record<string, string>
       )[event.key] || event.key.toLowerCase();
     event.preventDefault();
+    if (stageKeysDown.has(key) === pressed) return;
+    if (pressed) stageKeysDown.add(key);
+    else stageKeysDown.delete(key);
     client?.sendKey(key, pressed).catch(() => undefined);
   }
   function releaseStageKeys() {
-    [
-      "left",
-      "right",
-      "up",
-      "down",
-      "space",
-      "enter",
-      "escape",
-      "shift",
-      "control",
-      "tab",
-      "backspace",
-    ].forEach((key) => client?.sendKey(key, false).catch(() => undefined));
+    for (const key of stageKeysDown) client?.sendKey(key, false).catch(() => undefined);
+    stageKeysDown.clear();
   }
   function stageClick(event: MouseEvent) {
     const target = event.currentTarget as HTMLElement;
@@ -531,6 +524,7 @@
     if (action === "start" && stageRunning) return;
     if (action === "stop" && !stageRunning) return;
     if (action === "setSpeed" && runtime.phase !== "ready" && runtime.phase !== "waitingForInput") return;
+    if (action === "start") stageCanvas?.focus();
     if (library?.id === "blueplay") {
       client.simulation(action, action === "setSpeed" ? Number(speed) : undefined)
         .then((result) => {
@@ -1251,7 +1245,7 @@
       event.stopPropagation();
       return;
     }
-    if (document.activeElement?.classList.contains("game-stage"))
+    if (document.activeElement?.classList.contains("game-stage") || stageRunning)
       stageKey(event, true);
   }
   function newFile(kind: "class" | "functions", name: string) {
@@ -2589,7 +2583,7 @@
   }}
   on:keydown={handleWindowKeydown}
   on:keyup={(event) =>
-    document.activeElement?.classList.contains("game-stage") &&
+    (document.activeElement?.classList.contains("game-stage") || stageRunning) &&
     stageKey(event, false)}
   on:blur={releaseStageKeys}
 />
@@ -2610,6 +2604,7 @@
       data-library={library?.id || ""}
       data-phase={runtime.phase}
       data-simulation={runtime.simulation}
+      data-frame-version={stage.frameVersion}
     >
       <div
         class="stage-window-chrome"

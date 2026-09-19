@@ -76,8 +76,8 @@ export class LocalRuntimeClient {
     if (epoch !== this.epoch || reply.generationId !== this.snapshot.generationId) throw new Error('Stale runtime response.');
     this.update(reply.snapshot);
     this.responseListeners.forEach(listener => listener(reply.response));
-    if (reply.response.stage) this.stageListeners.forEach(listener => listener(reply.response.stage!));
-    if (reply.snapshot.stage) this.stageListeners.forEach(listener => listener(reply.snapshot.stage!));
+    const stage = reply.response.stage ?? reply.snapshot.stage;
+    if (stage) this.stageListeners.forEach(listener => listener(stage));
     return reply.response;
   }
   async compile(files: ProjectFile[], revision: number, library?: ProjectLibrary, resources: ProjectResource[] = []): Promise<CompileResult> {
@@ -113,23 +113,30 @@ export class LocalRuntimeClient {
   async execute(command: RuntimeCommand): Promise<RuntimeValue> {
     const inputCommand = command.op === 'input';
     const simulationCommand = command.op === 'simulation';
+    const deviceInput = command.op === 'key' || command.op === 'click';
     const passiveDuringSimulation = command.op === 'key' || command.op === 'click' || command.op === 'inspect' || command.op === 'simulation' || inputCommand;
     if (!passiveDuringSimulation && this.snapshot.simulation !== 'inactive' && this.snapshot.simulation !== 'paused') {
       throw new Error('BluePlay simulation is running. Stop it before executing code.');
     }
-    const simulationPhaseAllowed = simulationCommand && (this.snapshot.phase === 'ready' || this.snapshot.phase === 'running' || this.snapshot.phase === 'waitingForInput');
+    const simulationPhaseAllowed = (simulationCommand || deviceInput) && (this.snapshot.phase === 'ready' || this.snapshot.phase === 'running' || this.snapshot.phase === 'waitingForInput');
     if (this.snapshot.phase !== 'ready' && !simulationPhaseAllowed && !(inputCommand && this.snapshot.phase === 'waitingForInput') && !(this.snapshot.phase === 'faulted' && command.op === 'inspect' && this.worker)) {
       throw new Error(this.snapshot.phase === 'running' ? 'Another runtime command is running.' : 'Reset or compile the project before running code.');
     }
     if (command.generationId && command.generationId !== this.snapshot.generationId) throw new Error('Stale runtime command.');
     const epoch = this.epoch;
     const previous = this.snapshot;
-    if (!inputCommand && !simulationCommand) this.update({ ...previous, phase: 'running' });
+    if (!inputCommand && !simulationCommand && !deviceInput) this.update({ ...previous, phase: 'running' });
     try {
       const reply = await this.request({ ...command, generationId: previous.generationId, ...(inputCommand ? { inputRequestId: this.inputRequestId } : {}) });
+      // Input acknowledgements do not change interpreter state or publish frames.
+      // In particular, never replay their older snapshot over a completed tick.
+      if (deviceInput) {
+        if (epoch !== this.epoch || reply.generationId !== this.snapshot.generationId) throw new Error('Stale runtime response.');
+        return reply.response;
+      }
       return this.accept(reply, epoch);
     } catch (error) {
-      if (epoch === this.epoch && this.getSnapshot().phase === 'running') this.update(previous);
+      if (!deviceInput && epoch === this.epoch && this.getSnapshot().phase === 'running') this.update(previous);
       throw error;
     }
   }

@@ -74,12 +74,56 @@ Kotlin-Library kopiert.
 
 `RuntimeHost` besitzt den einzigen Scheduler: `step`, `start`, `stop`, `reset`
 und `setSpeed` sind versionierte Runtime-Kommandos. Der Worker plant den
-nächsten Schritt mit `max(1, 100 - speed)` Millisekunden; der Client hält keinen
+nächsten Schritt mit `max(1, 100 - speed - elapsed)` Millisekunden, wobei
+`elapsed` die Rechen-/Publikationszeit des letzten Schritts ist. Überlange
+Schritte erzeugen keine Nachhol-Warteschlange; der Client hält keinen
 zweiten Simulationstimer. Während eines laufenden Schritts bleiben Tastatur-
 und Mausereignisse zulässig, normale Codepad-/Objektoperationen werden bis zum
 Pause-Zustand abgewiesen. Reset stoppt zunächst, ruft danach das
 parameterlose `main()` direkt in derselben Session auf und meldet einen
 verständlichen Fehler, falls es fehlt oder mehrdeutig ist.
+
+### BluePlay-Performance und Ausführungsgrenzen
+
+Ein Tick führt `World.act()` und die weiterhin vorhandenen Actors aus, bevor
+ein gemeinsamer Frame veröffentlicht wird. Währenddessen unterdrückt die
+Session Zwischenbilder, auch bei externen Render-/Speed-Anfragen. Tastatur und
+Maus sind Zustandsänderungen, keine Code-Ausführungen: Ihre Bestätigungen setzen
+im Client weder die IDE-Phase auf `running` noch veröffentlichen sie erneut
+einen alten Frame. Gleichzeitige Tastendrücke und Loslassen dürfen parallel
+bestätigt werden. Automatische Ticks verzichten auf vollständige Inspektionen.
+Streaming-Terminalausgabe wird höchstens etwa alle 16 ms veröffentlicht,
+statt für jedes `println` einen Snapshot zu senden. Der erste Text erscheint
+sofort; ein nachlaufender Timer liefert auch Text vor einem längeren `sleep`.
+Eingabe- und Abschlussereignisse leeren den Restpuffer vollständig.
+Damit kann ein schneller Interpreter die Oberfläche nicht mit einer
+Einzelnachricht pro Schleifeniteration überfluten.
+
+Profiling des Space-Invaders-Beispiels zeigte nicht Canvas-Zeichnung, sondern
+Interpreter-Typauflösung und temporäre Symboltabellen als Hauptkosten. Deshalb
+nutzen synthetische Receiver-/Iterator-Bindungen ihre vorhandenen `DataType`s,
+statt sie in `TypeNode`s zurückzuverwandeln und erneut aufzulösen. Klassen ohne
+generische Vorfahren brauchen keine Generic-Substitutionstabellen; generische
+Hierarchien behalten den bisherigen Auflösungspfad. Selten benötigte
+Symboltabellen-Metadaten werden erst bei Zugriff angelegt. Es gibt keinen
+globalen Typcache, der nach Compile/Reset veralten könnte. Die BluePlay-Library
+kopiert Objektlisten mit `toList()` statt mit interpretierten Identitäts-Lambdas
+und führt `isTouching(other)` direkt zur nativen Kollisionsprüfung.
+
+`node scripts/benchmark-blueplay.mjs` misst getrennt Tick und zusätzliche
+Frame-Publikation, mit 1-Pixel-Bewegung und mit/ohne Dauerschießen. Es prüft auch
+Bewegung, Laser-Erzeugung und gemeinsame Invader-Schritte. Der Chromium-Test
+PERF-01 misst vier Sekunden lang DOM-Frame-Ankünfte bei Speed 95. Diese Werte
+sind keine Garantie für 60 tatsächlich präsentierte Bilder/s auf jedem Gerät.
+
+Weitere mögliche Umbauten sind vorbereitete Aufruf-/Typsignaturen pro
+kompilierter Generation, native BluePlay-Methoden statt interpretierter
+Framework-Wrapper und ein getrennter Frame-Transport ohne IDE-Metadaten. Sie
+sind noch nicht umgesetzt: Signaturcaches benötigen saubere Grenzen für lokale
+Typen/Generics; native Methoden dürfen Overrides und Objektidentität nicht
+umgehen. Ein anderer Renderer oder ein zweiter Scheduler behebt den gemessenen
+Interpreter-Engpass nicht. Alpha-Kollisionen und studentischer Code bleiben
+unverändert maßgeblich; es werden keine Kollisionsprüfungen übersprungen.
 
 Die sichtbare World ist ein einzelnes BlueJ-artiges Fenster aus Titelleiste,
 Canvas und eingebetteter Steuerleiste. Die Titelleiste verschiebt den gesamten

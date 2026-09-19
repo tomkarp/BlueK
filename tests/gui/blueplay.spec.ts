@@ -16,6 +16,20 @@ async function loadBluePlay(page: Page) {
   return stage;
 }
 
+async function loadSpaceInvaders(page: Page) {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New Project', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Create New Project' });
+  await dialog.getByRole('button', { name: /^Space Invaders Demo/ }).click();
+  await expect(dialog).toBeHidden();
+  const input = page.getByLabel('Codepad input');
+  await input.fill('main()');
+  await input.press('Enter');
+  const stage = page.getByRole('dialog', { name: 'BluePlay – World' });
+  await expect(stage).toBeVisible();
+  return stage;
+}
+
 test('GUI-58 BluePlay library cards are normal movable cards with per-file API docs', async ({ page }) => {
   const stage = await loadBluePlay(page);
   await stage.getByRole('button', { name: 'Close BluePlay world' }).click();
@@ -176,6 +190,7 @@ test('RT-11 Run stays active, Pause stops it, and speed can be dragged during Ru
   const pause = stage.getByRole('button', { name: 'Pause BluePlay world' });
   await run.click();
   await expect(stage).toHaveAttribute('data-simulation', 'running');
+  await expect(stage.locator('.game-stage')).toBeFocused();
   await expect(run).toBeDisabled();
   await expect(pause).toBeEnabled();
 
@@ -191,6 +206,55 @@ test('RT-11 Run stays active, Pause stops it, and speed can be dragged during Ru
   await expect(stage).toHaveAttribute('data-simulation', 'paused');
   await expect(pause).toBeDisabled();
   await expect(run).toBeEnabled();
+});
+
+test('PERF-01 Space Invaders advances in coherent frames while a key is held', async ({ page }) => {
+  // Match the reported scenario without changing the shipped example.
+  await page.route('**/examples/space-invaders.bluek.json', async route => {
+    const response = await route.fetch();
+    const project = await response.json();
+    for (const file of project.files) file.source = file.source.replaceAll('x - 5', 'x - 1').replaceAll('x + 5', 'x + 1');
+    await route.fulfill({ json: project });
+  });
+  const stage = await loadSpaceInvaders(page);
+  const slider = stage.locator('input[type="range"]');
+  await slider.fill('95');
+  await stage.evaluate((element) => {
+    const frameTimes: number[] = [];
+    let previous = element.getAttribute('data-frame-version');
+    const observer = new MutationObserver(() => {
+      const next = element.getAttribute('data-frame-version');
+      if (next !== previous) {
+        frameTimes.push(performance.now());
+        previous = next;
+      }
+    });
+    observer.observe(element, { attributes: true, attributeFilter: ['data-frame-version'] });
+    (element as HTMLElement & { __bluekFrameTimes?: number[]; __bluekFrameObserver?: MutationObserver }).__bluekFrameTimes = frameTimes;
+    (element as HTMLElement & { __bluekFrameTimes?: number[]; __bluekFrameObserver?: MutationObserver }).__bluekFrameObserver = observer;
+  });
+  await stage.getByRole('button', { name: 'Run BluePlay world' }).click();
+  await expect(stage).toHaveAttribute('data-simulation', 'running');
+  const initialFrame = Number(await stage.getAttribute('data-frame-version'));
+  await page.keyboard.down('ArrowLeft');
+  await page.keyboard.down('Space');
+  await page.waitForTimeout(4000);
+  await page.keyboard.up('ArrowLeft');
+  await page.keyboard.up('Space');
+  const finalFrame = Number(await stage.getAttribute('data-frame-version'));
+  expect(finalFrame - initialFrame).toBeGreaterThanOrEqual(120);
+  const frameGaps = await stage.evaluate((element) => {
+    const target = element as HTMLElement & { __bluekFrameTimes?: number[]; __bluekFrameObserver?: MutationObserver };
+    target.__bluekFrameObserver?.disconnect();
+    const times = target.__bluekFrameTimes || [];
+    return times.slice(1).map((time, index) => time - times[index]);
+  });
+  const sortedGaps = frameGaps.slice().sort((a, b) => a - b);
+  console.log('PERF-01 high speed + shooting', { frames: frameGaps.length, p95: sortedGaps[Math.floor(sortedGaps.length * .95)], max: Math.max(...frameGaps) });
+  expect(frameGaps.length).toBeGreaterThanOrEqual(120);
+  expect(sortedGaps[Math.floor(sortedGaps.length * .95)]).toBeLessThan(50);
+  expect(Math.max(...frameGaps)).toBeLessThan(150);
+  await stage.getByRole('button', { name: 'Pause BluePlay world' }).click();
 });
 
 test('GUI-53 canvas clicks target visible Actor pixels and ignore transparent pixels', async ({ page }) => {

@@ -178,4 +178,29 @@ expectAnalysisError(json(modifierSession.load('<crossinline>', `
     fun invalid(crossinline predicate: () -> Boolean): Boolean = predicate()
 `)), 'crossinline boundary');
 
+// Optimized receiver/type binding must retain virtual dispatch, super, concrete
+// generic ancestors, nullable arguments and method-local type parameters.
+const dispatchSession = api.bluekCreateKotliteSession();
+load(dispatchSession, `
+    open class PlainBase {
+        open fun number(): Int = 2
+        fun same(other: PlainBase?): Boolean = other === this
+        fun <T> echo(value: T): T = value
+    }
+    class PlainChild : PlainBase() {
+        override fun number(): Int = super.number() + 3
+    }
+    open class GenericBase<T>(val value: T) { fun echo(value: T): T = value }
+    class StringChild : GenericBase<String>("text")
+`, 'optimized method dispatch');
+if (evaluate(dispatchSession, `
+    val child = PlainChild()
+    val base: PlainBase = child
+    val generic = StringChild()
+    base.number() == 5 && child.same(child) && !child.same(null) &&
+        child.echo<String>("ok") == "ok" && generic.echo("typed") == "typed"
+`, 'optimized method dispatch').display !== 'true') {
+  throw new Error('Optimized runtime type binding changed method dispatch or generic inheritance.');
+}
+
 console.log('Generics smoke test passed.');

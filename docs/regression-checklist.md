@@ -103,11 +103,49 @@ Worker-/Runtime-Smokes getrennt.
 | GUI-57 | Maximieren füllt den gesamten Browser-Viewport; die Welt bleibt dabei unskaliert, kleine Welten zeigen weiterhin den grauen Surround und das Spielfeld ist horizontal/vertikal symmetrisch zentriert | Chromium-GUI-Test prüft Fenster `0,0` bis `100vw,100vh`, unveränderte `100x100`-Canvas, grauen Body sowie gleiche linke/rechte und obere/untere Abstände | Abgesichert |
 | GUI-58 | BluePlay-Bibliothekskarten (`BluePlayFunctions`, `World`, `Actor`, `Image`) erscheinen wie normale Karten ohne Built-in-Leiste, sind verschiebbar, bilden mit `Actor`-/`World`-Unterklassen die Vererbungspfeile und öffnen dateibezogene API-Hilfe; jede Karte und die zugehörigen Pfeile folgen beim Überlappen derselben Stapelordnung | Chromium-GUI-Test prüft normale Darstellung, Karten-Drag, zwei Pfeile (`Figure -> Actor`, `MyWorld -> World`), das Nach-vorne-Holen einer verschobenen Karte samt Vererbungspfeil, `World API` per Doppelklick und das eingeschränkte Actor-Kontextmenü | Abgesichert |
 | GUI-59 | Neue Schülerklassen werden bei der Kartenpositionierung hinter den vier BluePlay-Bibliothekskarten berücksichtigt | Chromium-GUI-Test prüft die Position der ersten neu angelegten Klasse | Abgesichert |
-| RT-11 | `Run` führt dauerhaft Schritte aus, `Pause` beendet den nächsten Scheduler-Schritt ohne zweiten Lauf; Speed bleibt während Run änderbar und plant den nächsten Schritt neu | Native Runtime-Smoke + Built-in-Browser mit laufendem `simulation=running`, Pause und Slider-Drag | Chromium-Automatisierung ergänzt |
+| RT-11 | `Run` führt dauerhaft Schritte aus, fokussiert sofort die Spielfläche für Tastatursteuerung, `Pause` beendet den nächsten Scheduler-Schritt ohne zweiten Lauf; Speed bleibt während Run änderbar und plant den nächsten Schritt neu | Native Runtime-Smoke + Built-in-Browser mit laufendem `simulation=running`, fokussiertem Canvas, Pause und Slider-Drag | Abgesichert |
 | RT-12 | `isTouching`/`intersects` verwenden sichtbare Alpha-Pixel mit Skalierung und Rotation; ein angeklickter Actor darf in `act()` sicher `world.removeObject(this)` ausführen | Native Browser-Smoke prüft getrennte Alpha-Flächen trotz überlappender Rechtecke, 180°-Rotation, sichtbare Überdeckung, Klick-ID außerhalb der Mittelpunktzelle und Selbstentfernung ohne Fault | Abgesichert; 100-Actor-Performance bleibt PERF-01 |
-| PERF-01 | Scheduler, Frame-Abstände, Stop-Reaktion, Historien- und Ressourcenwachstum bei Referenzspielen und 100 Actoren sind messbar | Architektur und Scheduler-Pfad vorhanden; noch keine 60-Sekunden-/100-Actor-Messung ausgeführt | Messprotokoll und Grenzwerte offen |
+| PERF-01 | Scheduler, Frame-Abstände, Stop-Reaktion, Historien- und Ressourcenwachstum bei Referenzspielen und 100 Actoren sind messbar | Node-Benchmark prüft 180 komplette Schritte mit 1-Pixel-Bewegung, echte Laser und synchrone Invader. Chromium: Speed 95, Pfeil+Space für 4 s, 206 DOM-Frame-Updates, p95 26,7 ms, max. 30,2 ms. Gateway-Test: gleichzeitige Key-down/up ohne Busy-Phase oder alte Frames. Interpreter optimiert; Alpha-Kollisionen unverändert | Noch keine 60-Sekunden-/100-Actor-Messung und keine 60-FPS-Garantie; visuelle Benutzerabnahme offen |
 
 ## Letzter Prüflauf
+
+2026-09-19, BluePlay-Performance: Der reproduzierbare Node/VM-Benchmark
+`node scripts/benchmark-blueplay.mjs` verwendet das echte Space-Invaders-Projekt
+mit ausschließlich für den Test auf 1 Pixel reduzierter Defender-Bewegung.
+180 Schritte ohne Schießen: Mittel 10,78 → 3,47 ms; mit Dauerschießen:
+53,55 → 12,62 ms, p95 87,79 → 21,68 ms. Zusätzliche Frame-Erzeugung etwa
+0,16 ms. Ausgangsmessung mit CPU-Profil, Endmessung ohne Profiler; lokale
+Vergleichswerte, kein geräteunabhängiges Leistungsversprechen. Der Benchmark
+prüft jeden Defender-Schritt, echte Laser sowie gemeinsame Invader-Bewegung
+einschließlich Begrenzung am Weltrand.
+
+Gezielte echte Chromium-Suite (`blueplay.spec.ts`, `generics.spec.ts`): 11/11
+grün. PERF-01 testet Speed 95 und vier Sekunden gleichzeitige Pfeil-/Space-
+Eingabe, nicht mehr nur 800 ms bei Default-Speed. Zwei Läufe lieferten
+193–206 DOM-Frame-Updates/4 s, p95 26,7–28,9 ms und maximal 30,2–33,7 ms.
+Das misst Frame-Ankünfte, nicht die tatsächlichen Bildschirm-Present-Zeiten.
+Der manuelle Vorlagenwechsel im eingebauten Browser wurde wegen möglichem
+Verlust des geladenen Projekts nicht ausgeführt; kein Projekt wurde ersetzt.
+
+`browser-smoke` (Node/VM, kein Browser), `test:generics` einschließlich 49
+Boundary-Fällen und neuem Receiver-/Vererbungsfall, `test:blueplay-demos`,
+Kotlin- und Svelte-Build sowie Typecheck erfolgreich. Typecheck meldet
+0 Fehler/5 bestehende Svelte-Warnungen, Builds weiterhin Cast-/Bundle-Warnungen.
+Langzeit-/100-Actor-/Speicher- und Safari-Messungen sowie Benutzerabnahme offen.
+
+Der erste vollständige Regressionslauf bestand 72/73 Chromium-Tests; GUI-14
+lief wegen einer Flut einzelner `println`-Snapshots in den Timeout. Der Host
+bündelt Streaming-Ausgabe nun auf höchstens etwa eine Meldung pro 16 ms und
+leert Resttext bei Eingabe/Abschluss. Gezielte Wiederholung GUI-12/13/15 und
+GUI-14: 2/2 grün; Runtime-State-Test einschließlich Reihenfolge, vollständiger
+Ausgabe und Eingabeprompt grün. Ein Zwischenlauf während der Host-Nachbesserung
+zeigte ein fehlendes World-Fenster bei GUI-54 und wurde abgebrochen. Die
+abschließende Wiederholung auf unverändertem Stand ist vollständig grün:
+`npm run test:regression`, einschließlich 73/73 echten Chromium-Tests und
+aller enthaltenen Helfer-/Runtime-Tests. Auch Resttext vor `Thread.sleep`
+wird explizit vor Befehlsabschluss geprüft. Abschließender PERF-01-Lauf:
+203 DOM-Frame-Updates/4 s, p95 27,2 ms, Maximum 29,6 ms. Svelte-Build und
+`git diff --check` erfolgreich. Kein Commit und kein Push.
 
 2026-09-18: Actor-Treffer und Kollisionen auf sichtbare Bildpixel umgestellt.
 PNG-Ressourcen liefern flüchtige Alpha-Masken an die Laufzeit; Klicks wählen

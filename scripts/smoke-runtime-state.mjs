@@ -122,7 +122,19 @@ await ok({ op: 'main', fileName: 'Actions.kt' });
 assert.equal(field(shared.objectId), '20');
 const loopExecution = client.execute({ op: 'eval', code: 'loopOutput()' });
 await loopExecution;
-assert.deepEqual(outputs.splice(0), ['1\n', '2\n', '3\n'], 'loop output must stream after each println');
+assert.equal(outputs.splice(0).join(''), '1\n2\n3\n', 'batched output must preserve every line in order and flush at completion');
+const trailingOutput = new Promise((resolve, reject) => {
+  const timeout = setTimeout(() => { unsubscribe(); reject(new Error('Buffered output was not flushed during sleep.')); }, 2000);
+  const unsubscribe = client.onResponse(() => {
+    if (outputs.join('') === 'firstbuffered') {
+      clearTimeout(timeout); unsubscribe(); resolve(client.getSnapshot().phase);
+    }
+  });
+});
+const sleepingOutput = client.execute({ op: 'eval', code: 'print("first"); print("buffered"); Thread.sleep(1000)' });
+assert.equal(await trailingOutput, 'running', 'trailing output must appear before the sleeping command completes');
+await sleepingOutput;
+assert.equal(outputs.splice(0).join(''), 'firstbuffered');
 const string = await ok({ op: 'eval', code: '"true"' });
 assert.equal(string.type.displayName, 'String');
 assert.equal((await ok({ op: 'eval', code: 'true' })).type.displayName, 'Boolean');
@@ -279,6 +291,16 @@ assert.deepEqual(nativeCompile.diagnostics, []);
 await nativeClient.execute({ op: 'main', fileName: 'Main.kt' });
 await nativeClient.simulation('step');
 assert.equal(nativeStages.at(-1)?.objects[0]?.x, 101, 'native scheduler must dispatch one BluePlay step');
+const inputSnapshot = nativeClient.getSnapshot();
+const inputFrameCount = nativeStages.length;
+let inputNotifications = 0;
+const unsubscribeInput = nativeClient.subscribe(() => inputNotifications++);
+await Promise.all([nativeClient.sendKey('left', true), nativeClient.sendKey('space', true)]);
+await Promise.all([nativeClient.sendKey('left', false), nativeClient.sendKey('space', false)]);
+assert.equal(nativeClient.getSnapshot(), inputSnapshot, 'device input must not toggle the IDE execution phase');
+assert.equal(inputNotifications, 0, 'input acknowledgements must not republish IDE snapshots');
+assert.equal(nativeStages.length, inputFrameCount, 'input acknowledgements must not redraw old frames');
+unsubscribeInput();
 await nativeClient.simulation('setSpeed', 80);
 assert.equal(nativeClient.getSnapshot().simulation, 'paused');
 await nativeClient.simulation('start');

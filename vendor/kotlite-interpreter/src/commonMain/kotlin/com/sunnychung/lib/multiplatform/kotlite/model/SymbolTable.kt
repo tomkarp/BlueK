@@ -38,18 +38,20 @@ open class SymbolTable(
 
     private val propertyDeclarations = mutableMapOf<String, PropertyType>()
     internal val propertyValues = mutableMapOf<String, RuntimeValueAccessor>()
-    internal val propertyOwners = mutableMapOf<String, PropertyOwnerInfo>() // only use in SemanticAnalyzer
-    internal val functionOwners = mutableMapOf<String, String>() // only use in SemanticAnalyzer
+    // Most runtime call/block scopes never declare classes, functions or types.
+    // Allocate their metadata tables only if actually used, not on every act call.
+    internal val propertyOwners by lazy { mutableMapOf<String, PropertyOwnerInfo>() } // only use in SemanticAnalyzer
+    internal val functionOwners by lazy { mutableMapOf<String, String>() } // only use in SemanticAnalyzer
     internal val transformedSymbols = mutableMapOf<Pair<IdentifierClassifier, String>, String>() // only use in SemanticAnalyzer. transformed name -> original name
     internal val transformedSymbolsByDeclaredName = mutableMapOf<Pair<IdentifierClassifier, String>, String>() // only use in SemanticAnalyzer. original name -> transformed name
 
-    protected val functionDeclarations = mutableMapOf<String, FunctionDeclarationNode>()
-    protected val extensionFunctionDeclarations = mutableMapOf<String, Pair<DataType, FunctionDeclarationNode>>()
-    protected val extensionProperties = mutableMapOf<String, ExtensionProperty>()
+    protected val functionDeclarations by lazy { mutableMapOf<String, FunctionDeclarationNode>() }
+    protected val extensionFunctionDeclarations by lazy { mutableMapOf<String, Pair<DataType, FunctionDeclarationNode>>() }
+    protected val extensionProperties by lazy { mutableMapOf<String, ExtensionProperty>() }
 
-    private val classDeclarations = mutableMapOf<String, ClassDefinition>()
-    private val typeAlias = mutableMapOf<String, DataType>()
-    private val typeAliasResolution = mutableMapOf<String, DataType>()
+    private val classDeclarations by lazy { mutableMapOf<String, ClassDefinition>() }
+    private val typeAlias by lazy { mutableMapOf<String, DataType>() }
+    private val typeAliasResolution by lazy { mutableMapOf<String, DataType>() }
 
     internal lateinit var rootScope: SymbolTable
     val AnyType get() = AnyType()
@@ -159,6 +161,15 @@ open class SymbolTable(
         log.d { "declareProperty($position, $name, ${type.descriptiveName()}, $isMutable)" }
         propertyDeclarations[name] = typeNodeToPropertyType(type = type, isMutable = isMutable)
             ?: throw RuntimeException("Unknown type ${type.name}")
+    }
+
+    // Synthetic runtime bindings already have a resolved type. Re-resolving a
+    // TypeNode here rebuilds the complete generic/class hierarchy on every call.
+    fun declareProperty(position: SourcePosition, name: String, type: DataType, isMutable: Boolean) {
+        if (hasProperty(name = name, true)) {
+            throw DuplicateIdentifierException(position, name, IdentifierClassifier.Property)
+        }
+        propertyDeclarations[name] = PropertyType(type, isMutable)
     }
 
     open fun findTypeAlias(name: String): Pair<DataType, SymbolTable>? {
@@ -287,6 +298,18 @@ open class SymbolTable(
     }
 
     fun resolveObjectType(clazz: ClassDefinition, typeArguments: List<TypeNode>?, isNullable: Boolean, upToIndex: Int = -1, visitCache: SymbolTableTypeVisitCache = SymbolTableTypeVisitCache()): ObjectType {
+        // A hierarchy without type parameters requires no substitution tables.
+        // Resolve directly; keep the generic/recursive-bound path unchanged.
+        fun isNonGeneric(type: ClassDefinition): Boolean = type.typeParameters.isEmpty() &&
+            (type.superClass?.let { isNonGeneric(it) } ?: true) && type.superInterfaces.all { isNonGeneric(it) }
+        if (typeArguments.isNullOrEmpty() && isNonGeneric(clazz)) {
+            fun resolvePlain(type: ClassDefinition): ObjectType {
+                val parents = (listOfNotNull(type.superClass) + type.superInterfaces).map { resolvePlain(it) }
+                return ObjectType(type, emptyList(), isNullable,
+                    parents.flatMap { listOf(it) + it.superTypes }.distinctBy { it.name })
+            }
+            return resolvePlain(clazz)
+        }
         val genericResolver = ClassMemberResolver.create(this, clazz, typeArguments ?: emptyList())!!
 //        var superType: ObjectType? = null
 //        genericResolver.genericResolutions.forEachIndexed { index, resolutions ->
