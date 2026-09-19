@@ -13,6 +13,7 @@
     "test:runtime-state": "node scripts/smoke-runtime-state.mjs",
     "test:references": "node scripts/smoke-references.mjs",
     "test:generics": "node scripts/smoke-generics.mjs && node scripts/smoke-generics-boundaries.mjs",
+    "test:blueplay-demos": "node scripts/smoke-space-invaders.mjs",
     "test:ui": "node scripts/smoke-ui-behavior.mjs",
     "test:gui": "playwright test",
     "test:inspector": "node scripts/smoke-inspector-model.mjs",

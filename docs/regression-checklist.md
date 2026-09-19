@@ -26,7 +26,7 @@ Worker-/Runtime-Smokes getrennt.
 
 | ID | Erwartetes Verhalten / Reproduktion | Bisheriger Nachweis | Automatisierung / offen |
 | --- | --- | --- | --- |
-| GUI-01 | New Project: Empty/Kotlin wählbar, BluePlay-Vorlagen sichtbar und als Built-in-Library startbar, separate Hilfe, Cancel schließt | Echter Chromium-Lauf: 5/5 GUI-01-Fälle einschließlich beider BluePlay-Vorlagen, Built-in-World-Karte und API-Hilfe; native Browser-Smoke prüft Migration/Studentendateien | Laufendes Canvas-Spiel und Bilddarstellung noch visuell abnehmen |
+| GUI-01 | New Project: Empty Project, BluePlay Template, BluePlay Example, BlueK Demo Project und Space Invaders Demo erscheinen in dieser Reihenfolge | Echter Chromium-Lauf prüft alle fünf Vorlagen; `test:blueplay-demos` prüft Welt, Invader, Defender und Laser | Laufendes Canvas-Spiel noch visuell abnehmen |
 | GUI-02 | Auch ein parameterloser Konstruktor öffnet den Create-Dialog, schlägt hund1 bzw. hund2 vor und erstellt erst nach Bestätigung die Instanz | GUI-Test aktualisiert: beide parameterlosen Konstruktor-Dialoge, Namensvorschläge und Bench | Abgesichert |
 | GUI-03 | Computed Property zeigt im Inspektor den Wert | Nutzerbestätigung + GUI grün mit echtem Getter | Abgesichert |
 | GUI-04 | Nach jeder Änderung im Inspektor sofort aktueller Getter-Wert, keine Änderung Verzögerung | GUI grün: 1 → 2 → 3 → 7, zusätzlich Änderung über Codepad auf 9 | Abgesichert |
@@ -101,7 +101,7 @@ Worker-/Runtime-Smokes getrennt.
 | GUI-55 | Eine kleine Welt (z. B. `100x100`) bleibt in ihrer echten Pixelgröße; reicht sie nicht bis zur Buttonleiste, zeigt der World-Body einen grauen Rand statt die Welt zu skalieren | Chromium-GUI-Test misst Canvas `100x100` und prüft den grauen Surround; eingebauter Browser visuell bestätigt | Abgesichert |
 | GUI-56 | Das World-Fenster wächst bis knapp an die Browsergrenzen, damit eine große unvergrößerte Welt möglichst lange ohne Scrollen sichtbar bleibt | Chromium-GUI-Test misst eine `1000x100`-Canvas in Originalgröße und bestätigt, dass der World-Body noch nicht horizontal scrollt | Abgesichert |
 | GUI-57 | Maximieren füllt den gesamten Browser-Viewport; die Welt bleibt dabei unskaliert, kleine Welten zeigen weiterhin den grauen Surround und das Spielfeld ist horizontal/vertikal symmetrisch zentriert | Chromium-GUI-Test prüft Fenster `0,0` bis `100vw,100vh`, unveränderte `100x100`-Canvas, grauen Body sowie gleiche linke/rechte und obere/untere Abstände | Abgesichert |
-| GUI-58 | BluePlay-Bibliothekskarten (`BluePlayFunctions`, `World`, `Actor`, `Image`) erscheinen wie normale Karten ohne Built-in-Leiste, sind verschiebbar, bilden mit `Actor`-/`World`-Unterklassen die Vererbungspfeile und öffnen dateibezogene API-Hilfe | Chromium-GUI-Test prüft normale Darstellung, Karten-Drag, zwei Pfeile (`Figure -> Actor`, `MyWorld -> World`), `World API` per Doppelklick und das eingeschränkte Actor-Kontextmenü | Abgesichert |
+| GUI-58 | BluePlay-Bibliothekskarten (`BluePlayFunctions`, `World`, `Actor`, `Image`) erscheinen wie normale Karten ohne Built-in-Leiste, sind verschiebbar, bilden mit `Actor`-/`World`-Unterklassen die Vererbungspfeile und öffnen dateibezogene API-Hilfe; jede Karte und die zugehörigen Pfeile folgen beim Überlappen derselben Stapelordnung | Chromium-GUI-Test prüft normale Darstellung, Karten-Drag, zwei Pfeile (`Figure -> Actor`, `MyWorld -> World`), das Nach-vorne-Holen einer verschobenen Karte samt Vererbungspfeil, `World API` per Doppelklick und das eingeschränkte Actor-Kontextmenü | Abgesichert |
 | GUI-59 | Neue Schülerklassen werden bei der Kartenpositionierung hinter den vier BluePlay-Bibliothekskarten berücksichtigt | Chromium-GUI-Test prüft die Position der ersten neu angelegten Klasse | Abgesichert |
 | RT-11 | `Run` führt dauerhaft Schritte aus, `Pause` beendet den nächsten Scheduler-Schritt ohne zweiten Lauf; Speed bleibt während Run änderbar und plant den nächsten Schritt neu | Native Runtime-Smoke + Built-in-Browser mit laufendem `simulation=running`, Pause und Slider-Drag | Chromium-Automatisierung ergänzt |
 | RT-12 | `isTouching`/`intersects` verwenden sichtbare Alpha-Pixel mit Skalierung und Rotation; ein angeklickter Actor darf in `act()` sicher `world.removeObject(this)` ausführen | Native Browser-Smoke prüft getrennte Alpha-Flächen trotz überlappender Rechtecke, 180°-Rotation, sichtbare Überdeckung, Klick-ID außerhalb der Mittelpunktzelle und Selbstentfernung ohne Fault | Abgesichert; 100-Actor-Performance bleibt PERF-01 |
@@ -303,6 +303,11 @@ Port 5194.
 2026-09-15: Vorlagenraster auf eine Spalte geändert und zentraler Escape-Abbruch
 für relevante Fenster ergänzt. GUI-Suite erfolgreich mit 17/17 Chromium-Tests;
 Typecheck und Svelte-Build erfolgreich.
+
+2026-09-19: Die Vorlagen erscheinen in der Reihenfolge Empty Project, BluePlay
+Template, BluePlay Example, BlueK Demo Project und Space Invaders Demo. Beide
+Demos werden derzeit in jedem Build ausgeliefert. `test:blueplay-demos` prüft
+das Laden, Starten und Schießen der Space-Invaders-Vorlage.
 
 2026-09-15: Lange Codepad-Werte werden mit sichtbarem Typ gekürzt; der vollständige
 Wert steht als Hover-Text zur Verfügung. GUI-Suite erfolgreich mit 20/20 Chromium-

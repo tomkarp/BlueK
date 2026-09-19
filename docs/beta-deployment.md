@@ -1,6 +1,6 @@
 # Öffentliche BlueK-Beta
 
-Die Beta läuft unabhängig vom öffentlichen `main`-Stand:
+Die Beta läuft mit einem eigenen Branch und einem eigenen statischen Zielpfad:
 
 - Branch: `beta`
 - Ziel: `https://beta.bluek.de`
@@ -82,4 +82,6 @@ einem Commit und Push deployt GitHub Actions automatisch:
 git push origin beta
 ```
 
-Die Produktionsversion bleibt an `main` gebunden.
+Die Produktionsversion bleibt an `main` gebunden. Die Vorlagen werden derzeit in
+beiden Builds ausgeliefert; der Branch trennt nur den übrigen Quellcode und die
+Deployment-Ziele.

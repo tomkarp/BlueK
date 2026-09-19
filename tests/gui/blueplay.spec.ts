@@ -28,17 +28,42 @@ test('GUI-58 BluePlay library cards are normal movable cards with per-file API d
     await expect(card).not.toContainText('BluePlay API');
   }
 
-  await expect(page.locator('.inheritance-layer line')).toHaveCount(2);
+  await expect(page.locator('.inheritance-edge')).toHaveCount(2);
+  const initialEdgeZ = await page.locator('.inheritance-edge').evaluateAll((elements) =>
+    elements.map((element) => Number(getComputedStyle(element).zIndex)),
+  );
 
   const world = page.locator('.classcard[aria-label="World"]');
+  const myWorld = page.locator('.classcard[aria-label="MyWorld"]');
   const before = (await world.boundingBox())!;
+  const myWorldBounds = (await myWorld.boundingBox())!;
+  const targetCenter = {
+    x: myWorldBounds.x + myWorldBounds.width / 2 + 40,
+    y: myWorldBounds.y + myWorldBounds.height / 2 + 30,
+  };
   await page.mouse.move(before.x + before.width / 2, before.y + before.height / 2);
   await page.mouse.down();
-  await page.mouse.move(before.x + before.width / 2 + 35, before.y + before.height / 2 + 20, { steps: 4 });
+  await page.mouse.move(
+    targetCenter.x,
+    targetCenter.y,
+    { steps: 4 },
+  );
   await page.mouse.up();
   const after = (await world.boundingBox())!;
-  expect(Math.abs(after.x - before.x - 35)).toBeLessThan(4);
-  expect(Math.abs(after.y - before.y - 20)).toBeLessThan(4);
+  expect(Math.abs(after.x + after.width / 2 - targetCenter.x)).toBeLessThan(4);
+  expect(Math.abs(after.y + after.height / 2 - targetCenter.y)).toBeLessThan(4);
+  const worldZ = await world.evaluate((element) => Number(getComputedStyle(element).zIndex));
+  const edgeZ = await page.locator('.inheritance-edge').evaluateAll((elements) =>
+    elements.map((element) => Number(getComputedStyle(element).zIndex)),
+  );
+  expect(worldZ).toBeGreaterThan(Math.max(...initialEdgeZ));
+  expect(edgeZ).toContain(worldZ);
+  const topCard = await page.evaluate(({ x, y }) =>
+    document.elementFromPoint(x, y)?.closest('.classcard')?.getAttribute('aria-label'), {
+      x: targetCenter.x,
+      y: targetCenter.y,
+    });
+  expect(topCard).toBe('World');
 
   await world.dblclick();
   const api = page.getByRole('dialog', { name: 'World API' });

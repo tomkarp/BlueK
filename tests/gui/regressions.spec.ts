@@ -679,7 +679,7 @@ test('GUI-43 loading a saved project clears the load URL', async ({ page }) => {
   await expect(page.getByLabel('Codepad input')).toBeEnabled();
   await expect(page).toHaveURL(/\/$/);
   await page.getByRole('button', { name: 'New Project', exact: true }).click();
-  await page.getByRole('dialog', { name: 'Create New Project' }).getByRole('button', { name: /^Kotlin Example/ }).click();
+  await page.getByRole('dialog', { name: 'Create New Project' }).getByRole('button', { name: /^BluePlay Template/ }).click();
   await expect(page.locator('.classcard').first()).toBeVisible();
 });
 
@@ -721,7 +721,7 @@ test('GUI-01 new project offers all templates and can be cancelled', async ({ pa
   await project(page);
   await page.getByRole('button', { name: 'New Project', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Create New Project' });
-  const choices = ['Empty Project', 'Kotlin Example', 'BluePlay Template', 'BluePlay Example']
+  const choices = ['Empty Project', 'BluePlay Template', 'BluePlay Example', 'BlueK Demo Project', 'Space Invaders Demo']
     .map(name => dialog.getByRole('button', { name: new RegExp('^' + name) }));
   for (const choice of choices) await expect(choice).toBeEnabled();
   const boxes = await Promise.all(choices.map(choice => choice.boundingBox()));
@@ -771,15 +771,14 @@ test('GUI-02 constructor suggests numbered names', async ({ page }) => {
   }
 });
 
-for (const name of ['Empty Project', 'Kotlin Example']) {
+for (const name of ['Empty Project']) {
   test(`GUI-01 creates ${name}`, async ({ page }) => {
     await project(page);
     await page.getByRole('button', { name: 'New Project', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Create New Project' });
     await dialog.getByRole('button', { name: new RegExp('^' + name) }).click();
     await expect(dialog).toBeHidden();
-    if (name === 'Empty Project') await expect(page.locator('.classcard')).toHaveCount(0);
-    else await expect(page.locator('.classcard').first()).toBeVisible();
+    await expect(page.locator('.classcard')).toHaveCount(0);
   });
 }
 
@@ -794,6 +793,17 @@ for (const name of ['BluePlay Template', 'BluePlay Example']) {
     await expect(page.locator('.classcard[aria-label="World"]')).toBeVisible();
     await expect(page.locator('.classcard[aria-label="World"]')).not.toContainText('built-in');
     await expect(page.locator('.classcard[aria-label="World"]')).not.toContainText('BluePlay API');
+  });
+}
+
+for (const name of ['BlueK Demo Project', 'Space Invaders Demo']) {
+  test(`GUI-01 creates ${name}`, async ({ page }) => {
+    await project(page);
+    await page.getByRole('button', { name: 'New Project', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Create New Project' });
+    await dialog.getByRole('button', { name: new RegExp('^' + name) }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.locator('.classcard').first()).toBeVisible();
   });
 }
 

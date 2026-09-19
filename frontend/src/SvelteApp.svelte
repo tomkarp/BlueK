@@ -325,6 +325,7 @@
     y1: number;
     x2: number;
     y2: number;
+    zIndex: number;
   }> = [];
   let createDialog: {
       className: string;
@@ -360,6 +361,8 @@
     : Boolean(stage?.running);
   let inputElement: HTMLInputElement;
   let cardDrag: { id: string; dx: number; dy: number } | null = null;
+  let cardLayers: Record<string, number> = {};
+  let nextCardLayer = 100;
   const defaultCardPosition = (index: number): CardPosition => ({
     x: 30 + (index % 3) * 280,
     y: 32 + Math.floor(index / 3) * 170,
@@ -387,6 +390,13 @@
   }
   function cardPosition(file: ProjectFile, index: number) {
     return cardPositions[file.id] || bluePlayCardPositions[file.fileName] || defaultCardPosition(index);
+  }
+  function cardLayer(file: ProjectFile, index: number) {
+    return cardLayers[file.id] ?? index + 1;
+  }
+  function bringCardToFront(file: ProjectFile) {
+    nextCardLayer = Math.max(nextCardLayer + 1, displayFiles.length + 1);
+    cardLayers = { ...cardLayers, [file.id]: nextCardLayer };
   }
   function openBluePlayApi(file: ProjectFile) {
     bluePlayApiFile = file;
@@ -423,6 +433,7 @@
     if (!canvas) return;
     const bounds = canvas.getBoundingClientRect();
     const position = cardPosition(file, displayFiles.indexOf(file));
+    bringCardToFront(file);
     cardDrag = {
       id: file.id,
       dx: event.clientX - bounds.left - position.x,
@@ -647,6 +658,10 @@
         y1: start.y,
         x2: end.x,
         y2: end.y,
+        zIndex: Math.max(
+          cardLayer(child, index),
+          cardLayer(displayFiles[parentIndex], parentIndex),
+        ),
       });
     });
     if (JSON.stringify(next) !== JSON.stringify(inheritanceEdges))
@@ -2521,12 +2536,17 @@
       status = "New project";
       return;
     }
-    const path =
-      choice === "kotlin"
-        ? "./examples/kotlin-example.bluek.json"
-        : choice === "empty-blueplay"
-          ? "./examples/blueplay-empty.bluek.json"
-          : "./examples/blueplay.bluek.json";
+    const paths: Record<string, string> = {
+      "empty-blueplay": "./examples/blueplay-empty.bluek.json",
+      blueplay: "./examples/blueplay.bluek.json",
+      "bluek-demo": "./examples/kotlin-example.bluek.json",
+      "space-invaders": "./examples/space-invaders.bluek.json",
+    };
+    const path = paths[choice];
+    if (!path) {
+      status = "Project template could not be found.";
+      return;
+    }
     try {
       const payload = await (await fetch(path)).json();
       if (choice === "empty-blueplay")
@@ -2777,27 +2797,31 @@
       <div class="panels">
         <div class="canvas">
           {#if showInheritance}
-            <svg class="inheritance-layer" aria-hidden="true"
+            {#each inheritanceEdges as edge, index}
+              <svg
+                class="inheritance-edge"
+                aria-hidden="true"
+                style={`z-index:${edge.zIndex}`}
               ><defs
-                ><marker
-                  id="svelte-inheritance-arrow"
-                  viewBox="0 0 14 14"
-                  refX="12"
-                  refY="7"
-                  markerWidth="14"
-                  markerHeight="14"
-                  markerUnits="userSpaceOnUse"
-                  orient="auto"><path d="M 0 0 L 12 7 L 0 14 Z" /></marker
-                ></defs
+                  ><marker
+                    id={`svelte-inheritance-arrow-${index}`}
+                    viewBox="0 0 14 14"
+                    refX="12"
+                    refY="7"
+                    markerWidth="14"
+                    markerHeight="14"
+                    markerUnits="userSpaceOnUse"
+                    orient="auto"><path d="M 0 0 L 12 7 L 0 14 Z" /></marker
+                  ></defs
+                ><line
+                    x1={edge.x1}
+                    y1={edge.y1}
+                    x2={edge.x2}
+                    y2={edge.y2}
+                    marker-end={`url(#svelte-inheritance-arrow-${index})`}
+                  /></svg
               >
-              {#each inheritanceEdges as edge}<line
-                  x1={edge.x1}
-                  y1={edge.y1}
-                  x2={edge.x2}
-                  y2={edge.y2}
-                  marker-end="url(#svelte-inheritance-arrow)"
-                />{/each}
-            </svg>
+            {/each}
           {/if}
           <div class="cards">
             {#each displayFiles as file, index (file.id)}
@@ -2809,7 +2833,7 @@
                 class:uncompiled={runtime.phase === "uncompiled"}
                 class:inheritance-selected={inheritanceSelection === file.id}
                 class="classcard"
-                style={`left:${position.x}px;top:${position.y}px;--card-left:${position.x}px;--card-top:${position.y}px`}
+                style={`left:${position.x}px;top:${position.y}px;z-index:${cardLayer(file, index)};--card-left:${position.x}px;--card-top:${position.y}px`}
                 on:mousedown={(event) => {
                   if (!inheritanceMode) beginCardDrag(event, file);
                 }}
@@ -3494,7 +3518,6 @@
         <div class="project-choice-list">
           <div class="project-choice-row">
             <button on:click={() => chooseTemplate("empty")}><strong>Empty Project</strong><span>Start with a blank BlueK project.</span></button>
-            <button on:click={() => chooseTemplate("kotlin")}><strong>Kotlin Example</strong><span>Start with a small Kotlin example.</span></button>
           </div>
           <div class="project-choice-with-info">
             <button on:click={() => chooseTemplate("empty-blueplay")}><strong>BluePlay Template</strong><span>Start with the built-in World, Actor and Image library.</span></button
@@ -3511,6 +3534,12 @@
             on:click|stopPropagation={() => (projectInfo = "example")}
             aria-label="What is BluePlay?">?</button
             >
+          </div>
+          <div class="project-choice-row">
+            <button on:click={() => chooseTemplate("bluek-demo")}><strong>BlueK Demo Project</strong><span>Explore classes, inheritance and object interaction with Person and Student.</span></button>
+          </div>
+          <div class="project-choice-row">
+            <button on:click={() => chooseTemplate("space-invaders")}><strong>Space Invaders Demo</strong><span>Play a simplified BluePlay game with a movable defender and invaders.</span></button>
           </div>
         </div>
         <div class="dialog-actions"><button
