@@ -25,9 +25,10 @@
   import { compileProject, executeCodepad } from "./codepadFlow";
   import { applyDiagnostics, editorDiagnostics } from "./editorDiagnostics";
   import { markdownPreview } from "./markdownEditor";
+  import { vim } from "@replit/codemirror-vim";
   import { minimalSetup } from "codemirror";
   import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
-  import { EditorState, StateEffect } from "@codemirror/state";
+  import { Compartment, EditorState, StateEffect } from "@codemirror/state";
   import {
     EditorView,
     drawSelection,
@@ -327,6 +328,9 @@
     readmeOpen = false,
     readmeHelp = false,
     editorFontSize = 16,
+    // Off unless someone asks for it: Vim gives every key a new meaning, which
+    // is a surprise for anyone who did not switch it on.
+    vimMode = false,
     filesNotice = false,
     shareNotice = "",
     shareLinkDialog: { url: string; code: string; copied: boolean } | null = null,
@@ -745,6 +749,7 @@
     // Each compile run bumps this, so the same error can be marked again after
     // the student edited the line and compiled once more.
     diagnosticsRun: number;
+    vim: boolean;
   };
   function codeMirror(node: HTMLElement, options: EditorOptions) {
     let current = options;
@@ -781,10 +786,14 @@
       return true;
     };
     editorFormatters.set(current.id, formatDocument);
+    // Vim rebinds nearly every key, so it has to sit in front of the other
+    // keymaps — a compartment keeps that place while it is switched on and off.
+    const vimKeys = new Compartment();
     view = new EditorView({
       state: EditorState.create({
         doc: current.value,
         extensions: [
+          vimKeys.of(current.vim ? vim({ status: true }) : []),
           minimalSetup,
           lineNumbers(),
           indentUnit.of("    "),
@@ -840,7 +849,12 @@
     return {
       update(next: EditorOptions) {
         const previousId = current.id;
+        const vimChanged = next.vim !== current.vim;
         current = next;
+        if (vimChanged) {
+          view.dispatch({ effects: vimKeys.reconfigure(next.vim ? vim({ status: true }) : []) });
+          view.focus();
+        }
         if (previousId !== next.id) {
           editorFormatters.delete(previousId);
           editorFormatters.set(next.id, formatDocument);
@@ -887,6 +901,13 @@
   }
   function formatEditor(id: string) {
     editorFormatters.get(id)?.();
+  }
+  // Which mode the editor is in decides what every key does, so switching says
+  // so — the mode line of Vim itself only appears in an open editor.
+  function setVimMode(enabled: boolean) {
+    if (enabled === vimMode) return;
+    vimMode = enabled;
+    status = enabled ? "Vim mode on" : "Vim mode off";
   }
   // The README is typed as Markdown and formatted while it is typed. Plaintext
   // only switches that formatting off; the text in the document is the same one.
@@ -1072,9 +1093,20 @@
       autosaveReady = true;
     };
     initializeProject();
+    // Before the editor sees the key: in Vim mode the editor answers to almost
+    // everything, and the way out has to keep working.
+    const vimShortcut = (event: KeyboardEvent) => {
+      if ((event.key.toLowerCase() !== "v" && event.code !== "KeyV") ||
+          !event.shiftKey || (!event.metaKey && !event.ctrlKey)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setVimMode(!vimMode);
+    };
+    window.addEventListener("keydown", vimShortcut, true);
     const edgeTimer = window.setInterval(refreshInheritanceEdges, 250);
     refreshInheritanceEdges();
     return () => {
+      window.removeEventListener("keydown", vimShortcut, true);
       window.clearInterval(edgeTimer);
       unsubscribe();
       unsubscribeOutput();
@@ -3372,7 +3404,7 @@
           <div
             class="svelte-editor-host"
             on:pointerdown={() => { activeWindow = "editor"; }}
-            use:codeMirror={{ id: activeEditorId, value: editorFile.source, fontSize: editorFontSize, onChange: (value: string) => updateSource(editorFile.id, value), diagnostics: diagnosticsByFile[editorFile.fileName] || [], diagnosticsRun }}
+            use:codeMirror={{ id: activeEditorId, value: editorFile.source, fontSize: editorFontSize, onChange: (value: string) => updateSource(editorFile.id, value), diagnostics: diagnosticsByFile[editorFile.fileName] || [], diagnosticsRun, vim: vimMode }}
           ><button
               class="editor-format"
               on:click={() => formatEditor(activeEditorId)}
@@ -3448,7 +3480,7 @@
             <div
               class="svelte-editor-host"
               on:pointerdown={() => { activeWindow = "editor"; activeEditorId = editorWindow.id; }}
-              use:codeMirror={{ id: editorWindow.id, value: editorFile.source, fontSize: editorFontSize, onChange: (value: string) => updateSource(editorFile.id, value), diagnostics: diagnosticsByFile[editorFile.fileName] || [], diagnosticsRun }}
+              use:codeMirror={{ id: editorWindow.id, value: editorFile.source, fontSize: editorFontSize, onChange: (value: string) => updateSource(editorFile.id, value), diagnostics: diagnosticsByFile[editorFile.fileName] || [], diagnosticsRun, vim: vimMode }}
             ><button
                 class="editor-format"
                 on:click={() => formatEditor(editorWindow.id)}
@@ -4122,6 +4154,16 @@
             {/each}
           </select>
         </label>
+        <label class="settings-field settings-toggle">
+          <span>Vim mode in the editor</span>
+          <input
+            type="checkbox"
+            aria-label="Vim mode in the editor"
+            checked={vimMode}
+            on:change={(event) => setVimMode(event.currentTarget.checked)}
+          />
+        </label>
+        <p class="settings-hint">{formatShortcutLabel.replace("+I", "+V")} switches it on and off.</p>
         <div class="dialog-actions"><button on:click={() => (settingsNotice = false)}>Close</button></div>
       </div>
     </div>{/if}

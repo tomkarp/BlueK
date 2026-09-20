@@ -1108,3 +1108,41 @@ test('GUI-67 a link can open the README, and the export dialog attaches that to 
   await page.getByRole('button', { name: 'Save / Export' }).click();
   await expect(page.getByRole('dialog', { name: 'Save / Export' }).getByLabel(/Open README.md with the link/).first()).toBeDisabled();
 });
+
+test('GUI-68 the editor has a Vim mode that stays off until it is switched on', async ({ page }) => {
+  await project(page, 'class Hund {\n    var name = "Bello"\n    var alter = 3\n}');
+  await page.getByRole('button', { name: 'Hund', exact: true }).dblclick();
+  const editor = page.locator('.editor-dialog');
+  const panel = editor.locator('.cm-panels');
+  // Nobody gets Vim without asking for it: typing inserts what was typed.
+  await expect(panel).toHaveCount(0);
+  await editor.locator('.cm-line').first().click();
+  await page.keyboard.press('Home');
+  await page.keyboard.press('j');
+  await expect(editor.locator('.cm-line').first()).toHaveText('jclass Hund {');
+  await page.keyboard.press('Backspace');
+
+  // The shortcut switches it on, and the mode line says where one is.
+  await page.keyboard.press('ControlOrMeta+Shift+V');
+  await expect(panel).toHaveText('--NORMAL--');
+  await expect(page.getByRole('dialog', { name: 'Settings' })).toHaveCount(0);
+  await page.keyboard.press('j');
+  await page.keyboard.press('d');
+  await page.keyboard.press('d');
+  await expect(editor.locator('.cm-line').nth(1)).toHaveText('    var alter = 3');
+  await page.keyboard.press('u');
+  await expect(editor.locator('.cm-line').nth(1)).toHaveText('    var name = "Bello"');
+
+  // The settings show the same switch, and switching it off there ends the mode.
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  const settings = page.getByRole('dialog', { name: 'Settings' });
+  const toggle = settings.getByLabel('Vim mode in the editor');
+  await expect(toggle).toBeChecked();
+  await toggle.uncheck();
+  await settings.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(panel).toHaveCount(0);
+  await editor.locator('.cm-line').first().click();
+  await page.keyboard.press('Home');
+  await page.keyboard.press('j');
+  await expect(editor.locator('.cm-line').first()).toHaveText('jclass Hund {');
+});
