@@ -4037,19 +4037,15 @@
   {#if toolbarDialog === "open"}<div class="modal topmost-modal" role="presentation">
       <div class="dialog toolbar-dialog" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="open-import-title" use:containClicks>
         <h3 id="open-import-title">Open / Import</h3>
-        <p>Drop a project file or directory here, or click to choose one.</p>
+        <p>Drop a project file here, or click to choose one.</p>
         <label
           class="project-dropzone"
           on:dragover|preventDefault
           on:drop={openProjectDrop}
         >
-          <strong>JSON · BlueJ ZIP · Project directory</strong>
-          <span>Accepted: .json, .zip, or a complete project directory</span>
-          <input type="file" aria-label="Choose project file" accept=".json,.bluek.json,.zip,application/json,application/zip" on:change={(event) => { importProject(event); toolbarDialog = null; }} />
-        </label>
-        <label class="project-directory-choice">
-          <span>Choose project directory…</span>
-          <input type="file" aria-label="Choose project directory" webkitdirectory multiple on:change={(event) => { importProjectDirectory(event); toolbarDialog = null; }} />
+          <strong>JSON</strong>
+          <span>Accepted: .json</span>
+          <input type="file" aria-label="Choose project file" accept=".json,.bluek.json,application/json" on:change={(event) => { importProject(event); toolbarDialog = null; }} />
         </label>
         {#if serverFeatures}<div class="shared-project-loader">
           <strong>Load shared project</strong>
