@@ -1,0 +1,597 @@
+*{box-sizing:border-box}body{margin:0;background:#eee;font:14px Arial,sans-serif;color:#222}.bluek{width:100vw;height:100vh;background:#e5e6e7;overflow:hidden}.menubar{height:32px;padding:0 16px;display:flex;gap:22px;align-items:center;background:#d7d9da;border-bottom:1px solid #aaa;color:#555;font-size:12px}.status{margin-left:auto}.body{height:calc(100% - 32px);display:flex}.sidebar{width:178px;background:#dedfe0;border-right:1px solid #aaa;padding:34px 18px;display:flex;flex-direction:column;gap:16px}.sidebar button,.resource-button{height:52px;font-size:18px;border:1px solid #aaa;border-radius:6px;background:linear-gradient(#f8f8f8,#d7d7d7);box-shadow:0 1px 2px #aaa;text-align:center;padding:14px 3px;cursor:pointer}.resource-button{display:block;position:relative;overflow:hidden}.resource-button input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}.side-spacer{flex:1}.workspace{flex:1;display:grid;grid-template-rows:minmax(0,1fr) 265px 108px;background:#eee;padding:18px 16px 0}.canvas{background:#faf9f4;border:2px solid #aaa;border-radius:9px;padding:30px;position:relative;overflow:hidden}.cards{display:flex;gap:72px;margin:108px 10px 0;flex-wrap:wrap}.classcard{width:240px;height:142px;background:#f5c889;border:2px solid #333;border-radius:12px;box-shadow:2px 3px 4px #999;text-align:center;cursor:pointer;display:flex;flex-direction:column}.classcard strong{font-size:27px;border-top:2px solid #333;padding:9px}.classcard small{height:26px;font-size:17px;padding-top:8px}.classcard small:empty{height:0}.lower{display:grid;grid-template-columns:1.25fr .8fr;gap:12px;padding-top:12px}.bench,.codepad{border:2px solid #999;border-radius:9px;background:#eeece8;overflow:hidden}.bench-items{display:flex;gap:24px;padding:14px;flex-wrap:wrap}.object{width:165px;height:100px;border-radius:32px;background:#fa3040;color:white;text-align:center;padding:17px 8px;font-size:18px;box-shadow:2px 3px 4px #777;border:2px solid #111;cursor:pointer}.codepad{padding:12px}.codepad textarea{width:100%;height:190px;resize:none;border:2px solid #555;border-radius:7px;padding:8px;font-size:17px;background:#fff}.codepad button{margin:8px 6px 0 0;padding:5px 12px}footer{display:flex;align-items:flex-end;color:#555;font-size:13px}footer>span{width:38%;padding:9px}.console{width:62%;height:100%;background:#f5f4f1;border:1px solid #aaa;padding:6px}.console pre{height:51px;margin:0;overflow:auto;white-space:pre-wrap;font:12px monospace}.console input{width:100%;border:1px solid #aaa;padding:5px}.popup{position:fixed;z-index:5;width:300px;background:#fff;border:1px solid #aaa;box-shadow:2px 4px 12px #777}.popup-title{padding:12px;font-size:16px;border-bottom:1px solid #bbb}.popup button{display:block;width:100%;border:0;border-bottom:1px solid #ddd;background:#fff;text-align:left;padding:10px 12px;font-size:15px}.popup button:hover{background:#0a9dcc;color:#fff}.popup hr{border:0;border-top:1px solid #bbb;margin:0}.modal,.inspector{position:fixed;inset:0;background:#0005;display:grid;place-items:center;z-index:10}.dialog,.inspect-window{background:#eee;border:2px solid #555;border-radius:9px;padding:20px;min-width:360px;box-shadow:3px 5px 15px #333}.dialog h3{margin:0 0 15px}.dialog label{display:block;margin-bottom:14px}.dialog input{display:block;width:100%;margin-top:6px;padding:7px;border:1px solid #888}.dialog button,.inspect-window button{padding:8px 14px;margin-right:6px}.inspect-window{background:#fa3040;color:#fff;border-radius:28px;min-width:520px;min-height:260px}.inspect-window h2{text-align:center}.field{background:#ffea00;color:#111;padding:14px;margin:30px 20px 60px;font-size:20px}.editor-dialog{min-width:min(850px,80vw)}.editor-dialog textarea{display:block;width:100%;height:52vh;resize:vertical;margin:0 0 14px;padding:10px;font:14px monospace;border:1px solid #888}.game-stage{position:absolute;right:28px;top:28px;width:min(40%,420px);background:#fff;border:2px solid #555;overflow:hidden}.game-actor{position:absolute;width:30px;height:30px;border-radius:50%;background:#f33142;border:2px solid #111;color:#fff;text-align:center;line-height:26px;font-weight:bold}
+.sidebar button:disabled,.codepad button:disabled{cursor:not-allowed;opacity:.55}.console input:disabled{background:#e5e5e5;cursor:not-allowed}
+.object.selected{outline:3px solid #222;outline-offset:3px}
+.game-actor.image{background-color:transparent;border:0;border-radius:0}
+.game-actor-image{display:block;width:100%;height:100%;object-fit:fill;pointer-events:none;user-select:none}
+.game-text{position:absolute;z-index:2;color:#fff;font-weight:bold;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;pointer-events:none;white-space:pre;transform:translateY(-50%)}
+.game-controls{position:absolute;right:28px;bottom:12px;display:flex;align-items:center;gap:6px}.game-controls button{padding:4px 12px;border:1px solid #999;border-radius:4px;background:linear-gradient(#fff,#d5d5d5);cursor:pointer}.game-controls button:active{background:#c7c7c7}.game-controls label{display:flex;align-items:center;gap:4px;color:#555;font-size:12px}.game-controls input{width:100px}
+.game-stage{max-height:calc(100% - 72px)}
+.game-controls{top:auto;bottom:24px;max-width:calc(100% - 56px);flex-wrap:wrap;justify-content:flex-end}
+
+/* Keep the project canvas usable at laptop and narrow browser widths. */
+.canvas{overflow:auto}
+
+/* The terminal behaves like the separate BlueJ terminal window while staying
+   inside the browser viewport. */
+.terminal-window.maximized{position:fixed;inset:4vh 4vw;width:auto;height:auto;margin:0}
+.terminal-window.maximized pre{min-height:0}
+.terminal-notice{flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 8px;font-size:12px;color:#555}
+.terminal-notice[role=alert]{color:#a00000}
+.terminal-window pre{min-height:0}
+.terminal-window{position:relative}
+.terminal-resize-handle{position:absolute;right:2px;bottom:2px;width:18px;height:18px;cursor:nwse-resize}
+.terminal-resize-handle::after{position:absolute;right:2px;bottom:2px;width:10px;height:10px;border-right:2px solid #777;border-bottom:2px solid #777;content:""}
+.terminal-resize-handle{z-index:3;width:10px;height:10px}
+.terminal-resize-n,.terminal-resize-s{left:10px;right:10px;width:auto}
+.terminal-resize-n{top:-4px;cursor:ns-resize}
+.terminal-resize-s{bottom:-4px;cursor:ns-resize}
+.terminal-resize-e,.terminal-resize-w{top:10px;bottom:10px;height:auto}
+.terminal-resize-e{right:-4px;cursor:ew-resize}
+.terminal-resize-w{left:-4px;cursor:ew-resize}
+.terminal-resize-ne{right:-4px;top:-4px;cursor:nesw-resize}
+.terminal-resize-se{right:-4px;bottom:-4px;cursor:nwse-resize}
+.terminal-resize-sw{left:-4px;bottom:-4px;cursor:nesw-resize}
+.terminal-resize-nw{left:-4px;top:-4px;cursor:nwse-resize}
+.terminal-resize-handle::after{display:none}
+.terminal-header{cursor:grab;user-select:none}
+.terminal-header:active{cursor:grabbing}
+.terminal-header>div{display:flex;gap:4px}
+.terminal-header button{min-width:28px;padding:2px 7px}
+.bluek:has(.stage-window-chrome) .game-controls{top:calc(var(--bluek-stage-top,72px) + var(--bluek-stage-height,262px) + 8px)}
+.bluek:has(.stage-window-chrome.maximized) .game-controls{top:calc(8vh + 30px + var(--bluek-stage-height,262px) + 8px)}
+.bluek:has(.stage-window-chrome) .game-controls{top:var(--bluek-controls-top);left:var(--bluek-controls-left);width:var(--bluek-controls-width)}
+
+/* BlueJ-style resizable split between the class diagram and the bench. */
+.workspace{display:flex;flex-direction:column;min-height:0}
+.panels{flex:1;min-height:0;display:flex;flex-direction:column}
+.canvas{flex:0 1 var(--pane-split,66%);min-height:140px}
+.pane-splitter{height:9px;flex:0 0 9px;margin:0 2px;cursor:row-resize;background:#c8c8c8;border-top:2px solid transparent;border-bottom:2px solid transparent}
+.pane-splitter:hover{background:#999}
+.lower{position:relative;flex:1 1 auto;min-height:145px;min-width:0;display:grid;grid-template-columns:minmax(0,1fr) 18px minmax(280px,.8fr);gap:0;padding-top:12px;overflow:hidden}
+.lower .bench{grid-column:1}
+.lower .codepad{grid-column:3}
+.codepad-toggle{grid-column:2;align-self:center;justify-self:center;width:18px;height:46px;border:0;border-radius:0 5px 5px 0;background:#bbb;color:#fff;font-size:25px;line-height:40px;cursor:pointer;padding:0}
+.codepad-toggle:hover{background:#999}
+.lower.codepad-collapsed{grid-template-columns:minmax(0,1fr) 18px}
+.lower.codepad-collapsed .bench{grid-column:1 / -1}
+.lower.codepad-collapsed .codepad-toggle{grid-column:2;position:absolute;right:0;top:50%;z-index:2}
+footer{flex:0 0 108px}
+.panels{flex:0 1 var(--pane-split,66%)}
+.panels .canvas{flex:1 1 auto}
+.classcard strong{border-top:0;border-bottom:2px solid #333}
+.pane-splitter{height:17px;flex-basis:17px;background:transparent;border:0;position:relative;touch-action:none;cursor:row-resize;z-index:4}
+.pane-splitter::before{content:"";position:absolute;left:50%;top:3px;width:54px;height:11px;transform:translateX(-50%);border-radius:6px;background:#d0d0d0;border:1px solid #aaa}
+.pane-splitter::after{content:"";position:absolute;left:50%;top:7px;width:34px;height:3px;transform:translateX(-50%);border-top:1px solid #999;border-bottom:1px solid #999}
+.pane-splitter:hover::before,.pane-splitter:active::before{background:#b7b7b7;border-color:#777}
+.pane-splitter:hover::after,.pane-splitter:active::after{border-color:#555}
+.codepad{display:flex;flex-direction:column;min-height:0;min-width:0;padding:0}
+.codepad-history{height:auto;flex:1 1 auto;min-height:0}
+.codepad textarea{flex:0 0 36px;height:36px;min-height:36px;margin:0}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:24px;margin:56px 10px 0}
+.classcard{width:auto;min-width:0;height:124px}
+.classcard strong{font-size:24px}
+.inspect-fields{background:#ff929b;color:#111;padding:12px 20px;margin:20px 20px 34px;min-height:92px}
+.inspect-no-fields{display:flex;align-items:center;justify-content:center;color:#555;font-style:italic}
+.inspect-window{width:min(520px,calc(100vw - 40px));min-width:0}
+.inspect-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr) auto;align-items:center;margin:4px 0;background:#fff0f0;border:1px solid #e65f6b}
+.inspect-row span{padding:8px;font:16px Arial,sans-serif}
+.inspect-row output{padding:8px;background:#fff;border-left:2px solid #e65f6b;font:16px monospace;min-height:35px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inspect-row input{grid-column:2 / -1;width:100%;min-width:0;padding:8px;border:0;border-left:2px solid #e65f6b;font:16px monospace}
+.inspect-row input[aria-invalid="true"]{outline:2px solid #c00000;outline-offset:-2px}
+.inspect-error{grid-column:1 / -1;padding:4px 8px;color:#a00000;font:13px Arial,sans-serif;background:#ffe0e0}
+.dialog-error{margin:4px 0 12px;padding:8px 10px;color:#a00000;background:#ffe0e0;border:1px solid #d66;font-size:14px}
+.editor-dialog-error{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.editor-dialog-error>span{min-width:0;overflow-wrap:anywhere}
+.dialog-error-close{flex:0 0 auto!important;min-width:24px!important;width:24px;height:24px;padding:0!important;margin:0!important;border:1px solid #c77!important;border-radius:4px;background:#fff0f0!important;color:#900;font:bold 16px/20px Arial,sans-serif;cursor:pointer}
+.dialog-error-close:hover,.dialog-error-close:focus-visible{background:#fff!important;color:#600;outline:2px solid #c77;outline-offset:1px}
+.classcard{position:relative}
+.card-menu{position:absolute;top:7px;right:8px;width:28px;height:24px;border:1px solid #9a6b2f;border-radius:4px;background:#f8d59f;color:#333;font:bold 18px/16px Arial;cursor:pointer}
+.card-menu:hover{background:#fff1d4}
+.object{position:relative}
+.object-menu{position:absolute;top:8px;right:13px;width:26px;height:23px;border:1px solid #d85a65;border-radius:4px;background:#fb5260;color:#fff;font:bold 18px/15px Arial;cursor:pointer}
+.object-menu:hover{background:#ff7b85}
+.console{display:flex;flex-direction:column}.console-toolbar{display:flex;justify-content:flex-end;height:22px}.console-toolbar button{border:1px solid #aaa;background:#e7e5e1;border-radius:3px;padding:1px 8px;font-size:11px;cursor:pointer}.console pre{flex:1;height:auto}.terminal-output{position:relative;flex:1;min-height:0;margin:0 0 8px}.terminal-output pre{height:100%;box-sizing:border-box;margin:0}.terminal-input-echo{color:#1769aa}.terminal-clear{z-index:2;position:absolute;right:10px;bottom:10px;width:30px;height:30px;padding:0;border:1px solid #999;border-radius:4px;background:#f5f4f1cc;color:#444;font-size:19px;line-height:1;cursor:pointer}.terminal-clear:hover{background:#fff;color:#111}.terminal-modal{position:fixed;inset:0;z-index:20;background:#0006;display:grid;place-items:center;padding:5vh 8vw}.terminal-window{width:min(1000px,100%);height:min(680px,90vh);display:flex;flex-direction:column;background:#f5f4f1;border:2px solid #555;border-radius:8px;box-shadow:none;padding:12px}.terminal-header{display:flex;justify-content:space-between;align-items:center;font-weight:bold;margin-bottom:8px}.terminal-header button,.terminal-actions button{border:1px solid #999;border-radius:4px;background:linear-gradient(#fff,#d5d5d5);padding:5px 12px;cursor:pointer}.terminal-window pre{flex:1;overflow:auto;white-space:pre-wrap;background:#fff;border:1px solid #aaa;margin:0 0 8px;padding:10px;font:14px monospace}.terminal-window input{width:100%;border:1px solid #888;padding:8px;font:14px monospace;background:#ecebea;color:#777}.terminal-window input:not(:disabled){border-color:#2878c8;background:#eef7ff;color:#111;box-shadow:0 0 0 2px #2878c833}.terminal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
+.result-dialog{width:min(520px,calc(100vw - 40px));min-width:0;box-sizing:border-box;text-align:center;display:flex;flex-direction:column}.result-dialog h3{margin:0 0 14px}.result-method{margin:0 0 14px;padding:10px 12px;background:#eee;border:1px solid #ccc;font:18px monospace;text-align:left;overflow-wrap:anywhere}.result-value{display:block;width:100%;box-sizing:border-box;margin:0 0 18px;padding:16px;background:#fff;border:1px solid #999;font:18px monospace;text-align:left;overflow-wrap:anywhere}.result-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}.result-actions button{margin:0}
+.argument-object-select{display:block;width:max-content;max-width:100%;margin-top:5px;padding:3px 7px;border:1px solid #999;border-radius:3px;background:#e7e5e1;font:12px monospace;cursor:pointer}.argument-object-select:hover{background:#ccecf4}
+.popup-group{padding:7px 12px 5px;background:#eee;border-bottom:1px solid #ccc;color:#555;font-size:12px;font-style:italic}
+.inspector{background:transparent;display:block;pointer-events:none}
+.inspector .inspect-window{pointer-events:auto}
+.inspector .inspect-window h2{cursor:grab;user-select:none}
+.inspector .inspect-window h2:active{cursor:grabbing}
+.cards{position:relative;display:block;min-height:100%;margin:0;touch-action:none}
+.classcard{position:absolute;width:210px;cursor:grab}
+.classcard.uncompiled{background-image:none}
+.classcard .card-body{flex:1 1 auto;min-height:0;border-radius:0 0 10px 10px}
+.classcard.uncompiled .card-body{background:repeating-linear-gradient(135deg,#f5c889 0 13px,#858585 13px 17px,#f5c889 17px 30px)}
+.classcard:active{cursor:grabbing}
+.game-stage{z-index:3}
+.canvas:has(.game-stage) .cards{width:calc(60% - 24px);display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin:0;min-height:0}
+.canvas:has(.game-stage) .classcard{position:relative;left:auto!important;top:auto!important;width:auto;height:118px}
+.canvas:has(.game-stage) .game-controls{right:28px;top:calc(38px + min(40%,420px) * .67);bottom:auto;width:min(40%,420px);justify-content:flex-end}
+.stage-window-chrome{position:fixed;z-index:12;left:var(--bluek-stage-left,calc(100vw - min(40%,420px) - 28px));top:calc(var(--bluek-stage-top,72px) - 30px);width:min(40%,420px);height:30px;display:flex;align-items:center;justify-content:space-between;padding:0 5px 0 10px;background:#d7d9da;border:2px solid #555;border-bottom:0;border-radius:7px 7px 0 0;box-shadow:3px 4px 10px #777;font-size:13px;font-weight:bold;cursor:grab}.stage-window-chrome:active{cursor:grabbing}.stage-window-chrome div{display:flex;gap:3px}.stage-window-chrome button{width:24px;height:22px;padding:0;border:1px solid #999;border-radius:3px;background:#eee;color:#333;cursor:pointer;font-size:15px;line-height:18px}.stage-window-chrome button:hover{background:#fff}.game-stage{position:fixed;z-index:11;left:var(--bluek-stage-left,calc(100vw - min(40%,420px) - 28px));right:auto;top:var(--bluek-stage-top,72px);width:min(40%,420px);max-height:none;box-shadow:3px 5px 12px #777}.bluek:has(.stage-window-chrome) .game-controls{position:fixed;z-index:12;right:auto;left:var(--bluek-stage-left,calc(100vw - min(40%,420px) - 28px));top:calc(var(--bluek-stage-top,72px) + min(40%,420px) * .67 + 8px);width:min(40%,420px);bottom:auto;justify-content:flex-end}.bluek-stage-closed .game-stage,.bluek-stage-closed .game-controls{display:none}.bluek:has(.stage-window-chrome.maximized) .stage-window-chrome{left:5vw;top:8vh;width:90vw}.bluek:has(.stage-window-chrome.maximized) .game-stage{left:5vw;top:calc(8vh + 30px);width:90vw;max-height:72vh}.bluek:has(.stage-window-chrome.maximized) .game-controls{left:5vw;top:calc(8vh + 30px + min(90vw,1000px) * .67 + 8px);width:90vw}
+.game-actor{will-change:left,top,transform}
+.bluek:has(.stage-window-chrome.maximized) .game-controls{right:auto;bottom:auto;left:var(--bluek-controls-left);top:var(--bluek-controls-top);width:var(--bluek-controls-width)}
+.codepad-history{height:154px;overflow:auto;padding:4px 8px;background:#faf9f4;border:1px solid #ddd;border-radius:5px 5px 0 0;font:16px monospace;white-space:pre-wrap}.codepad-entry{padding:0;border:0;font-size:0;line-height:1.2}.codepad-entry>div:first-child{padding:3px 0;font:16px/1.2 monospace}.codepad textarea{height:36px;border-radius:0 0 7px 7px;padding:6px 8px}
+.codepad-result,.codepad-object-result{display:flex;align-items:center;gap:12px;color:#168b22;font:18px/1.2 monospace;line-height:1.2;padding:3px 0 3px 4px;margin:0;text-align:left;white-space:nowrap;overflow:hidden}.codepad .codepad-object-result{margin:0;padding:3px 0 3px 4px}.codepad-object-result{border:0;background:transparent;cursor:pointer;min-width:0;width:100%;box-sizing:border-box}.codepad-object-result:hover{color:#0b6415;text-decoration:underline}.codepad-object-label{display:flex;min-width:0;overflow:hidden;flex:1 1 auto}.codepad-result-value{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 auto}.codepad-result-type{flex:0 0 auto;white-space:nowrap}.codepad-object-placeholder{color:#888}.codepad-value-icon,.codepad-object-icon{display:inline-block;flex:0 0 12px;width:12px;height:12px;border-radius:2px;background:#b21f2d;box-shadow:inset 0 0 0 1px #7d111c}.codepad-error{color:#a11;padding:3px 0 3px 28px;font:16px/1.2 monospace;white-space:pre-wrap}
+.codepad-object-result:disabled{cursor:default;opacity:.7}.codepad-object-result:disabled:hover{text-decoration:none}
+
+/* The world controls follow the measured world element in every window mode. */
+.bluek:has(.stage-window-chrome) .game-controls{position:fixed;right:auto;bottom:auto;left:var(--bluek-controls-left);top:var(--bluek-controls-top);width:var(--bluek-controls-width)}
+
+/* BluePlay is one BlueJ-style window: chrome, world and controls share the
+   same frame. The older rules above are kept for non-BluePlay compatibility,
+   so these scoped rules deliberately reset their fixed positioning. */
+.stage-window{position:fixed;z-index:35;left:var(--bluek-stage-left,max(12px,calc((100vw - var(--bluek-stage-window-width,760px))/2)));top:var(--bluek-stage-top,72px);width:min(var(--bluek-stage-window-width,760px),calc(100vw - 24px));max-height:calc(100vh - 48px);display:flex;flex-direction:column;overflow:hidden;background:#fff;border:2px solid #555;border-radius:8px;box-shadow:3px 5px 16px #777}
+.stage-window.maximized{left:5vw;top:6vh;width:90vw;max-height:88vh}
+.stage-window .stage-window-chrome{position:relative;z-index:auto;inset:auto;width:auto;height:32px;flex:0 0 32px;padding:0 6px 0 12px;background:#d7d9da;border:0;border-bottom:1px solid #777;border-radius:0;box-shadow:none;color:#333;cursor:grab;user-select:none}
+.stage-window .stage-window-chrome:active{cursor:grabbing}
+.stage-window .stage-window-chrome button{width:26px;height:24px}
+.stage-window-body{flex:1 1 auto;min-height:0;display:flex;justify-content:center;overflow:auto;padding:0;background:#fff}
+.stage-window .game-stage{position:relative;inset:auto;z-index:auto;display:block;width:100%;height:auto;max-width:none;max-height:none;flex:0 1 auto;border:0;box-shadow:none;background-image:none!important;cursor:crosshair}
+.stage-window.maximized .stage-window-body{max-height:calc(88vh - 96px)}
+.stage-window .game-controls{position:relative;inset:auto;z-index:auto;width:auto;max-width:none;min-height:58px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:12px;padding:10px 14px;background:#eee;border-top:1px solid #aaa}
+.stage-window .game-controls button{min-width:76px;padding:7px 14px;font-size:15px}
+.stage-window .game-controls label{gap:8px;color:#222;font-size:15px;white-space:nowrap}
+.stage-window .game-controls input{width:190px;cursor:pointer;accent-color:#2878c8}
+.stage-window .game-controls input:disabled{cursor:not-allowed}
+@media(max-width:700px){.stage-window{left:12px;top:48px;width:calc(100vw - 24px)}.stage-window .game-controls{gap:7px;padding:8px}.stage-window .game-controls button{min-width:62px;padding:6px 9px}.stage-window .game-controls input{width:130px}}
+
+/* Opening the separate world window must not reflow the BlueJ workbench.
+   Cards keep their coordinates whether or not a world is currently shown. */
+.canvas:has(.game-stage) .cards{width:auto;display:block;margin:0;min-height:100%}
+.canvas:has(.game-stage) .classcard{position:absolute;left:var(--card-left)!important;top:var(--card-top)!important;width:210px;height:124px}
+
+/* Final pane polish: the splitter is a real, forgiving drag target and the
+   codepad input keeps its own space even when the lower pane is short. */
+.pane-splitter{height:21px;flex:0 0 21px;margin:0;outline:0;background:#d7d7d7;border-top:1px solid #aaa;border-bottom:1px solid #aaa}
+.pane-splitter::before{top:5px;width:72px;height:11px;background:#c4c4c4;border:1px solid #999;box-shadow:inset 0 1px #eee}
+.pane-splitter::after{top:9px;width:38px;height:4px;border-top:1px solid #777;border-bottom:1px solid #777}
+.pane-splitter:hover,.pane-splitter:focus-visible{background:#c8c8c8}
+.pane-splitter:hover::before,.pane-splitter:focus-visible::before,.pane-splitter:active::before{background:#aaa;border-color:#666}
+.card-header{display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:0;flex:0 0 auto;border-bottom:2px solid #333}
+.classcard .card-header small{height:auto;padding:7px 6px 0;font-size:16px;line-height:18px}
+.classcard .card-header strong{border:0;padding:2px 8px 7px;line-height:28px}
+.classcard .card-header strong{max-width:100%;font-size:20px;overflow-wrap:anywhere}
+.classcard:not(:has(.card-header small)) .card-header strong{padding-top:8px;padding-bottom:8px}
+.codepad-history{height:auto!important;flex:1 1 auto;min-height:0;overflow:auto}
+.codepad-context-menu{position:fixed;z-index:25;min-width:190px;background:#fff;border:1px solid #aaa;box-shadow:2px 4px 12px #777}
+.codepad-context-menu button{display:block;width:100%;margin:0;padding:10px 14px;border:0;border-bottom:1px solid #ddd;background:#fff;text-align:left;font-size:15px;cursor:pointer}
+.codepad-context-menu button:last-child{border-bottom:0}
+.codepad-context-menu button:hover,.codepad-context-menu button:focus-visible{background:#0a9dcc;color:#fff;outline:0}
+.codepad textarea{flex:0 0 38px;height:38px!important;min-height:38px;max-height:38px}
+
+.game-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none}
+.game-stage.canvas-rendering .game-actor,.game-stage.canvas-rendering .game-text{display:none}
+
+/* The separator belongs between the two main panes, so both panes resize together. */
+.workspace{display:grid;grid-template-rows:minmax(180px,var(--upper-pane,2fr)) 21px minmax(170px,1fr) 108px}
+.workspace>.panels{grid-row:1;min-height:0;display:flex;flex:initial}
+.workspace>.pane-splitter{grid-row:2}
+.workspace>.lower{grid-row:3;min-height:0}
+.workspace>footer{grid-row:4;min-height:0}
+.toolbar label.media-disabled,.sidebar .resource-button.media-disabled{cursor:not-allowed;opacity:.55;pointer-events:none}
+.toolbar label.media-disabled input,.sidebar .resource-button.media-disabled input{cursor:not-allowed}
+.compiler-error-modal{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:5vh 8vw;background:#0006}
+.compiler-error-window{width:min(760px,100%);max-height:80vh;display:flex;flex-direction:column;background:#f5f4f1;border:2px solid #555;border-radius:8px;box-shadow:3px 5px 18px #333;padding:12px}
+.compiler-error-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-size:17px}
+.compiler-error-header button{border:1px solid #999;border-radius:4px;background:linear-gradient(#fff,#d5d5d5);padding:2px 9px;cursor:pointer}
+.compiler-error-window p{margin:0 0 8px;color:#555}
+.compiler-error-location{margin:0 0 6px;color:#444;font:13px monospace}
+.compiler-error-window pre{flex:1;min-height:120px;overflow:auto;white-space:pre-wrap;background:#fff;border:1px solid #aaa;margin:0 0 10px;padding:10px;font:14px monospace}
+.compiler-error-message{max-height:18vh}
+
+/* BluePlay API cards use the same visual treatment as every other class card. */
+.game-stage.game-canvas{display:block;width:min(40%,420px);height:auto;max-width:none;background-image:none!important;image-rendering:auto;cursor:crosshair}.blueplay-api-dialog{width:min(620px,calc(100vw - 40px));max-height:84vh;overflow:auto}.blueplay-api-dialog h3{margin-bottom:6px}.blueplay-api-dialog>p{color:#555}.blueplay-api-members{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 18px;margin:18px 0;padding:14px 18px;background:#fff;border:1px solid #bbb;border-radius:6px;list-style:none}.blueplay-api-members li{min-width:0}.blueplay-api-members code{font:12px monospace;overflow-wrap:anywhere}@media(max-width:700px){.blueplay-api-members{grid-template-columns:1fr}}
+
+/* Final BluePlay window overrides: legacy fixed rules must not split the
+   world, header and controls again. */
+.bluek .stage-window .game-stage{position:relative!important;inset:auto!important;display:block;width:100%!important;height:auto!important;max-width:none!important;max-height:none!important;flex:1 1 100%;min-width:0;border:0;box-shadow:none;pointer-events:auto!important}
+.bluek .stage-window .game-controls{position:relative!important;inset:auto!important;display:flex;width:auto!important;max-width:none;min-height:58px;flex:0 0 auto;align-items:center;justify-content:center;flex-wrap:wrap;gap:12px;padding:10px 14px;background:#eee;border-top:1px solid #aaa}
+.bluek .stage-window .stage-window-chrome{position:relative!important;inset:auto!important;width:auto!important;height:32px;flex:0 0 32px;border:0;border-bottom:1px solid #777;border-radius:0;box-shadow:none}
+.bluek .stage-window:not(.maximized){left:var(--bluek-stage-left,max(12px,calc((100vw - var(--bluek-stage-window-width,760px))/2)));width:min(var(--bluek-stage-window-width,760px),calc(100vw - 24px))}
+.bluek .stage-window.maximized{left:0!important;top:0!important;width:100vw!important;height:100vh;max-width:none!important;max-height:100vh;border-radius:0}
+.bluek .stage-window.maximized .stage-window-body{max-height:none;flex:1 1 auto}
+
+.project-choice-with-info{position:relative;width:100%}
+.project-choice-with-info>button:first-child{width:100%;padding-right:58px}
+.project-choice-with-info .project-info-button{position:absolute;right:14px;top:50%;display:flex;width:32px;height:32px;min-height:0;transform:translateY(-50%);align-items:center;justify-content:center;margin:0;padding:0;border:1px solid #b00000;border-radius:50%;background:#fff;color:#b00000;font:bold 20px/1 Arial;cursor:pointer}
+.project-choice-with-info .project-info-button:hover,.project-choice-with-info .project-info-button:focus-visible{background:#b00000;color:#fff;outline:0}
+.project-info-panel{position:fixed;left:50%;top:50%;z-index:11;width:min(560px,calc(100vw - 40px));transform:translate(-50%,-50%);padding:22px 48px 20px 22px;border:2px solid #555;border-radius:9px;background:#fff;color:#333;box-shadow:3px 5px 18px #333;font-size:15px;line-height:1.45}
+.project-info-panel h4{margin:0 0 8px;font-size:18px;color:#b00000}
+.project-info-panel p{margin:7px 0}
+.project-info-panel a{color:#087c9d}
+.project-info-close{position:absolute;right:8px;top:7px;border:0!important;background:transparent!important;color:#555!important;font-size:24px!important;line-height:1!important;padding:0!important;margin:0!important;cursor:pointer}
+.canvas{overflow:auto}
+
+/* Native range input: it gives the BlueJ-style divider reliable pointer and
+   keyboard behavior in Safari as well as Chromium-based embedded browsers. */
+.pane-splitter{appearance:none;width:100%;height:21px;margin:0;padding:0;border:0;border-top:1px solid #aaa;border-bottom:1px solid #aaa;border-radius:0;background:#eee;cursor:row-resize;touch-action:none}
+.pane-splitter::-webkit-slider-runnable-track{height:19px;background:#eee}
+.pane-splitter::-webkit-slider-thumb{appearance:none;width:72px;height:13px;margin-top:3px;border:1px solid #888;border-radius:6px;background:#c4c4c4;box-shadow:inset 0 1px #eee;cursor:row-resize}
+.pane-splitter::-moz-range-track{height:19px;background:#eee}
+.pane-splitter::-moz-range-thumb{width:72px;height:11px;border:1px solid #888;border-radius:6px;background:#c4c4c4;box-shadow:inset 0 1px #eee;cursor:row-resize}
+.pane-splitter:hover::-webkit-slider-thumb,.pane-splitter:focus-visible::-webkit-slider-thumb{background:#aaa;border-color:#666}
+.pane-splitter:hover::-moz-range-thumb,.pane-splitter:focus-visible::-moz-range-thumb{background:#aaa;border-color:#666}
+.pane-splitter::before,.pane-splitter::after{display:none;content:none}
+.pane-splitter{display:block;position:relative;outline:0}
+.pane-splitter:focus-visible{box-shadow:inset 0 0 0 2px #168fbd}
+.pane-splitter::before{display:block;content:"";position:absolute;left:50%;top:4px;width:72px;height:12px;transform:translateX(-50%);border:1px solid #888;border-radius:6px;background:#c4c4c4;box-shadow:inset 0 1px #eee}
+.pane-splitter::after{display:block;content:"";position:absolute;left:50%;top:8px;width:38px;height:4px;transform:translateX(-50%);border-top:1px solid #777;border-bottom:1px solid #777}
+.pane-splitter:hover::before,.pane-splitter:active::before{background:#aaa;border-color:#666}
+.terminal-modal{background:transparent;pointer-events:none}
+.terminal-window{pointer-events:auto}
+.terminal-window:not(.maximized):focus-within{box-shadow:3px 5px 18px #333}
+.bluek.terminal-split{width:100vw}
+.bluek.terminal-split>.menubar,.bluek.terminal-split>.body{width:calc(100vw - var(--terminal-split-width,430px))}
+.terminal-modal-split{display:flex;align-items:stretch;justify-content:flex-end;padding:0;pointer-events:none}
+.terminal-modal-split .terminal-window{flex:0 0 var(--terminal-split-width,430px);width:var(--terminal-split-width,430px)!important;height:100vh!important;border-radius:0;border-width:0 0 0 2px;box-shadow:none}
+.terminal-window.split .terminal-resize-handle{display:none}
+.terminal-window.split .terminal-header{height:58px;min-height:58px;margin:-12px -12px -1px;padding:0 12px}
+.terminal-window.split .terminal-header button{width:46px;height:40px;padding:0;font-size:20px;line-height:1}
+.terminal-reopen{display:none}
+.terminal-window.split .terminal-header{cursor:default}
+.terminal-split-divider{position:fixed;inset:0 auto 0 auto;right:calc(var(--terminal-split-width,430px) - 9px);z-index:35;width:18px;pointer-events:auto;cursor:col-resize;background:transparent;touch-action:none}
+.bluek:has(.editor-modal.window-active) .terminal-split-divider{z-index:25}
+.terminal-split-divider::after{content:"";position:absolute;top:50%;left:5px;width:8px;height:100px;transform:translateY(-50%);border-left:1px solid #777;border-right:1px solid #777;background:repeating-linear-gradient(to bottom,#777 0 1px,transparent 1px 5px)}
+.terminal-split-divider:hover::after,.terminal-split-divider:focus-visible::after{background-color:#c4c4c4;outline:2px solid #168fbd;outline-offset:1px}
+
+/* BlueJ keeps the workbench footer deliberately narrow: selection on the
+   left, activity in the middle, and reset at the far right. */
+.workspace>footer.status-bar{display:flex;align-items:center;gap:12px;min-height:0;height:32px;padding:0 4px;color:#555;font-size:13px}
+.status-bar .current-element{flex:0 1 38%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 5px}
+.activity-bar{position:relative;display:block;flex:1 1 auto;height:20px;max-width:240px;border:1px solid #aaa;border-radius:5px;background:#e2e2e2;overflow:hidden}
+.activity-indicator{position:absolute;top:2px;bottom:2px;left:1%;width:28%;background:#1717b8;border:1px solid #08087a;border-radius:3px;box-sizing:border-box;animation:bluek-activity 1s ease-in-out infinite alternate}
+.terminal-reopen{border:1px solid #aaa;border-radius:4px;background:#e7e5e1;color:#444;padding:3px 9px;font-size:12px;cursor:pointer}
+.terminal-reopen:hover{background:#d7d7d7}
+@keyframes bluek-activity{from{left:1%}to{left:71%}}
+.reset-runtime{margin-left:auto;width:32px;height:28px;border:0;background:transparent;color:#777;font-size:27px;line-height:24px;cursor:pointer;border-radius:4px}
+.reset-runtime:hover:not(:disabled){background:#d7d7d7;color:#333}
+.reset-runtime:disabled{opacity:.45;cursor:not-allowed}
+
+/* The status strip is not a console pane. Keep it short and place the
+   activity indicator close to the reset control, as in BlueJ. */
+.workspace{grid-template-rows:minmax(180px,var(--upper-pane,2fr)) 21px minmax(170px,1fr) 32px}
+.workspace>footer.status-bar{height:32px;flex:0 0 32px}
+.status-bar .current-element{flex:0 1 auto}
+.status-bar .activity-bar{margin-left:auto;flex:0 0 240px}
+.status-bar .reset-runtime{margin-left:0}
+
+/* Both BlueJ workbench splits stay useful even at extreme sizes. The narrow
+   splitter itself is neutral; only its handle provides visual affordance. */
+.workspace{grid-template-rows:minmax(90px,var(--upper-pane,2fr)) 21px minmax(90px,1fr) 32px}
+.pane-splitter{border-top:0;border-bottom:0}
+.pane-splitter{box-shadow:none}
+.pane-splitter::-webkit-slider-runnable-track{background:#eee}
+.pane-splitter::-moz-range-track{background:#eee}
+.lower{grid-template-columns:minmax(90px,var(--bench-width,60%)) 8px 18px minmax(90px,1fr)}
+.lower .bench{grid-column:1;min-width:0}
+.lower .bench-codepad-splitter{grid-column:2;align-self:stretch;position:relative;cursor:col-resize;touch-action:none}
+.lower .bench-codepad-splitter::after{content:"";position:absolute;left:3px;top:50%;width:2px;height:46px;transform:translateY(-50%);border-radius:2px;background:#aaa}
+.lower .bench-codepad-splitter:hover::after,.lower .bench-codepad-splitter:focus-visible::after{background:#777}
+.lower .codepad-toggle{grid-column:3}
+.lower .codepad{grid-column:4;min-width:0}
+.lower.codepad-collapsed{grid-template-columns:minmax(90px,1fr) 18px}
+.lower.codepad-collapsed .bench-codepad-splitter{display:none}
+
+/* Make the horizontal grip easy to acquire with a mouse or finger while
+   keeping the neutral track visually unobtrusive. */
+.pane-splitter::before{width:112px;height:15px;top:3px;border-radius:8px}
+.pane-splitter::after{width:64px;top:8px}
+.lower .bench-codepad-splitter{width:14px}
+.lower .bench-codepad-splitter::after{left:4px;width:6px;height:78px;background:#c4c4c4;border:1px solid #999;border-radius:5px;box-shadow:inset 1px 0 #eee}
+.lower .bench-codepad-splitter:hover::after,.lower .bench-codepad-splitter:focus-visible::after{background:#aaa;border-color:#666}
+
+/* Keep splitters visually quiet: the drag affordance is only three lines,
+   while the codepad arrow remains an independent control. */
+.lower{padding-top:0}
+.pane-splitter{background:transparent;border:0}
+.pane-splitter::before{content:"";display:block;position:absolute;left:50%;top:50%;width:96px;height:9px;transform:translate(-50%,-50%);border:0;border-radius:0;box-shadow:none;background:linear-gradient(#8d8d8d,#8d8d8d) 0 0/100% 1px no-repeat,linear-gradient(#8d8d8d,#8d8d8d) 0 4px/100% 1px no-repeat,linear-gradient(#8d8d8d,#8d8d8d) 0 8px/100% 1px no-repeat}
+.pane-splitter::after{display:none;content:none}
+.pane-splitter:hover,.pane-splitter:focus-visible,.pane-splitter:active{background:transparent}
+.pane-splitter:hover::before,.pane-splitter:focus-visible::before,.pane-splitter:active::before{background:linear-gradient(#8d8d8d,#8d8d8d) 0 0/100% 1px no-repeat,linear-gradient(#8d8d8d,#8d8d8d) 0 4px/100% 1px no-repeat,linear-gradient(#8d8d8d,#8d8d8d) 0 8px/100% 1px no-repeat}
+.lower .bench-codepad-splitter{width:14px}
+.lower .bench-codepad-splitter::after{display:none;content:none}
+.lower .bench-codepad-splitter::before{content:"";display:block;position:absolute;left:50%;top:50%;width:9px;height:96px;transform:translate(-50%,-50%);background:linear-gradient(to right,#8d8d8d,#8d8d8d) 0 0/1px 100% no-repeat,linear-gradient(to right,#8d8d8d,#8d8d8d) 4px 0/1px 100% no-repeat,linear-gradient(to right,#8d8d8d,#8d8d8d) 8px 0/1px 100% no-repeat}
+.lower .bench-codepad-splitter:hover::before,.lower .bench-codepad-splitter:focus-visible::before{background:linear-gradient(to right,#8d8d8d,#8d8d8d) 0 0/1px 100% no-repeat,linear-gradient(to right,#8d8d8d,#8d8d8d) 4px 0/1px 100% no-repeat,linear-gradient(to right,#8d8d8d,#8d8d8d) 8px 0/1px 100% no-repeat}
+.lower .codepad-toggle{display:none;position:relative;z-index:2;width:40px;height:92px;margin-left:-39px;border:0;border-radius:0 8px 8px 0;background:#bbb;color:#fff;font:bold 29px/88px Arial,sans-serif;padding:0;overflow:visible;cursor:pointer}
+.lower .codepad-toggle::before{display:none;content:none}
+.lower .codepad-toggle:hover{background:#aaa;color:#fff}
+
+/* The arrow is the BlueJ-style control; keep the three-line grip behind it. */
+.lower .bench-codepad-splitter::before{width:9px}
+.lower{grid-template-columns:minmax(90px,var(--bench-width,60%)) 22px 14px minmax(90px,1fr)}
+.lower .codepad-toggle{display:flex;grid-column:2;align-self:center;justify-self:center;position:relative;left:8px;width:22px;height:46px;margin:0;border:0;border-radius:0;background:transparent;color:transparent;font-size:0;padding:0;cursor:pointer}
+.lower .codepad-toggle::after{content:"";display:block;width:0;height:0;border-top:8px solid transparent;border-bottom:8px solid transparent;border-left:12px solid #aaa}
+.lower .codepad-toggle:hover,.lower .codepad-toggle:focus-visible{background:transparent;color:transparent}
+.lower .codepad-toggle:hover::after,.lower .codepad-toggle:focus-visible::after{border-left-color:#aaa}
+
+/* Keep the diagram and object bench in separate paint layers.  Draggable
+   cards can otherwise escape the scrollable canvas when its content is
+   repainted, making them appear on top of the bench. */
+.workspace>.panels{position:relative;z-index:0;min-height:0}
+.workspace>.panels>.canvas{isolation:isolate;overflow:auto}
+.workspace>.lower{position:relative;z-index:1;isolation:isolate}
+.lower .bench-codepad-splitter{grid-column:3}
+.lower .bench{grid-row:1}
+.lower .bench-codepad-splitter{grid-row:1}
+.lower .codepad-toggle{grid-row:1}
+.lower .codepad{grid-column:4;grid-row:1}
+.lower.codepad-collapsed{grid-template-columns:minmax(90px,1fr) 22px}
+.lower.codepad-collapsed .bench{grid-column:1}
+.lower.codepad-collapsed .codepad-toggle{grid-column:2;position:relative;left:auto;right:auto;top:auto;transform:none}
+.lower.codepad-collapsed .codepad-toggle::after{border-left:0;border-right:12px solid #aaa}
+
+/* Keep the vertical grip narrow; the toggle is an overlaid BlueJ-style
+   control to its left and must not consume a grid column of its own. */
+.lower{grid-template-columns:minmax(90px,var(--bench-width,60%)) 14px minmax(90px,1fr)}
+
+/* BlueJ-style inheritance relations use one SVG per edge. This lets each
+   arrow share the stacking level of its two endpoint cards, even when cards
+   overlap after being dragged. */
+.inheritance-edge{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+.inheritance-edge line{stroke:#555;stroke-width:2;fill:none;stroke-linecap:butt}
+.inheritance-edge marker{overflow:visible}
+.inheritance-edge path{fill:#faf9f4;stroke:#555;stroke-width:1.7;stroke-linejoin:miter;transform-box:fill-box;transform-origin:100% 50%;transform:scale(1.6)}
+.cards{z-index:auto}
+.classcard.inheritance-selected{outline:3px solid #168fbd;outline-offset:3px}
+.sidebar button.active-tool{background:#c9e5ed;border-color:#168fbd;box-shadow:0 0 0 1px #168fbd}
+/* BlueJ uses the inheritance tool as a compact icon button rather than a
+   labelled action. Keep the accessible label in the DOM, but show the line
+   and hollow triangle as the visual control. */
+.sidebar button:nth-of-type(3){font-size:0;padding:0;position:relative}
+.sidebar button:nth-of-type(3) .inheritance-icon{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.sidebar button:nth-of-type(3) .inheritance-icon svg{width:58px;height:28px;overflow:visible}
+.sidebar button:nth-of-type(3) .inheritance-icon line{stroke:#222;stroke-width:2}
+.sidebar button:nth-of-type(3) .inheritance-icon path{fill:#fafafa;stroke:#222;stroke-width:2;stroke-linejoin:miter}
+.sidebar button:nth-of-type(3).active-tool{background:linear-gradient(#f8f8f8,#d7d7d7);border-color:#aaa;box-shadow:0 1px 2px #aaa}
+
+/* Project actions live in a compact top row; the workbench sidebar keeps
+   only actions that operate directly on the class diagram. */
+.toolbar{height:58px;display:flex;align-items:center;gap:10px;padding:8px 16px;background:#d7d9da;border-bottom:1px solid #aaa;overflow:auto}
+.toolbar-main-action{gap:8px}.toolbar-action-icon{display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;font-size:22px;line-height:1}.toolbar-action-icon svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.toolbar button,.toolbar label{height:40px;display:inline-flex;align-items:center;justify-content:center;position:relative;border:1px solid #aaa;border-radius:5px;background:linear-gradient(#f8f8f8,#d7d7d7);box-shadow:0 1px 2px #aaa;padding:0 14px;color:#222;font-size:14px;white-space:nowrap;cursor:pointer}
+.toolbar button:disabled{cursor:not-allowed;opacity:.55}
+.toolbar label{overflow:hidden}
+.toolbar input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+.toolbar-status{margin-left:auto;color:#555;white-space:nowrap;font-size:13px}
+.toolbar-options{margin-left:auto;display:flex;align-items:center;gap:6px}
+.toolbar .toolbar-icon-button{width:46px;padding:0;font-size:20px;line-height:1}
+.toolbar .toolbar-icon-button svg{width:29px;height:29px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.toolbar .toolbar-icon-button svg path:last-child{fill:currentColor;stroke:none}
+.toolbar .toolbar-icon-button svg .toolbar-arrowhead{fill:currentColor;stroke:none}
+.toolbar .toolbar-icon-button:nth-child(2) svg{display:none}
+.toolbar .toolbar-icon-button:nth-child(2)::before{content:"";display:block;width:29px;height:29px;background:center/contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='%23222' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='8' y='1' width='8' height='5' rx='1' fill='none'/%3E%3Crect x='8' y='18' width='8' height='5' rx='1' fill='none'/%3E%3Cpath d='M12 18V14'/%3E%3Cpath d='M9 14L12 8L15 14Z' fill='none'/%3E%3C/g%3E%3C/svg%3E")}
+.toolbar .toolbar-icon-button.active{background:linear-gradient(#dff7fc,#a8dce8);color:#075b70}
+.toolbar .settings-button{margin-left:8px}
+@media (max-width:1050px){.toolbar-main-action>span:not(.toolbar-action-icon){display:none}.toolbar-main-action{width:46px;padding:0;gap:0}.toolbar-action-icon{font-size:22px}}
+.toolbar-dialog{min-width:min(520px,88vw)}.project-dropzone{position:relative;display:flex!important;flex-direction:column;align-items:center;justify-content:center;width:100%;min-height:150px;margin:18px 0;padding:24px;border:2px dashed #999;border-radius:8px;background:#faf9f4;color:#555;text-align:center;cursor:pointer}.project-dropzone:hover,.project-dropzone:focus-within{border-color:#08a6d2;background:#eefaff;color:#075b70}.project-dropzone strong{font-size:17px;color:#222}.project-dropzone span{margin-top:8px;font-size:13px}.project-dropzone input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}.toolbar-dialog-options{display:flex;flex-direction:column;gap:10px;margin:18px 0}.toolbar-dialog-option{display:flex!important;align-items:center;justify-content:flex-start!important;width:100%;min-height:46px;margin:0!important;padding:10px 14px!important;border:1px solid #aaa!important;border-radius:6px!important;background:linear-gradient(#fff,#e0e0e0)!important;box-shadow:0 1px 2px #aaa!important;color:#222;font-size:15px!important;text-align:left;cursor:pointer}.toolbar-dialog-option:hover:not(:disabled),.toolbar-dialog-option:focus-visible{background:#08a6d2!important;color:#fff}.toolbar-dialog-option:disabled{cursor:not-allowed;opacity:.5}.dialog-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:14px}.dialog-actions button{margin:0}.toolbar-dialog-option input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+.sidebar .resource-button,.sidebar button:nth-of-type(2){display:none}
+.body{height:calc(100% - 58px)}
+.lower .bench-codepad-splitter{grid-column:2}
+.lower .codepad-toggle{grid-column:auto;position:absolute;left:calc(var(--bench-width,60%) - 22px);top:50%;transform:translateY(-50%);z-index:2;height:22px;align-items:center;justify-content:center}
+.lower .codepad{grid-column:3}
+.lower.codepad-collapsed{grid-template-columns:minmax(90px,1fr)}
+.lower.codepad-collapsed .codepad-toggle{position:absolute;left:auto;right:8px;top:50%;transform:translateY(-50%);z-index:2}
+
+/* Match the horizontal splitter thickness to the 14px vertical grip. */
+.workspace{grid-template-rows:minmax(90px,var(--upper-pane,2fr)) 14px minmax(90px,1fr) 32px}
+.pane-splitter{height:14px;flex-basis:14px}
+
+.new-class-dialog{min-width:min(520px,85vw)}
+.new-class-dialog fieldset{border:1px solid #aaa;margin:8px 0 18px;padding:10px 14px}
+.new-class-dialog legend{padding:0 6px;color:#555}
+.new-class-option{display:flex!important;align-items:center;gap:8px;margin:9px 0!important;cursor:pointer}
+.new-class-option input{display:inline-block!important;width:auto!important;margin:0!important}
+.new-class-dialog > label > input{display:block;width:100%;margin-top:6px}
+.dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+.create-object-dialog{min-width:min(480px,85vw)}
+.create-object-dialog h3{padding-bottom:14px;border-bottom:1px solid #ccc}
+.create-object-dialog,.method-dialog{background:#f5f5f5;border:2px solid #666;border-radius:10px;box-shadow:3px 5px 16px #333}
+.create-object-dialog h3,.method-dialog h3{font-size:22px;margin:0 0 18px;padding:0 0 14px;border-bottom:1px solid #c8c8c8}
+.create-object-dialog label,.method-dialog label{color:#333;font-size:16px}
+.create-object-dialog label>input,.method-dialog label>input{font-size:16px;background:#fff;border:1px solid #999}
+.create-object-dialog .dialog-actions,.method-dialog .dialog-actions{border-top:1px solid #ccc;padding-top:14px}
+.new-project-dialog{min-width:min(520px,88vw)}
+.new-project-dialog p{margin:0 0 14px;color:#555}
+.project-choice-list{display:grid;gap:8px}
+.project-choice-row{display:grid;grid-template-columns:1fr;gap:8px}
+.project-choice-list button{display:flex;flex-direction:column;align-items:flex-start;gap:4px;width:100%;margin:0;padding:12px 14px;text-align:left;border:1px solid #aaa;border-radius:5px;background:#fff;color:#b00000;cursor:pointer}
+.project-choice-list button:hover,.project-choice-list button:focus-visible{background:#08a6d2;color:#fff;outline:0}
+.project-choice-list strong{font-size:15px}
+.project-choice-list span{font-size:12px;color:inherit}
+.inspect-row{position:relative;grid-template-columns:minmax(0,3fr) minmax(0,2fr) auto}
+.inspect-row span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inspect-row output{grid-column:2}
+.inspect-row.private-field{background:#dedede;border-color:#999}
+.inspect-row.private-field>span,.inspect-row.private-field>output{color:#666}
+.inspect-row.private-field>output{background:#ededed;border-left-color:#999}
+.inspect-row input{grid-column:2 / -1;width:100%;min-width:0;padding:7px;border:1px solid #888;font:16px monospace}
+.inspect-row.editable output{cursor:text}
+.inspect-edit,.inspect-save{position:absolute;right:-26px;top:50%;transform:translateY(-50%);width:30px;height:32px;margin:0!important;padding:0!important;border:0;border-radius:0;background:transparent;color:#555;font-size:23px;line-height:1;cursor:pointer}
+.inspect-edit:hover,.inspect-save:hover{background:transparent;color:#087c9d}
+.inspect-edit:disabled,.inspect-edit-disabled{color:#777;cursor:not-allowed;opacity:.85}
+.inspect-edit:disabled:hover,.inspect-edit-disabled:hover{background:transparent;color:#777}
+.popup-submenu{position:relative}
+.popup-submenu-trigger{display:flex!important;justify-content:space-between;align-items:center}
+.popup-submenu-trigger span{margin-left:24px;font-size:18px}.popup-no-methods{padding:10px 12px;color:#aaa;font-style:italic}
+.popup-submenu-panel{position:absolute;left:100%;top:-1px;display:none;min-width:260px;max-height:70vh;overflow:auto;background:#fff;border:1px solid #aaa;box-shadow:2px 4px 12px #777}
+.popup-submenu:hover .popup-submenu-panel,.popup-submenu:focus-within .popup-submenu-panel{display:block}
+.compiling-overlay{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:rgba(35,38,40,.58);cursor:wait}
+.compiling-message{display:flex;align-items:center;gap:12px;min-width:220px;padding:18px 24px;border:1px solid #777;border-radius:8px;background:#f5f4f1;box-shadow:0 5px 18px #222;color:#333;font-size:18px;font-weight:bold}
+.compiling-message small{display:block;margin-left:4px;color:#666;font-size:12px;font-weight:normal}
+.compiling-spinner{width:18px;height:18px;border:3px solid #bbb;border-top-color:#078fb9;border-radius:50%;animation:bluek-spin .8s linear infinite}
+@keyframes bluek-spin{to{transform:rotate(360deg)}}
+
+/* BlueJ-style class-card context menu. */
+.popup{width:max-content;min-width:210px;max-width:calc(100vw - 16px);overflow-x:auto;background:#fff;border:1px solid #aaa;box-shadow:2px 4px 12px #777;display:flex;flex-direction:column}
+.popup-title{display:none}
+.popup button{color:#222;background:#fff;padding:10px 12px;font-size:15px;white-space:nowrap}
+.popup button:hover,.popup button:focus-visible{background:#08a6d2;color:#fff;outline:0}
+.popup hr ~ button{color:#b00000}
+.popup hr ~ button:hover,.popup hr ~ button:focus-visible{color:#fff}
+.popup button.constructor-menu-item{color:#222}
+.popup button.constructor-menu-item:hover,.popup button.constructor-menu-item:focus-visible{color:#222}
+.popup button{border-bottom:0}
+.popup hr{border-top:1px solid #d6d6d6;margin:1px 0}
+.editor-dialog{min-width:min(850px,80vw);width:min(850px,80vw);height:min(680px,86vh);display:flex;flex-direction:column}.kotlin-editor{flex:1;min-height:0;margin:0 0 14px;border:1px solid #888;background:#fff;overflow:hidden}.kotlin-editor .cm-editor{height:100%}
+.editor-dialog.maximized{position:fixed;inset:4vh 4vw;width:auto;height:auto;max-height:none;margin:0}
+.editor-dialog.floating{position:fixed;margin:0}
+.editor-dialog{position:relative}
+.editor-resize-handle{position:absolute;z-index:3;width:10px;height:10px}
+.editor-resize-n,.editor-resize-s{left:10px;right:10px;width:auto;cursor:ns-resize}
+.editor-resize-n{top:-4px}.editor-resize-s{bottom:-4px}
+.editor-resize-e,.editor-resize-w{top:10px;bottom:10px;height:auto;cursor:ew-resize}
+.editor-resize-e{right:-4px}.editor-resize-w{left:-4px}
+.editor-resize-ne,.editor-resize-se,.editor-resize-sw,.editor-resize-nw{cursor:nwse-resize}
+.editor-resize-ne{right:-4px;top:-4px;cursor:nesw-resize}.editor-resize-se{right:-4px;bottom:-4px}
+.editor-resize-sw{left:-4px;bottom:-4px;cursor:nesw-resize}.editor-resize-nw{left:-4px;top:-4px}
+.editor-header{display:flex;align-items:center;justify-content:space-between;margin:0 0 10px;font-weight:bold}
+.editor-header h3{margin:0}
+.editor-header>div{display:flex;gap:4px}
+.editor-window-controls{display:flex;gap:4px!important}
+.editor-dialog:not(.editor-tabbed-dialog) .editor-header{margin-bottom:0}
+.editor-header button{min-width:28px;padding:2px 7px;margin:0;border:1px solid #999;border-radius:4px;background:linear-gradient(#fff,#d5d5d5);cursor:pointer;font-size:16px;line-height:20px}
+.svelte-editor-host{position:relative}
+.editor-format{position:absolute;right:10px;bottom:10px;z-index:2;width:30px;height:30px;padding:0!important;margin:0!important;border:1px solid #999!important;border-radius:4px;background:#f5f4f1cc!important;color:#444;font-size:22px;line-height:26px;cursor:pointer}
+.editor-format:hover{background:#fff!important;color:#111}
+.editor-dialog.maximized .svelte-editor-host{height:auto;flex:1;min-height:0}
+
+/* Keep both workbench panes inside the workspace even when either splitter
+   is dragged to an extreme size. The available height always includes the
+   horizontal splitter and the status bar, so the splitter cannot disappear
+   and the diagram cannot paint into the lower pane. */
+.workspace{grid-template-rows:minmax(90px,min(var(--upper-pane,66%),calc(100% - 136px))) 14px minmax(90px,1fr) 32px;grid-template-columns:minmax(0,1fr);min-height:0;overflow:hidden}
+.workspace>.panels{grid-row:1;min-height:0;overflow:hidden;flex:initial}
+.workspace>.panels>.canvas{height:100%;min-height:0;max-height:100%;overflow:auto}
+.workspace>.pane-splitter{grid-row:2;position:relative;z-index:5;flex:0 0 14px;min-height:14px}
+.workspace>.lower{grid-row:3;min-height:0;min-width:0;width:100%;overflow:hidden;position:relative;z-index:1}
+.workspace>.lower>*{min-width:0}
+.workspace>footer{grid-row:4;min-height:0}
+
+/* Svelte uses the same layout classes throughout, without preview-specific overrides. */
+.svelte-preview .terminal-window.floating{position:fixed;margin:0}
+.svelte-preview .terminal-header{cursor:move;user-select:none}
+.svelte-preview .editor-dialog{height:auto;max-height:86vh}
+.svelte-preview .editor-dialog.maximized{position:fixed;inset:4vh 4vw;width:auto;height:auto;max-height:none;margin:0}
+.svelte-preview .editor-dialog.floating{position:fixed;margin:0}
+.svelte-preview .svelte-editor-host{height:auto;flex:1;min-height:220px;overflow:hidden;margin:0;border:1px solid #aaa;background:#fff}
+.svelte-preview .editor-dialog.maximized .svelte-editor-host{height:auto;flex:1;min-height:0}
+.svelte-preview .dialog-error{color:#b00020;margin:8px 0}
+.svelte-preview .inspect-edit-input{min-width:120px;flex:1;padding:5px;font:13px monospace}
+.svelte-preview .inspect-error{color:#b00020}
+.settings-field{display:flex;align-items:center;justify-content:space-between;gap:24px;margin:18px 0;color:#333}
+.settings-field select{min-width:88px;padding:6px 8px;border:1px solid #999;border-radius:4px;background:#fff;font:inherit}
+.topmost-modal{z-index:100}
+.shared-project-loader{margin:16px 0;padding:14px;border:1px solid #bbb;border-radius:6px;background:#faf9f4}
+.shared-project-loader>strong{display:block;margin-bottom:10px}
+.shared-project-loader label{display:flex;align-items:center;gap:10px;margin:0}
+.shared-project-loader label span{flex:0 0 auto;color:#555;font-size:13px}
+.shared-project-loader input{min-width:0;flex:1;padding:7px;border:1px solid #999;font:14px monospace}
+.shared-project-load{margin-top:10px;padding:6px 12px;border:1px solid #999;border-radius:4px;background:linear-gradient(#fff,#d5d5d5);cursor:pointer}
+.shared-project-load:disabled{cursor:not-allowed;opacity:.55}
+.share-notice{position:fixed;z-index:100;top:72px;left:50%;transform:translateX(-50%);padding:10px 16px;border:1px solid #2878c8;border-radius:5px;background:#eef7ff;color:#075b70;box-shadow:2px 3px 10px #888;font-size:14px}
+.share-link-dialog{min-width:min(560px,88vw)}.share-link-code,.share-link-value{display:block;width:100%;cursor:pointer;text-align:center}.share-link-code{padding:16px;border:2px solid #2878c8;border-radius:5px;background:#eef7ff;color:#075b70;font:bold 22px monospace;letter-spacing:.04em;user-select:text}.share-link-code:hover,.share-link-code:focus-visible{background:#dff1ff}.share-link-full-label{margin:16px 0 6px}.share-link-value{padding:14px 16px;border:1px solid #999;border-radius:5px;background:#fff;color:#075b70;font:16px monospace;line-height:1.4;overflow-wrap:anywhere;user-select:text}.share-link-value:hover,.share-link-value:focus-visible{border-color:#2878c8;background:#f7fbff}.share-link-expiry{margin:16px 0 0;color:#7a1f1f;font-weight:bold}
+
+/* The Kotlin editor is the same kind of floating window as the terminal.
+   Keep its chrome and content area aligned with the terminal, including the
+   drag affordance and the compact spacing below the editor. */
+.editor-dialog{background:#f5f4f1;border:2px solid #555;border-radius:8px;padding:12px;box-shadow:none}
+.editor-tabbed-dialog .editor-header{margin-bottom:0;align-items:center}
+.editor-tabbed-dialog .editor-header h3{display:none}
+.editor-tabbed-dialog .editor-header>.editor-tabs{display:flex;align-items:flex-end;gap:3px;flex:1;min-width:0;min-height:32px;margin:0 8px -1px 0;overflow-x:auto}
+.editor-tabbed-dialog .editor-tabs button{display:flex;align-items:center;gap:10px;flex:0 1 max-content;min-width:0;padding:5px 8px 5px 12px;border:1px solid #aaa;border-radius:4px 4px 0 0;background:#ddd;color:#333;cursor:pointer;font:13px Arial,sans-serif;white-space:nowrap}
+.editor-tabbed-dialog .editor-tabs button>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.editor-tabbed-dialog .editor-tabs button.active{position:relative;z-index:1;background:#fff;border-color:#888;border-bottom-color:#fff;font-weight:bold;margin-bottom:-1px;box-shadow:0 -1px 0 #888}
+.editor-tabbed-dialog .editor-tab-close{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:3px;color:#555;font:bold 16px/16px Arial,sans-serif}
+.editor-tabbed-dialog .editor-tab-close:hover,.editor-tabbed-dialog .editor-tab-close:focus-visible{background:#ccc;color:#111;outline:0}
+.editor-tabbed-dialog .svelte-editor-host{flex:1;min-height:0}
+.window-icon{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round}
+.editor-header{cursor:grab;user-select:none;margin:0 0 8px;font-size:14px}
+.editor-header:active{cursor:grabbing}
+.editor-header h3{font-size:14px}
+.editor-header button{border:1px solid #999;border-radius:4px;background:linear-gradient(#fff,#d5d5d5);padding:5px 12px;cursor:pointer;font-size:14px;line-height:normal}
+.svelte-editor-host{flex:1;min-height:0;height:auto;margin:0;border:1px solid #aaa;background:#fff;overflow:hidden}
+
+/* Terminal and editor are non-modal floating windows with one shared chrome. */
+.terminal-modal,.editor-modal{z-index:20}
+.terminal-modal.window-active,.editor-modal.window-active{z-index:30}
+.editor-modal{background:transparent;pointer-events:none}
+.editor-modal .editor-dialog{pointer-events:auto}
+.window-header{display:flex;align-items:center;justify-content:space-between;margin:0 0 8px;font-weight:bold;cursor:move;user-select:none}
+.window-header:active{cursor:move}
+.window-header h3{margin:0;font-size:14px}
+.window-header>div{display:flex;gap:4px}
+.window-header button{width:32px;height:32px;min-width:32px;margin:0;border:1px solid #999;border-radius:4px;background:linear-gradient(#fff,#d5d5d5);padding:0;cursor:pointer;font-size:20px;line-height:1;display:grid;place-items:center}
+.window-header{margin:-12px -12px 8px;padding:12px}
+.terminal-window,.editor-dialog{min-width:0;min-height:0;background:#f5f4f1;border:2px solid #555;border-radius:8px;padding:12px;box-shadow:none}
+.terminal-split-toggle{font-size:20px!important}
+.terminal-resize-handle,.editor-resize-handle{width:24px;height:24px;touch-action:none}
+.terminal-resize-n,.editor-resize-n{left:24px;right:24px;top:-12px;width:auto;cursor:ns-resize}
+.terminal-resize-s,.editor-resize-s{left:24px;right:24px;bottom:-12px;width:auto;cursor:ns-resize}
+.terminal-resize-e,.editor-resize-e{top:24px;bottom:24px;right:-12px;height:auto;cursor:ew-resize}
+.terminal-resize-w,.editor-resize-w{top:24px;bottom:24px;left:-12px;height:auto;cursor:ew-resize}
+.terminal-resize-ne,.editor-resize-ne{right:-12px;top:-12px;cursor:nesw-resize}
+.terminal-resize-se,.editor-resize-se{right:-12px;bottom:-12px;cursor:nwse-resize}
+.terminal-resize-sw,.editor-resize-sw{left:-12px;bottom:-12px;cursor:nesw-resize}
+.terminal-resize-nw,.editor-resize-nw{left:-12px;top:-12px;cursor:nwse-resize}
+
+/* Final BluePlay window overrides: legacy fixed rules must not split the
+   world, header and controls again. */
+.bluek .stage-window .game-stage{position:relative!important;inset:auto!important;display:block;width:100%!important;height:auto!important;max-width:none!important;max-height:none!important;flex:1 1 100%;min-width:0;border:0;box-shadow:none}
+.bluek .stage-window .stage-window-body{justify-content:center;align-items:center;overflow:auto;padding:0;background:#d2d2d2}
+.bluek .stage-window .game-stage{width:var(--bluek-world-width)!important;height:var(--bluek-world-height)!important;flex:0 0 auto;max-width:none!important;max-height:none!important}
+.bluek .stage-window .game-controls{position:relative!important;inset:auto!important;display:flex;width:auto!important;max-width:none;min-height:58px;flex:0 0 auto;align-items:center;justify-content:center;flex-wrap:wrap;gap:12px;padding:10px 14px;background:#eee;border-top:1px solid #aaa}
+.bluek .stage-window .stage-window-chrome{position:relative!important;inset:auto!important;width:auto!important;height:32px;flex:0 0 32px;border:0;border-bottom:1px solid #777;border-radius:0;box-shadow:none}
+.project-directory-choice{position:relative;display:inline-flex!important;align-items:center;margin:-6px 0 12px;padding:6px 12px;border:1px solid #aaa;border-radius:6px;background:linear-gradient(#fff,#e0e0e0);color:#222;font-size:13px;cursor:pointer}.project-directory-choice:hover,.project-directory-choice:focus-within{border-color:#08a6d2;color:#075b70}.project-directory-choice input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+
+.offline-download{display:block;margin-top:-4px;padding:8px 10px;border:1px solid #bbb;border-radius:6px;background:#e8e9ea;color:#4a5157;font-size:12px;line-height:1.35;text-align:center;text-decoration:none}
+.offline-download span{display:block;color:#7b8288;font-size:11px}
+.offline-download:hover,.offline-download:focus-visible{border-color:#08a6d2;background:#e2f2f7;color:#075b70}
+
+/* Compiler errors are reported below the editor, where the formatter reports
+   its parse errors as well; the line itself is marked in the code. */
+.editor-diagnostics>span{max-height:22vh;overflow:auto;font:13px Menlo,Monaco,Consolas,monospace}
+.editor-diagnostics .editor-diagnostic{display:block}
+.editor-diagnostics .editor-diagnostic+.editor-diagnostic{margin-top:6px}
+
+/* The project description sits in the top-left corner like BlueJ's README note,
+   but muted: a class is the subject of the canvas, the note only accompanies it. */
+.readme-card{position:absolute;left:0;top:0;z-index:4;width:56px;height:72px;padding:0;border:0;background:transparent;cursor:pointer;opacity:.5}
+.readme-card:hover,.readme-card:focus-visible{opacity:1;outline:none}
+.readme-card:focus-visible svg{outline:2px solid #168fbd;outline-offset:2px}
+.readme-card svg{display:block;width:100%;height:100%}
+.readme-card .readme-sheet{fill:#fdfcf7;stroke:#888;stroke-width:1}
+.readme-card .readme-fold{fill:#e6e3d8;stroke:#888;stroke-width:1}
+.readme-card .readme-text{stroke:#b0b0a8;stroke-width:1.2;stroke-linecap:round}
+.readme-card.written{opacity:.72}
+.readme-card.written .readme-text{stroke:#6f6f5e}
+/* The note owns the corner, so the cards of a stage layout start beside it. */
+.canvas:has(.game-stage) .cards{padding-left:62px}
+.readme-dialog{position:relative;width:min(720px,calc(100vw - 40px));max-height:86vh;display:flex;flex-direction:column}
+.readme-header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px}
+.readme-header h3{margin:0}
+.readme-dialog .readme-help-button{display:grid;place-items:center;width:24px;height:24px;padding:0;margin:0;border:1px solid #bbb;border-radius:50%;background:#f3f2ef;color:#777;font:bold 14px/1 Arial,sans-serif;cursor:pointer}
+.readme-dialog .readme-help-button:hover,.readme-dialog .readme-help-button[aria-expanded=true]{background:#168fbd;border-color:#0f6f93;color:#fff}
+.readme-help{position:absolute;right:20px;top:52px;z-index:2;width:352px;max-height:60vh;overflow:auto;padding:12px 14px;background:#fffdf5;border:1px solid #bbb;border-radius:6px;box-shadow:2px 4px 12px #0003;text-align:left}
+.readme-help table{width:100%;border-collapse:collapse}
+.readme-help td{padding:3px 6px 3px 0;font-size:13px;vertical-align:baseline;overflow-wrap:anywhere}
+.readme-help td:first-child{width:52%}
+.readme-help code{font:12px Menlo,Monaco,Consolas,monospace;color:#555}
+.readme-help .help-code{padding:1px 4px;background:#f2f1ed;border-radius:3px;color:#222}
+.readme-help .help-h1{font-size:17px;font-weight:bold}
+.readme-help .help-h2{font-size:15px;font-weight:bold}
+.readme-help .help-quote{display:inline-block;padding-left:8px;border-left:4px solid #ddd;color:#555}
+.readme-help .help-link{color:#0b6fa4;text-decoration:underline}
+.readme-help .help-rule{display:block;width:100%;border-bottom:1px solid #ccc}
+.readme-help p{margin:10px 0 0;color:#666;font-size:12px;line-height:1.45}
+.readme-editor{flex:1 1 auto;min-height:44vh;max-height:66vh;overflow:hidden;background:#fff;border:1px solid #bbb;border-radius:6px;text-align:left}
+.readme-editor .cm-editor{height:100%}
+.readme-editor .cm-editor.cm-focused{outline:none}
+.readme-editor .cm-scroller{overflow:auto}
+
+/* The option belongs to the link it travels with, so it sits in that box, at
+   its right edge — and stays readable when the box turns blue under the mouse. */
+.project-choice-row{position:relative}
+.project-choice-row .share-readme-option{position:absolute;right:12px;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:7px;margin:0;padding:3px 9px;border:1px solid #ccc;border-radius:12px;background:#fff;color:#555;font-size:11px;cursor:pointer}
+.project-choice-row .share-readme-option.disabled{color:#aaa;border-color:#ddd;cursor:default}
+.project-choice-row .share-readme-option input{display:inline-block;flex:0 0 auto;width:auto;margin:0;padding:0}

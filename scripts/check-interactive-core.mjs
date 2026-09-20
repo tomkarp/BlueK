@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import vm from 'node:vm';
+vm.runInThisContext(await readFile(new URL('../frontend/public/kotlite/bluek-kotlite-browser.js', import.meta.url), 'utf8'));
+const api = globalThis['bluek-kotlite-browser'];
+
+const session = api.bluekCreateKotliteSession();
+const loaded = JSON.parse(session.load('<interactive>', 'fun main() { print("Name? "); val name = readln(); println("Hallo $name") }'));
+assert.notEqual(loaded.kind, 'error', loaded.display);
+let inputId;
+let completed;
+const started = JSON.parse(session.startEvaluate('<main>', 'main()', id => { inputId = id; }, result => { completed = JSON.parse(result); }));
+assert.equal(started.kind, 'unit');
+assert.equal(session.takeOutput(), 'Name? ');
+assert.equal(inputId, 1);
+assert.equal(completed, undefined);
+assert.equal(JSON.parse(session.enqueueInput('Ada')).kind, 'unit');
+assert.equal(completed.display, 'Unit');
+assert.equal(completed.kind, 'unit');
+assert.equal(session.takeOutput(), 'Hallo Ada\n');
+console.log('Interactive Kotlin core pause/resume passed.');

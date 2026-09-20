@@ -1,0 +1,11 @@
+{
+  "format": "bluek-project",
+  "version": 1,
+  "files": [
+    {"id":"person","fileName":"Person.kt","kind":"class","source":"class Person(var name: String) {\n    fun greet(): String = \"Hello, $name!\"\n    fun rename(newName: String) { name = newName }\n}\n","revision":1},
+    {"id":"helpers","fileName":"Helpers.kt","kind":"functions","source":"fun greeting(person: Person): String = person.greet()\n","revision":1},
+    {"id":"main","fileName":"Main.kt","kind":"functions","source":"fun main() {\n    println(\"student main\")\n}\n","revision":1},
+    {"id":"console","fileName":"Console.kt","kind":"functions","source":"fun ask(): String = readln()\n","revision":1}
+  ],
+  "resources": []
+}

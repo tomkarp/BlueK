@@ -1,0 +1,23 @@
+{
+  "format": "bluek-project",
+  "version": 1,
+  "files": [
+    {
+      "fileName": "Person.kt",
+      "kind": "class",
+      "source": "open class Person(val name: String) {\n    var age = 0\n        set(value) {\n            if (value >= 0) {\n                field = value\n            } else {\n                field = 0\n            }\n        }\n\n    val remainingLifeYears: Int\n        // Let’s stay optimistic and follow the example of Master Yoda.\n        get() = 900 - age\n\n    init {\n        age = 0\n    }\n\n    fun speak() {\n        println(\"Hi, I am $name and I am $age years old and have $remainingLifeYears years left\")\n    }\n\n    fun listen() {\n        // Read one line and repeat it with a short comment.\n        val input = readln()\n        println(\"You said: $input\")\n    }\n}\n"
+    },
+    {
+      "fileName": "Student.kt",
+      "kind": "class",
+      "source": "class Student(name: String, val grade: Int) : Person(name) {\n    init {\n        age = (6..18).random()\n    }\n\n    fun study() {\n        val subject = listOf(\"Kotlin\", \"Math\", \"Science\").random()\n        var minutes = (20..60).random()\n        minutes += 5\n        println(\"$name studies $subject for $minutes minutes\")\n    }\n}\n"
+    },
+    {
+      "fileName": "People.kt",
+      "kind": "class",
+      "source": "class People {\n    val members = mutableListOf<Person>()\n    var selected: Person? = null\n\n    init {\n        val initialMembers = listOf(Person(\"Alice\"), Student(\"Ben\", 7))\n        for (member in initialMembers) {\n            members.add(member)\n        }\n        selected = members.random()\n    }\n\n    fun addPerson(person: Person) {\n        members.add(person)\n    }\n\n    fun greetSelected() {\n        selected?.speak()\n        val selectedName = selected?.name ?: \"Nobody\"\n        println(\"Selected person: $selectedName\")\n    }\n\n    fun listenToSelected() {\n        val person = selected ?: members.random()\n        person.listen()\n    }\n}\n"
+    }
+  ],
+  "resources": [],
+  "cardPositions": {}
+}

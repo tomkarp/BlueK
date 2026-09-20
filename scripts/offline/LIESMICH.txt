@@ -1,0 +1,51 @@
+BlueK - Offline-Version
+=======================
+
+Diese Version laeuft vollstaendig ohne Internet. Es wird nichts installiert und
+nichts nach aussen gesendet; der Webserver ist nur auf diesem Rechner
+erreichbar (127.0.0.1).
+
+
+Start unter Windows
+-------------------
+1. Den Ordner aus dem ZIP auf die Festplatte entpacken, z. B. auf den Desktop.
+   Wichtig: nicht direkt aus dem ZIP-Fenster starten.
+2. start.bat doppelklicken.
+3. Der Browser oeffnet BlueK nach etwa zwei Sekunden automatisch.
+   Falls nicht: im Browser http://127.0.0.1:8901/ aufrufen.
+
+Zum Beenden das schwarze Fenster "start.bat" schliessen.
+
+Hinweis: Windows zeigt bei Dateien aus dem Internet eventuell eine
+Sicherheitsabfrage. Diese mit "Ausfuehren" bestaetigen, oder vorher im
+Datei-Explorer: Rechtsklick auf die ZIP-Datei > Eigenschaften > "Zulassen".
+
+
+Start unter macOS / Linux
+-------------------------
+start.command doppelklicken (macOS) bzw. ./start.command im Terminal
+ausfuehren. Beim ersten Mal unter macOS gegebenenfalls:
+Rechtsklick > Oeffnen.
+
+
+Anderer Port
+------------
+Ist Port 8901 belegt, kann ein anderer angegeben werden. In der
+Eingabeaufforderung im Ordner:   start.bat 8902
+
+
+Was offline nicht geht
+----------------------
+- "Copy Short Link" (Kurzlink ueber den Server) und das Laden eines Projekts
+  per Drei-Wort-Code. Beides ist in dieser Version ausgeblendet.
+
+Alles andere funktioniert: Projekte anlegen, bearbeiten, kompilieren,
+ausfuehren, als JSON exportieren und importieren, BlueJ-Projekte importieren
+sowie "Copy Full Project Link" (das Projekt steckt vollstaendig im Link).
+
+
+Projekte der Schuelerinnen und Schueler
+---------------------------------------
+Projekte liegen im Browser des jeweiligen Rechners. Fuer die Abgabe eignet sich
+"Export Project JSON" - die Datei kann dann auf einen Stick oder in ein
+Netzlaufwerk gespeichert werden.

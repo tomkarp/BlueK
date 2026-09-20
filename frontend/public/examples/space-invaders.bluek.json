@@ -1,0 +1,37 @@
+{
+  "format": "bluek-project",
+  "version": 1,
+  "library": {
+    "id": "blueplay",
+    "version": 1
+  },
+  "files": [
+    {
+      "fileName": "Invader.kt",
+      "kind": "class",
+      "source": "class Invader : Actor() {\n    private var direction = 1\n    private var frame = 0\n\n    init {\n        val sprite = Image()\n        sprite.scale(32, 22)\n        sprite.setColor(104, 220, 130)\n        sprite.fillRect(4, 2, 24, 16)\n        sprite.setColor(17, 24, 39)\n        sprite.fillRect(9, 7, 4, 4)\n        sprite.fillRect(19, 7, 4, 4)\n        sprite.setColor(104, 220, 130)\n        sprite.fillRect(0, 18, 8, 4)\n        sprite.fillRect(24, 18, 8, 4)\n        setImage(sprite)\n    }\n\n    override fun act() {\n        frame += 1\n        if (frame % 5 == 0) {\n            setLocation(x + direction * 8, y)\n            if (x > world.width - 70 || x < 70) direction = -direction\n        }\n    }\n}\n"
+    },
+    {
+      "fileName": "Laser.kt",
+      "kind": "class",
+      "source": "class Laser : Actor() {\n    init {\n        val sprite = Image()\n        sprite.scale(4, 14)\n        sprite.setColor(255, 230, 90)\n        sprite.fillRect(0, 0, 4, 14)\n        setImage(sprite)\n    }\n\n    override fun act() {\n        setLocation(x, y - 8)\n        val invader = getOneIntersecting<Invader>()\n        if (invader != null) {\n            world.removeObject(invader)\n            world.removeObject(this)\n        } else if (y < 10) {\n            world.removeObject(this)\n        }\n    }\n}\n"
+    },
+    {
+      "fileName": "Defender.kt",
+      "kind": "class",
+      "source": "class Defender : Actor() {\n    private var shotCooldown = 0\n\n    init {\n        val sprite = Image()\n        sprite.scale(38, 24)\n        sprite.setColor(80, 170, 255)\n        sprite.fillRect(4, 8, 30, 12)\n        sprite.fillRect(12, 2, 14, 8)\n        sprite.setColor(220, 240, 255)\n        sprite.fillRect(18, 0, 3, 8)\n        setImage(sprite)\n    }\n\n    override fun act() {\n        if (isKeyDown(\"left\")) setLocation(x - 5, y)\n        if (isKeyDown(\"right\")) setLocation(x + 5, y)\n        if (shotCooldown > 0) shotCooldown -= 1\n        if (isKeyDown(\"space\") && shotCooldown == 0) {\n            world.addObject(Laser(), x, y - 20)\n            shotCooldown = 12\n        }\n    }\n}\n"
+    },
+    {
+      "fileName": "SpaceInvadersWorld.kt",
+      "kind": "class",
+      "source": "class SpaceInvadersWorld : World(720, 480, 1) {\n    init {\n        setBackground(17, 24, 39)\n        var row = 0\n        while (row < 4) {\n            var column = 0\n            while (column < 8) {\n                addObject(Invader(), 110 + column * 70, 80 + row * 42)\n                column += 1\n            }\n            row += 1\n        }\n        addObject(Defender(), 360, 420)\n        showText(\"Move with left/right. Press Space to fire.\", 20, 25)\n    }\n\n    override fun act() {\n        if (getObjects<Invader>().isEmpty()) {\n            showText(\"You win! Press Reset to play again.\", 235, 245)\n            stop()\n        }\n    }\n}\n"
+    },
+    {
+      "fileName": "Main.kt",
+      "kind": "functions",
+      "source": "fun main() {\n    val spaceWorld = SpaceInvadersWorld()\n    showWorld(spaceWorld)\n}\n"
+    }
+  ],
+  "resources": [],
+  "cardPositions": {}
+}

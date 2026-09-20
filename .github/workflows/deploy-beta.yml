@@ -1,0 +1,70 @@
+name: Deploy BlueK beta to own server
+
+on:
+  push:
+    branches:
+      - beta
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bluek-beta-deploy
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      VITE_BASE_PATH: /
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build beta application
+        run: npm run build
+
+      - name: Install rsync
+        run: sudo apt-get update && sudo apt-get install -y rsync
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.BLUEK_DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.BLUEK_DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/bluek_deploy
+          chmod 600 ~/.ssh/bluek_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Deploy beta static files
+        env:
+          HOST: ${{ secrets.BLUEK_DEPLOY_HOST }}
+          USER: ${{ secrets.BLUEK_DEPLOY_USER }}
+          PORT: ${{ secrets.BLUEK_DEPLOY_PORT }}
+          TARGET: ${{ secrets.BLUEK_BETA_DEPLOY_PATH }}
+        run: |
+          test -n "$TARGET"
+          ssh -i ~/.ssh/bluek_deploy -p "$PORT" "$USER@$HOST" "install -d '$TARGET'"
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/bluek_deploy -p $PORT" \
+            frontend/dist/ \
+            "$USER@$HOST:$TARGET/"
