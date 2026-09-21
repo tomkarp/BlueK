@@ -10,6 +10,8 @@ function encodeAlpha(data: Uint8ClampedArray): string {
 }
 
 async function prepareImageResource(resource: ProjectResource): Promise<ProjectResource> {
+  // The graphics BlueK ships with arrive with their mask already generated.
+  if (resource.imageWidth && resource.imageHeight && resource.alphaHex) return resource;
   if (!resource.path.startsWith("images/") || typeof Image === "undefined" || typeof document === "undefined")
     return { path: resource.path, data: resource.data };
   const cached = cache.get(resource.data);

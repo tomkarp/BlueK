@@ -59,6 +59,12 @@ private data class BluePlayActorBounds(val left: Double, val top: Double, val ri
 class KotliteSession {
 
     private val output = StringBuilder()
+    /** Every name a student can call; filled while the modules are installed. */
+    private val knownNames: MutableSet<String> = mutableSetOf()
+
+    /** The source of the most recent analysis, used to explain a failed one. */
+    private var analysisCandidate: String = ""
+
     private var environment = ExecutionEnvironment()
     private lateinit var interpreter: Interpreter
     private val handles = linkedMapOf<String, RuntimeValue>()
@@ -94,7 +100,8 @@ class KotliteSession {
     // Keyed by bluePlayIdentity(): every inheritance part of one object shares
     // that root, so the lookup is O(1) instead of a scan per actor and frame.
     private val bluePlayActorIds = mutableMapOf<ClassInstance, String>()
-    private val bluePlayResources = linkedMapOf<String, BluePlayResourceMask>()
+    /** Every known resource path; the mask is null when no pixel data was prepared. */
+    private val bluePlayResources = linkedMapOf<String, BluePlayResourceMask?>()
     private var nextBluePlayActorId = 1
     private var bluePlayActorHint: ClassInstance? = null
     private var bluePlaySpeed = 50
@@ -133,11 +140,13 @@ class KotliteSession {
         bluePlayResources.clear()
         manifest.lines().filter { it.isNotEmpty() }.forEach { line ->
             val fields = line.split('\u0000')
-            if (fields.size == 4) {
+            if (fields.size == 4 && fields[0].isNotEmpty()) {
                 val width = fields[1].toIntOrNull()
                 val height = fields[2].toIntOrNull()
-                if (width != null && height != null && width > 0 && height > 0 && fields[3].length >= width * height * 2)
-                    bluePlayResources[fields[0]] = BluePlayResourceMask(width, height, fields[3])
+                bluePlayResources[fields[0]] =
+                    if (width != null && height != null && width > 0 && height > 0 && fields[3].length >= width * height * 2)
+                        BluePlayResourceMask(width, height, fields[3])
+                    else null
             }
         }
     }
@@ -150,8 +159,17 @@ class KotliteSession {
         })
         environment.registerClass(BlueKClass.definition())
         environment.registerFunction(BlueKClass.beepFunction { pendingEffects += "beep" })
-        AllStdLibModules { text -> appendOutput(text) }.modules.forEach(environment::install)
-        environment.install(GenericCollectionsModule)
+        val modules = AllStdLibModules { text -> appendOutput(text) }.modules +
+            listOf(GenericCollectionsModule, BlueKStdlibModule)
+        modules.forEach(environment::install)
+        // Names BlueK actually provides, used to tell a misspelling from an
+        // unsupported piece of Kotlin. See KotlinSurfaceHints.
+        knownNames.clear()
+        modules.forEach { module ->
+            module.functions.forEach { knownNames += it.functionName }
+            module.properties.forEach { knownNames += it.declaredName }
+        }
+        knownNames += setOf("readln", "readLine", "readlnOrNull", "println", "print", "main")
         environment.registerFunction(CustomFunctionDefinition(
             position = SourcePosition.BUILTIN,
             receiverType = "Throwable",
@@ -359,10 +377,14 @@ class KotliteSession {
         // setup, so resolving World/Actor here would fail for an empty symbol
         // table. The combined library source still provides the typed public API.
         definition("bluekImageWidth", "Int", listOf(CustomFunctionParameter("path", "String"))) { currentInterpreter, args ->
-            IntValue(resourceMask((args[0] as StringValue).value)?.width ?: 30, currentInterpreter.symbolTable())
+            val path = (args[0] as StringValue).value
+            requireResource(path)
+            IntValue(resourceMask(path)?.width ?: 30, currentInterpreter.symbolTable())
         }
         definition("bluekImageHeight", "Int", listOf(CustomFunctionParameter("path", "String"))) { currentInterpreter, args ->
-            IntValue(resourceMask((args[0] as StringValue).value)?.height ?: 30, currentInterpreter.symbolTable())
+            val path = (args[0] as StringValue).value
+            requireResource(path)
+            IntValue(resourceMask(path)?.height ?: 30, currentInterpreter.symbolTable())
         }
         definition("bluekActiveWorld", "Any", emptyList()) { _, _ ->
             bluePlayWorld ?: throw IllegalStateException("No BluePlay world is shown yet. Call show() on a world first.")
@@ -510,8 +532,31 @@ class KotliteSession {
         return false
     }
 
-    private fun resourceMask(path: String): BluePlayResourceMask? =
-        bluePlayResources[path] ?: bluePlayResources.entries.firstOrNull { it.key.endsWith("/$path") }?.value
+    private fun resourceEntry(path: String): Map.Entry<String, BluePlayResourceMask?>? =
+        bluePlayResources.entries.firstOrNull { it.key == path }
+            ?: bluePlayResources.entries.firstOrNull { it.key == "images/$path" }
+            ?: bluePlayResources.entries.firstOrNull { it.key.endsWith("/$path") }
+
+    private fun resourceMask(path: String): BluePlayResourceMask? = resourceEntry(path)?.value
+
+    /**
+     * Mirrors BluePlay's own message for a file that is not there, so a typo in
+     * `Image("duckk.png")` fails loudly instead of yielding an invisible 30x30
+     * placeholder. The names help with a misspelled standard graphic.
+     */
+    private fun requireResource(path: String) {
+        if (resourceEntry(path) != null) return
+        val available = bluePlayResources.keys
+            .filter { it.startsWith("images/") }
+            .map { it.removePrefix("images/") }
+            .sorted()
+        val names = if (available.isEmpty()) ""
+            else " Available: " + available.take(12).joinToString(", ") +
+                (if (available.size > 12) ", ... (${available.size} in total)" else "") + "."
+        throw IllegalArgumentException(
+            "Image file not found: $path (expected e.g. in the folder 'images/').$names"
+        )
+    }
 
     /** The shared root of an object's inheritance parts; see [sameBluePlayInstance]. */
     private fun ClassInstance.bluePlayIdentity(): ClassInstance {
@@ -975,8 +1020,10 @@ class KotliteSession {
     private suspend fun evaluateSuspended(filename: String, source: String, interactiveNames: Set<String> = emptySet()): String {
         if (faulted) return errorMessage("Runtime failed. Reset or compile before running more code.", "runtime", true)
         val boundary = analysisSource.length + 1
+        val candidate = analysisSource + "\n" + source
+        analysisCandidate = candidate
         val analyzed = try {
-            ReplAnalyzer.analyze("<BlueK project>", analysisSource + "\n" + source, environment, retiredProperties)
+            ReplAnalyzer.analyze("<BlueK project>", candidate, environment, retiredProperties)
         } catch (error: Throwable) {
             return error(error, "analysis")
         }
@@ -1364,8 +1411,26 @@ class KotliteSession {
         // name, e.g. `IllegalArgumentException: Unbekannte Farbe: Blau`.
         val thrown = (error as? EvaluateRuntimeException)?.error
         val name = thrown?.let { it.externalExceptionClassName ?: it.type().name } ?: error.fullClassName
-        return errorMessage("$name: ${thrown?.message ?: error.message ?: "Kotlite evaluation failed."}", phase, fatal)
+        val message = thrown?.message ?: error.message ?: "Kotlite evaluation failed."
+        // A missing name is reported by Kotlite as an ordinary analysis error.
+        // BlueK says instead which side the gap is on; the exception class name
+        // would only add noise there.
+        if (thrown == null) {
+            KotlinSurfaceHints.rewrite(message, knownNames, declaredNames())
+                ?.let { return errorMessage(it, phase, fatal) }
+        }
+        return errorMessage("$name: $message", phase, fatal)
     }
+    /**
+     * Names the student declared in the analyzed source. Kotlite reports a
+     * wrong argument type with the same wording as an unknown name, so a name
+     * found here must keep Kotlite's message - it lists the argument types.
+     */
+    private fun declaredNames(): Set<String> =
+        Regex("\\b(?:fun|class|val|var)\\s+([A-Za-z_][A-Za-z0-9_]*)")
+            .findAll(analysisCandidate)
+            .mapTo(mutableSetOf()) { it.groupValues[1] }
+
     private fun errorMessage(message: String, phase: String = "request", fatal: Boolean = false): String =
         "{\"kind\":\"error\",\"display\":\"${escape(message)}\",\"phase\":\"$phase\",\"fatal\":$fatal}"
     private fun escape(value: String): String = buildString {

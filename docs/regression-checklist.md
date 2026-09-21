@@ -114,6 +114,9 @@ Worker-/Runtime-Smokes getrennt.
 | GUI-66 | Jedes Projekt hat eine README.md: das dezente Blatt links oben im Diagramm ist immer da (auch leer); im Fenster wird Markdown direkt beim Tippen formatiert dargestellt, die Marker sind nur auf der Cursor-Zeile sichtbar, bei Codeblöcken und Zitaten im ganzen Block (inkl. der Zaunzeilen), Kotlin in Codeblöcken wird eingefärbt; beim Öffnen liegt der Fokus nicht im Text, erstes Escape verlässt den Text, zweites schließt das Fenster; das Fragezeichen oben rechts zeigt die Syntax am Minimalbeispiel und verschwindet beim Klick daneben; Export/Autosave enthalten die README nur, wenn sie nicht leer ist, beim Import ist sie optional (BlueJ-`README.TXT` wird übernommen) | Chromium-GUI-Test GUI-66 (Blatt sichtbar, leer nicht gespeichert, kein Fokus beim Öffnen, Formatierung beim Tippen, Marker auf der Cursor-Zeile, Hilfe inkl. Schließen daneben, Codeblock mit Zäunen und Einfärbung, Escape-Folge, Wiederöffnen) und `smoke-project-format` (Export nur bei Inhalt, optionaler Import, Formatierungsmarken, Block-Regionen, Kotlin-Token, BlueJ-README) | Abgesichert |
 | GUI-67 | Ein Projektlink kann die README beim Start öffnen (`readme=1` im Hash des vollen Links bzw. in der Query des Kurzlinks); der Save/Export-Dialog trägt die Option als Häkchen am rechten Rand beider Link-Kästen, nur bei nicht-leerer README wählbar, und listet zuerst die beiden Links, dann JSON, dann das BlueJ-ZIP | Chromium-GUI-Test GUI-67 (ohne Flag kein Fenster, mit Flag gerenderte README, Reihenfolge der Einträge, beide Häkchen gemeinsam, Flag im kopierten Link, bei leerer README deaktiviert) | Abgesichert |
 | GUI-68 | Der Code-Editor hat einen Vim-Modus: standardmäßig aus, umschaltbar über Cmd/Ctrl+Shift+V oder die Einstellungen; im Modus zeigt der Editor unten die Vim-Statuszeile, Normal-Mode-Befehle (`j`, `dd`, `u`) wirken, ausgeschaltet tippt der Editor wieder normal | Chromium-GUI-Test GUI-68 (ohne Modus tippt `j` ein `j`, Kürzel schaltet ein, `--NORMAL--`, `dd`/`u`, Einstellungs-Checkbox synchron, Ausschalten beendet den Modus) | Abgesichert |
+| GUI-69 | BlueK liefert die BluePlay-Standardgrafiken mit (`assets/standard-images/`, im Bundle erzeugt): `Image("duck.png")` und `setBackground("pizza.png")` sind ohne Projektimport nutzbar, die Grafik wird auf die Weltfläche gezeichnet; eine gleichnamige Projektressource hat Vorrang; die Grafiken stehen nicht im Projekt und werden nicht gespeichert | Chromium-GUI-Test GUI-69 (Standardgrafik im Codepad und auf dem Canvas) und `smoke-blueplay-browser` (Auflösung über `images/`, Vorrang der Projektressource) | Abgesichert |
+| GUI-70 | Die im Build erzeugten Pixelmasken der Standardgrafiken stimmen mit der Browserdekodierung überein (Größe und Alphakanal), damit pixelgenaue Klicks und `isTouching` für sie stimmen | Chromium-GUI-Test GUI-70 über alle mitgelieferten Grafiken | Abgesichert |
+| RT-31 | Eine fehlende Grafik meldet einen klaren Laufzeitfehler statt eines unsichtbaren 30x30-Platzhalters: `Image("duckk.png")` ergibt `IllegalArgumentException: Image file not found: duckk.png (expected e.g. in the folder 'images/')` mit den verfügbaren Namen; gilt ebenso für `setImage` und `setBackground` | `smoke-blueplay-browser` (Image, Hintergrund, Namensliste) und Chromium-GUI-Test GUI-69 | Abgesichert |
 | RT-15 | `private fun` in Klassen: intern aufrufbar, von außen Compilefehler, Manifest `visibility: private` | `smoke-curriculum-kotlin` | Abgesichert |
 | RT-16 | String-Templates enden am ersten Nicht-Bezeichnerzeichen (`"│$rang│"`, `"$name's"`); einzelnes `$` bleibt Text | `smoke-curriculum-kotlin` | Abgesichert |
 | RT-17 | `IllegalArgumentException`, `IllegalStateException`, `NumberFormatException` u. a. sind werfbar/fangbar; unbehandelt erscheint `IllegalArgumentException: Nachricht` statt `EvaluateRuntimeException` | `smoke-curriculum-kotlin` | Abgesichert |
@@ -130,7 +133,9 @@ Worker-/Runtime-Smokes getrennt.
 | RT-28 | `private` gilt für alle Member, nicht nur den ersten (Lookahead für `private set` verschluckte den Modifier der Folge-Property); Semikolons am Zeilenende im Klassenrumpf sind erlaubt | `smoke-curriculum-kotlin` | Abgesichert |
 | RT-11 | `Run` führt dauerhaft Schritte aus, fokussiert sofort die Spielfläche für Tastatursteuerung, `Pause` beendet den nächsten Scheduler-Schritt ohne zweiten Lauf; Speed bleibt während Run änderbar und plant den nächsten Schritt neu | Native Runtime-Smoke + Built-in-Browser mit laufendem `simulation=running`, fokussiertem Canvas, Pause und Slider-Drag | Abgesichert |
 | RT-12 | `isTouching`/`intersects` verwenden sichtbare Alpha-Pixel mit Skalierung und Rotation; ein angeklickter Actor darf in `act()` sicher `world.removeObject(this)` ausführen | Native Browser-Smoke prüft getrennte Alpha-Flächen trotz überlappender Rechtecke, 180°-Rotation, sichtbare Überdeckung, Klick-ID außerhalb der Mittelpunktzelle und Selbstentfernung ohne Fault | Abgesichert; 100-Actor-Performance bleibt PERF-01 |
+| RT-30 | Fehlt ein Name, sagt BlueK auf welcher Seite die Lücke liegt statt Kotlites generischer Meldung: bekannte Lücke mit Alternative (arrayOf -> listOf), naher Treffer als Vorschlag (minOff -> minOf), sonst neutral (neither declared in this project nor provided by BlueK). Ein vorhandener Name mit falschen Argumenttypen behält Kotlites Meldung, weil nur sie die Argumenttypen nennt | `npm run test:kotlin-surface` prüft 17 Meldungen, darunter zwei Durchreich-Fälle (`split(1,2,3)`, `zeige(5)`); Curriculum-Smoke weiterhin grün, inklusive der Zusicherung `argument types (Int)` | Abgesichert für die geprüften Formen; die Umschreibung erkennt Kotlites Wortlaut per Textmuster und fällt bei geändertem Wortlaut auf die Originalmeldung zurück |
 | PERF-01 | Scheduler, Frame-Abstände, Stop-Reaktion, Historien- und Ressourcenwachstum bei Referenzspielen und 100 Actoren sind messbar | Node-Benchmark prüft 180 komplette Schritte mit 1-Pixel-Bewegung, echte Laser und synchrone Invader (Dauerschießen: Mittel 13,1 → 4,5 ms). Chromium: Speed 95, Pfeil+Space für 4 s, 321–326 DOM-Frame-Updates, p95 15,2–15,5 ms, max. 24,4–24,9 ms (vorher 203–206, p95 ≈ 27 ms). Gateway-Test: gleichzeitige Key-down/up ohne Busy-Phase oder alte Frames. Alpha-Kollisionen unverändert | Noch keine 100-Actor-Messung und keine 60-FPS-Garantie; visuelle Benutzerabnahme offen |
+| RT-29 | Schul-Kotlin erreicht die zugesagte Stdlib-Oberfläche: `minOf`/`maxOf` (2..n Werte), `coerceIn`/`coerceAtLeast`/`coerceAtMost`, `Int.MAX_VALUE`/`MIN_VALUE`, `Int.toChar`, `Char.code`/`digitToInt`, `sum`/`average`/`sumOf`/`reduce`/`flatten`/`indices` auf Listen und Ranges sowie String als Zeichenfolge (`for (c in wort)`, `wort[i]`, `split`, `toList`, `indices`) | `npm run test:kotlin-surface` prüft 48 Ausdrücke gegen das gebaute Bundle und hält 13 bekannte Lücken (Arrays, `format`, `withIndex`, qualifizierte `kotlin.math.*`-Aufrufe) ausdrücklich als Lücke fest; `benchmark-blueplay` vor/nach der Änderung ohne messbaren Unterschied (Mittel 1,04→1,12 bzw. 3,63→3,31 ms) | Abgesichert für die gelisteten Ausdrücke; Arrays und `format` bleiben offen, `String.indices` liefert `List<Int>` statt `IntRange` |
 | PERF-02 | Ein längeres Spiel wird nicht mit jedem entfernten Actor langsamer: Hit-IDs entfernter Actors werden freigegeben, ein wieder hinzugefügter Actor erhält eine neue, klickbare ID | Ursache: die Hit-ID-Liste wuchs mit jedem Laser und wurde pro Frame und Actor linear durchsucht. Node-Langzeitmessung 3000 Schritte Dauerfeuer bei 5 Objekten: 4,1 ms → 1,0 ms pro Schritt. Native BluePlay-Smoke prüft Entfernen, erneutes Hinzufügen und Klick über die neue ID | Kein automatischer Wachstumsgrenzwert (zeitbasiert instabil); Speicherverlauf im Browser nicht gemessen |
 
 ## Letzter Prüflauf
@@ -462,3 +467,47 @@ Offen bleiben die explizit genannten visuellen Abnahmen, weitere Datentypen,
 Viewportgrößen und Browser. Die Liste bedeutet keine vollständige Feature-Parität.
 Gezielt grün in echtem Chromium: GUI-54 bis GUI-57; dabei werden auch die
 symmetrischen Abstände und die fehlende unnötige Seitenreserve geprüft.
+
+2026-09-20: BlueK ergänzt fehlende Kotlin-Stdlib-Funktionen über ein eigenes
+`BlueKStdlibModule` statt über den Interpreter-Fork; der Fork bleibt für
+Interpreter-Semantik reserviert. Bewusst native `CustomFunctionDefinition`s und
+kein interpretiertes Prelude, weil BluePlay einen Teil davon (Clamping) pro
+Frame und Actor aufruft. Kotlite erlaubt `vararg` nur als einzigen Parameter,
+daher `minOf(vararg values: Int)` statt Kotlins `minOf(a, vararg other)`:
+`minOf()` ohne Argumente scheitert erst zur Laufzeit, mit klarer Meldung.
+`String.lastIndex` existierte bereits und liess sich nicht erneut deklarieren.
+Neu gebautes Bundle; `browser-smoke`, `test:references`, `test:generics`,
+`test:blueplay-demos` und `test:kotlin-surface` erfolgreich. GUI-Suite für
+diese Änderung nicht ausgeführt - keine GUI-Änderung, aber auch nicht belegt.
+
+2026-09-20: Fehlende Namen werden über `KotlinSurfaceHints` in BlueK-Wortlaut
+umgeschrieben (Punkt 4a). Die Unterscheidung BlueK-Lücke gegen Tippfehler ist
+nicht allgemein entscheidbar; der dritte Fall nennt deshalb beide
+Möglichkeiten. Beim ersten Versuch schlug die Umschreibung auch bei falschen
+Argumenttypen zu und behauptete, eine vorhandene Methode existiere nicht
+(Curriculum-Smoke `zeige(5)`); Kotlite verwendet dort denselben Wortlaut.
+Deklarierte und registrierte Namen werden jetzt durchgereicht, und der
+Smoke-Test sichert beide Richtungen ab. `browser-smoke`, `test:references`,
+`test:generics`, `test:blueplay-demos`, `test:codepad-flow`, `test:inspector`,
+`test:kotlin-surface` und Typecheck erfolgreich; GUI-Suite nicht ausgeführt.
+
+2026-09-21: GUI-Suite für RT-29 und RT-30 nachgeholt: 77 bestanden, 4 offen.
+Davon sind zwei kein Befund dieses Laufs - GUI-35 erwartet Port 5194 fest im
+Link und schlug nur fehl, weil der Lauf wegen eines parallel belegten Ports
+auf 5291 ausweichen musste; PERF-01 besteht im ruhigen Einzellauf (10/10 in
+blueplay.spec). Offen bleiben GUI-61 (BlueJ-Verzeichnisimport) und GUI-22
+(Dropzone nennt BlueJ ZIP): der Open/Import-Dialog bietet heute nur JSON
+(SvelteApp.svelte, .project-dropzone). Beide bestehen unabhängig von den
+Kotlin-Änderungen - die Commits d799407 und f20d1cb fassen frontend/src
+nicht an, letzte Änderung dort war 08963a8.
+Hinweis: playwright.config.ts nutzt den festen Port 5194 mit
+reuseExistingServer:false. Laufen zwei Arbeitskopien parallel, reißen sich
+die Läufe gegenseitig den Testserver weg (ERR_CONNECTION_REFUSED, SIGTERM).
+
+Nachtrag zum Merge der Standardgrafiken: Das oben genannte RT-30 bezeichnet
+die Meldung fehlender Namen. Die fehlende Grafik hat beim Merge die ID RT-31
+bekommen, weil RT-30 zu dem Zeitpunkt bereits vergeben war. Der Lauf oben
+zählt 77 bestanden bei 4 offenen; auf dem zusammengeführten Stand sind es 81
+bestanden bei 2 offenen: GUI-69 und GUI-70 kommen hinzu, und die beiden
+Portartefakte GUI-35 und PERF-01 treten ohne parallelen Lauf nicht auf.
+Offen bleiben weiterhin nur GUI-61 und GUI-22.

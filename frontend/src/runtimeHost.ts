@@ -145,9 +145,13 @@ export class RuntimeHost {
         this.snapshot = { ...initialSnapshot(), generationId: command.generationId, phase: 'compiling' };
         this.session = this.createSession();
         this.session.configureBluePlay(command.library?.id === 'blueplay', command.generationId);
+        // Every resource is announced, so the runtime can tell a missing image
+        // from one whose pixel mask could not be prepared; only prepared images
+        // carry width/height/alpha.
         this.session.setBluePlayResources((command.resources || [])
-          .filter(resource => resource.imageWidth && resource.imageHeight && resource.alphaHex)
-          .map(resource => `${resource.path}\u0000${resource.imageWidth}\u0000${resource.imageHeight}\u0000${resource.alphaHex}`)
+          .map(resource => resource.imageWidth && resource.imageHeight && resource.alphaHex
+            ? `${resource.path}\u0000${resource.imageWidth}\u0000${resource.imageHeight}\u0000${resource.alphaHex}`
+            : `${resource.path}\u0000\u0000\u0000`)
           .join('\n'));
         const executionId = id;
         this.active = { executionId };

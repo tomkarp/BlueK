@@ -174,6 +174,16 @@ Bilder und Zeichenoperationen werden erst im UI aus dem typed Frame und
 Projektressourcen gerendert. Nicht geladene Bilder erhalten einen
 deterministischen, vollständig treffbaren Platzhalter.
 
+Die mitgelieferten Standardgrafiken sind gewöhnliche Ressourcen, die nicht zum
+Projekt gehören: `withStandardImages` stellt sie den Projektressourcen voran,
+eine gleichnamige Projektressource gewinnt. Sie stehen samt Pixelmaske im
+Bundle (`frontend/src/standardImages.generated.ts`), damit Rendern, Compile und
+Kollisionsprüfung ohne Netzwerkzugriff und ohne Dekodierung auskommen.
+Gespeichert, exportiert oder im Dateidialog gelistet wird weiterhin nur
+`resources`. Der Runtime werden alle bekannten Ressourcenpfade gemeldet — auch
+solche ohne vorbereitete Maske —, damit sie einen Tippfehler von einer
+vorhandenen Datei unterscheiden und eine fehlende Grafik melden kann.
+
 Die Canvas-CSS-Größe entspricht dabei immer `width * cellSize` und
 `height * cellSize`; das World-Fenster skaliert kleine oder große Welten nicht
 automatisch. Der umgebende Body ist scrollbar und erhält bei einer Welt, die

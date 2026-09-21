@@ -7,6 +7,12 @@ const api = globalThis['bluek-kotlite-browser'];
 const session = api.bluekCreateKotliteSession();
 const files = ['Image.kt', 'Actor.kt', 'World.kt', 'BluePlayFunctions.kt', 'Figure.kt', 'MyWorld.kt', 'Main.kt'];
 const sources = await Promise.all(files.map(file => readFile(new URL(`../examples/blueplay/${file}`, import.meta.url), 'utf8')));
+// The graphics BlueK ships with are announced to the runtime like project
+// resources; only their paths are needed to tell a typo from a real file.
+const standardImages = [...(await readFile(new URL('../frontend/src/standardImages.generated.ts', import.meta.url), 'utf8'))
+  .matchAll(/path: "images\/([^"]+)"/g)].map(match => match[1]);
+if (!standardImages.includes('figure.png') || !standardImages.includes('duck.png')) throw new Error('The standard graphics manifest is missing BluePlay names.');
+const standardManifest = standardImages.map(name => `images/${name}\0\0\0`).join('\n');
 const staticProject = JSON.parse(await readFile(new URL('../frontend/public/examples/blueplay.bluek.json', import.meta.url), 'utf8'));
 const figureResource = staticProject.resources?.find(resource => resource.path === 'images/figure.png');
 if (!figureResource?.data?.startsWith('data:image/png;base64,')) throw new Error('The bundled BluePlay example image is missing from the static project asset.');
@@ -121,6 +127,7 @@ if (evaluate('clickedWorld.isClicked', 'world click query').display !== 'true') 
 // built-in World/Actor/Image/Functions declarations come from the runtime.
 const nativeSession = api.bluekCreateKotliteSession();
 nativeSession.configureBluePlay(true, 'native-blueplay-smoke');
+nativeSession.setBluePlayResources(standardManifest);
 const nativeFiles = ['Figure.kt', 'MyWorld.kt', 'Main.kt'];
 const nativeSources = await Promise.all(nativeFiles.map(file => readFile(new URL(`../examples/blueplay/${file}`, import.meta.url), 'utf8')));
 const awaitCompletion = (start) => new Promise(resolve => {
@@ -203,5 +210,33 @@ const typedEvaluate = (source, label) => expectOk(JSON.parse(typedSession.evalua
 if (typedEvaluate('seeker.one() === target && seeker.touching() && seeker.count() == 1', 'typed collision queries') !== 'true') throw new Error('Typed collision queries did not find the touching actor.');
 if (typedEvaluate('seeker.clear(); typedWorld.numberOfObjects', 'removeTouching') !== '1') throw new Error('removeTouching did not remove the touching actor.');
 if (typedEvaluate('seeker.touching() || seeker.one() != null', 'typed collision after removal') !== 'false') throw new Error('A removed actor was still reported as touching.');
+
+// Standard graphics are usable without being part of the project, and a name
+// that exists nowhere fails loudly instead of yielding an invisible placeholder.
+const imageSession = api.bluekCreateKotliteSession();
+imageSession.configureBluePlay(true, 'native-blueplay-images');
+// Project resources are announced last, so a project file wins over the
+// standard graphic of the same name.
+imageSession.setBluePlayResources(`${standardManifest}\nimages/duck.png\0${3}\0${2}\0${'ff'.repeat(6)}`);
+expectOk(await awaitCompletion((onInput, onComplete) => imageSession.startLoadProject(['Main.kt'], ['fun main() { }'], 'blueplay', 1, onInput, onComplete)), 'image project load');
+const imageEvaluate = (source) => JSON.parse(imageSession.evaluate('<images>', source));
+if (expectOk(imageEvaluate('Image("duck.png").width'), 'standard graphic width').display !== '3')
+  throw new Error('A standard graphic was not resolved through the images/ folder.');
+if (expectOk(imageEvaluate('Image("images/cat.png").height'), 'standard graphic by path').display !== '30')
+  throw new Error('A standard graphic was not resolved by its full path.');
+const missingImage = imageEvaluate('Image("duckk.png")');
+if (missingImage.kind !== 'error' || !missingImage.display.includes('Image file not found: duckk.png'))
+  throw new Error(`A missing image did not report a clear error: ${missingImage.display}`);
+if (!missingImage.display.includes('duck.png'))
+  throw new Error('The missing-image error does not list the available graphics.');
+// A runtime exception faults its session, so the background check runs its own.
+const backgroundSession = api.bluekCreateKotliteSession();
+backgroundSession.configureBluePlay(true, 'native-blueplay-background');
+backgroundSession.setBluePlayResources(standardManifest);
+expectOk(await awaitCompletion((onInput, onComplete) => backgroundSession.startLoadProject(['Main.kt'], ['fun main() { }'], 'blueplay', 1, onInput, onComplete)), 'background project load');
+expectOk(JSON.parse(backgroundSession.evaluate('<images>', 'World(5, 5).setBackground("pizza.png")')), 'standard background');
+const missingBackground = JSON.parse(backgroundSession.evaluate('<images>', 'World(5, 5).setBackground("nope.png")'));
+if (missingBackground.kind !== 'error' || !missingBackground.display.includes('Image file not found: nope.png'))
+  throw new Error(`A missing background image did not report a clear error: ${missingBackground.display}`);
 
 console.log('BluePlay browser smoke test passed.');

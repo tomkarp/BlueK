@@ -21,6 +21,7 @@
   import { createProjectPayload, projectModelFromPayload } from "./projectFormat";
   import { blueJProjectFromEntries, entriesFromZip, type ImportEntry } from "./blueJImport";
   import { prepareRuntimeResources } from "./imageAlpha";
+  import { standardImages, withStandardImages } from "./standardImages";
   import { loadProjectFromServer, saveProjectToServer } from "./shareApi";
   import { compileProject, executeCodepad } from "./codepadFlow";
   import { applyDiagnostics, editorDiagnostics } from "./editorDiagnostics";
@@ -957,8 +958,12 @@
   );
   $: if (files.length || Object.keys(cardPositions).length || showInheritance)
     window.setTimeout(refreshInheritanceEdges, 0);
-  $: if (resources.length) refreshResourceSizes(resources);
-  $: if (!resources.length && Object.keys(resourceSizes).length)
+  // The graphics BlueK ships with are usable everywhere a project resource is,
+  // but they are not project content: they stay out of `resources` so they are
+  // never saved, listed as project files or overwritten by an import.
+  $: runtimeResources = withStandardImages(resources, standardImages);
+  $: if (runtimeResources.length) refreshResourceSizes(runtimeResources);
+  $: if (!runtimeResources.length && Object.keys(resourceSizes).length)
     resourceSizes = {};
   $: if (stage && Object.keys(resourceSizes).length) {
     const refreshed = decorateStage(stage);
@@ -1126,7 +1131,7 @@
 
   function resourceData(path: string | undefined) {
     if (!path) return undefined;
-    return resources.find(
+    return runtimeResources.find(
       (item) => item.path === path || item.path.endsWith(`/${path}`),
     )?.data;
   }
@@ -1134,20 +1139,25 @@
     const entries = await Promise.all(
       list
         .filter((item) => item.path.startsWith("images/"))
-        .map(
-          (item) =>
-            new Promise<[string, { width: number; height: number }] | null>(
-              (resolve) => {
-                const image = new Image();
-                image.onload = () =>
-                  resolve([
-                    item.path,
-                    { width: image.naturalWidth, height: image.naturalHeight },
-                  ]);
-                image.onerror = () => resolve(null);
-                image.src = item.data;
-              },
-            ),
+        .map((item) =>
+          // The graphics BlueK ships with already carry their size.
+          item.imageWidth && item.imageHeight
+            ? Promise.resolve<[string, { width: number; height: number }] | null>([
+                item.path,
+                { width: item.imageWidth, height: item.imageHeight },
+              ])
+            : new Promise<[string, { width: number; height: number }] | null>(
+                (resolve) => {
+                  const image = new Image();
+                  image.onload = () =>
+                    resolve([
+                      item.path,
+                      { width: image.naturalWidth, height: image.naturalHeight },
+                    ]);
+                  image.onerror = () => resolve(null);
+                  image.src = item.data;
+                },
+              ),
         ),
     );
     const next = Object.fromEntries(
@@ -1168,7 +1178,7 @@
         const imagePath = object.imagePath || image.resourcePath;
         const operations = object.imageOperations || image.operations;
         const resource = imagePath
-          ? resources.find(
+          ? runtimeResources.find(
               (item) =>
                 item.path === `images/${imagePath}` ||
                 item.path.endsWith(`/images/${imagePath}`),
@@ -1191,7 +1201,7 @@
             object.imageData ||
             (typeof rawImage === "string" ? rawImage : undefined) ||
             resource?.data ||
-            drawnImageDataUrl(operations, width, height, resources),
+            drawnImageDataUrl(operations, width, height, runtimeResources),
           imagePath,
           imageOperations: operations,
           imageWidth: width,
@@ -1303,7 +1313,7 @@
       value.backgroundOperations || [],
       logicalWidth,
       logicalHeight,
-      resources,
+      runtimeResources,
     );
     drawImage(backgroundResource || canvasDataUrl(backgroundSvg), 0, 0, logicalWidth, logicalHeight);
     (value.objects || []).forEach((object: any) => {
@@ -1701,7 +1711,7 @@
     history = [];
     activeInspectorId = "";
     inspectorWindows = [];
-    const result = await compileProject(client, files, Date.now(), library, await prepareRuntimeResources(resources));
+    const result = await compileProject(client, files, Date.now(), library, await prepareRuntimeResources(runtimeResources));
     if (!result.ok) {
         status = "Compile error";
         error = result.diagnostics
@@ -1740,7 +1750,7 @@
     if (!client || !code) return;
     codepad = "";
     codepadHistoryIndex = -1;
-    const result = await executeCodepad(client, files, Date.now(), code, library, await prepareRuntimeResources(resources));
+    const result = await executeCodepad(client, files, Date.now(), code, library, await prepareRuntimeResources(runtimeResources));
     if (result.kind === "compile-error") {
       status = "Compile error";
       error = result.compile.diagnostics

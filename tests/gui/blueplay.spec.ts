@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { STANDARD_IMAGES } from '../../frontend/src/standardImages.generated';
 
 async function loadBluePlay(page: Page) {
   await page.goto('/');
@@ -310,4 +311,68 @@ test('GUI-53 canvas clicks target visible Actor pixels and ignore transparent pi
   await input.fill('clickActor.isClicked');
   await input.press('Enter');
   await expect(entries.last()).toContainText('true');
+});
+
+test('GUI-69 standard graphics are available everywhere and a missing name is reported', async ({ page }) => {
+  const stage = await loadBluePlay(page);
+  const input = page.getByLabel('Codepad input');
+  const entries = page.locator('.codepad-entry');
+
+  // A graphic BlueK ships with, used without importing anything into the project.
+  await input.fill('Image("duck.png").width > 1 && Image("pizza.png").height > 1');
+  await input.press('Enter');
+  await expect(entries).toHaveCount(2);
+  await expect(entries.last()).toContainText('true');
+
+  // The stage draws it, so the standard graphics reach the renderer as well.
+  await input.fill('val duckWorld = MyWorld(); val duck = Figure(); duck.setImage("duck.png"); duckWorld.addObject(duck, 100, 100); showWorld(duckWorld)');
+  await input.press('Enter');
+  await expect(entries).toHaveCount(3);
+  await expect(stage).toBeVisible();
+  const drawn = await stage.locator('.game-stage').evaluate((element: HTMLCanvasElement) => {
+    const context = element.getContext('2d')!;
+    const scaleX = element.width / 600, scaleY = element.height / 400;
+    const data = context.getImageData(
+      Math.round(80 * scaleX), Math.round(80 * scaleY),
+      Math.round(40 * scaleX), Math.round(40 * scaleY),
+    ).data;
+    let coloured = 0;
+    for (let index = 0; index < data.length; index += 4)
+      if (data[index] < 235 || data[index + 1] < 235 || data[index + 2] < 235) coloured += 1;
+    return coloured;
+  });
+  expect(drawn).toBeGreaterThan(50);
+
+  // A typo must fail loudly instead of leaving an invisible placeholder.
+  await input.fill('val missing = Image("duckk.png")');
+  await input.press('Enter');
+  await expect(entries).toHaveCount(4);
+  await expect(entries.last()).toContainText('Image file not found: duckk.png');
+  await expect(entries.last()).toContainText("images/");
+});
+
+// The pixel masks of the standard graphics are generated at build time; a
+// mismatch would make pixel-perfect clicks and isTouching wrong for them.
+test('GUI-70 generated masks of the standard graphics match the browser', async ({ page }) => {
+  await page.goto('/');
+  expect(STANDARD_IMAGES.length).toBeGreaterThan(20);
+  for (const entry of STANDARD_IMAGES) {
+    const decoded = await page.evaluate(async (data) => {
+      const image = new Image();
+      await new Promise((resolve) => { image.onload = resolve; image.src = data; });
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const context = canvas.getContext('2d', { willReadFrequently: true })!;
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0);
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      let alpha = '';
+      for (let index = 3; index < pixels.length; index += 4) alpha += pixels[index].toString(16).padStart(2, '0');
+      return { alpha, width: canvas.width, height: canvas.height };
+    }, entry.data);
+    expect(decoded.width, entry.path).toBe(entry.imageWidth);
+    expect(decoded.height, entry.path).toBe(entry.imageHeight);
+    expect(decoded.alpha, entry.path).toBe(entry.alphaHex);
+  }
 });
