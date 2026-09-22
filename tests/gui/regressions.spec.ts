@@ -160,7 +160,7 @@ test('GUI-27 editor window has maximize, close and format controls', async ({ pa
   const dialog = page.locator('.editor-dialog');
   await expect(dialog.getByRole('button', { name: 'Format Kotlin file' })).toHaveAttribute(
     'title',
-    /Format Kotlin file \((Cmd|Ctrl)\+Shift\+I\)/,
+    /Format Kotlin file \((Cmd|Ctrl)\+I\)/,
   );
   await dialog.getByRole('button', { name: 'Format Kotlin file' }).click();
   await expect(dialog.locator('.cm-line').nth(1)).toHaveText('    fun bellen() {');
@@ -857,7 +857,16 @@ test('GUI-09 bench splitter follows first drag without jumping', async ({ page }
 test('GUI-06 terminal splitter spans viewport and resizes both panels', async ({ page }) => {
   await project(page);
   await page.getByLabel('Show terminal', { exact: true }).click();
-  await page.getByLabel('Split terminal to the right').click();
+  const splitButton = page.getByLabel('Split terminal to the right');
+  const splitIcon = splitButton.locator('.terminal-split-icon');
+  const maximizeIcon = page.getByLabel('Maximize terminal window').locator('.window-control-icon');
+  await expect(splitIcon).toHaveCSS('width', '18px');
+  await expect(splitIcon).toHaveCSS('width', await maximizeIcon.evaluate((icon) => getComputedStyle(icon).width));
+  await expect(splitIcon).toHaveCSS('stroke-width', '2px');
+  await expect(splitIcon.locator('rect')).toHaveAttribute('rx', '2.5');
+  await expect(maximizeIcon.locator('rect')).toHaveAttribute('rx', '2.5');
+  await expect(splitIcon.locator('path')).toHaveAttribute('d', 'M12 4.5v15');
+  await splitButton.click();
   const splitter = page.locator('.terminal-split-divider');
   const before = (await splitter.boundingBox())!;
   expect(before.y).toBe(0);
@@ -1178,4 +1187,149 @@ test('GUI-68 the editor has a Vim mode that stays off until it is switched on', 
   await page.keyboard.press('Home');
   await page.keyboard.press('j');
   await expect(editor.locator('.cm-line').first()).toHaveText('jclass Hund {');
+});
+
+test('GUI-71 Dark mode can be switched on and off in Settings', async ({ page }) => {
+  await project(page, 'class Hund {}');
+  const root = page.locator('.bluek');
+  await expect(root).not.toHaveClass(/dark/);
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  const settings = page.getByRole('dialog', { name: 'Settings' });
+  const toggle = settings.getByLabel('Dark mode', { exact: true });
+  await expect(toggle).not.toBeChecked();
+  await toggle.check();
+  await expect(root).toHaveClass(/dark/);
+  await expect(root).toHaveCSS('background-color', 'rgb(30, 30, 30)');
+  const settingsClose = settings.getByRole('button', { name: 'Close', exact: true });
+  await expect(settingsClose).toHaveCSS('background-color', 'rgb(48, 48, 52)');
+  await expect(settingsClose).toHaveCSS('border-top-style', 'solid');
+  await expect(settingsClose).toHaveCSS('box-shadow', 'none');
+  // The open editor's own CodeMirror theme follows the same switch.
+  await settingsClose.click();
+  const primaryAction = page.locator('.toolbar-main-action').first();
+  await primaryAction.hover();
+  await expect(primaryAction).toHaveCSS('background-color', 'rgb(69, 69, 74)');
+  await page.getByRole('button', { name: 'Show terminal', exact: true }).click();
+  await page.mouse.move(0, 0);
+  const terminalToggle = page.getByRole('button', { name: 'Hide terminal', exact: true });
+  await expect(terminalToggle).toHaveCSS('color', 'rgb(212, 212, 212)');
+  await expect(terminalToggle.locator('svg')).toHaveCSS('stroke', 'rgb(212, 212, 212)');
+  await terminalToggle.click();
+  await page.locator('.classcard').dblclick();
+  const editor = page.locator('.editor-dialog .cm-editor');
+  await expect(editor).toHaveCSS('background-color', 'rgb(30, 30, 30)');
+  const formatButton = page.getByRole('button', { name: 'Format Kotlin file' });
+  await formatButton.hover();
+  await expect(formatButton).toHaveCSS('background-color', 'rgb(80, 80, 87)');
+  await page.getByRole('button', { name: 'Close editor' }).click();
+  await page.getByRole('button', { name: 'New File', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Create New Kotlin File' }).getByLabel('Name'))
+    .toHaveCSS('background-color', 'rgb(60, 60, 60)');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.locator('.classcard').dblclick();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await toggle.uncheck();
+  await expect(root).not.toHaveClass(/dark/);
+  await expect(editor).not.toHaveCSS('background-color', 'rgb(30, 30, 30)');
+});
+
+test('GUI-74 Settings are grouped into General and Editor with English as the available language', async ({ page }) => {
+  await project(page);
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  const settings = page.getByRole('dialog', { name: 'Settings' });
+  const sections = settings.locator('.settings-section');
+  await expect(sections).toHaveCount(2);
+  await expect(sections.nth(0).getByRole('heading', { name: 'General', exact: true })).toBeVisible();
+  await expect(sections.nth(1).getByRole('heading', { name: 'Editor', exact: true })).toBeVisible();
+  const language = settings.getByLabel('Language', { exact: true });
+  await expect(language).toHaveValue('en');
+  await expect(language.locator('option')).toHaveText(['English (only for now)']);
+  await expect(sections.nth(0).getByLabel('Dark mode', { exact: true })).toBeVisible();
+  await expect(sections.nth(1).getByLabel('Font size', { exact: true })).toBeVisible();
+  await expect(sections.nth(1).getByLabel('Vim mode', { exact: true })).toBeVisible();
+});
+
+test('GUI-72 the toolbar switches to icon-only mode by its own width, not the window width', async ({ page }) => {
+  await page.setViewportSize({ width: 1350, height: 800 });
+  await project(page, 'class Hund {}');
+  const actions = page.locator('.toolbar-main-action');
+  const label = actions.first().locator('span:not(.toolbar-action-icon)');
+  await expect(label).toBeVisible();
+  // Splitting the terminal narrows the toolbar (1350 - 430 = 920px) without
+  // shrinking the window itself — the old width media query only watched the
+  // window and missed this, leaving the icons hidden behind the terminal.
+  await page.getByLabel('Show terminal', { exact: true }).click();
+  await page.getByLabel('Split terminal to the right').click();
+  await expect(label).toBeVisible();
+  await expect(page.getByLabel('Hide terminal', { exact: true })).toBeVisible();
+  await expect(page.getByLabel(/inheritance arrows/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeVisible();
+  // Narrowing further (1150 - 430 = 720px) still collapses to icons, same as
+  // a plain window resize would.
+  await page.setViewportSize({ width: 1150, height: 800 });
+  await expect(label).toBeHidden();
+});
+
+test('GUI-74 inheritance mode explains both class selections', async ({ page }) => {
+  await project(page, 'class Hund {}');
+  await page.getByRole('button', { name: 'New File', exact: true }).click();
+  const newFile = page.getByRole('dialog', { name: 'Create New Kotlin File' });
+  await newFile.getByLabel('Name').fill('Parent');
+  await newFile.getByRole('radio', { name: 'Open Class' }).check();
+  await newFile.getByRole('button', { name: 'Create', exact: true }).click();
+
+  await page.getByRole('button', { name: 'Inheritance', exact: true }).click();
+  const hint = page.getByRole('status');
+  await expect(hint).toHaveText('Select a subclass, then its superclass.');
+  await page.getByRole('button', { name: 'Hund', exact: true }).click();
+  await expect(hint).toHaveText('Now select its superclass.');
+  await page.getByRole('button', { name: 'Parent', exact: true }).click();
+  await expect(hint).toHaveCount(0);
+});
+
+test('GUI-75 class cards snap to a shared invisible grid while dragging', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, files: [
+    { fileName: 'Hund.kt', kind: 'class', source: 'class Hund {}' },
+    { fileName: 'Katze.kt', kind: 'class', source: 'class Katze {}' },
+  ] };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  await expect(page.getByLabel('Codepad input')).toBeEnabled();
+  const cards = page.locator('.classcard');
+  const first = cards.nth(0);
+  const second = cards.nth(1);
+
+  async function position(card: typeof first) {
+    return card.evaluate((element) => ({
+      x: Number.parseFloat((element as HTMLElement).style.left),
+      y: Number.parseFloat((element as HTMLElement).style.top),
+    }));
+  }
+
+  async function dragBy(card: typeof first, dx: number, dy: number) {
+    const box = (await card.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + dx, box.y + box.height / 2 + dy, { steps: 4 });
+    await page.mouse.up();
+  }
+
+  await dragBy(first, 137, 77);
+  const firstPosition = await position(first);
+  expect(firstPosition.x % 20).toBe(0);
+  expect(firstPosition.y % 20).toBe(0);
+
+  const secondPosition = await position(second);
+  await dragBy(second, firstPosition.x - secondPosition.x, firstPosition.y + 160 - secondPosition.y);
+  const alignedPosition = await position(second);
+  expect(alignedPosition.x).toBe(firstPosition.x);
+  expect(alignedPosition.y - firstPosition.y).toBe(160);
+});
+
+test('GUI-77 the left action names the main entry point instead of Run', async ({ page }) => {
+  await project(page, 'fun main() {}');
+  const startMain = page.getByRole('button', { name: 'Start main', exact: true });
+  await expect(startMain).toBeVisible();
+  await expect(startMain).toHaveText('Start main');
+  await expect(startMain).toHaveAttribute('title', /Start main/);
+  await expect(page.getByRole('button', { name: 'Run', exact: true })).toHaveCount(0);
 });

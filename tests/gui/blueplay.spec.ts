@@ -65,8 +65,8 @@ test('GUI-58 BluePlay library cards are normal movable cards with per-file API d
   );
   await page.mouse.up();
   const after = (await world.boundingBox())!;
-  expect(Math.abs(after.x + after.width / 2 - targetCenter.x)).toBeLessThan(4);
-  expect(Math.abs(after.y + after.height / 2 - targetCenter.y)).toBeLessThan(4);
+  expect(Math.abs(after.x + after.width / 2 - targetCenter.x)).toBeLessThanOrEqual(10);
+  expect(Math.abs(after.y + after.height / 2 - targetCenter.y)).toBeLessThanOrEqual(10);
   const worldZ = await world.evaluate((element) => Number(getComputedStyle(element).zIndex));
   const edgeZ = await page.locator('.inheritance-edge').evaluateAll((elements) =>
     elements.map((element) => Number(getComputedStyle(element).zIndex)),
@@ -92,7 +92,7 @@ test('GUI-58 BluePlay library cards are normal movable cards with per-file API d
   await expect(menu.getByRole('button', { name: 'Compile', exact: true })).toHaveCount(0);
 });
 
-test('GUI-59 new classes are laid out after the BluePlay library cards', async ({ page }) => {
+test('GUI-59 new classes are laid out after the current BluePlay cards', async ({ page }) => {
   await loadBluePlay(page);
   await page.getByRole('button', { name: 'New File', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Create New Kotlin File' });
@@ -100,8 +100,45 @@ test('GUI-59 new classes are laid out after the BluePlay library cards', async (
   await dialog.getByRole('button', { name: 'Create', exact: true }).click();
   const card = page.locator('.classcard[aria-label="NewActor"]');
   await expect(card).toBeVisible();
-  // The README note owns the corner, so the card grid starts 46px further right.
-  await expect(card).toHaveAttribute('style', /left: 356px; top: 372px/);
+  await expect(card).toHaveAttribute('style', /left: 920px; top: 200px/);
+});
+
+test('GUI-76 BluePlay templates use the reference card order and shared grid spacing', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New Project', exact: true }).click();
+  let dialog = page.getByRole('dialog', { name: 'Create New Project' });
+  await dialog.getByRole('button', { name: /^BluePlay Example/ }).click();
+  await expect(dialog).toBeHidden();
+
+  async function expectCards(names: string[], expectedPositions: Array<[number, number]>) {
+    const cards = page.locator('.classcard');
+    await expect(cards).toHaveCount(names.length);
+    await expect.poll(() => cards.evaluateAll((elements) => elements.map((element) => element.getAttribute('aria-label')))).toEqual(names);
+    const positions = await cards.evaluateAll((elements) => elements.map((element) => {
+      const card = element as HTMLElement;
+      return [Number.parseFloat(card.style.left), Number.parseFloat(card.style.top)];
+    }));
+    expect(positions).toEqual(expectedPositions);
+    for (const [x, y] of positions) {
+      expect(x % 20).toBe(0);
+      expect(y % 20).toBe(0);
+    }
+  }
+
+  await expectCards(
+    ['BluePlayFunctions', 'World', 'Actor', 'Image', 'Main', 'MyWorld', 'Figure'],
+    [[80, 40], [360, 40], [640, 40], [920, 40], [80, 200], [360, 200], [640, 200]],
+  );
+
+  page.once('dialog', (confirmation) => confirmation.accept());
+  await page.getByRole('button', { name: 'New Project', exact: true }).click();
+  dialog = page.getByRole('dialog', { name: 'Create New Project' });
+  await dialog.getByRole('button', { name: /^Space Invaders Demo/ }).click();
+  await expect(dialog).toBeHidden();
+  await expectCards(
+    ['BluePlayFunctions', 'World', 'Actor', 'Image', 'Main', 'SpaceInvadersWorld', 'Invader', 'Laser', 'Defender'],
+    [[80, 40], [360, 40], [640, 40], [920, 40], [80, 200], [360, 200], [640, 200], [920, 200], [80, 360]],
+  );
 });
 
 test('GUI-52 BluePlay keeps chrome, world and controls in one draggable window', async ({ page }) => {
@@ -126,6 +163,15 @@ test('GUI-52 BluePlay keeps chrome, world and controls in one draggable window',
   await stage.getByRole('button', { name: 'Close BluePlay world' }).click();
   await expect(stage).toBeHidden();
   await expect(page.locator('.stage-window .game-stage')).toHaveCount(0);
+});
+
+test('GUI-73 the terminal split resize handle stays behind the BluePlay world window', async ({ page }) => {
+  await loadBluePlay(page);
+  await page.getByLabel('Show terminal', { exact: true }).click();
+  await page.getByLabel('Split terminal to the right').click();
+  const dividerZ = await page.locator('.terminal-split-divider').evaluate((el) => getComputedStyle(el).zIndex);
+  const stageZ = await page.locator('.stage-window').evaluate((el) => getComputedStyle(el).zIndex);
+  expect(Number(dividerZ)).toBeLessThan(Number(stageZ));
 });
 
 test('GUI-54 a world without a custom background is rendered on white', async ({ page }) => {

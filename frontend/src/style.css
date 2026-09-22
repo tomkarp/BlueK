@@ -222,7 +222,7 @@ footer{flex:0 0 108px}
 .terminal-window{pointer-events:auto}
 .terminal-window:not(.maximized):focus-within{box-shadow:3px 5px 18px #333}
 .bluek.terminal-split{width:100vw}
-.bluek.terminal-split>.menubar,.bluek.terminal-split>.body{width:calc(100vw - var(--terminal-split-width,430px))}
+.bluek.terminal-split>.menubar,.bluek.terminal-split>.toolbar,.bluek.terminal-split>.body{width:calc(100vw - var(--terminal-split-width,430px))}
 .terminal-modal-split{display:flex;align-items:stretch;justify-content:flex-end;padding:0;pointer-events:none}
 .terminal-modal-split .terminal-window{flex:0 0 var(--terminal-split-width,430px);width:var(--terminal-split-width,430px)!important;height:100vh!important;border-radius:0;border-width:0 0 0 2px;box-shadow:none}
 .terminal-window.split .terminal-resize-handle{display:none}
@@ -231,7 +231,7 @@ footer{flex:0 0 108px}
 .terminal-reopen{display:none}
 .terminal-window.split .terminal-header{cursor:default}
 .terminal-split-divider{position:fixed;inset:0 auto 0 auto;right:calc(var(--terminal-split-width,430px) - 9px);z-index:35;width:18px;pointer-events:auto;cursor:col-resize;background:transparent;touch-action:none}
-.bluek:has(.editor-modal.window-active) .terminal-split-divider{z-index:25}
+.bluek:has(.editor-modal.window-active) .terminal-split-divider,.bluek:has(.stage-window) .terminal-split-divider{z-index:25}
 .terminal-split-divider::after{content:"";position:absolute;top:50%;left:5px;width:8px;height:100px;transform:translateY(-50%);border-left:1px solid #777;border-right:1px solid #777;background:repeating-linear-gradient(to bottom,#777 0 1px,transparent 1px 5px)}
 .terminal-split-divider:hover::after,.terminal-split-divider:focus-visible::after{background-color:#c4c4c4;outline:2px solid #168fbd;outline-offset:1px}
 
@@ -334,6 +334,7 @@ footer{flex:0 0 108px}
 .inheritance-edge path{fill:#faf9f4;stroke:#555;stroke-width:1.7;stroke-linejoin:miter;transform-box:fill-box;transform-origin:100% 50%;transform:scale(1.6)}
 .cards{z-index:auto}
 .classcard.inheritance-selected{outline:3px solid #168fbd;outline-offset:3px}
+.inheritance-mode-hint{position:absolute;z-index:100;top:12px;left:50%;transform:translateX(-50%);max-width:calc(100% - 24px);padding:8px 12px;border:1px solid #168fbd;border-radius:6px;background:#eefaff;color:#075b70;box-shadow:0 2px 8px #0002;text-align:center;font-size:14px;font-weight:600;pointer-events:none}
 .sidebar button.active-tool{background:#c9e5ed;border-color:#168fbd;box-shadow:0 0 0 1px #168fbd}
 /* BlueJ uses the inheritance tool as a compact icon button rather than a
    labelled action. Keep the accessible label in the DOM, but show the line
@@ -347,7 +348,7 @@ footer{flex:0 0 108px}
 
 /* Project actions live in a compact top row; the workbench sidebar keeps
    only actions that operate directly on the class diagram. */
-.toolbar{height:58px;display:flex;align-items:center;gap:10px;padding:8px 16px;background:#d7d9da;border-bottom:1px solid #aaa;overflow:auto}
+.toolbar{height:58px;display:flex;align-items:center;gap:10px;padding:8px 16px;background:#d7d9da;border-bottom:1px solid #aaa;overflow:auto;container-type:inline-size}
 .toolbar-main-action{gap:8px}.toolbar-action-icon{display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;font-size:22px;line-height:1}.toolbar-action-icon svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .toolbar button,.toolbar label{height:40px;display:inline-flex;align-items:center;justify-content:center;position:relative;border:1px solid #aaa;border-radius:5px;background:linear-gradient(#f8f8f8,#d7d7d7);box-shadow:0 1px 2px #aaa;padding:0 14px;color:#222;font-size:14px;white-space:nowrap;cursor:pointer}
 .toolbar button:disabled{cursor:not-allowed;opacity:.55}
@@ -363,7 +364,7 @@ footer{flex:0 0 108px}
 .toolbar .toolbar-icon-button:nth-child(2)::before{content:"";display:block;width:29px;height:29px;background:center/contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='%23222' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='8' y='1' width='8' height='5' rx='1' fill='none'/%3E%3Crect x='8' y='18' width='8' height='5' rx='1' fill='none'/%3E%3Cpath d='M12 18V14'/%3E%3Cpath d='M9 14L12 8L15 14Z' fill='none'/%3E%3C/g%3E%3C/svg%3E")}
 .toolbar .toolbar-icon-button.active{background:linear-gradient(#dff7fc,#a8dce8);color:#075b70}
 .toolbar .settings-button{margin-left:8px}
-@media (max-width:1050px){.toolbar-main-action>span:not(.toolbar-action-icon){display:none}.toolbar-main-action{width:46px;padding:0;gap:0}.toolbar-action-icon{font-size:22px}}
+@container (max-width:820px){.toolbar-main-action>span:not(.toolbar-action-icon){display:none}.toolbar-main-action{width:46px;padding:0;gap:0}.toolbar-action-icon{font-size:22px}}
 .toolbar-dialog{min-width:min(520px,88vw)}.project-dropzone{position:relative;display:flex!important;flex-direction:column;align-items:center;justify-content:center;width:100%;min-height:150px;margin:18px 0;padding:24px;border:2px dashed #999;border-radius:8px;background:#faf9f4;color:#555;text-align:center;cursor:pointer}.project-dropzone:hover,.project-dropzone:focus-within{border-color:#08a6d2;background:#eefaff;color:#075b70}.project-dropzone strong{font-size:17px;color:#222}.project-dropzone span{margin-top:8px;font-size:13px}.project-dropzone input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}.toolbar-dialog-options{display:flex;flex-direction:column;gap:10px;margin:18px 0}.toolbar-dialog-option{display:flex!important;align-items:center;justify-content:flex-start!important;width:100%;min-height:46px;margin:0!important;padding:10px 14px!important;border:1px solid #aaa!important;border-radius:6px!important;background:linear-gradient(#fff,#e0e0e0)!important;box-shadow:0 1px 2px #aaa!important;color:#222;font-size:15px!important;text-align:left;cursor:pointer}.toolbar-dialog-option:hover:not(:disabled),.toolbar-dialog-option:focus-visible{background:#08a6d2!important;color:#fff}.toolbar-dialog-option:disabled{cursor:not-allowed;opacity:.5}.dialog-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:14px}.dialog-actions button{margin:0}.toolbar-dialog-option input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
 .sidebar .resource-button,.sidebar button:nth-of-type(2){display:none}
 .body{height:calc(100% - 58px)}
@@ -522,9 +523,9 @@ footer{flex:0 0 108px}
 .window-header h3{margin:0;font-size:14px}
 .window-header>div{display:flex;gap:4px}
 .window-header button{width:32px;height:32px;min-width:32px;margin:0;border:1px solid #999;border-radius:4px;background:linear-gradient(#fff,#d5d5d5);padding:0;cursor:pointer;font-size:20px;line-height:1;display:grid;place-items:center}
+.window-control-icon{display:block;width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .window-header{margin:-12px -12px 8px;padding:12px}
 .terminal-window,.editor-dialog{min-width:0;min-height:0;background:#f5f4f1;border:2px solid #555;border-radius:8px;padding:12px;box-shadow:none}
-.terminal-split-toggle{font-size:20px!important}
 .terminal-resize-handle,.editor-resize-handle{width:24px;height:24px;touch-action:none}
 .terminal-resize-n,.editor-resize-n{left:24px;right:24px;top:-12px;width:auto;cursor:ns-resize}
 .terminal-resize-s,.editor-resize-s{left:24px;right:24px;bottom:-12px;width:auto;cursor:ns-resize}
@@ -601,10 +602,80 @@ footer{flex:0 0 108px}
    dialog too — otherwise the row would never be a flex row at all. */
 .settings-dialog .settings-field{display:flex;align-items:center;justify-content:space-between;gap:24px;margin:18px 0;color:#333}
 .settings-dialog .settings-field input[type=checkbox]{display:inline-block;width:auto;min-width:0;margin:0;padding:0}
-.settings-hint{margin:-12px 0 0;color:#777;font-size:12px}
+.settings-section{margin-top:20px}
+.settings-section h4{margin:0;padding-bottom:6px;border-bottom:1px solid #ddd;color:#555;font-size:14px;font-weight:600}
+.settings-section .settings-field{margin:14px 0}
+.settings-hint{margin:-8px 0 10px;color:#777;font-size:12px}
+.settings-inline-hint{color:#777;font-size:12px;font-weight:normal}
 .shortcuts-help-list{list-style:none;margin:0 0 18px;padding:0}
 .shortcuts-help-list li{display:flex;align-items:baseline;gap:14px;padding:6px 0;border-bottom:1px solid #ddd}
 .shortcuts-help-list li strong{min-width:120px;font-family:Menlo,Monaco,Consolas,monospace;font-size:13px;color:#222}
 .shortcuts-help-list li span{color:#555;font-size:13px}
 .vim-panel,.cm-vim-panel{padding:2px 8px;background:#f0efeb;border-top:1px solid #ccc;font:12px Menlo,Monaco,Consolas,monospace;color:#333}
+
+/* Dark mode. Toggled in Settings; .dark sits on the root .bluek element, so
+   everything below is scoped under it rather than a global `body` flip —
+   the app fills its own container and never assumes it owns the page.
+   The code editor's own dark colors are set separately, in SvelteApp.svelte,
+   via CodeMirror's theme/highlight compartments (plain CSS can't safely win
+   against CodeMirror's own generated stylesheet). Deliberately-colored
+   elements — the red object bench/inspector, the yellow inspected field —
+   keep their identity color in both themes and are left alone here. */
+.dark{background:#1e1e1e;color:#d4d4d4}
+.dark .bluek,.dark body{background:#1e1e1e}
+.dark .menubar{background:#2d2d30;border-color:#3c3c3c;color:#ccc}
+.dark .sidebar{background:#252526;border-color:#3c3c3c}
+.dark .sidebar button,.dark .resource-button,.dark .toolbar-main-action,.dark .toolbar-icon-button{background:#303034;border-color:#55555c;color:#d4d4d4;box-shadow:none}
+.dark .sidebar button.active-tool,.dark .toolbar-icon-button.active{background:#0a4a63;border-color:#0a9dcc;color:#d4d4d4}
+.dark .toolbar,.dark .toolbar-options{background:#252526;border-color:#3c3c3c}
+.dark .workspace{background:#1e1e1e}
+.dark .canvas{background:#252526;border-color:#3c3c3c}
+.dark .inheritance-mode-hint{background:#173b47;border-color:#0a9dcc;color:#e2f7fc;box-shadow:0 2px 10px #0008}
+.dark .classcard{color:#222}
+.dark .bench,.dark .codepad,.dark .console,.dark .terminal-output{background:#252526;border-color:#3c3c3c}
+.dark .codepad textarea,.dark .console pre,.dark .codepad-history{background:#1e1e1e;color:#d4d4d4;border-color:#3c3c3c}
+.dark .offline-download{background:#303034;color:#d4d4d4;border-color:#55555c}
+.dark .console input,.dark input:not([type]),.dark input[type=text],.dark input[type=number],.dark input[type=search],.dark select,.dark textarea{background:#3c3c3c;color:#d4d4d4;border-color:#5a5a5a}
+.dark input:not([type]):focus,.dark input[type=text]:focus,.dark input[type=number]:focus,.dark input[type=search]:focus{border-color:#0a9dcc;outline:2px solid #0a9dcc55;outline-offset:1px}
+.dark .popup{background:#2d2d30;border-color:#3c3c3c;color:#d4d4d4}
+.dark .popup-title{border-color:#3c3c3c}
+.dark .popup button{background:#2d2d30;color:#d4d4d4}
+.dark .popup button:hover{background:#0a9dcc;color:#fff}
+.dark .popup hr{border-color:#3c3c3c}
+.dark .modal{background:#000000b3}
+.dark .dialog,.dark .settings-dialog,.dark .shortcuts-help-dialog,.dark .editor-dialog,.dark .terminal-window,.dark .stage-window{background:#252526;border-color:#3c3c3c;color:#d4d4d4}
+.dark .editor-header,.dark .terminal-header,.dark .window-header,.dark .editor-tabs{background:#2d2d30;border-color:#3c3c3c}
+.dark .terminal-window pre{background:#1e1e1e;color:#d4d4d4;border-color:#3c3c3c}
+.dark .terminal-window input{background:#3c3c3c;color:#d4d4d4;border-color:#5a5a5a}
+.dark .terminal-window input:not(:disabled){background:#3c3c3c;color:#d4d4d4;border-color:#0a9dcc;box-shadow:0 0 0 2px #0a9dcc33}
+.dark .terminal-header button,.dark .terminal-actions button,.dark .terminal-clear,.dark .terminal-reopen{background:#303034;color:#d4d4d4;border-color:#55555c;box-shadow:none}
+.dark .terminal-input-echo{color:#4fc1ff}
+.dark .readme-editor{background:#1e1e1e;color:#d4d4d4;border-color:#3c3c3c}
+.dark .readme-help{background:#2d2d30;color:#d4d4d4;border-color:#3c3c3c}
+.dark .readme-help-button{background:#3c3c3c;color:#d4d4d4;border-color:#5a5a5a}
+.dark .status-bar{background:#252526;border-color:#3c3c3c;color:#d4d4d4}
+.dark .settings-field{color:#d4d4d4}
+.dark .settings-field select{background:#3c3c3c;color:#d4d4d4;border-color:#5a5a5a}
+.dark .settings-hint,.dark .settings-inline-hint{color:#9d9d9d}
+.dark .settings-section h4{border-color:#444;color:#bbb}
+.dark .shortcuts-help-list li{border-color:#3c3c3c}
+.dark .shortcuts-help-list li strong{color:#d4d4d4}
+.dark .shortcuts-help-list li span{color:#9d9d9d}
+.dark .dialog h3{color:#fff}
+.dark button{-webkit-appearance:none;appearance:none;background:#303034;color:#d4d4d4;border:1px solid #55555c;box-shadow:none}
+.dark .dialog-error{color:#f44747}
+.dark .sidebar button:nth-of-type(3) .inheritance-icon line{stroke:#d4d4d4}
+.dark .sidebar button:nth-of-type(3) .inheritance-icon path{fill:#2d2d30;stroke:#d4d4d4}
+.dark .toolbar .toolbar-icon-button:nth-child(2)::before{filter:invert(1)}
+.dark button:hover:not(:disabled){background:#45454a;border-color:#707077;color:#f3f3f3}
+.dark button:active:not(:disabled){background:#242428;border-color:#0a9dcc;color:#fff;box-shadow:none}
+.dark button:focus-visible{outline:2px solid #3794ff;outline-offset:2px}
+.dark button:disabled{opacity:.48}
+.dark .editor-tabbed-dialog .editor-tabs button{background:#323236;color:#c8c8c8;border-color:#515157}
+.dark .editor-tabbed-dialog .editor-tabs button.active{background:#1e1e1e;color:#f3f3f3;border-color:#5a5a62;border-bottom-color:#1e1e1e;box-shadow:0 -1px 0 #5a5a62}
+.dark .editor-tabbed-dialog .editor-tab-close{color:#c8c8c8}
+.dark .editor-tabbed-dialog .editor-tab-close:hover,.dark .editor-tabbed-dialog .editor-tab-close:focus-visible{background:#505057;color:#fff}
+.dark .editor-format{background:#3c3c3c!important;border-color:#686870!important;color:#d4d4d4!important}
+.dark .editor-format:hover,.dark .editor-format:focus-visible{background:#505057!important;color:#fff!important}
+.dark option{background:#252526;color:#d4d4d4}
 .cm-vim-panel input{display:inline-block;width:auto;margin:0;padding:0;border:0;background:transparent;font:inherit}

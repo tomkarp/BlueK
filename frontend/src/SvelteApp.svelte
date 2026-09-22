@@ -47,10 +47,12 @@
   import {
     bracketMatching,
     defaultHighlightStyle,
+    HighlightStyle,
     indentUnit,
     StreamLanguage,
     syntaxHighlighting,
   } from "@codemirror/language";
+  import { tags } from "@lezer/highlight";
   import { searchKeymap } from "@codemirror/search";
   import { kotlin } from "@codemirror/legacy-modes/mode/clike";
   import type {
@@ -332,6 +334,7 @@
     // Off unless someone asks for it: Vim gives every key a new meaning, which
     // is a surprise for anyone who did not switch it on.
     vimMode = false,
+    darkMode = false,
     filesNotice = false,
     shareNotice = "",
     shareLinkDialog: { url: string; code: string; copied: boolean } | null = null,
@@ -411,24 +414,25 @@
   let cardDrag: { id: string; dx: number; dy: number } | null = null;
   let cardLayers: Record<string, number> = {};
   let nextCardLayer = 100;
-  // The README note owns the top-left corner, so the first card starts beside it.
+  const cardGridSize = 20;
   const defaultCardPosition = (index: number): CardPosition => ({
-    x: 76 + (index % 3) * 280,
-    y: 32 + Math.floor(index / 3) * 170,
+    x: 80 + (index % 4) * 280,
+    y: 40 + Math.floor(index / 4) * 160,
   });
-  const bluePlayCardPositions: Record<string, CardPosition> = {
-    "BluePlayFunctions.kt": { x: 76, y: 32 },
-    "Actor.kt": { x: 356, y: 32 },
-    "World.kt": { x: 636, y: 32 },
-    "Image.kt": { x: 916, y: 32 },
-    "Main.kt": { x: 76, y: 202 },
-    "Figure.kt": { x: 356, y: 202 },
-    "MyWorld.kt": { x: 636, y: 202 },
-  };
+  function orderedBluePlayFiles(projectFiles: ProjectFile[]) {
+    const rank = (file: ProjectFile) => {
+      if (file.fileName === "Main.kt") return 0;
+      const parent = sourceSuperclass(file.source);
+      if (parent === "World") return 1;
+      if (parent === "Actor") return 2;
+      return 3;
+    };
+    return [...projectFiles].sort((a, b) => rank(a) - rank(b));
+  }
   let displayFiles: ProjectFile[] = files;
   let displayCardPositions: CardPosition[] = [];
   $: displayFiles = library?.id === "blueplay"
-    ? [...bluePlayFrameworkFiles, ...files]
+    ? [...bluePlayFrameworkFiles, ...orderedBluePlayFiles(files)]
     : files;
   $: {
     cardPositions;
@@ -438,7 +442,7 @@
     return library?.id === "blueplay" && bluePlayFrameworkNames.includes(file.fileName);
   }
   function cardPosition(file: ProjectFile, index: number) {
-    return cardPositions[file.id] || bluePlayCardPositions[file.fileName] || defaultCardPosition(index);
+    return cardPositions[file.id] || defaultCardPosition(index);
   }
   function cardLayer(file: ProjectFile, index: number) {
     return cardLayers[file.id] ?? index + 1;
@@ -519,23 +523,15 @@
     const canvas = document.querySelector<HTMLElement>(".canvas");
     if (!canvas) return;
     const bounds = canvas.getBoundingClientRect();
+    const maxX = Math.max(0, Math.floor((bounds.width - 250) / cardGridSize) * cardGridSize);
+    const maxY = Math.max(0, Math.floor((bounds.height - 145) / cardGridSize) * cardGridSize);
+    const targetX = event.clientX - bounds.left - cardDrag.dx;
+    const targetY = event.clientY - bounds.top - cardDrag.dy;
     cardPositions = {
       ...cardPositions,
       [file.id]: {
-        x: Math.max(
-          0,
-          Math.min(
-            bounds.width - 250,
-            event.clientX - bounds.left - cardDrag.dx,
-          ),
-        ),
-        y: Math.max(
-          0,
-          Math.min(
-            bounds.height - 145,
-            event.clientY - bounds.top - cardDrag.dy,
-          ),
-        ),
+        x: Math.max(0, Math.min(maxX, Math.round(targetX / cardGridSize) * cardGridSize)),
+        y: Math.max(0, Math.min(maxY, Math.round(targetY / cardGridSize) * cardGridSize)),
       },
     };
   }
@@ -749,6 +745,35 @@
     });
     codepadMenu = null;
   }
+  // defaultHighlightStyle picks colors for a light background; a dark
+  // background needs its own palette or keywords/strings turn unreadable.
+  const darkHighlightStyle = HighlightStyle.define([
+    { tag: tags.keyword, color: "#c586c0" },
+    { tag: [tags.name, tags.deleted, tags.character, tags.macroName], color: "#9cdcfe" },
+    { tag: [tags.function(tags.variableName), tags.labelName], color: "#dcdcaa" },
+    { tag: [tags.color, tags.constant(tags.name), tags.standard(tags.name)], color: "#4fc1ff" },
+    { tag: [tags.definition(tags.name), tags.separator], color: "#9cdcfe" },
+    { tag: [tags.typeName, tags.className, tags.number, tags.changed, tags.annotation, tags.modifier, tags.self, tags.namespace], color: "#4ec9b0" },
+    { tag: [tags.operator, tags.operatorKeyword, tags.url, tags.escape, tags.regexp, tags.link, tags.special(tags.string)], color: "#d4d4d4" },
+    { tag: [tags.meta, tags.comment], color: "#6a9955" },
+    { tag: tags.strong, fontWeight: "bold" },
+    { tag: tags.emphasis, fontStyle: "italic" },
+    { tag: tags.strikethrough, textDecoration: "line-through" },
+    { tag: tags.link, color: "#6a9955", textDecoration: "underline" },
+    { tag: tags.heading, fontWeight: "bold", color: "#9cdcfe" },
+    { tag: [tags.atom, tags.bool, tags.special(tags.variableName)], color: "#4fc1ff" },
+    { tag: [tags.processingInstruction, tags.string, tags.inserted], color: "#ce9178" },
+    { tag: tags.invalid, color: "#f44747" },
+  ]);
+  const darkEditorTheme = EditorView.theme({
+    "&": { backgroundColor: "#1e1e1e", color: "#d4d4d4" },
+    ".cm-content": { caretColor: "#d4d4d4" },
+    ".cm-cursor, .cm-dropCursor": { borderLeftColor: "#d4d4d4" },
+    "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": { backgroundColor: "#264f78" },
+    ".cm-gutters": { backgroundColor: "#1e1e1e", color: "#6e7681", border: "none" },
+    ".cm-activeLine": { backgroundColor: "#2a2d2e" },
+    ".cm-activeLineGutter": { backgroundColor: "#2a2d2e" },
+  }, { dark: true });
   type EditorOptions = {
     id: string;
     value: string;
@@ -759,6 +784,7 @@
     // the student edited the line and compiled once more.
     diagnosticsRun: number;
     vim: boolean;
+    dark: boolean;
   };
   function codeMirror(node: HTMLElement, options: EditorOptions) {
     let current = options;
@@ -798,11 +824,15 @@
     // Vim rebinds nearly every key, so it has to sit in front of the other
     // keymaps — a compartment keeps that place while it is switched on and off.
     const vimKeys = new Compartment();
+    const editorTheme = new Compartment();
+    const editorHighlight = new Compartment();
     view = new EditorView({
       state: EditorState.create({
         doc: current.value,
         extensions: [
           vimKeys.of(current.vim ? vim({ status: true }) : []),
+          editorTheme.of(current.dark ? darkEditorTheme : []),
+          editorHighlight.of(syntaxHighlighting(current.dark ? darkHighlightStyle : defaultHighlightStyle, { fallback: true })),
           minimalSetup,
           lineNumbers(),
           indentUnit.of("    "),
@@ -811,7 +841,6 @@
           bracketMatching(),
           drawSelection(),
           highlightActiveLine(),
-          syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
           StreamLanguage.define(kotlin),
           editorDiagnostics(),
           keymap.of([
@@ -859,11 +888,19 @@
       update(next: EditorOptions) {
         const previousId = current.id;
         const vimChanged = next.vim !== current.vim;
+        const darkChanged = next.dark !== current.dark;
         current = next;
         if (vimChanged) {
           view.dispatch({ effects: vimKeys.reconfigure(next.vim ? vim({ status: true }) : []) });
           view.focus();
         }
+        if (darkChanged)
+          view.dispatch({
+            effects: [
+              editorTheme.reconfigure(next.dark ? darkEditorTheme : []),
+              editorHighlight.reconfigure(syntaxHighlighting(next.dark ? darkHighlightStyle : defaultHighlightStyle, { fallback: true })),
+            ],
+          });
         if (previousId !== next.id) {
           editorFormatters.delete(previousId);
           editorFormatters.set(next.id, formatDocument);
@@ -2866,30 +2903,8 @@
     try {
       const payload = await (await fetch(path)).json();
       if (choice === "empty-blueplay")
-        payload.files = payload.files
-          .filter((file: ProjectFile) => file.fileName !== "Main.kt")
-          .sort(
-            (a: ProjectFile, b: ProjectFile) =>
-              [
-                "BluePlayFunctions.kt",
-                "Actor.kt",
-                "World.kt",
-                "Image.kt",
-              ].indexOf(a.fileName) -
-              [
-                "BluePlayFunctions.kt",
-                "Actor.kt",
-                "World.kt",
-                "Image.kt",
-              ].indexOf(b.fileName),
-          );
+        payload.files = payload.files.filter((file: ProjectFile) => file.fileName !== "Main.kt");
       await loadProject(payload, "Project template loaded.");
-      const positions = Object.fromEntries(
-        files
-          .filter((file) => bluePlayCardPositions[file.fileName])
-          .map((file) => [file.id, bluePlayCardPositions[file.fileName]]),
-      );
-      if (Object.keys(positions).length) cardPositions = positions;
     } catch {
       status = "Project error";
       error = "Could not load project template.";
@@ -2919,6 +2934,7 @@
 <div
   class:terminal-split={terminalOpen && terminalSplit}
   class:bluek-stage-closed={!stageWindowOpen}
+  class:dark={darkMode}
   class="bluek svelte-preview"
   style={`--editor-font-size:${editorFontSize}px;--terminal-split-width:${terminalSplitWidth}px;--bluek-stage-height:${stageHeight}px;--bluek-stage-window-width:${stageWindowWidth}px;${stagePosition ? `--bluek-stage-left:${stagePosition.left}px;--bluek-stage-top:${stagePosition.top}px;` : ""}`}
 >
@@ -3114,8 +3130,9 @@
       >
       <button
         on:click={() => void runMain()}
-        title={`Run main (${runShortcutLabel})`}
-        disabled={!canExecute || !mainEntries.length}>Run</button
+        title={`Start main (${runShortcutLabel})`}
+        aria-label="Start main"
+        disabled={!canExecute || !mainEntries.length}>Start main</button
       >
       <div class="side-spacer"></div>
       {#if !offlineBuild}
@@ -3135,6 +3152,11 @@
     >
       <div class="panels">
         <div class="canvas">
+          {#if inheritanceMode}<div class="inheritance-mode-hint" role="status" aria-live="polite">
+              {inheritanceSelection
+                ? "Now select its superclass."
+                : "Select a subclass, then its superclass."}
+            </div>{/if}
           {#if showInheritance}
             {#each inheritanceEdges as edge, index}
               <svg
@@ -3399,13 +3421,17 @@
               aria-label={terminalMaximized
                 ? "Restore terminal window"
                 : "Maximize terminal window"}
-              >{terminalMaximized ? "❐" : "□"}</button
+              ><svg class="window-control-icon" viewBox="0 0 24 24" aria-hidden="true">{#if terminalMaximized}<path d="M8 7.5V5.5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2.5" /><rect x="3.5" y="7.5" width="13" height="13" rx="2.5" />{:else}<rect x="3.5" y="3.5" width="17" height="17" rx="2.5" />{/if}</svg></button
             ><button
               class="terminal-split-toggle"
               on:click|stopPropagation={toggleTerminalSplit}
               aria-label={terminalSplit
                 ? "Restore terminal window"
-                : "Split terminal to the right"}>◫</button
+                : "Split terminal to the right"}><svg
+                  class="window-control-icon terminal-split-icon"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                ><rect x="3.5" y="3.5" width="17" height="17" rx="2.5" /><path d="M12 4.5v15" /></svg></button
             ><button
               on:click|stopPropagation={() => {
                 terminalOpen = false;
@@ -3491,7 +3517,7 @@
                 on:click={() => toggleEditorMaximized(activeEditorId)}
                 aria-label={editorGroup.maximized ? "Restore editor window" : "Maximize editor window"}
                 title={editorGroup.maximized ? "Restore editor window" : "Maximize editor window"}
-              >{editorGroup.maximized ? "❐" : "□"}</button>
+              ><svg class="window-control-icon" viewBox="0 0 24 24" aria-hidden="true">{#if editorGroup.maximized}<path d="M8 7.5V5.5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2.5" /><rect x="3.5" y="7.5" width="13" height="13" rx="2.5" />{:else}<rect x="3.5" y="3.5" width="17" height="17" rx="2.5" />{/if}</svg></button>
               <button
                 on:click={ungroupEditors}
                 aria-label="Ungroup editor tabs"
@@ -3503,7 +3529,7 @@
           <div
             class="svelte-editor-host"
             on:pointerdown={() => { activeWindow = "editor"; }}
-            use:codeMirror={{ id: activeEditorId, value: editorFile.source, fontSize: editorFontSize, onChange: (value: string) => updateSource(editorFile.id, value), diagnostics: diagnosticsByFile[editorFile.fileName] || [], diagnosticsRun, vim: vimMode }}
+            use:codeMirror={{ id: activeEditorId, value: editorFile.source, fontSize: editorFontSize, onChange: (value: string) => updateSource(editorFile.id, value), diagnostics: diagnosticsByFile[editorFile.fileName] || [], diagnosticsRun, vim: vimMode, dark: darkMode }}
           ><button
               class="editor-format"
               on:click={() => formatEditor(activeEditorId)}
@@ -3566,7 +3592,7 @@
                   on:click={() => toggleEditorMaximized(editorWindow.id)}
                   aria-label={editorWindow.maximized ? "Restore editor window" : "Maximize editor window"}
                   title={editorWindow.maximized ? "Restore editor window" : "Maximize editor window"}
-                >{editorWindow.maximized ? "❐" : "□"}</button>
+                ><svg class="window-control-icon" viewBox="0 0 24 24" aria-hidden="true">{#if editorWindow.maximized}<path d="M8 7.5V5.5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2.5" /><rect x="3.5" y="7.5" width="13" height="13" rx="2.5" />{:else}<rect x="3.5" y="3.5" width="17" height="17" rx="2.5" />{/if}</svg></button>
                 <button
                   disabled={editorWindows.length < 2}
                   on:click={collectEditors}
@@ -3579,7 +3605,7 @@
             <div
               class="svelte-editor-host"
               on:pointerdown={() => { activeWindow = "editor"; activeEditorId = editorWindow.id; }}
-              use:codeMirror={{ id: editorWindow.id, value: editorFile.source, fontSize: editorFontSize, onChange: (value: string) => updateSource(editorFile.id, value), diagnostics: diagnosticsByFile[editorFile.fileName] || [], diagnosticsRun, vim: vimMode }}
+              use:codeMirror={{ id: editorWindow.id, value: editorFile.source, fontSize: editorFontSize, onChange: (value: string) => updateSource(editorFile.id, value), diagnostics: diagnosticsByFile[editorFile.fileName] || [], diagnosticsRun, vim: vimMode, dark: darkMode }}
             ><button
                 class="editor-format"
                 on:click={() => formatEditor(editorWindow.id)}
@@ -4241,24 +4267,43 @@
         use:containClicks
       >
         <h3 id="svelte-settings-title">Settings</h3>
-        <label class="settings-field">
-          <span>Editor font size</span>
-          <select aria-label="Editor font size" bind:value={editorFontSize}>
-            {#each Array.from({ length: 21 }, (_, index) => index + 10) as size}
-              <option value={size}>{size}px</option>
-            {/each}
-          </select>
-        </label>
-        <label class="settings-field settings-toggle">
-          <span>Vim mode in the editor</span>
-          <input
-            type="checkbox"
-            aria-label="Vim mode in the editor"
-            checked={vimMode}
-            on:change={(event) => setVimMode(event.currentTarget.checked)}
-          />
-        </label>
-        <p class="settings-hint">{vimShortcutLabel} switches it on and off.</p>
+        <section class="settings-section" aria-labelledby="settings-general-title">
+          <h4 id="settings-general-title">General</h4>
+          <label class="settings-field">
+            <span>Language</span>
+            <select aria-label="Language" value="en">
+              <option value="en">English (only for now)</option>
+            </select>
+          </label>
+          <label class="settings-field settings-toggle">
+            <span>Dark mode</span>
+            <input
+              type="checkbox"
+              aria-label="Dark mode"
+              bind:checked={darkMode}
+            />
+          </label>
+        </section>
+        <section class="settings-section" aria-labelledby="settings-editor-title">
+          <h4 id="settings-editor-title">Editor</h4>
+          <label class="settings-field">
+            <span>Font size</span>
+            <select aria-label="Font size" bind:value={editorFontSize}>
+              {#each Array.from({ length: 21 }, (_, index) => index + 10) as size}
+                <option value={size}>{size}px</option>
+              {/each}
+            </select>
+          </label>
+          <label class="settings-field settings-toggle">
+            <span>Vim mode <span class="settings-inline-hint">({vimShortcutLabel})</span></span>
+            <input
+              type="checkbox"
+              aria-label="Vim mode"
+              checked={vimMode}
+              on:change={(event) => setVimMode(event.currentTarget.checked)}
+            />
+          </label>
+        </section>
         <div class="dialog-actions"><button on:click={() => (settingsNotice = false)}>Close</button></div>
       </div>
     </div>{/if}
