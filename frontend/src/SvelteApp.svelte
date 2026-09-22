@@ -336,7 +336,8 @@
     // is a surprise for anyone who did not switch it on.
     vimMode = false,
     darkMode = false,
-    filesNotice = false,
+    imageLibraryOpen = false,
+    mediaNotice = "",
     shareNotice = "",
     shareLinkDialog: { url: string; code: string; copied: boolean } | null = null,
     stageWindowOpen = false,
@@ -1649,7 +1650,8 @@
     if (newClassOpen) return () => { newClassOpen = false; };
     if (shortcutsHelpOpen) return () => { shortcutsHelpOpen = false; };
     if (settingsNotice) return () => { settingsNotice = false; };
-    if (filesNotice) return () => { filesNotice = false; };
+    if (mediaNotice) return () => { mediaNotice = ""; };
+    if (imageLibraryOpen) return () => { imageLibraryOpen = false; };
     if (shareLinkDialog) return () => { shareLinkDialog = null; };
     if (toolbarDialog) return () => { toolbarDialog = null; };
     if (newProjectOpen) return () => { newProjectOpen = false; };
@@ -3056,9 +3058,14 @@
     <button class="toolbar-main-action" on:click={() => (toolbarDialog = "save")} disabled={!files.length} aria-label="Save / Export" title="Save / Export">
         <span class="toolbar-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 5h12M12 8v11M9 16l3 3 3-3"/></svg></span><span>Save / Export</span>
       </button>
-    <button class="toolbar-main-action" on:click={() => (filesNotice = true)} aria-label="Files" title="Files">
-      <span class="toolbar-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 3.5h7l1.5 2H20v4H7v11H4z"/><path d="M7 9.5v11h13v-11M10 13h7M10 16h5"/></svg></span><span>Files</span>
-    </button>
+    {#if library?.id === "blueplay"}
+      <button class="toolbar-icon-button media-tool-button" on:click={() => (imageLibraryOpen = true)} aria-label="Images" title="Images">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+      </button>
+      <button class="toolbar-icon-button media-tool-button" on:click={() => (mediaNotice = "Audio support is not implemented yet.")} aria-label="Audio" title="Audio">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10v4h4l5 4V6l-5 4H3Z"/><path d="M16 9a5 5 0 0 1 0 6M18.5 6.5a9 9 0 0 1 0 11"/></svg>
+      </button>
+    {/if}
     <div class="toolbar-options">
       <button
         class:active={terminalOpen}
@@ -4286,11 +4293,26 @@
         <div class="dialog-actions"><button on:click={() => (shareLinkDialog = null)}>Close</button></div>
       </div>
     </div>{/if}
-  {#if filesNotice}<div class="modal topmost-modal" role="presentation">
-      <div class="dialog settings-dialog" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="svelte-files-title" use:containClicks>
-        <h3 id="svelte-files-title">Files</h3>
-        <p>The file manager is not implemented yet.</p>
-        <div class="dialog-actions"><button on:click={() => (filesNotice = false)}>Close</button></div>
+  {#if imageLibraryOpen && library?.id === "blueplay"}<div class="modal topmost-modal" role="presentation">
+      <div class="dialog image-library-dialog" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="images-title" use:containClicks>
+        <h3 id="images-title">Images</h3>
+        <div class="standard-image-grid">
+          <button class="standard-image-tile standard-image-add" on:click={() => (mediaNotice = "Adding images is not implemented yet.")} aria-label="Add image" title="Add image"><span aria-hidden="true">+</span></button>
+          {#each standardImages as resource (resource.path)}
+            <div class="standard-image-tile" aria-label={resource.path.split("/").at(-1)}>
+              <div class="standard-image-preview"><img src={resource.data} alt={resource.path.split("/").at(-1)} /></div>
+              <span>{resource.path.split("/").at(-1)}</span>
+            </div>
+          {/each}
+        </div>
+        <div class="dialog-actions"><button on:click={() => (imageLibraryOpen = false)}>Close</button></div>
+      </div>
+    </div>{/if}
+  {#if mediaNotice}<div class="modal topmost-modal" role="presentation">
+      <div class="dialog settings-dialog media-notice-dialog" role="alertdialog" aria-modal="true" tabindex="-1" aria-labelledby="media-notice-title" use:containClicks>
+        <h3 id="media-notice-title">Not implemented</h3>
+        <p>{mediaNotice}</p>
+        <div class="dialog-actions"><button on:click={() => (mediaNotice = "")}>OK</button></div>
       </div>
     </div>{/if}
   {#if settingsNotice}<div class="modal topmost-modal" role="presentation">
