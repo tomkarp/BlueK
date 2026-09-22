@@ -43,6 +43,7 @@
     history as historyExtension,
     historyKeymap,
     indentWithTab,
+    toggleComment as toggleEditorComment,
   } from "@codemirror/commands";
   import {
     bracketMatching,
@@ -346,7 +347,9 @@
     benchWidth: number | null = null,
     codepadMenu: { x: number; y: number; text?: string } | null = null;
   const editorFormatters = new Map<string, () => boolean>();
+  const editorCommenters = new Map<string, () => boolean>();
   let formatShortcutLabel = "Ctrl+I";
+  let commentShortcutLabel = "Ctrl+/";
   let vimShortcutLabel = "Ctrl+Shift+V";
   let compileShortcutLabel = "Ctrl+K";
   let saveShortcutLabel = "Ctrl+S";
@@ -821,6 +824,8 @@
       return true;
     };
     editorFormatters.set(current.id, formatDocument);
+    const toggleComments = () => toggleEditorComment(view);
+    editorCommenters.set(current.id, toggleComments);
     // Vim rebinds nearly every key, so it has to sit in front of the other
     // keymaps — a compartment keeps that place while it is switched on and off.
     const vimKeys = new Compartment();
@@ -882,7 +887,15 @@
       event.stopPropagation();
       formatDocument();
     };
+    const germanCommentShortcut = (event: KeyboardEvent) => {
+      if ((!event.metaKey && !event.ctrlKey) || !event.shiftKey || event.code !== "Digit7") return;
+      if (!node.contains(document.activeElement)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      toggleComments();
+    };
     window.addEventListener("keydown", formatShortcut, true);
+    window.addEventListener("keydown", germanCommentShortcut, true);
     view.focus();
     return {
       update(next: EditorOptions) {
@@ -904,6 +917,8 @@
         if (previousId !== next.id) {
           editorFormatters.delete(previousId);
           editorFormatters.set(next.id, formatDocument);
+          editorCommenters.delete(previousId);
+          editorCommenters.set(next.id, toggleComments);
         }
         if (next.value !== view.state.doc.toString())
           view.dispatch({
@@ -939,7 +954,9 @@
       destroy() {
         ++formatRequest;
         editorFormatters.delete(current.id);
+        editorCommenters.delete(current.id);
         window.removeEventListener("keydown", formatShortcut, true);
+        window.removeEventListener("keydown", germanCommentShortcut, true);
         formatter.dispose();
         view.destroy();
       },
@@ -947,6 +964,9 @@
   }
   function formatEditor(id: string) {
     editorFormatters.get(id)?.();
+  }
+  function toggleEditorComments(id: string) {
+    editorCommenters.get(id)?.();
   }
   // Which mode the editor is in decides what every key does, so switching says
   // so — the mode line of Vim itself only appears in an open editor.
@@ -1035,6 +1055,7 @@
   onMount(() => {
     const mac = /Mac/i.test(navigator.platform);
     formatShortcutLabel = mac ? "Cmd+I" : "Ctrl+I";
+    commentShortcutLabel = mac ? "Cmd+/" : "Ctrl+/";
     vimShortcutLabel = mac ? "Cmd+Shift+V" : "Ctrl+Shift+V";
     compileShortcutLabel = mac ? "Cmd+K" : "Ctrl+K";
     saveShortcutLabel = mac ? "Cmd+S" : "Ctrl+S";
@@ -3530,12 +3551,17 @@
             class="svelte-editor-host"
             on:pointerdown={() => { activeWindow = "editor"; }}
             use:codeMirror={{ id: activeEditorId, value: editorFile.source, fontSize: editorFontSize, onChange: (value: string) => updateSource(editorFile.id, value), diagnostics: diagnosticsByFile[editorFile.fileName] || [], diagnosticsRun, vim: vimMode, dark: darkMode }}
-          ><button
-              class="editor-format"
+          ><div class="editor-actions" role="toolbar" aria-label="Editor actions"><button
+              class="editor-action editor-comment"
+              on:click={() => toggleEditorComments(activeEditorId)}
+              aria-label="Toggle line comments"
+              title={`Comment / uncomment lines (${commentShortcutLabel})`}
+            >//</button><button
+              class="editor-action editor-format"
               on:click={() => formatEditor(activeEditorId)}
               aria-label="Format Kotlin file"
               title={`Format Kotlin file (${formatShortcutLabel})`}
-            >≡</button></div>
+            >≡</button></div></div>
           {#if (diagnosticsByFile[editorFile.fileName] || []).length}<div
             class="dialog-error editor-dialog-error editor-diagnostics"
             role="alert"
@@ -3606,12 +3632,17 @@
               class="svelte-editor-host"
               on:pointerdown={() => { activeWindow = "editor"; activeEditorId = editorWindow.id; }}
               use:codeMirror={{ id: editorWindow.id, value: editorFile.source, fontSize: editorFontSize, onChange: (value: string) => updateSource(editorFile.id, value), diagnostics: diagnosticsByFile[editorFile.fileName] || [], diagnosticsRun, vim: vimMode, dark: darkMode }}
-            ><button
-                class="editor-format"
+            ><div class="editor-actions" role="toolbar" aria-label="Editor actions"><button
+                class="editor-action editor-comment"
+                on:click={() => toggleEditorComments(editorWindow.id)}
+                aria-label="Toggle line comments"
+                title={`Comment / uncomment lines (${commentShortcutLabel})`}
+              >//</button><button
+                class="editor-action editor-format"
                 on:click={() => formatEditor(editorWindow.id)}
                 aria-label="Format Kotlin file"
                 title={`Format Kotlin file (${formatShortcutLabel})`}
-              >≡</button></div>
+              >≡</button></div></div>
             {#if (diagnosticsByFile[editorFile.fileName] || []).length}<div
               class="dialog-error editor-dialog-error editor-diagnostics"
               role="alert"
@@ -4323,6 +4354,7 @@
           <li><strong>{saveShortcutLabel}</strong><span>Save / Export</span></li>
           <li><strong>{terminalShortcutLabel}</strong><span>Cycle the terminal: closed / window / split</span></li>
           <li><strong>{formatShortcutLabel}</strong><span>Format the current Kotlin file</span></li>
+          <li><strong>{commentShortcutLabel}</strong><span>Comment / uncomment selected lines</span></li>
           <li><strong>{vimShortcutLabel}</strong><span>Switch Vim mode on / off</span></li>
           <li><strong>{editorNextShortcutLabel}</strong><span>Next editor window</span></li>
           <li><strong>{editorPrevShortcutLabel}</strong><span>Previous editor window</span></li>

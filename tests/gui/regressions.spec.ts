@@ -1333,3 +1333,30 @@ test('GUI-77 the left action names the main entry point instead of Run', async (
   await expect(startMain).toHaveAttribute('title', /Start main/);
   await expect(page.getByRole('button', { name: 'Run', exact: true })).toHaveCount(0);
 });
+
+test('GUI-78 selected Kotlin lines can be commented and uncommented by button and slash shortcut', async ({ page }) => {
+  await project(page, 'class Hund {\n    fun eins() {}\n    fun zwei() {}\n}');
+  await page.locator('.classcard').dblclick();
+  const editor = page.locator('.editor-dialog .cm-editor');
+  const lines = editor.locator('.cm-line');
+
+  async function selectTwoLines() {
+    await lines.nth(1).click({ position: { x: 14, y: 10 } });
+    await page.keyboard.down('Shift');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.up('Shift');
+  }
+
+  const comment = page.getByRole('button', { name: 'Toggle line comments', exact: true });
+  await expect(comment).toHaveAttribute('title', /Comment \/ uncomment lines \((Cmd|Ctrl)\+\/\)/);
+  await selectTwoLines();
+  await comment.click();
+  await expect(lines.nth(1)).toContainText('//');
+  await expect(lines.nth(2)).toContainText('//');
+
+  await selectTwoLines();
+  await page.keyboard.press('ControlOrMeta+Shift+7');
+  await expect(lines.nth(1)).not.toContainText('//');
+  await expect(lines.nth(2)).not.toContainText('//');
+});

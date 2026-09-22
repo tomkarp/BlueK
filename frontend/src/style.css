@@ -453,8 +453,11 @@ footer{flex:0 0 108px}
 .editor-dialog:not(.editor-tabbed-dialog) .editor-header{margin-bottom:0}
 .editor-header button{min-width:28px;padding:2px 7px;margin:0;border:1px solid #999;border-radius:4px;background:linear-gradient(#fff,#d5d5d5);cursor:pointer;font-size:16px;line-height:20px}
 .svelte-editor-host{position:relative}
-.editor-format{position:absolute;right:10px;bottom:10px;z-index:2;width:30px;height:30px;padding:0!important;margin:0!important;border:1px solid #999!important;border-radius:4px;background:#f5f4f1cc!important;color:#444;font-size:22px;line-height:26px;cursor:pointer}
-.editor-format:hover{background:#fff!important;color:#111}
+.editor-actions{position:absolute;right:10px;bottom:10px;z-index:2;display:flex;gap:6px}
+.editor-action{width:30px;height:30px;padding:0!important;margin:0!important;border:1px solid #999!important;border-radius:4px;background:#f5f4f1cc!important;color:#444;cursor:pointer}
+.editor-format{font-size:22px;line-height:26px}
+.editor-comment{font:600 13px/1 Menlo,Monaco,Consolas,monospace}
+.editor-action:hover,.editor-action:focus-visible{background:#fff!important;color:#111}
 .editor-dialog.maximized .svelte-editor-host{height:auto;flex:1;min-height:0}
 
 /* Keep both workbench panes inside the workspace even when either splitter
@@ -675,7 +678,7 @@ footer{flex:0 0 108px}
 .dark .editor-tabbed-dialog .editor-tabs button.active{background:#1e1e1e;color:#f3f3f3;border-color:#5a5a62;border-bottom-color:#1e1e1e;box-shadow:0 -1px 0 #5a5a62}
 .dark .editor-tabbed-dialog .editor-tab-close{color:#c8c8c8}
 .dark .editor-tabbed-dialog .editor-tab-close:hover,.dark .editor-tabbed-dialog .editor-tab-close:focus-visible{background:#505057;color:#fff}
-.dark .editor-format{background:#3c3c3c!important;border-color:#686870!important;color:#d4d4d4!important}
-.dark .editor-format:hover,.dark .editor-format:focus-visible{background:#505057!important;color:#fff!important}
+.dark .editor-action{background:#3c3c3c!important;border-color:#686870!important;color:#d4d4d4!important}
+.dark .editor-action:hover,.dark .editor-action:focus-visible{background:#505057!important;color:#fff!important}
 .dark option{background:#252526;color:#d4d4d4}
 .cm-vim-panel input{display:inline-block;width:auto;margin:0;padding:0;border:0;background:transparent;font:inherit}
