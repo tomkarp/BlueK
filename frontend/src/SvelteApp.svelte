@@ -2901,11 +2901,16 @@
     stage = null;
     if (choice === "empty") {
       files = [];
+      library = undefined;
       resources = [];
       cardPositions = {};
       readme = "";
       closeReadme();
       selected = 0;
+      editorWindows = [];
+      activeEditorId = "";
+      editorGroup = null;
+      editorTabbed = false;
       markUncompiled();
       status = "New project";
       return;
@@ -3206,9 +3211,9 @@
             {/each}
           {/if}
           <div class="cards">
-            <!-- Like BlueJ's README note, but quieter: a small sheet in the top
-                 left corner that is part of every project, even an empty one. -->
-            <div
+            <!-- Like BlueJ's README note, but quieter: show it when the project
+                 has files, resources or a written description. -->
+            {#if files.length || resources.length || readme.trim()}<div
               role="button"
               tabindex="0"
               class:written={Boolean(readme.trim())}
@@ -3227,7 +3232,7 @@
                   class="readme-fold"
                   d="M14.5 1.5l8 8h-8z"
                 /><path class="readme-text" d="M5.5 13h13M5.5 16.5h13M5.5 20h13M5.5 23.5h8" /></svg
-              ></div>
+              ></div>{/if}
             {#each displayFiles as file, index (file.id)}
               {@const position = displayCardPositions[index]}
               <div

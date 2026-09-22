@@ -809,9 +809,15 @@ for (const name of ['Empty Project']) {
     await project(page);
     await page.getByRole('button', { name: 'New Project', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Create New Project' });
-    await dialog.getByRole('button', { name: new RegExp('^' + name) }).click();
-    await expect(dialog).toBeHidden();
+    await dialog.getByRole('button', { name: /^BluePlay Template/ }).click();
+    await expect(page.locator('.classcard[aria-label="World"]')).toBeVisible();
+    await page.getByRole('button', { name: 'New Project', exact: true }).click();
+    const replaceDialog = page.getByRole('dialog', { name: 'Create New Project' });
+    page.once('dialog', browserDialog => browserDialog.accept());
+    await replaceDialog.getByRole('button', { name: new RegExp('^' + name) }).click();
+    await expect(replaceDialog).toBeHidden();
     await expect(page.locator('.classcard')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'README.md' })).toHaveCount(0);
   });
 }
 
