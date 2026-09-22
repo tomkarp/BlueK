@@ -602,5 +602,9 @@ footer{flex:0 0 108px}
 .settings-dialog .settings-field{display:flex;align-items:center;justify-content:space-between;gap:24px;margin:18px 0;color:#333}
 .settings-dialog .settings-field input[type=checkbox]{display:inline-block;width:auto;min-width:0;margin:0;padding:0}
 .settings-hint{margin:-12px 0 0;color:#777;font-size:12px}
+.shortcuts-help-list{list-style:none;margin:0 0 18px;padding:0}
+.shortcuts-help-list li{display:flex;align-items:baseline;gap:14px;padding:6px 0;border-bottom:1px solid #ddd}
+.shortcuts-help-list li strong{min-width:120px;font-family:Menlo,Monaco,Consolas,monospace;font-size:13px;color:#222}
+.shortcuts-help-list li span{color:#555;font-size:13px}
 .vim-panel,.cm-vim-panel{padding:2px 8px;background:#f0efeb;border-top:1px solid #ccc;font:12px Menlo,Monaco,Consolas,monospace;color:#333}
 .cm-vim-panel input{display:inline-block;width:auto;margin:0;padding:0;border:0;background:transparent;font:inherit}

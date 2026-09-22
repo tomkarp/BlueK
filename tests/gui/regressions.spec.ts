@@ -283,12 +283,45 @@ test('GUI-41 project and file dialogs stay above windows', async ({ page }) => {
   }
 });
 
-test('GUI-42 Escape does not close an editor window', async ({ page }) => {
+test('GUI-42 Escape closes an editor immediately without Vim', async ({ page }) => {
   await project(page, 'class Hund {}');
   await page.locator('.classcard').dblclick();
   await expect(page.locator('.editor-dialog')).toHaveCount(1);
   await page.keyboard.press('Escape');
+  await expect(page.locator('.editor-dialog')).toHaveCount(0);
+});
+
+test('GUI-42 Vim Escape leaves insert mode immediately and never closes the editor by itself', async ({ page }) => {
+  await project(page, 'class Hund {}');
+  await page.locator('.classcard').dblclick();
+  const editor = page.locator('.editor-dialog');
+  await page.keyboard.press('ControlOrMeta+Shift+V');
+  await page.keyboard.press('i');
+  await expect(editor.locator('.cm-panels')).toHaveText('--INSERT--');
+  await page.keyboard.press('Escape');
+  await expect(editor.locator('.cm-panels')).toHaveText('--NORMAL--');
+  await expect(editor).toHaveCount(1);
+  // Repeated plain Escapes in normal mode must not close the editor either —
+  // Vim's own keymap owns a bare Escape entirely while Vim is on.
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Escape', { delay: 100 });
+  await expect(editor).toHaveCount(1);
+});
+
+test('GUI-42 Shift+Escape closes the editor window while Vim is on', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, files: [
+    { fileName: 'Hund.kt', kind: 'class', source: 'class Hund {}' },
+    { fileName: 'Katze.kt', kind: 'class', source: 'class Katze {}' },
+  ] };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  await page.getByRole('button', { name: 'Hund', exact: true }).dblclick();
+  await page.getByRole('button', { name: 'Katze', exact: true }).dblclick();
+  await page.keyboard.press('ControlOrMeta+Shift+V');
+  await expect(page.locator('.editor-dialog')).toHaveCount(2);
+  await page.keyboard.press('Shift+Escape');
   await expect(page.locator('.editor-dialog')).toHaveCount(1);
+  await expect(page.locator('.editor-header h3')).toHaveText('Hund.kt');
+  await page.keyboard.press('Shift+Escape');
+  await expect(page.locator('.editor-dialog')).toHaveCount(0);
 });
 
 test('GUI-29 editor uses terminal window chrome without a bottom gap', async ({ page }) => {

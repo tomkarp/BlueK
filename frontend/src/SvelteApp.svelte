@@ -343,7 +343,15 @@
     benchWidth: number | null = null,
     codepadMenu: { x: number; y: number; text?: string } | null = null;
   const editorFormatters = new Map<string, () => boolean>();
-  let formatShortcutLabel = "Ctrl+Shift+I";
+  let formatShortcutLabel = "Ctrl+I";
+  let vimShortcutLabel = "Ctrl+Shift+V";
+  let compileShortcutLabel = "Ctrl+K";
+  let saveShortcutLabel = "Ctrl+S";
+  let terminalShortcutLabel = "Ctrl+#";
+  let runShortcutLabel = "Ctrl+Enter";
+  let editorNextShortcutLabel = "Ctrl+E";
+  let editorPrevShortcutLabel = "Ctrl+Shift+E";
+  let shortcutsHelpOpen = false;
   let toolbarDialog: "open" | "save" | null = null;
   // Offline builds (npm run build:offline) run without the share server, so features
   // that need it are hidden instead of failing when a student clicks them.
@@ -839,7 +847,7 @@
     if (current.diagnostics.length) applyDiagnostics(view, current.diagnostics);
     const formatShortcut = (event: KeyboardEvent) => {
       if ((event.key.toLowerCase() !== "i" && event.code !== "KeyI") ||
-          !event.shiftKey || (!event.metaKey && !event.ctrlKey)) return;
+          event.shiftKey || event.altKey || (!event.metaKey && !event.ctrlKey)) return;
       if (!node.contains(document.activeElement)) return;
       event.preventDefault();
       event.stopPropagation();
@@ -988,7 +996,15 @@
   }
 
   onMount(() => {
-    formatShortcutLabel = /Mac/i.test(navigator.platform) ? "Cmd+Shift+I" : "Ctrl+Shift+I";
+    const mac = /Mac/i.test(navigator.platform);
+    formatShortcutLabel = mac ? "Cmd+I" : "Ctrl+I";
+    vimShortcutLabel = mac ? "Cmd+Shift+V" : "Ctrl+Shift+V";
+    compileShortcutLabel = mac ? "Cmd+K" : "Ctrl+K";
+    saveShortcutLabel = mac ? "Cmd+S" : "Ctrl+S";
+    terminalShortcutLabel = mac ? "Cmd+#" : "Ctrl+#";
+    runShortcutLabel = mac ? "Cmd+Enter" : "Ctrl+Enter";
+    editorNextShortcutLabel = mac ? "Cmd+E" : "Ctrl+E";
+    editorPrevShortcutLabel = mac ? "Cmd+Shift+E" : "Ctrl+Shift+E";
     client = new LocalRuntimeClient();
     inspectorModel = new InspectorModel(client, () => { inspectorRevision += 1; });
     const unsubscribe = client.subscribe(() => {
@@ -1108,10 +1124,27 @@
       setVimMode(!vimMode);
     };
     window.addEventListener("keydown", vimShortcut, true);
+    // Same reasoning as vimShortcut above: Mod-Enter is CodeMirror's own
+    // "insert blank line" and Mod-E is Vim's scroll-down command, so these
+    // have to win the race before the editor (or Vim) sees the key.
+    const captureShortcut = (event: KeyboardEvent) => {
+      const mod = (event.metaKey || event.ctrlKey) && !event.altKey;
+      if (mod && !event.shiftKey && event.key === "Enter") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (canExecute && mainEntries.length) void runMain();
+      } else if (mod && (event.key.toLowerCase() === "e" || event.code === "KeyE")) {
+        event.preventDefault();
+        event.stopPropagation();
+        cycleEditor(event.shiftKey ? -1 : 1);
+      }
+    };
+    window.addEventListener("keydown", captureShortcut, true);
     const edgeTimer = window.setInterval(refreshInheritanceEdges, 250);
     refreshInheritanceEdges();
     return () => {
       window.removeEventListener("keydown", vimShortcut, true);
+      window.removeEventListener("keydown", captureShortcut, true);
       window.clearInterval(edgeTimer);
       unsubscribe();
       unsubscribeOutput();
@@ -1365,47 +1398,57 @@
     status = "Uncompiled";
     error = "";
   }
+  // Global (non-editor-scoped) keyboard shortcuts live here, in one place.
+  // Two exceptions stay as their own capture-phase window listeners (see
+  // the comments above onMount's vimShortcut/captureShortcut): the format
+  // shortcut (tied to a specific CodeMirror view instance), and the Vim
+  // on/off + Run/editor-navigation shortcuts, all of which need to reach
+  // the key before CodeMirror's own keymap (or Vim's) swallows it — Mod-Enter
+  // is CodeMirror's "insert blank line", and Mod-E is Vim's scroll-down
+  // command.
   function handleWindowKeydown(event: KeyboardEvent) {
-    if (event.key === "Escape") {
-      if (projectInfo) projectInfo = null;
-      else if (readmeOpen) {
-        // The first Escape leaves the text: without a cursor no line shows its
-        // markers, so the description stands there formatted. The second closes.
-        const content = document.querySelector<HTMLElement>(".readme-editor .cm-content");
-        if (readmeHelp) readmeHelp = false;
-        else if (content && document.activeElement === content) content.blur();
-        else closeReadme();
+    const mod = (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey;
+    if (mod && (event.key.toLowerCase() === "k" || event.code === "KeyK")) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (files.length &&
+          runtime.phase !== "compiling" &&
+          runtime.phase !== "running" &&
+          !inputReady)
+        compile();
+      return;
+    }
+    if (mod && (event.key.toLowerCase() === "s" || event.code === "KeyS")) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (files.length) toolbarDialog = "save";
+      return;
+    }
+    if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key === "#") {
+      event.preventDefault();
+      event.stopPropagation();
+      // Cycles through the terminal's three states: closed -> window -> split -> closed.
+      if (!terminalOpen) {
+        terminalOpen = true;
+        terminalSplit = false;
+        activeWindow = "terminal";
+      } else if (!terminalSplit) {
+        toggleTerminalSplit();
+      } else {
+        terminalOpen = false;
+        terminalSplit = false;
       }
-      else if (bluePlayApiFile) bluePlayApiFile = null;
-      else if (compilerDialog) compilerDialog = false;
-      else if (createDialog) {
-        createDialog = null;
-        dialogError = "";
-      } else if (invokeDialog) {
-        invokeDialog = null;
-        dialogError = "";
-      } else if (objectNamePrompt) objectNamePrompt = null;
-      else if (resultDialog) resultDialog = null;
-      else if (activeInspectorId && inspectorWindows.some((item) => item.id === activeInspectorId))
-        closeInspector(activeInspectorId);
-      else if (newClassOpen) newClassOpen = false;
-      else if (settingsNotice) settingsNotice = false;
-      else if (filesNotice) filesNotice = false;
-      else if (shareLinkDialog) shareLinkDialog = null;
-      else if (toolbarDialog) toolbarDialog = null;
-      else if (newProjectOpen) newProjectOpen = false;
-      else if (activeWindow === "terminal" && terminalOpen) {
-        terminalOpen = false;
-        terminalSplit = false;
-      } else if (terminalOpen) {
-        terminalOpen = false;
-        terminalSplit = false;
-      } else if (stageWindowOpen) {
-        stageWindowOpen = false;
-        stageMaximized = false;
-      } else if (menu) menu = null;
-      else if (codepadMenu) codepadMenu = null;
-      else return;
+      return;
+    }
+    if (event.key === "Escape") {
+      const action = escapeWindowAction();
+      if (!action) return;
+      // With Vim on, a bare Escape is pressed constantly to leave insert
+      // mode, so closing the editor window that way needs Shift held too —
+      // a plain Escape is left alone here for Vim's own keymap to handle.
+      // Everything else Escape closes stays instant, Shift or not.
+      if (vimMode && action === closeEditor && !event.shiftKey) return;
+      action();
       event.preventDefault();
       event.stopPropagation();
       return;
@@ -1520,6 +1563,45 @@
     if (!editorWindows.some((item) => item.id === id)) return;
     activeEditorId = id;
     activeWindow = "editor";
+  }
+  function cycleEditor(direction: 1 | -1) {
+    if (editorWindows.length < 2) return;
+    const index = editorWindows.findIndex((item) => item.id === activeEditorId);
+    const next = ((index < 0 ? 0 : index) + direction + editorWindows.length) % editorWindows.length;
+    selectEditorTab(editorWindows[next].id);
+  }
+  // What Escape would close right now — shared by handleWindowKeydown so
+  // the Vim-and-editor special case there stays in sync with everything else.
+  function escapeWindowAction(): (() => void) | null {
+    if (projectInfo) return () => { projectInfo = null; };
+    if (readmeOpen) return () => {
+      const content = document.querySelector<HTMLElement>(".readme-editor .cm-content");
+      if (readmeHelp) readmeHelp = false;
+      else if (content && document.activeElement === content) content.blur();
+      else closeReadme();
+    };
+    if (bluePlayApiFile) return () => { bluePlayApiFile = null; };
+    if (compilerDialog) return () => { compilerDialog = false; };
+    if (createDialog) return () => { createDialog = null; dialogError = ""; };
+    if (invokeDialog) return () => { invokeDialog = null; dialogError = ""; };
+    if (objectNamePrompt) return () => { objectNamePrompt = null; };
+    if (resultDialog) return () => { resultDialog = null; };
+    if (activeInspectorId && inspectorWindows.some((item) => item.id === activeInspectorId))
+      return () => closeInspector(activeInspectorId);
+    if (newClassOpen) return () => { newClassOpen = false; };
+    if (shortcutsHelpOpen) return () => { shortcutsHelpOpen = false; };
+    if (settingsNotice) return () => { settingsNotice = false; };
+    if (filesNotice) return () => { filesNotice = false; };
+    if (shareLinkDialog) return () => { shareLinkDialog = null; };
+    if (toolbarDialog) return () => { toolbarDialog = null; };
+    if (newProjectOpen) return () => { newProjectOpen = false; };
+    if (activeWindow === "editor" && editorWindows.length) return closeEditor;
+    if (terminalOpen) return () => { terminalOpen = false; terminalSplit = false; };
+    if (editorWindows.length) return closeEditor;
+    if (stageWindowOpen) return () => { stageWindowOpen = false; stageMaximized = false; };
+    if (menu) return () => { menu = null; };
+    if (codepadMenu) return () => { codepadMenu = null; };
+    return null;
   }
   function toggleEditorMaximized(id: string) {
     const frame = editorFrame(id);
@@ -3024,10 +3106,16 @@
       </button>
       <button
         on:click={compile}
+        title={`Compile (${compileShortcutLabel})`}
         disabled={!files.length ||
           runtime.phase === "compiling" ||
           runtime.phase === "running" ||
           inputReady}>Compile</button
+      >
+      <button
+        on:click={() => void runMain()}
+        title={`Run main (${runShortcutLabel})`}
+        disabled={!canExecute || !mainEntries.length}>Run</button
       >
       <div class="side-spacer"></div>
       {#if !offlineBuild}
@@ -3039,6 +3127,7 @@
           >Offline Version<span>ZIP, no installation</span></a
         >
       {/if}
+      <button on:click={() => (shortcutsHelpOpen = true)} aria-label="Help" title="Help">Help</button>
     </nav>
     <section
       class="workspace"
@@ -4169,8 +4258,32 @@
             on:change={(event) => setVimMode(event.currentTarget.checked)}
           />
         </label>
-        <p class="settings-hint">{formatShortcutLabel.replace("+I", "+V")} switches it on and off.</p>
+        <p class="settings-hint">{vimShortcutLabel} switches it on and off.</p>
         <div class="dialog-actions"><button on:click={() => (settingsNotice = false)}>Close</button></div>
+      </div>
+    </div>{/if}
+  {#if shortcutsHelpOpen}<div class="modal topmost-modal" role="presentation">
+      <div
+        class="dialog shortcuts-help-dialog"
+        role="dialog"
+        aria-modal="true"
+        tabindex="-1"
+        aria-labelledby="shortcuts-help-title"
+        use:containClicks
+      >
+        <h3 id="shortcuts-help-title">Keyboard Shortcuts</h3>
+        <ul class="shortcuts-help-list">
+          <li><strong>{compileShortcutLabel}</strong><span>Compile the project</span></li>
+          <li><strong>{runShortcutLabel}</strong><span>Run main</span></li>
+          <li><strong>{saveShortcutLabel}</strong><span>Save / Export</span></li>
+          <li><strong>{terminalShortcutLabel}</strong><span>Cycle the terminal: closed / window / split</span></li>
+          <li><strong>{formatShortcutLabel}</strong><span>Format the current Kotlin file</span></li>
+          <li><strong>{vimShortcutLabel}</strong><span>Switch Vim mode on / off</span></li>
+          <li><strong>{editorNextShortcutLabel}</strong><span>Next editor window</span></li>
+          <li><strong>{editorPrevShortcutLabel}</strong><span>Previous editor window</span></li>
+          <li><strong>Escape</strong><span>Close the topmost dialog or window (in Vim mode: Shift+Escape)</span></li>
+        </ul>
+        <div class="dialog-actions"><button on:click={() => (shortcutsHelpOpen = false)}>Close</button></div>
       </div>
     </div>{/if}
   {#if objectNamePrompt}<div class="modal" role="presentation">

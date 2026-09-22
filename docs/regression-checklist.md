@@ -67,7 +67,7 @@ Worker-/Runtime-Smokes getrennt.
 | GUI-39 | Die Editor-Schriftgröße lässt sich über Settings oben rechts von 10 px bis 30 px einstellen und wirkt sofort auf Code und Zeilennummern | GUI-Test erweitert und grün | Abgesichert |
 | GUI-40 | Settings und New File liegen beim Öffnen über Editoren, Terminal und Objektinspektoren; der Dialog bietet zusätzlich Kotlin Functions an | Chromium-Test grün: Settings/New File, Kotlin-Functions-Option und kein New-Functions-Button | Abgesichert |
 | GUI-41 | New Project, Open / Import, Save / Export und Files liegen beim Öffnen über Editoren, Terminal und Objektinspektoren | GUI-Test ergänzt | Abzusichern |
-| GUI-42 | Escape schließt kein geöffnetes Editorfenster | GUI-Test grün | Abgesichert |
+| GUI-42 | Ohne Vim schließt Escape den Editor sofort. Mit Vim gehört ein einfaches Escape ganz Vim (verlässt sofort den Insert-Modus, schließt aber nie das Editorfenster, egal wie oft/lang gedrückt); erst Shift+Escape schließt gezielt den aktiven Editor | 3 echte Chromium-Tests grün: sofortiges Schließen ohne Vim, wiederholtes einfaches Escape in Insert-/Normal-Mode ohne Effekt, Shift+Escape schließt bei mehreren offenen Editorfenstern genau den aktiven | — |
 | GUI-43 | Nach dem Laden eines gespeicherten Projekts wird `/load/<code>` aus der URL entfernt; weitere Vorlagen funktionieren normal | GUI-Test grün | Abgesichert |
 | GUI-44 | Open / Import kann einen dreiteiligen Wortcode eingeben und lädt das entsprechende gespeicherte Projekt | GUI-Test grün | Abgesichert |
 | GUI-50 | Nach dem Laden eines vollständigen `#bluek=...`-Projektlinks wird der Link aus der URL entfernt; das geladene Projekt bleibt sichtbar | Chromium-GUI-Test grün | Abgesichert |
@@ -511,3 +511,33 @@ zählt 77 bestanden bei 4 offenen; auf dem zusammengeführten Stand sind es 81
 bestanden bei 2 offenen: GUI-69 und GUI-70 kommen hinzu, und die beiden
 Portartefakte GUI-35 und PERF-01 treten ohne parallelen Lauf nicht auf.
 Offen bleiben weiterhin nur GUI-61 und GUI-22.
+
+2026-09-22: GUI-42 an das gewünschte Escape-Verhalten angepasst und den
+Vim-Haltefehler reproduziert: vor der Korrektur bestand der Test ohne Vim,
+der neue Test mit gehaltenem Escape ohne Repeat scheiterte (Editor blieb offen).
+Die Haltezeit wird jetzt ab dem ersten Keydown in der Capture-Phase gemessen,
+bevor Vim Escape verarbeitet. Keyup und Fokus-/Fensterwechsel löschen den
+Timer; pro Tastendruck wird höchstens ein Editor geschlossen. Die Auswahl des
+Escape-Ziels ist für normalen Escape und Vim-Halten gemeinsam; Dialoge behalten
+Vorrang. Die Kürzelhilfe nennt die Haltezeit von einer Sekunde.
+
+Nachweis: `npx playwright test --grep 'GUI-42|GUI-68|GUI-66|GUI-17|GUI-18'`
+mit 11/11 echten Chromium-Tests erfolgreich; `npm run test:ui` erfolgreich
+(Hilfsfunktionstests). Der erste Browserstart war durch Sandbox-EPERM am lokalen
+Testport blockiert; der freigegebene Lauf außerhalb der Sandbox funktionierte.
+Typecheck: 0 Fehler, 5 Svelte-Warnungen. Keine vollständige GUI-/Runtime-Suite
+für diese Änderung ausgeführt. Physisches langes Escape und echter
+OS-Fensterwechsel sind noch nicht manuell bzw. durch den Nutzer bestätigt.
+
+2026-09-22 (Nachtrag): Der einsekündige Halte-Mechanismus aus dem obigen
+Eintrag hat sich in echter Nutzung als unzuverlässig erwiesen — die
+Sicherheitsabbrüche bei `pointerdown`/`focusin` reagierten schon auf normale
+Mausbewegung/Fokusereignisse während des Haltens und brachen den Timer
+unbemerkt ab. Ersetzt durch `Shift+Escape`, das ohne Timing arbeitet: ein
+einfaches Escape gehört bei aktiviertem Vim vollständig Vim (Insert- und
+Normal-Modus-Wechsel bleiben sofort wirksam, schließt aber nie das
+Editorfenster), erst Shift+Escape schließt es gezielt und sofort. Der ganze
+Halte-/Abbruch-Mechanismus (Timer, Capture-Listener, Pointer-/Fokus-/Blur-/
+Sichtbarkeits-Abbrüche) wurde entfernt. Nachweis:
+`npx playwright test --grep GUI-42` mit 3/3 grün; `npm run typecheck` mit
+0 Fehlern.
