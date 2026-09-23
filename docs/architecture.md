@@ -14,10 +14,33 @@ Archivierter Vergleichs-Commit: `ff1f5d7`.
   Schnittstelle zur Laufzeit: nur `getSnapshot()` und `execute(get)`.
 - `LocalRuntimeClient`: einziger Worker-Zugang, laufende Befehle, Phasen,
   Generationen und veröffentlichter Laufzeit-Snapshot.
+- Worker-Start: `runtimeWorker.ts` (`startRuntimeWorker`) wertet das
+  Kotlite-Bundle einmal aus und leitet jeden Befehl an einen `RuntimeHost`.
+  Nur die Quelle des Bundles unterscheidet sich: `localRuntimeWorker.ts` lädt
+  in der IDE das statische Asset per `fetch`; `playerRuntimeWorker.ts` nutzt
+  im HTML-Export das über `virtual:bluek-kotlite-gzip`
+  (`frontend/build/embeddedKotlite.mjs`) eingebettete gzip+base64-Bundle und
+  entpackt es mit `DecompressionStream` (`embeddedKotlite.ts`, ohne
+  `Blob.stream()`, das in WebKit unter `file://` scheitert).
+  `LocalRuntimeClient` erhält die Worker-Fabrik immer von außen; die IDE
+  übergibt `createLocalRuntimeWorker` (`localRuntimeWorkerFactory.ts`), damit
+  der Player-Build den IDE-Worker nicht mitbündelt.
 - `projectFormat.ts`: typisiertes Projektdateiformat. Validiert externe
   `unknown`-Payloads und wandelt gespeicherte Dateien, Ressourcen und
   Kartenpositionen in das interne `ProjectFile`-Modell um. Keine DOM-, Svelte-
   oder Runtime-Abhängigkeit; IDs werden von der Oberfläche injiziert.
+- `programExport.ts`: typisiertes Format des HTML-Exports
+  (`{ format: "bluek-program", version: 1, mainFile, blueKUrl, project }`).
+  `project` ist unverändert das `.bluek.json`-Format aus `projectFormat.ts`
+  und wird mit dessen Validierung geprüft; `mainFile` muss eine Projektdatei
+  sein. Ob sie ein parameterloses `main()` hat, entscheiden Exporter und
+  Player anhand ihrer Runtime-Metadaten. Das Programm wird als JSON in genau
+  ein leeres `<script type="application/json" id="bluek-program">` der
+  Player-Vorlage eingesetzt; `<`, `>`, `&`, U+2028 und U+2029 werden dabei als
+  `\uXXXX` geschrieben, sodass Quelltexte das Element weder schließen noch
+  Skripte einschleusen können. `blueKUrl` ist die exportierende Instanz,
+  bei localhost/Offline-Paket `https://bluek.de/`. Keine DOM-, Svelte- oder
+  Runtime-Abhängigkeit.
 - `codepadFlow.ts`: schmale Ablaufsteuerung für Compile-on-demand und
   Codepad-Evaluation. Nutzt nur die benötigten Client-Fähigkeiten, gibt
   typisierte Compile-/Ausführungsergebnisse zurück und verwirft Antworten
@@ -29,6 +52,13 @@ Archivierter Vergleichs-Commit: `ff1f5d7`.
   Kartenpositionen stammen aus `package.bluej`. Enthält das Projekt die
   historischen BluePlay-Framework-Dateien, wird die eingebaute Library gesetzt
   und die Dateien entfallen. Keine DOM-, Svelte- oder Runtime-Abhängigkeit.
+- `bluePlayStage.ts`: leitet aus dem veröffentlichten `BluePlayStage` und den
+  Projektressourcen ab, was der Canvas zeigt: Bildauflösung
+  (`decorateStage`), Zeichnen und pixelgenaue Klickziele (`StageRenderer`),
+  Tastennamen (`stageKeyName`) sowie Frame-Sounds und Beep (`StageAudio`).
+  Hält nur Bild-Cache und Alpha-Masken, keinen Welt- oder Laufzeitzustand.
+  Keine Svelte- oder Worker-Abhängigkeit; die IDE behält Zeichentakt, Fokus,
+  gedrückte Tasten und den Client-Zugriff. Grundlage für den HTML-Export.
 - `kotlinFormatterClient.ts`: asynchrone CodeMirror-Formatierung über den
   lokalen ktfmt-WASM-Build im Hauptthread. Vite bündelt WASM und Laufzeit in
   die Anwendung; es gibt keinen Server- oder CDN-Aufruf. Der Formatter
@@ -36,6 +66,42 @@ Archivierter Vergleichs-Commit: `ff1f5d7`.
 - `RuntimeHost` und Kotlin-Session: Ausführung und tatsächlicher Objektzustand.
 - `runtime-contract`: gemeinsame Transporttypen. Ansichtsdetails werden nicht
   dem Worker-Protokoll hinzugefügt.
+
+## HTML-Export (Player)
+
+Ein Export ist eine einzelne HTML-Datei ohne Server- oder Netzwerkzugriff.
+`scripts/build-player.mjs` baut die Vorlage
+`frontend/public/player/bluek-player.html`: Player-Code (`playerMain.ts`,
+`PlayerApp.svelte`), der Player-Worker als Text und darin das
+gzip+base64-Kotlite stehen inline; dazu ein leeres
+`<script type="application/json" id="bluek-program">`, das der Export mit
+`embedProgram` füllt. `<\/script` und `<!--` werden beim Einbetten des Codes
+maskiert. Die Vorlage ist generiert (nicht eingecheckt) und wird mit
+`npm run build` bzw. bei Bedarf von `predev` erzeugt; Offline-Paket und
+Online-Version liefern sie unter `player/` aus.
+
+`playerMain.ts` startet den Worker aus einer Blob-URL (funktioniert auch unter
+`file://`) und übergibt `PlayerApp` das validierte Programm und die
+Worker-Fabrik. `PlayerApp` nutzt dieselben Bausteine wie die IDE:
+`LocalRuntimeClient`, `projectModelFromPayload`, `mainFiles`,
+`prepareRuntimeResources` mit Standardgrafiken und `bluePlayStage.ts`. Er
+kompiliert beim Laden und prüft, dass `mainFile` ein parameterloses `main()`
+hat. Konsolenprogramme starten sofort; „Restart“ kompiliert neu. BluePlay-
+Programme führen `reset(mainFile)` aus und zeigen die Welt pausiert mit Step,
+Run/Pause, Reset (nur im Pause-Zustand) und Speed; Tastatur und Klicks gehen
+wie in der IDE an die Laufzeit, eine gehaltene Taste wird immer freigegeben.
+„Download project (.bluek.json)“ speichert `program.project` unverändert,
+„Open in BlueK“ verlinkt `blueKUrl#bluek=…` in einem neuen Tab, solange der
+Link höchstens `MAX_PROJECT_LINK_LENGTH` (1 MB) lang ist.
+
+In der IDE startet „Export as HTML“ im Save/Export-Dialog den Export. Wie
+Start main liest er die Einstiegspunkte mit `mainFiles` aus dem Snapshot der
+aktuellen Generation; ist das Projekt nicht kompiliert, kompiliert er vorher
+(Compilefehler erscheinen wie bei Compile). Ohne `main()` wird nicht
+exportiert, bei mehreren fragt der `mainDialog` (Aktion `export`). Vor dem
+Schreiben prüft die IDE, dass die Generation unverändert ist. `htmlExport.ts`
+lädt die Vorlage von `<BASE_URL>player/bluek-player.html` und setzt das
+Programm mit `blueKUrlForExport` ein; die Datei heißt `<Projektname>.html`.
 
 ## Projektdateien und Codepad
 

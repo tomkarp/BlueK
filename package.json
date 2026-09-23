@@ -3,13 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "predev": "node scripts/build-offline.mjs --if-missing",
+    "predev": "node scripts/build-player.mjs --if-missing && node scripts/build-offline.mjs --if-missing",
     "dev": "vite --config frontend/vite.config.ts",
     "dev:svelte": "npm run dev",
     "build:svelte": "vite build --config frontend/vite.config.ts",
     "build:kotlite": "./jvm/gradlew -p kotlite-browser jsBrowserProductionWebpack --no-daemon",
     "build:standard-images": "node scripts/build-standard-images.mjs",
-    "build": "npm run build:kotlite && npm run build:offline && vite build --config frontend/vite.config.ts",
+    "build": "npm run build:kotlite && npm run build:player && npm run build:offline && vite build --config frontend/vite.config.ts",
+    "build:player": "node scripts/build-player.mjs",
     "build:offline": "node scripts/build-offline.mjs",
     "browser-smoke": "node scripts/smoke-static-architecture.mjs && node scripts/smoke-svelte-architecture.mjs && node scripts/smoke-kotlite-browser.mjs && node scripts/smoke-blueplay-browser.mjs && node scripts/smoke-curriculum-kotlin.mjs && npm run test:runtime-state",
     "typecheck": "tsc && svelte-check --tsconfig ./tsconfig.json --threshold error",
@@ -22,11 +23,14 @@
     "test:ui": "node scripts/smoke-ui-behavior.mjs",
     "test:gui": "playwright test",
     "test:inspector": "node scripts/smoke-inspector-model.mjs",
+    "test:blueplay-stage": "node scripts/smoke-blueplay-stage.mjs",
     "test:project-format": "node scripts/smoke-project-format.mjs",
+    "test:program-export": "node scripts/smoke-program-export.mjs",
+    "test:player-worker": "node scripts/smoke-player-worker.mjs",
     "test:codepad-flow": "node scripts/smoke-codepad-flow.mjs",
     "share:server": "node server/share-server.mjs",
     "test:share-server": "node scripts/smoke-share-server.mjs",
-    "test:regression": "npm run typecheck && npm run test:ui && npm run test:runtime-state && npm run test:references && npm run test:kotlin-surface && npm run test:inspector && npm run test:project-format && npm run test:codepad-flow && npm run test:offline && npm run test:gui"
+    "test:regression": "npm run typecheck && npm run test:ui && npm run test:runtime-state && npm run test:references && npm run test:kotlin-surface && npm run test:inspector && npm run test:blueplay-stage && npm run test:project-format && npm run test:program-export && npm run test:player-worker && npm run test:codepad-flow && npm run test:offline && npm run test:gui"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",

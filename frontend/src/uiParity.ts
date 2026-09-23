@@ -1,4 +1,5 @@
 import { inflateSync } from "fflate";
+import { byteStream } from "./byteStream";
 import type { ClassMeta } from "../../runtime-contract/src/index";
 type ClassModel = ClassMeta;
 type ObjectModel = { className: string };
@@ -24,8 +25,7 @@ const encodeBlueKLink = async (payload: unknown) => {
   const json = JSON.stringify(payload);
   if (!("CompressionStream" in window))
     return `p1.${bytesToBase64Url(new TextEncoder().encode(json))}`;
-  const stream = new Blob([json])
-    .stream()
+  const stream = byteStream(new TextEncoder().encode(json))
     .pipeThrough(new CompressionStream("deflate-raw"));
   return `d1.${bytesToBase64Url(new Uint8Array(await new Response(stream).arrayBuffer()))}`;
 };
@@ -38,8 +38,7 @@ const decodeBlueKLink = async (value: string) => {
   const bytes = base64UrlToBytes(encoded);
   if (version === "p1") return JSON.parse(new TextDecoder().decode(bytes));
   if ("DecompressionStream" in window) {
-    const stream = new Blob([bytes])
-      .stream()
+    const stream = byteStream(bytes)
       .pipeThrough(new DecompressionStream("deflate-raw"));
     return JSON.parse(await new Response(stream).text());
   }
@@ -96,6 +95,49 @@ const decodeNestedImage = (value: string) => {
   }
 };
 
+// One renderer for every Image drawing operation the BluePlay library emits
+// (see `Image` in BluePlayLibrary.kt), so backgrounds and actor images cannot
+// drift apart. Only the paint used when an operation carries none differs.
+const drawingElement = (
+  operation: string,
+  width: number,
+  height: number,
+  resources: ResourceModel[],
+  defaultPaint: string,
+): string => {
+  const [name, ...parts] = operation.split("|");
+  if (name === "drawImage" && parts.length >= 3) {
+    const [fileName, x, y, imageWidth = "30", imageHeight = "30"] = parts;
+    return renderImageElement(
+      fileName,
+      x,
+      y,
+      imageWidth,
+      imageHeight,
+      resources,
+    );
+  }
+  const paint = parts.at(-1) || defaultPaint;
+  const values = parts.slice(0, -1);
+  if (name === "fill")
+    return `<rect x="0" y="0" width="${width}" height="${height}" fill="${paint}"/>`;
+  if (name === "fillRect" && values.length >= 4)
+    return `<rect x="${values[0]}" y="${values[1]}" width="${values[2]}" height="${values[3]}" fill="${paint}"/>`;
+  if (name === "drawRect" && values.length >= 4)
+    return `<rect x="${values[0]}" y="${values[1]}" width="${values[2]}" height="${values[3]}" fill="none" stroke="${paint}"/>`;
+  if (name === "fillOval" && values.length >= 4)
+    return `<ellipse cx="${Number(values[0]) + Number(values[2]) / 2}" cy="${Number(values[1]) + Number(values[3]) / 2}" rx="${Number(values[2]) / 2}" ry="${Number(values[3]) / 2}" fill="${paint}"/>`;
+  if (name === "drawOval" && values.length >= 4)
+    return `<ellipse cx="${Number(values[0]) + Number(values[2]) / 2}" cy="${Number(values[1]) + Number(values[3]) / 2}" rx="${Number(values[2]) / 2}" ry="${Number(values[3]) / 2}" fill="none" stroke="${paint}"/>`;
+  if (name === "drawLine" && values.length >= 4)
+    return `<line x1="${values[0]}" y1="${values[1]}" x2="${values[2]}" y2="${values[3]}" stroke="${paint}"/>`;
+  if (name === "drawString" && values.length >= 3)
+    return `<text x="${values[1]}" y="${values[2]}" fill="${paint}">${svgEscape(decodeDrawingValue(values[0]))}</text>`;
+  return "";
+};
+const drawingSvg = (elements: string, width: number, height: number) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${elements}</svg>`;
+
 const backgroundDataUrl = (
   operations: string[] = [],
   width: number,
@@ -104,41 +146,12 @@ const backgroundDataUrl = (
 ) => {
   if (!operations.length) return undefined;
   const elements = operations
-    .map((operation) => {
-      const [name, ...parts] = operation.split("|");
-      if (name === "drawImage" && parts.length >= 3) {
-        const [fileName, x, y, imageWidth = "30", imageHeight = "30"] = parts;
-        return renderImageElement(
-          fileName,
-          x,
-          y,
-          imageWidth,
-          imageHeight,
-          resources,
-        );
-      }
-      const paint = parts.at(-1) || "rgb(255, 255, 255)";
-      const values = parts.slice(0, -1);
-      if (name === "fill")
-        return `<rect x="0" y="0" width="${width}" height="${height}" fill="${paint}"/>`;
-      if (name === "fillRect" && values.length >= 4)
-        return `<rect x="${values[0]}" y="${values[1]}" width="${values[2]}" height="${values[3]}" fill="${paint}"/>`;
-      if (name === "drawRect" && values.length >= 4)
-        return `<rect x="${values[0]}" y="${values[1]}" width="${values[2]}" height="${values[3]}" fill="none" stroke="${paint}"/>`;
-      if (name === "fillOval" && values.length >= 4)
-        return `<ellipse cx="${Number(values[0]) + Number(values[2]) / 2}" cy="${Number(values[1]) + Number(values[3]) / 2}" rx="${Number(values[2]) / 2}" ry="${Number(values[3]) / 2}" fill="${paint}"/>`;
-      if (name === "drawOval" && values.length >= 4)
-        return `<ellipse cx="${Number(values[0]) + Number(values[2]) / 2}" cy="${Number(values[1]) + Number(values[3]) / 2}" rx="${Number(values[2]) / 2}" ry="${Number(values[3]) / 2}" fill="none" stroke="${paint}"/>`;
-      if (name === "drawLine" && values.length >= 4)
-        return `<line x1="${values[0]}" y1="${values[1]}" x2="${values[2]}" y2="${values[3]}" stroke="${paint}"/>`;
-      if (name === "drawString" && values.length >= 3)
-        return `<text x="${values[1]}" y="${values[2]}" fill="${paint}">${svgEscape(decodeDrawingValue(values[0]))}</text>`;
-      return "";
-    })
+    .map((operation) =>
+      drawingElement(operation, width, height, resources, "rgb(255, 255, 255)"),
+    )
     .join("");
   if (!elements) return undefined;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${elements}</svg>`;
-  return `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}")`;
+  return `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(drawingSvg(elements, width, height))}")`;
 };
 const drawnImageDataUrl = (
   operations: string[] | null = [],
@@ -149,38 +162,12 @@ const drawnImageDataUrl = (
   if (operations === null) return undefined;
   if (!operations.length) return emptyImageDataUrl(width, height);
   const elements = operations
-    .map((operation) => {
-      const [name, ...parts] = operation.split("|");
-      if (name === "drawImage" && parts.length >= 3) {
-        const [fileName, x, y, imageWidth = "30", imageHeight = "30"] = parts;
-        return renderImageElement(
-          fileName,
-          x,
-          y,
-          imageWidth,
-          imageHeight,
-          resources,
-        );
-      }
-      const paint = parts.at(-1) || "rgb(0, 0, 0)";
-      const values = parts.slice(0, -1);
-      if (name === "fillRect" && values.length >= 4)
-        return `<rect x="${values[0]}" y="${values[1]}" width="${values[2]}" height="${values[3]}" fill="${paint}"/>`;
-      if (name === "drawRect" && values.length >= 4)
-        return `<rect x="${values[0]}" y="${values[1]}" width="${values[2]}" height="${values[3]}" fill="none" stroke="${paint}"/>`;
-      if (name === "fillOval" && values.length >= 4)
-        return `<ellipse cx="${Number(values[0]) + Number(values[2]) / 2}" cy="${Number(values[1]) + Number(values[3]) / 2}" rx="${Number(values[2]) / 2}" ry="${Number(values[3]) / 2}" fill="${paint}"/>`;
-      if (name === "drawOval" && values.length >= 4)
-        return `<ellipse cx="${Number(values[0]) + Number(values[2]) / 2}" cy="${Number(values[1]) + Number(values[3]) / 2}" rx="${Number(values[2]) / 2}" ry="${Number(values[3]) / 2}" fill="none" stroke="${paint}"/>`;
-      if (name === "drawLine" && values.length >= 4)
-        return `<line x1="${values[0]}" y1="${values[1]}" x2="${values[2]}" y2="${values[3]}" stroke="${paint}"/>`;
-      if (name === "drawString" && values.length >= 3)
-        return `<text x="${values[1]}" y="${values[2]}" fill="${paint}">${svgEscape(decodeDrawingValue(values[0]))}</text>`;
-      return "";
-    })
+    .map((operation) =>
+      drawingElement(operation, width, height, resources, "rgb(0, 0, 0)"),
+    )
     .join("");
   if (!elements) return undefined;
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${elements}</svg>`)}`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(drawingSvg(elements, width, height))}`;
 };
 const emptyImageDataUrl = (width: number, height: number) =>
   `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"/>`)}`;

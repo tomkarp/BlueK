@@ -32,7 +32,8 @@ export class LocalRuntimeClient {
   private resources: ProjectResource[] = [];
   private inputRequestId: number | undefined;
 
-  constructor(private readonly workerFactory = () => new Worker(new URL('./localRuntimeWorker.ts', import.meta.url), { type: 'module' })) {}
+  /** The worker transport is injected: the IDE and an exported player load Kotlite differently. */
+  constructor(private readonly workerFactory: () => Worker) {}
   getSnapshot = () => this.snapshot;
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   onResponse(listener: (value: RuntimeValue) => void) { this.responseListeners.add(listener); return () => { this.responseListeners.delete(listener); }; }

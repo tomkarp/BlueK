@@ -27,6 +27,26 @@ assert.equal(ui.sourceDeclarationName('class Hund { }'), 'Hund');
 assert.equal(ui.sourceDeclarationName('interface Tier { }'), 'Tier');
 assert.equal(ui.sourceDeclarationName('// empty'), null);
 
+// GUI-83: every Image operation the BluePlay library emits is drawn, for actor
+// images (including nested ones) as well as backgrounds.
+const svgOf = (url) => decodeURIComponent(url.replace(/^url\("|"\)$/g, '').split(',')[1]);
+assert.match(svgOf(ui.drawnImageDataUrl(['fill|rgb(200,0,0)'], 20, 20)),
+  /<rect x="0" y="0" width="20" height="20" fill="rgb\(200,0,0\)"\/>/);
+assert.match(svgOf(ui.backgroundDataUrl(['fill|rgb(1,2,3)'], 40, 30)),
+  /<rect x="0" y="0" width="40" height="30" fill="rgb\(1,2,3\)"\/>/);
+const nested = '__bluek:{\\"operations\\":[\\"fill\\prgb(0,0,200)\\"],\\"width\\":6,\\"height\\":6}';
+const framed = svgOf(ui.drawnImageDataUrl(['fill|rgb(0,160,0)', `drawImage|${nested}|7|7|6|6`], 20, 20));
+assert.match(framed, /^<svg[^>]*><rect x="0" y="0" width="20" height="20" fill="rgb\(0,160,0\)"\/><image href="data:image\/svg\+xml/);
+assert.match(decodeURIComponent(framed.match(/href="data:image\/svg\+xml;charset=utf-8,([^"]+)"/)[1]),
+  /<rect x="0" y="0" width="6" height="6" fill="rgb\(0,0,200\)"\/>/);
+const shapes = svgOf(ui.drawnImageDataUrl(['fillRect|1|2|3|4|red', 'drawOval|0|0|10|6|blue', 'drawString|a\\pb|1|9|green'], 20, 20));
+assert.match(shapes, /<rect x="1" y="2" width="3" height="4" fill="red"\/>/);
+assert.match(shapes, /<ellipse cx="5" cy="3" rx="5" ry="3" fill="none" stroke="blue"\/>/);
+assert.match(shapes, /<text x="1" y="9" fill="green">a\|b<\/text>/);
+assert.equal(ui.drawnImageDataUrl(null, 20, 20), undefined);
+assert.equal(ui.drawnImageDataUrl(['unknown|1'], 20, 20), undefined);
+assert.equal(ui.backgroundDataUrl([], 20, 20), undefined);
+
 const params = [{ name: 'a', hasDefault: true }, { name: 'b', hasDefault: false }];
 assert.equal(ui.missingRequired(params, ['', '2']), false);
 assert.equal(ui.missingRequired(params, ['', '']), true);

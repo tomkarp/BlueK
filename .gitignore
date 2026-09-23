@@ -6,6 +6,7 @@ test-results/
 frontend/dist/
 dist-offline/
 frontend/public/downloads/
+frontend/public/player/
 jvm/.gradle/
 jvm/build/
 kotlite-browser/.gradle/

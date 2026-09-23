@@ -15,7 +15,7 @@ try {
   const build = spawnSync('node', ['scripts/build-offline.mjs', '--out', target], { cwd: repository, encoding: 'utf8' });
   assert.equal(build.status, 0, `build:offline failed: ${build.stderr}`);
 
-  for (const file of ['app/index.html', 'app/kotlite/bluek-kotlite-browser.js', 'server.mjs', 'server.ps1', 'start.bat', 'start.command', 'LIESMICH.txt']) {
+  for (const file of ['app/index.html', 'app/kotlite/bluek-kotlite-browser.js', 'app/player/bluek-player.html', 'server.mjs', 'server.ps1', 'start.bat', 'start.command', 'LIESMICH.txt']) {
     assert.ok(existsSync(path.join(bundle, file)), `missing in bundle: ${file}`);
   }
 
@@ -53,6 +53,12 @@ try {
     assert.equal(kotlite.status, 200);
     assert.equal(kotlite.headers.get('content-type'), 'text/javascript; charset=utf-8');
     assert.ok((await kotlite.text()).includes('bluekCreateKotliteSession'), 'Kotlite bundle must be served');
+
+    // The HTML export fills this template, also in the offline package.
+    const player = await get('/player/bluek-player.html');
+    assert.equal(player.status, 200);
+    assert.equal(player.headers.get('content-type'), 'text/html; charset=utf-8');
+    assert.ok((await player.text()).includes('<script type="application/json" id="bluek-program"></script>'), 'player template must be served empty');
 
     assert.equal((await get('/examples/blueplay.bluek.json')).status, 200);
     assert.equal((await get('/../server.mjs')).status, 404, 'paths outside the app folder must be refused');
