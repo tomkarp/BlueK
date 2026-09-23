@@ -329,6 +329,7 @@
     // The project description, as BlueJ keeps it in README.TXT. It belongs to
     // the project, not to a class, so it lives beside `files` and never compiles.
     readme = "",
+    projectName = "",
     readmeOpen = false,
     readmeHelp = false,
     editorFontSize = 16,
@@ -468,7 +469,14 @@
       library,
       library?.id === "blueplay" ? bluePlayFrameworkFiles : [],
       readme,
+      projectName,
     );
+  }
+  function commitProjectName(event: KeyboardEvent) {
+    if (event.key !== "Enter" || event.isComposing) return;
+    event.preventDefault();
+    projectName = projectName.trim();
+    (event.currentTarget as HTMLInputElement).blur();
   }
   // BlueJ shows a README note in the corner of every project; BlueK does the
   // same and opens on the rendered text rather than on the markup.
@@ -495,6 +503,7 @@
     resources;
     cardPositions;
     readme;
+    projectName;
     saveAutosave();
   }
   function beginCardDrag(event: MouseEvent | PointerEvent, file: ProjectFile) {
@@ -2674,12 +2683,18 @@
     inheritanceSelection = "";
   }
   function exportProject() {
+    if (!projectName.trim()) {
+      const entered = window.prompt("What should your project be called?", "");
+      if (entered === null) return;
+      projectName = entered.trim();
+    }
     const blob = new Blob([JSON.stringify(projectPayload(), null, 2)], {
       type: "application/json",
     });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = "bluek-project.bluek.json";
+    const safeFileName = projectName.trim().replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-") || "bluek-project";
+    link.download = `${safeFileName}.bluek.json`;
     link.click();
     URL.revokeObjectURL(link.href);
     status = "Project exported";
@@ -2754,6 +2769,7 @@
     resources = imported.resources;
     cardPositions = imported.cardPositions;
     readme = imported.readme;
+    projectName = imported.projectName ?? "";
     closeReadme();
     selected = 0;
     editorWindows = [];
@@ -2907,6 +2923,7 @@
       resources = [];
       cardPositions = {};
       readme = "";
+      projectName = "";
       closeReadme();
       selected = 0;
       editorWindows = [];
@@ -3066,6 +3083,7 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10v4h4l5 4V6l-5 4H3Z"/><path d="M16 9a5 5 0 0 1 0 6M18.5 6.5a9 9 0 0 1 0 11"/></svg>
       </button>
     {/if}
+    <input class="project-title" aria-label="Project name" placeholder="Untitled project" bind:value={projectName} on:keydown={commitProjectName} />
     <div class="toolbar-options">
       <button
         class:active={terminalOpen}

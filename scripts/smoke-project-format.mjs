@@ -23,6 +23,10 @@ const model = projectModelFromPayload(parsed, index => `loaded-${index}`);
 assert.deepEqual(model.files, [{ id: 'loaded-0', path: files[0].path, fileName: files[0].fileName, kind: files[0].kind, source: files[0].source, revision: 1 }]);
 assert.deepEqual(model.resources, resources);
 assert.deepEqual(model.cardPositions, { 'loaded-0': positions.f1 });
+const named = createProjectPayload(files, [], {}, undefined, [], '', '  Mein Projekt  ');
+assert.equal(named.projectName, 'Mein Projekt');
+assert.equal(projectModelFromPayload(named, index => `named-${index}`).projectName, 'Mein Projekt');
+assert.equal('projectName' in createProjectPayload(files, [], {}, undefined, [], '', '   '), false);
 
 assert.throws(() => parseProject({ format: 'bluek-project', version: 1, files: [{ fileName: 'bad.txt', source: '' }] }), /Invalid Kotlin file/);
 assert.throws(() => parseProject({ format: 'bluek-project', version: 1, files: [{ fileName: 'A.kt', source: '' }, { fileName: 'A.kt', source: '' }] }), /duplicate Kotlin/);

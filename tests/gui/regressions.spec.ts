@@ -1340,6 +1340,38 @@ test('GUI-77 the left action names the main entry point instead of Run', async (
   await expect(page.getByRole('button', { name: 'Run', exact: true })).toHaveCount(0);
 });
 
+test('GUI-80 project name field does not intercept clicks on project actions', async ({ page }) => {
+  await project(page);
+  await page.getByRole('button', { name: 'New Project', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Create New Project' }).getByRole('button', { name: /^BluePlay Template/ }).click();
+
+  await expect(page.getByLabel('Project name')).toBeVisible();
+  const images = await page.getByRole('button', { name: 'Images', exact: true }).boundingBox();
+  const audio = await page.getByRole('button', { name: 'Audio', exact: true }).boundingBox();
+  const title = await page.getByLabel('Project name').boundingBox();
+  expect(images && audio && title).toBeTruthy();
+  expect(images!.x + images!.width).toBeLessThan(audio!.x);
+  expect(audio!.x + audio!.width).toBeLessThan(title!.x);
+
+  const projectName = page.getByLabel('Project name');
+  await projectName.fill('  Mein BluePlay  ');
+  await projectName.press('Enter');
+  await expect(projectName).toHaveValue('Mein BluePlay');
+  await expect(projectName).not.toBeFocused();
+
+  await page.getByRole('button', { name: 'New Project', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Create New Project' })).toBeVisible();
+  await page.getByRole('dialog', { name: 'Create New Project' }).getByRole('button', { name: 'Cancel' }).click();
+
+  await page.getByRole('button', { name: 'New File', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Create New Kotlin File' })).toBeVisible();
+  await page.getByRole('dialog', { name: 'Create New Kotlin File' }).getByRole('button', { name: 'Cancel' }).click();
+
+  await page.getByRole('button', { name: 'Help', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Keyboard Shortcuts' })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Offline Version/ })).toBeVisible();
+});
+
 test('GUI-78 selected Kotlin lines can be commented and uncommented by button and slash shortcut', async ({ page }) => {
   await project(page, 'class Hund {\n    fun eins() {}\n    fun zwei() {}\n}');
   await page.locator('.classcard').dblclick();

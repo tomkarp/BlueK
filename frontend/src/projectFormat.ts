@@ -18,6 +18,8 @@ export type SavedProject = {
   cardPositions?: Record<string, ProjectCardPosition>;
   /** The project description (README.md); absent while nobody wrote one. */
   readme?: string;
+  /** Optional project title. */
+  projectName?: string;
 };
 
 export type ProjectModel = {
@@ -26,6 +28,7 @@ export type ProjectModel = {
   resources: ProjectResource[];
   cardPositions: Record<string, ProjectCardPosition>;
   readme: string;
+  projectName?: string;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -96,6 +99,12 @@ function validateReadme(value: unknown): string | undefined {
   return value;
 }
 
+function validateProjectName(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") throw new Error("The project contains an invalid name.");
+  return value.trim() || undefined;
+}
+
 export function parseProject(value: unknown): SavedProject {
   if (!isRecord(value) || value.format !== "bluek-project" || value.version !== 1)
     throw new Error("Invalid BlueK project.");
@@ -107,6 +116,7 @@ export function parseProject(value: unknown): SavedProject {
     resources: validateResources(value.resources),
     cardPositions: validateCardPositions(value.cardPositions),
     readme: validateReadme(value.readme),
+    projectName: validateProjectName(value.projectName),
   };
 }
 
@@ -117,6 +127,7 @@ export function createProjectPayload(
   library?: ProjectLibrary,
   additionalCardFiles: ProjectFile[] = [],
   readme = "",
+  projectName = "",
 ): SavedProject {
   const positionedFiles = [...files, ...additionalCardFiles];
   return {
@@ -125,6 +136,7 @@ export function createProjectPayload(
     ...(library ? { library } : {}),
     // A description nobody wrote is nothing to export; whitespace alone is none.
     ...(readme.trim() ? { readme } : {}),
+    ...(projectName.trim() ? { projectName: projectName.trim() } : {}),
     files: files.map((file) => ({
       ...(file.path ? { path: file.path } : {}),
       fileName: file.fileName,
@@ -165,6 +177,7 @@ export function projectModelFromPayload(
     library: payload.library,
     resources: payload.resources ?? [],
     readme: payload.readme ?? "",
+    projectName: payload.projectName,
     cardPositions: Object.fromEntries(
       files
         .filter((file) => positions[file.fileName])
