@@ -3907,7 +3907,7 @@
       </div>
     </div>
   {/each}
-  {#if createDialog}<div class="modal" role="presentation">
+  {#if createDialog}<div class="modal topmost-modal" role="presentation">
       <div
         class="dialog create-object-dialog"
         role="dialog"
@@ -3972,7 +3972,7 @@
             missingRequired(createDialog.parameters, createArgs)}>Create</button></div>
       </div>
     </div>{/if}
-  {#if invokeDialog}<div class="modal" role="presentation">
+  {#if invokeDialog}<div class="modal topmost-modal" role="presentation">
       <div
         class="dialog method-dialog"
         role="dialog"
@@ -4511,7 +4511,7 @@
         <div class="dialog-actions"><button on:click={() => (shortcutsHelpOpen = false)}>Close</button></div>
       </div>
     </div>{/if}
-  {#if objectNamePrompt}<div class="modal" role="presentation">
+  {#if objectNamePrompt}<div class="modal topmost-modal" role="presentation">
       <div
         class="dialog create-object-dialog"
         role="dialog"
