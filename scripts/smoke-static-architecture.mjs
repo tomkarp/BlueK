@@ -6,6 +6,10 @@ const read = path => readFile(new URL(path, root), 'utf8');
 const runtimeSources = [
   ['frontend/src/localRuntimeClient.ts', await read('frontend/src/localRuntimeClient.ts')],
   ['frontend/src/localRuntimeWorker.ts', await read('frontend/src/localRuntimeWorker.ts')],
+  ['frontend/src/localRuntimeWorkerFactory.ts', await read('frontend/src/localRuntimeWorkerFactory.ts')],
+  ['frontend/src/runtimeWorker.ts', await read('frontend/src/runtimeWorker.ts')],
+  ['frontend/src/playerRuntimeWorker.ts', await read('frontend/src/playerRuntimeWorker.ts')],
+  ['frontend/src/embeddedKotlite.ts', await read('frontend/src/embeddedKotlite.ts')],
   ['frontend/src/SvelteApp.svelte', await read('frontend/src/SvelteApp.svelte')],
 ];
 
@@ -34,6 +38,10 @@ if (!worker.includes("new URL('../kotlite/bluek-kotlite-browser.js', import.meta
 }
 if (!worker.includes('fetch(bundleUrl)')) {
   throw new Error('The browser worker does not load its bundled static asset.');
+}
+const playerWorker = runtimeSources.find(([fileName]) => fileName.endsWith('playerRuntimeWorker.ts'))[1];
+if (!playerWorker.includes("from 'virtual:bluek-kotlite-gzip'") || playerWorker.includes('fetch(')) {
+  throw new Error('The player worker must use the embedded Kotlite bundle and never fetch it.');
 }
 
 await access(new URL('frontend/public/kotlite/bluek-kotlite-browser.js', root));

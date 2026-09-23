@@ -250,7 +250,7 @@ test('GUI-39 editor font size is configurable in Settings', async ({ page }) => 
   await page.locator('.classcard').dblclick();
   await page.getByLabel('Settings', { exact: true }).click();
   const settings = page.getByRole('dialog', { name: 'Settings' });
-  const fontSize = settings.getByLabel('Editor font size');
+  const fontSize = settings.getByLabel('Font size', { exact: true });
   await expect(fontSize.locator('option')).toHaveCount(21);
   await expect(fontSize.locator('option').first()).toHaveAttribute('value', '10');
   await expect(fontSize.locator('option').last()).toHaveAttribute('value', '30');
@@ -294,12 +294,9 @@ test('GUI-41 project and file dialogs stay above windows', async ({ page }) => {
     ['New Project', 'Create New Project', 'Cancel'],
     ['Open / Import', 'Open / Import', 'Cancel'],
     ['Save / Export', 'Save / Export', 'Cancel'],
-    ['Files', 'Files', 'Close'],
   ] as const;
   for (const [button, dialogName, closeButton] of dialogs) {
-    if (button === 'New Project') await page.getByRole('button', { name: button, exact: true }).click();
-    else if (button === 'Files') await page.getByRole('button', { name: button, exact: true }).click();
-    else await page.getByRole('button', { name: button, exact: true }).click();
+    await page.getByRole('button', { name: button, exact: true }).click();
     const dialog = page.getByRole('dialog', { name: dialogName });
     await expect(dialog).toBeVisible();
     await expect(dialog.locator('..')).toHaveCSS('z-index', '100');
@@ -480,10 +477,12 @@ test('GUI-32 editor and terminal share controls, minimum size and full frame han
   const terminal = page.locator('.terminal-window');
   const editorButtons = editor.locator('.editor-header button');
   const terminalButtons = terminal.locator('.terminal-header button');
-  await expect(editorButtons.nth(0)).toHaveText('□');
+  await expect(editorButtons.nth(0)).toHaveAccessibleName('Maximize editor window');
+  await expect(editorButtons.nth(0).locator('svg.window-control-icon')).toHaveCount(1);
   await expect(editorButtons.nth(1).locator('svg.window-icon')).toHaveCount(1);
   await expect(editorButtons.nth(2)).toHaveText('×');
-  await expect(terminalButtons.nth(0)).toHaveText('□');
+  await expect(terminalButtons.nth(0)).toHaveAccessibleName('Maximize terminal window');
+  await expect(terminalButtons.nth(0).locator('svg.window-control-icon')).toHaveCount(1);
   await expect(terminalButtons.nth(2)).toHaveText('×');
   await expect(terminalButtons.nth(1)).toHaveCSS('height', await terminalButtons.nth(0).evaluate((node) => getComputedStyle(node).height));
 
@@ -738,16 +737,16 @@ test('GUI-21 the same codepad object can be added under two reference names', as
 test('GUI-22 top actions are grouped, ordered and switch to icon-only mode together', async ({ page }) => {
   await project(page, 'class Hund {}');
   const actions = page.locator('.toolbar-main-action');
-  await expect(actions).toHaveCount(4);
+  await expect(actions).toHaveCount(3);
   await expect(actions.nth(0)).toHaveText(/New Project/);
   await expect(actions.nth(1)).toHaveText(/Open \/ Import/);
   await expect(actions.nth(2)).toHaveText(/Save \/ Export/);
-  await expect(actions.nth(3)).toHaveText(/Files/);
   await actions.nth(1).click();
   const openDialog = page.getByRole('dialog', { name: 'Open / Import' });
   await expect(openDialog.locator('.project-dropzone')).toContainText('JSON');
-  await expect(openDialog.locator('.project-dropzone')).toContainText('BlueJ ZIP');
-  await expect(openDialog.locator('.project-dropzone')).toContainText('Project directory');
+  await expect(openDialog.locator('.project-dropzone')).toContainText('Accepted: .json');
+  await expect(openDialog.getByLabel('Choose project file')).toHaveAttribute('accept', '.json,.bluek.json,application/json');
+  await expect(openDialog.getByLabel('Choose project directory')).toHaveCount(0);
   await openDialog.getByRole('button', { name: 'Cancel' }).click();
   await actions.nth(2).click();
   const saveDialog = page.getByRole('dialog', { name: 'Save / Export' });
@@ -756,8 +755,6 @@ test('GUI-22 top actions are grouped, ordered and switch to icon-only mode toget
   await expect(saveDialog.getByRole('button', { name: /BlueJ/ })).toBeDisabled();
   await expect(saveDialog.getByRole('button', { name: /Short Link/ })).toBeEnabled();
   await saveDialog.getByRole('button', { name: 'Cancel' }).click();
-  await actions.nth(3).click();
-  await expect(page.getByRole('dialog', { name: 'Files' })).toContainText('not implemented');
   await page.setViewportSize({ width: 800, height: 1000 });
   for (const action of await actions.all())
     await expect(action.locator('span:not(.toolbar-action-icon)')).toBeHidden();
@@ -1038,10 +1035,38 @@ test('GUI-12 GUI-13 GUI-15 input echo order and clearing preserve the app', asyn
   await expect(terminal.locator('pre')).not.toContainText('after');
 });
 
-test('GUI-16 Files remains an informational placeholder', async ({ page }) => {
+test('GUI-79 Files is gone and only BluePlay projects get Images and Audio', async ({ page }) => {
   await project(page);
-  await page.getByRole('button', { name: 'Files', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'Files' })).toContainText('not implemented');
+  await expect(page.getByRole('button', { name: 'Files', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Images', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Audio', exact: true })).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'New Project', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Create New Project' }).getByRole('button', { name: /^BluePlay Template/ }).click();
+  await expect(page.getByRole('button', { name: 'Files', exact: true })).toHaveCount(0);
+  const imagesButton = page.getByRole('button', { name: 'Images', exact: true });
+  const audioButton = page.getByRole('button', { name: 'Audio', exact: true });
+  for (const button of [imagesButton, audioButton]) {
+    await expect(button).toHaveText('');
+    await expect(button.locator('svg')).toHaveCount(1);
+  }
+
+  await imagesButton.click();
+  const images = page.getByRole('dialog', { name: 'Images' });
+  await expect(images.locator('.standard-image-tile').first()).toHaveAccessibleName('Add image');
+  await expect(images.getByLabel('duck.png', { exact: true })).toContainText('duck.png');
+  await expect(images.getByRole('img', { name: 'duck.png' })).toBeVisible();
+  await images.getByRole('button', { name: 'Add image' }).click();
+  const notice = page.getByRole('alertdialog', { name: 'Not implemented' });
+  await expect(notice).toContainText('Adding images is not implemented yet.');
+  await notice.getByRole('button', { name: 'OK' }).click();
+  await images.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(images).toHaveCount(0);
+
+  await audioButton.click();
+  await expect(notice).toContainText('Audio support is not implemented yet.');
+  await notice.getByRole('button', { name: 'OK' }).click();
+  await expect(notice).toHaveCount(0);
 });
 
 test('GUI-14 output is visible before a long loop finishes', async ({ page }) => {
@@ -1220,7 +1245,7 @@ test('GUI-67 a link can open the README, and the export dialog attaches that to 
   const save = page.getByRole('dialog', { name: 'Save / Export' });
   // The links come first, then the file exports.
   await expect(save.locator('.project-choice-list button strong')).toHaveText([
-    'Copy Full Project Link', 'Copy Short Link', 'Export Project JSON', 'Export BlueJ Project (.zip)',
+    'Copy Full Project Link', 'Copy Short Link', 'Export Project JSON', 'Export as HTML', 'Export BlueJ Project (.zip)',
   ]);
   // Each link box carries the option at its right edge; both mean the same.
   await expect(save.getByLabel(/Open README.md with the link/)).toHaveCount(2);
@@ -1273,7 +1298,7 @@ test('GUI-68 the editor has a Vim mode that stays off until it is switched on', 
   // The settings show the same switch, and switching it off there ends the mode.
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   const settings = page.getByRole('dialog', { name: 'Settings' });
-  const toggle = settings.getByLabel('Vim mode in the editor');
+  const toggle = settings.getByLabel('Vim mode', { exact: true });
   await expect(toggle).toBeChecked();
   await toggle.uncheck();
   await settings.getByRole('button', { name: 'Close', exact: true }).click();
@@ -1486,4 +1511,23 @@ test('GUI-78 selected Kotlin lines can be commented and uncommented by button an
   await page.keyboard.press('ControlOrMeta+Shift+7');
   await expect(lines.nth(1)).not.toContainText('//');
   await expect(lines.nth(2)).not.toContainText('//');
+});
+
+test('RT-33 Export Project JSON keeps its file name and content', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, projectName: 'Hunde: Teil 1/2',
+    files: [{ fileName: 'Hund.kt', kind: 'class', source: 'class Hund' }] };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  await expect(page.getByLabel('Project name')).toHaveValue('Hunde: Teil 1/2');
+  await page.getByRole('button', { name: 'Save / Export' }).click();
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('dialog', { name: 'Save / Export' }).getByRole('button', { name: /Export Project JSON/ }).click(),
+  ]);
+  expect(download.suggestedFilename()).toBe('Hunde- Teil 1-2.bluek.json');
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(chunk as Buffer);
+  const saved = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  expect(saved).toMatchObject({ format: 'bluek-project', version: 1, projectName: 'Hunde: Teil 1/2',
+    files: [{ fileName: 'Hund.kt', kind: 'class', source: 'class Hund' }] });
 });

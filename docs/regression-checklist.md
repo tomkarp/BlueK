@@ -41,13 +41,13 @@ Worker-/Runtime-Smokes getrennt.
 | GUI-13 | Clear leert alle Terminalinhalte sofort, auch im geteilten Terminal; App bleibt sichtbar; spätere Ausgabe funktioniert | GUI grün: Clear im Split-Terminal, Form Feed, danach neue Ausgabe | Abgesichert |
 | GUI-14 | Print/println wird während laufender Schleife sichtbar | GUI grün: Ausgabe vor Schleifenende, danach Reset | Laufzeit prüft zusätzlich Einzelereignisse |
 | GUI-15 | Keine EOF/Stop/Close-Leiste oder Hinweiszeile; aktives Eingabefeld farblich erkennbar | GUI grün: Eingabe aktiv/inaktiv, keine Hinweiszeile | Visuelle Details noch offen |
-| GUI-16 | Files zeigt zunächst nur einen Hinweis-Popup ohne Funktionalität | GUI grün | Abgesichert |
+| GUI-16 | Entfallen: Der Files-Button mit Hinweis-Popup wurde durch GUI-79 entfernt (fb0666c) | Chromium-Test GUI-16 durch GUI-79 ersetzt, der das Fehlen des Buttons prüft | Durch GUI-79 abgelöst |
 | GUI-17 | Vorlagen erscheinen untereinander; Escape bricht Projekt-, Konstruktor- und Methodendialoge ab; Eingabefokus startet sinnvoll | GUI grün: 17/17 Chromium-Tests | Weitere visuelle Abnahmen offen |
 | GUI-18 | Primitive Inspektoren zeigen ihren Typ, bleiben feldlos und werden beim Verschieben aktiviert; Escape schließt den aktiven Inspector | GUI grün: 18/18 Chromium-Tests | Weitere Typen noch ausbauen |
 | GUI-19 | Codepad-Eingaben und Ergebnisse stehen mit kompaktem vertikalem Abstand wie im BlueJ-Stil | GUI-Test grün | Visuelle Abnahme offen |
 | GUI-20 | Lange Codepad-Werte werden per CSS dynamisch einzeilig gekürzt, behalten den Typ sichtbar und zeigen den vollständigen Wert per Hover | GUI-Test grün | Visuelle Abnahme offen |
 | GUI-21 | Dasselbe Codepad-Objekt kann unter mehreren Referenznamen auf der Objektbank abgelegt werden; der gemeinsame Inspector zeigt den jeweils aufgerufenen Referenznamen | GUI-Test grün | Visuelle Abnahme offen |
-| GUI-22 | Obere Aktionen sind zu New Project, Open / Import, Save / Export und Files gebündelt; Open nutzt ein Drop-Feld, Save das New-Project-Layout und alle schalten gemeinsam auf Icon-only um | GUI-Test grün | Visuelle Abnahme offen |
+| GUI-22 | Obere Aktionen sind zu New Project, Open / Import und Save / Export gebündelt (Files entfällt seit GUI-79); Open nutzt ein Drop-Feld, dessen Dateiauswahl nur JSON anbietet (vom Nutzer bestätigt, 08963a8), Save das New-Project-Layout und alle schalten gemeinsam auf Icon-only um | Chromium-Test GUI-22: drei Aktionen, Drop-Feld „JSON“/„Accepted: .json“, `accept` nur JSON, keine Ordnerwahl | Visuelle Abnahme offen |
 | GUI-23 | Save / Export ist bei leerem Projekt bereits auf der Hauptleiste deaktiviert | GUI-Test grün | Abgesichert |
 | RT-01 | Identität, Getter/Setter, Main, Reset, Input, veraltete Worker-Antworten bleiben korrekt | Bestehende Integrationstests | `test:runtime-state` |
 | GUI-24 | Direkte Anweisungen in Projektdateien ergeben vor jeder Ausgabe einen Compilerfehler mit Dateiposition; auch Codepad kann den fehlgeschlagenen Compile nicht umgehen; direkte Codepad-Anweisungen bleiben erlaubt | GUI grün: echter Worker, Fehlerdialog mit Actions.kt/Zeile/Spalte, keine Terminalausgabe, Codepad nach Projektwechsel | Abgesichert in Chromium |
@@ -58,15 +58,15 @@ Worker-/Runtime-Smokes getrennt.
 | GUI-29 | Kotlin-Editor verwendet die Terminal-Fensteroptik, zeigt Verschiebe-Cursor und hat keinen unnötigen Leerraum unter dem Editor | Chromium-Test für Stil, Cursor und unteren Abstand ergänzt | Abgesichert |
 | GUI-30 | Editor und Terminal sind nicht modal; das zuletzt angeklickte Fenster liegt jeweils oben | Chromium-Test für Fensterfokus und aktiven Z-Index ergänzt | Abgesichert |
 | GUI-31 | Pro Klasse bzw. Funktionsdatei kann ein eigenes Editorfenster geöffnet bleiben | Chromium-Test mit zwei gleichzeitig geöffneten Kotlin-Dateien ergänzt | Abgesichert |
-| GUI-32 | Editor und Terminal verwenden identische Fenster-Buttons, gemeinsame Mindestgrößen und vollständig nutzbare Rahmenbereiche für Resize | Chromium-Test für Icons, 24-Pixel-Rahmenbereiche und Mindestgrößen ergänzt | Abgesichert |
+| GUI-32 | Editor und Terminal verwenden identische Fenster-Buttons (Maximieren als abgerundetes SVG-Symbol wie in GUI-06, Schließen als `×`), gemeinsame Mindestgrößen und vollständig nutzbare Rahmenbereiche für Resize | Chromium-Test für Icons, 24-Pixel-Rahmenbereiche und Mindestgrößen; Maximieren-Prüfung von `□` auf SVG-Symbol und zugänglichen Namen umgestellt | Abgesichert |
 | GUI-33 | Mehrere Editorfenster lassen sich zu einem Tab-Fenster sammeln, der aktive Tab ist durch seine mit dem Codefeld verbundene Hervorhebung eindeutig erkennbar, der vertikale Abstand unter den Fenster-Icons ist in beiden Modi gleich, Tabs lassen sich wechseln, über das Tab-Kreuz oder das X der Gruppe schließen und wieder in einzelne Fenster zerlegen | Chromium-Test für Sammeln, aktive Tab-Markierung, vertikalen Header-Abstand, Tabwechsel, Tab-Schließen, Gruppenschließen und Aufteilen ergänzt | Abgesichert |
 | GUI-34 | Eine fehlgeschlagene Formatierung zeigt einen schließbaren Fehler ohne unnötigen Formatter-Paketpräfix; ein neuer Formatierungsversuch entfernt die alte Meldung vor dem erneuten Ergebnis | Chromium-Test für Fehler, Schließen und erneuten Versuch grün | Abgesichert |
 | GUI-36 | Terminal-Splitter bleibt auf der Trennlinie zwischen BlueK und Terminal zentriert und verändert beim Ziehen beide Bereiche | Chromium-Test erweitert: Griffposition und Breitenänderung grün | Abgesichert |
 | GUI-37 | Der Terminal-Splitter wird bei geöffnetem Editorfenster nicht über den Editorinhalt gezeichnet | Chromium-Test für aktives Editorfenster grün | Abgesichert |
 | GUI-38 | Die Kotlin-Schrift im Editor ist auf 16 px eingestellt | GUI-Test grün | Abgesichert |
-| GUI-39 | Die Editor-Schriftgröße lässt sich über Settings oben rechts von 10 px bis 30 px einstellen und wirkt sofort auf Code und Zeilennummern | GUI-Test erweitert und grün | Abgesichert |
+| GUI-39 | Die Editor-Schriftgröße lässt sich über Settings oben rechts (Bereich Editor, Feld „Font size“, siehe GUI-74) von 10 px bis 30 px einstellen und wirkt sofort auf Code und Zeilennummern | GUI-Test erweitert und grün; Feldname nach GUI-74 angepasst | Abgesichert |
 | GUI-40 | Settings und New File liegen beim Öffnen über Editoren, Terminal und Objektinspektoren; der Dialog bietet zusätzlich Kotlin Functions an | Chromium-Test grün: Settings/New File, Kotlin-Functions-Option und kein New-Functions-Button | Abgesichert |
-| GUI-41 | New Project, Open / Import, Save / Export und Files liegen beim Öffnen über Editoren, Terminal und Objektinspektoren | GUI-Test ergänzt | Abzusichern |
+| GUI-41 | New Project, Open / Import und Save / Export liegen beim Öffnen über Editoren, Terminal und Objektinspektoren (Files entfällt seit GUI-79) | Chromium-Test GUI-41 ohne Files grün | Abgesichert |
 | GUI-42 | Ohne Vim schließt Escape den Editor sofort. Mit Vim gehört ein einfaches Escape ganz Vim (verlässt sofort den Insert-Modus, schließt aber nie das Editorfenster, egal wie oft/lang gedrückt); erst Shift+Escape schließt gezielt den aktiven Editor | 3 echte Chromium-Tests grün: sofortiges Schließen ohne Vim, wiederholtes einfaches Escape in Insert-/Normal-Mode ohne Effekt, Shift+Escape schließt bei mehreren offenen Editorfenstern genau den aktiven | — |
 | GUI-43 | Nach dem Laden eines gespeicherten Projekts wird `/load/<code>` aus der URL entfernt; weitere Vorlagen funktionieren normal | GUI-Test grün | Abgesichert |
 | GUI-44 | Open / Import kann einen dreiteiligen Wortcode eingeben und lädt das entsprechende gespeicherte Projekt | GUI-Test grün | Abgesichert |
@@ -105,8 +105,8 @@ Worker-/Runtime-Smokes getrennt.
 | GUI-59 | Neue Schülerklassen werden bei der Kartenpositionierung hinter den vier BluePlay-Bibliothekskarten berücksichtigt | Chromium-GUI-Test prüft die Position der ersten neu angelegten Klasse nach der Vorlagenreihenfolge | Mit GUI-76 und GUI-01 geprüft; fokussierter Vorlagenlauf 8/8 grün |
 | RT-13 | Eine Klasse darf eine später deklarierte Klasse verwenden, auch wenn deren Oberklasse nullable Member späterer Klassen hat (z. B. Defender erzeugt Laser, Laser erbt `image: Image?`) | Ursache: der Analyse-Retry verschob die Klasse an den Skriptanfang vor ihre eigenen Abhängigkeiten; betraf auch das alte Bundle. Kotlite-Smoke mit reinem Kotlin und fehlender Klasse als Negativfall; Space-Invaders-Smoke lädt alphabetisch (Defender vor Laser) | Jeder Retry kostet einen Analyse-Durchlauf (Vorlage in Dateireihenfolge ohne Retry ≈ 160 ms, alphabetisch ≈ 295 ms); echte Zwei-Pass-Analyse offen |
 | RT-14 | `getIntersecting<T>()`, `getOneIntersecting<T>()`, `isTouching<T>()` und `removeTouching<T>()` funktionieren in Schüler-Actors | Ursache: implizites `intersects(it)` im Lambda der inline-Library-Funktion war zur Laufzeit nicht auflösbar (auch im alten Bundle). Native BluePlay-Smoke prüft Treffer, Anzahl, Entfernen und den Zustand danach | Abgesichert |
-| GUI-60 | Ein BlueJ-Projekt als ZIP (auch mit umschließendem Ordner, `__MACOSX`, `.ctxt`) öffnet mit allen Kotlin-Klassen und den Kartenpositionen aus `package.bluej`; private Methoden erscheinen nicht im Objekt-Kontextmenü | Chromium-GUI-Test mit ZIP-Fixture (Karten, Codepad, Kontextmenü ohne `zieheKarte`); echte inf-schule-ZIPs Blackjack, Goldrausch, Ausgebüxt einmalig per Playwright geöffnet und ausgeführt | Abgesichert |
-| GUI-61 | Ein BlueJ-BluePlay-Ordner nutzt die eingebaute Library: `World.kt`/`Actor.kt`/`Image.kt`/`BluePlayFunctions.kt` werden ersetzt, `images/`/`sounds/` werden Projektressourcen; Ordner lassen sich wählen oder hineinziehen; JSON/ZIP über eigenes Dateifeld (vorher erzwang `webkitdirectory` eine Ordnerauswahl) | Chromium-GUI-Test mit Verzeichnis-Fixture und `main()`; Drag & Drop eines Ordners nicht automatisiert | Ordner-Drop visuell abnehmen |
+| GUI-60 | Ein BlueJ-Projekt als ZIP (auch mit umschließendem Ordner, `__MACOSX`, `.ctxt`) öffnet mit allen Kotlin-Klassen und den Kartenpositionen aus `package.bluej`; private Methoden erscheinen nicht im Objekt-Kontextmenü | Chromium-GUI-Test mit ZIP-Fixture, per Drop auf das Open/Import-Feld (die Dateiauswahl bietet nur JSON) (Karten, Codepad, Kontextmenü ohne `zieheKarte`); echte inf-schule-ZIPs Blackjack, Goldrausch, Ausgebüxt einmalig per Playwright geöffnet und ausgeführt | Abgesichert |
+| GUI-61 | Ein BlueJ-BluePlay-Projekt nutzt die eingebaute Library: `World.kt`/`Actor.kt`/`Image.kt`/`BluePlayFunctions.kt` werden ersetzt, `images/`/`sounds/` werden Projektressourcen. Seit 08963a8 (vom Nutzer als beabsichtigt bestätigt) bietet der Open/Import-Dialog nur JSON und keine Ordnerwahl; ZIPs und Ordner erreichen BlueK nur noch durch Ablegen auf dem Drop-Feld | Chromium-GUI-Test mit BluePlay-ZIP per Drop und `main()`; Ablegen eines Ordners nicht automatisiert | Ordner-Drop visuell abnehmen |
 | GUI-62 | `npm run build:offline` erzeugt ein lauffähiges Offline-Paket (App, Server, Startskripte); der mitgelieferte Server liefert App, Kotlite-Bundle und Beispiele lokal aus, Pfade außerhalb des App-Ordners werden abgelehnt; im Offline-Build fehlen Kurzlink-Aktion und Drei-Wort-Code | `smoke-offline-build`; Built-in-Browser auf dem gebauten Paket (Klasse angelegt, kompiliert, beide Dialoge ohne Server-Funktionen) | `start.bat` unter Windows noch nicht getestet (kein Windows-Rechner verfügbar) |
 | GUI-63 | Unten links in der Seitenleiste bietet BlueK die Offline-Version als ZIP an; `npm run build` und `npm run dev` (predev) legen die Datei immer an, im Offline-Build selbst fehlt der Link | Chromium-GUI-Test (Link sichtbar, `download`-Attribut, ZIP per Request geladen), `smoke-offline-build` (ZIP veröffentlicht, nicht im Offline-Paket selbst) | Abgesichert |
 | GUI-64 | Compilerfehler erscheinen nicht mehr im zentralen Dialog, sondern am Ort des Fehlers: der Editor der betroffenen Datei öffnet sich, markiert die Zeile (roter Hintergrund, Wellenlinie) und meldet den Text unter dem Editor wie die Parser-Meldungen des Formatierers; Tippen löscht die Markierung, der nächste Compile setzt sie neu. Der Dialog bleibt nur für Fehler ohne Quelltextstelle (z. B. fehlgeschlagener Methodenaufruf) | Chromium-GUI-Test GUI-64 (Markierung, Meldung unter dem Editor, kein Dialog, Löschen beim Tippen, erneutes Melden, Verschwinden nach der Korrektur) und GUI-24 (Fehler in `Actions.kt`) | Abgesichert |
@@ -126,13 +126,14 @@ Worker-/Runtime-Smokes getrennt.
 | GUI-80 | Ein optionaler Projektname ist zwischen den Toolbar-Aktionen editierbar, Enter trimmt und bestätigt den Namen und löst den Fokus vom Feld; der Name wird in Autosave/JSON/full link/Server-Shortlink erhalten und bestimmt beim JSON-Export den Dateinamen; beim ersten Export ohne Namen fragt BlueK danach. Bei BluePlay stehen Images und Audio links vom Namen; das Namensfeld darf keine Buttons überdecken | `smoke-project-format`; Chromium-GUI-Test GUI-80 prüft Enter/Fokus, Medienreihenfolge und Klicks auf New Project, New File und Help | Ursache war `.toolbar input`: das transparente, absolut positionierte Upload-Input traf auch das Namensfeld und überdeckte vorgelagerte Aktionen. Auf `.toolbar label input` eingegrenzt; direkte Browserprüfung nach Korrektur öffnete New Project, New File und Help. Playwright-Lauf hier durch fehlende `chromium_headless_shell`-Installation blockiert |
 | GUI-77 | Die linke Hauptaktion heißt „Start main“, damit sie klar vom „Run“-Button der BluePlay-Welt unterschieden ist | Chromium-GUI-Test GUI-77 prüft sichtbaren Text, zugänglichen Namen und Tooltip | Chromium-Test 1/1 grün; Typecheck 0 Fehler, 5 Svelte-Warnungen; abgesichert |
 | GUI-78 | Markierte Kotlin-Zeilen lassen sich per Button und Cmd/Ctrl+/ gemeinsam ein- und auskommentieren; Kommentar- und Autoformat-Buttons sind als einheitliche Editor-Aktionsleiste gestaltet | Chromium-GUI-Test GUI-78 prüft Mehrzeilenauswahl, Button, Tastatureingabe über den physischen Slash-Key und sichtbaren Shortcut-Text; die bestehenden Formatierungstests bleiben Teil der Editorregression | Chromium-Test 1/1 grün; Typecheck 0 Fehler, 5 Svelte-Warnungen; abgesichert |
-| GUI-79 | Der unbrauchbare Files-Button entfällt; nur BluePlay-Projekte erhalten zwei icon-only Aktionen für Bilder und Audio. Images öffnet eine Kachelansicht für ungefähr fünf Spalten mit Dateiname und Vorschau, einer wirkungslosen Add-Kachel mit Implementierungshinweis sowie mittigem Close-Button darunter; Audio zeigt ebenfalls einen Implementierungshinweis | Echter Chromium-GUI-Test nicht ausgeführt; Runtime-/Hilfstest nicht einschlägig | Nutzerbestätigung und visuelle Abnahme offen |
+| GUI-79 | Der unbrauchbare Files-Button entfällt; nur BluePlay-Projekte erhalten zwei icon-only Aktionen für Bilder und Audio. Images öffnet eine Kachelansicht für ungefähr fünf Spalten mit Dateiname und Vorschau, einer wirkungslosen Add-Kachel mit Implementierungshinweis sowie mittigem Close-Button darunter; Audio zeigt ebenfalls einen Implementierungshinweis | Chromium-GUI-Test GUI-79 (ersetzt GUI-16): kein Files-Button, Images/Audio nur im BluePlay-Projekt und ohne Text, Add-Kachel zuerst, `duck.png` mit Vorschau und Namen, beide Hinweise, Close | Chromium-Test 1/1 grün; Spaltenzahl, Zentrierung des Close-Buttons und visuelle Abnahme offen |
 | GUI-80 | Beim Maximieren füllen Editor und Terminal den vollständigen Browser-Viewport ohne Außenrand aus | Chromium-GUI-Test GUI-80 misst beide Fenster von `0,0` bis `innerWidth,innerHeight` | Abgesichert |
 | GUI-81 | Eine geschlossene BluePlay-Welt bleibt bei gewöhnlichen Codepad-Auswertungen geschlossen; erneutes Starten von `main()` oder explizites `show()` öffnet sie wieder | Chromium-GUI-Test GUI-81 schließt die Welt, führt `5 + 3` aus und prüft Ergebnis `8` bei weiterhin fehlendem Weltfenster; danach startet `main()` die Welt erneut | Abgesichert |
 | GUI-83 | Wenn Laufzeiteingabe oder Programmausgabe das Terminal öffnet, wird es auch über bereits geöffnete Editoren nach vorn geholt | Chromium-Test GUI-83 prüft Terminalausgabe, aktives Fenster und Z-Index über einem Editor | Implementiert; nicht ausgeführt |
 | GUI-84 | Der Dialog zur Objekterzeugung per Rechtsklick auf eine Klasse liegt über einem geöffneten Editor | Chromium-Test GUI-84 prüft den Dialog und dessen Z-Index über dem aktiven Editor | Implementiert; nicht ausgeführt |
 | GUI-85 | Der Parameterdialog eines per Mausklick aufgerufenen Objekts liegt über einem geöffneten Editor | Chromium-Test GUI-85 prüft den Methodendialog und dessen Z-Index über dem aktiven Editor | Implementiert; nicht ausgeführt |
 | GUI-82 | Geerbte Methoden im Objekt-Kontextmenü sind beim Öffnen des Oberklassen-Untermenüs vollständig sichtbar, ohne horizontalen Scrollen; das Untermenü bleibt auch vertikal im Browser-Viewport | Chromium-GUI-Test GUI-82 prüft sichtbare `World`-Methoden, deaktiviertes horizontales Scrollen und vollständig im Viewport liegende Grenzen des Untermenüs | Abgesichert |
+| GUI-86 | Selbst gezeichnete Actor-Bilder werden auf der Bühne gezeichnet: `Image(20, 20)`, `setColor(200, 0, 0)`, `fill()`, `setImage(picture)` ergibt ein rotes Quadrat statt des Platzhalters mit Klasseninitiale; ebenso `fill()` mit anschließend per `drawImage` eingebettetem gefülltem Bild. Hintergrund und Actor-Bilder nutzen dieselbe Umsetzung aller Image-Operationen (`fill`, `fillRect`, `drawRect`, `fillOval`, `drawOval`, `drawLine`, `drawString`, `drawImage`); `clear`, `setTransparency` und `scale` erzeugen keine Operationen | Chromium-GUI-Test GUI-86 (`blueplay-images.spec.ts`) lädt ein BluePlay-Projekt per `#bluek=p1.`-Link, startet main und prüft Canvas-Pixel beider Actors; `test:ui` prüft die Hilfsfunktionen für `fill`, verschachtelte Bilder und bestehende Operationen | Ursache: `drawnImageDataUrl` kannte `fill` nicht (nur `backgroundDataUrl`). GUI-86 und Hilfsfunktionstest scheiterten vor der Korrektur und sind danach grün. Visuelle Benutzerabnahme offen. Prüflauf siehe unten |
 | RT-31 | Eine fehlende Grafik meldet einen klaren Laufzeitfehler statt eines unsichtbaren 30x30-Platzhalters: `Image("duckk.png")` ergibt `IllegalArgumentException: Image file not found: duckk.png (expected e.g. in the folder 'images/')` mit den verfügbaren Namen; gilt ebenso für `setImage` und `setBackground` | `smoke-blueplay-browser` (Image, Hintergrund, Namensliste) und Chromium-GUI-Test GUI-69 | Abgesichert |
 | RT-15 | `private fun` in Klassen: intern aufrufbar, von außen Compilefehler, Manifest `visibility: private` | `smoke-curriculum-kotlin` | Abgesichert |
 | RT-16 | String-Templates enden am ersten Nicht-Bezeichnerzeichen (`"│$rang│"`, `"$name's"`); einzelnes `$` bleibt Text | `smoke-curriculum-kotlin` | Abgesichert |
@@ -154,6 +155,17 @@ Worker-/Runtime-Smokes getrennt.
 | PERF-01 | Scheduler, Frame-Abstände, Stop-Reaktion, Historien- und Ressourcenwachstum bei Referenzspielen und 100 Actoren sind messbar | Node-Benchmark prüft 180 komplette Schritte mit 1-Pixel-Bewegung, echte Laser und synchrone Invader (Dauerschießen: Mittel 13,1 → 4,5 ms). Chromium: Speed 95, Pfeil+Space für 4 s, 321–326 DOM-Frame-Updates, p95 15,2–15,5 ms, max. 24,4–24,9 ms (vorher 203–206, p95 ≈ 27 ms). Gateway-Test: gleichzeitige Key-down/up ohne Busy-Phase oder alte Frames. Alpha-Kollisionen unverändert | Noch keine 100-Actor-Messung und keine 60-FPS-Garantie; visuelle Benutzerabnahme offen |
 | RT-29 | Schul-Kotlin erreicht die zugesagte Stdlib-Oberfläche: `minOf`/`maxOf` (2..n Werte), `coerceIn`/`coerceAtLeast`/`coerceAtMost`, `Int.MAX_VALUE`/`MIN_VALUE`, `Int.toChar`, `Char.code`/`digitToInt`, `sum`/`average`/`sumOf`/`reduce`/`flatten`/`indices` auf Listen und Ranges sowie String als Zeichenfolge (`for (c in wort)`, `wort[i]`, `split`, `toList`, `indices`) | `npm run test:kotlin-surface` prüft 48 Ausdrücke gegen das gebaute Bundle und hält 13 bekannte Lücken (Arrays, `format`, `withIndex`, qualifizierte `kotlin.math.*`-Aufrufe) ausdrücklich als Lücke fest; `benchmark-blueplay` vor/nach der Änderung ohne messbaren Unterschied (Mittel 1,04→1,12 bzw. 3,63→3,31 ms) | Abgesichert für die gelisteten Ausdrücke; Arrays und `format` bleiben offen, `String.indices` liefert `List<Int>` statt `IntRange` |
 | PERF-02 | Ein längeres Spiel wird nicht mit jedem entfernten Actor langsamer: Hit-IDs entfernter Actors werden freigegeben, ein wieder hinzugefügter Actor erhält eine neue, klickbare ID | Ursache: die Hit-ID-Liste wuchs mit jedem Laser und wurde pro Frame und Actor linear durchsucht. Node-Langzeitmessung 3000 Schritte Dauerfeuer bei 5 Objekten: 4,1 ms → 1,0 ms pro Schritt. Native BluePlay-Smoke prüft Entfernen, erneutes Hinzufügen und Klick über die neue ID | Kein automatischer Wachstumsgrenzwert (zeitbasiert instabil); Speicherverlauf im Browser nicht gemessen |
+| EXP-01 | Exportierte Konsolenprogramme laufen als einzelne HTML-Datei per `file://`: Titel/Überschrift = Projektname, Ausgabe, fokussierte Eingabezeile mit blauem Echo, Status (Waiting for input/Finished), Restart startet neu; keinerlei Netzwerk-Anfragen | `player.spec.ts` EXP-01, echtes Chromium | Abgesichert (Chromium); Firefox nur Nutzerbestätigung im Machbarkeitstest |
+| EXP-02 | Der beim Export gewählte `main()` läuft, auch wenn eine andere Datei (z. B. `Main.kt`) ebenfalls `main()` hat | `player.spec.ts` EXP-02 | Abgesichert |
+| EXP-03 | Compilefehler (Datei:Zeile:Spalte), fehlendes `main()` in der gewählten Datei und Laufzeitfehler erscheinen als Meldung; vorherige Ausgabe bleibt stehen | `player.spec.ts` EXP-03 | Abgesichert |
+| EXP-04 | „Download project (.bluek.json)“ liefert das unveränderte Projektformat mit Dateinamen aus dem Projektnamen; „Open in BlueK“ öffnet in neuem Tab die exportierende BlueK-Instanz mit `#bluek=d1.…`, die das Projekt samt Namen lädt | `player.spec.ts` EXP-04 (gegen den Test-Server als BlueK-Adresse) | Abgesichert; Ziel `https://bluek.de/` nicht automatisiert |
+| EXP-05 | Wäre der Link länger als 1 MB, fehlt „Open in BlueK“; stattdessen Hinweis auf den Download | `player.spec.ts` EXP-05 (900 KB Zufallsdaten als Sound) | Abgesichert |
+| EXP-06 | Exportierte BluePlay-Programme zeigen die Welt nach dem Laden pausiert; Step, gehaltene Taste (auch beim Loslassen mit Fokus auf einem Button), Klick auf Actor, Run/Pause, Reset (während Run gesperrt) wirken; keine Netzwerk-Anfragen | `player.spec.ts` EXP-06, echtes Chromium, Canvas-Pixel geprüft | Abgesichert; Sounds nicht automatisiert; visuelle Abnahme offen |
+| EXP-07 | Konsolen- und BluePlay-Export laufen auch in WebKit | `player.spec.ts` EXP-07 (Playwright-WebKit) | Abgesichert; echtes Safari nicht geprüft |
+| EXP-08 | Save / Export kennzeichnet „Export as HTML“ als Beta; der Export kompiliert bei Bedarf, fragt wie der JSON-Export nach einem fehlenden Projektnamen und lädt `<Projektname>.html` herunter; die Datei läuft per `file://` mit dem einzigen `main()` und verlinkt bei Export von localhost auf `https://bluek.de/` | `html-export.spec.ts` EXP-08, echtes Chromium | Abgesichert |
+| EXP-09 | Bei mehreren `main()` fragt der Export jedes Mal („Which main() should the exported HTML file start?“); Abbrechen lädt nichts herunter; die gewählte Datei startet im Export | `html-export.spec.ts` EXP-09 | Abgesichert |
+| EXP-10 | Ohne parameterloses `main()` gibt es keinen Export: Hinweis nach dem Kompilieren, danach ist „Export as HTML“ deaktiviert mit „Needs a file with a parameterless main().“; bei Compilefehlern öffnet sich wie bei Compile die Datei mit markiertem Fehler, kein Download | `html-export.spec.ts` EXP-10 | Abgesichert |
+| EXP-11 | Ein BluePlay-Projekt aus der IDE exportiert zeigt im Player seine Welt (pausiert) und die Ausgabe von `main()` | `html-export.spec.ts` EXP-11 | Abgesichert |
 
 ## Letzter Prüflauf
 
@@ -586,3 +598,197 @@ Die ersten neuen GUI-Fixtures fehlten beim Compile-Schritt; anschließend
 verwendeten sie einen nicht vorhandenen Status-Selektor. Beide Testfehler wurden
 korrigiert und die betroffenen Tests erfolgreich wiederholt. Keine komplette
 Regressionssuite ausgeführt. Visuelle Benutzerabnahme des Auswahldialogs offen.
+
+## RT-32: BluePlay-Canvas als eigenes Modul (2026-09-23, Branch `html-export`)
+
+Vorbereitung für den HTML-Export: Zeichnen, Bildauflösung, pixelgenaue
+Klickziele, Tastennamen und Sounds des BluePlay-Canvas liegen jetzt in
+`frontend/src/bluePlayStage.ts` statt in `SvelteApp.svelte`. Das sichtbare
+Verhalten soll unverändert bleiben.
+
+Nachweise:
+
+- `npm run test:blueplay-stage` (neu, Hilfsfunktionstest in Node): Tastennamen,
+  Weltstil, Ressourcenauflösung, gemessene Bildgrößen, leere Zeichnung für
+  Actors ohne Bild, Klickziel bei skaliertem Canvas, gedrehtem Actor,
+  fast transparentem Actor und Klemmen an den Weltrand. Erfolgreich.
+  Bild-Alpha-Masken brauchen einen Browser und sind hier nicht abgedeckt.
+- Echte Chromium-Tests `blueplay.spec.ts` und `main-selection.spec.ts`:
+  22/22 erfolgreich, darunter GUI-53 (Klick auf sichtbare Actor-Pixel),
+  GUI-69/GUI-70 (Standardgrafiken und Masken) und PERF-01 (gehaltene Taste).
+- `npm run typecheck`: 0 Fehler, 0 Warnungen. `npm run test:ui`, beide
+  Architektur-Smokes und `npm run build:svelte`: erfolgreich.
+
+Keine komplette Regressionssuite ausgeführt. Sounds (`playSound`, Beep) sind
+nicht automatisiert geprüft; visuelle Abnahme des laufenden Spiels offen.
+
+## RT-33: Exportformat für den HTML-Export (2026-09-23, Branch `html-export`)
+
+`frontend/src/programExport.ts` definiert das eingebettete Programm
+(`mainFile`, `blueKUrl`, `project` im `.bluek.json`-Format) und setzt es in die
+Player-Vorlage ein. Der JSON-Export verwendet dieselbe Dateinamenbildung
+(`exportFileName`); sein Verhalten ist unverändert.
+
+Nachweise:
+
+- `npm run test:program-export` (neu): Validierung von Format, Version,
+  `mainFile`, Projektinhalt und BlueK-Adresse (auch `javascript:` abgewiesen),
+  Linkziel für öffentliche Instanz, GitHub-Pages-Pfad, localhost und
+  Offline-Paket, Dateinamen, beschädigte oder bereits gefüllte Vorlage.
+  Ein Quelltext mit `</script><script>alert(1)</script>`, `<!--`, `&`,
+  U+2028/U+2029 und Emoji wird in echtem Chromium (Playwright,
+  `page.setContent`) geparst: genau zwei Script-Elemente, kein Dialog,
+  nachfolgendes Skript läuft, Quelltext kommt unverändert zurück. Erfolgreich.
+- Echter Chromium-Test `RT-33 Export Project JSON keeps its file name and
+  content` (neu, `regressions.spec.ts`): Projektname mit `:` und `/` ergibt
+  `Hunde- Teil 1-2.bluek.json`, Inhalt mit Name und Datei unverändert.
+  Erfolgreich, ebenso beide GUI-80-Tests.
+- `npm run typecheck`: 0 Fehler, 0 Warnungen.
+
+Machbarkeitstest (Schritt 0, außerhalb des Repos): Eine einzelne HTML-Datei mit
+eingebettetem, gzip-komprimiertem Kotlite, Blob-Worker, `LocalRuntimeClient`
+und `RuntimeHost` lief per `file://` in Playwright-Chromium und
+-WebKit (Compile, `readLine`, `Thread.sleep`, Ausgabe). Firefox:
+Playwright-Firefox 1543 startet unter macOS 27 nicht („Could not find profile
+folder“); Nutzerbestätigung im installierten Firefox per Screenshot
+(Phase `ready`, vollständige Ausgabe). `Blob.stream()` scheitert in WebKit
+unter `file://`; ein `data:`-Worker ist in WebKit etwa sechsmal langsamer.
+
+## RT-34: Kotlite-Laden für IDE und Player getrennt (2026-09-23, Branch `html-export`)
+
+`runtimeWorker.ts` enthält den gemeinsamen Worker-Start. Die IDE lädt Kotlite
+weiterhin per `fetch` (`localRuntimeWorker.ts`), der Player aus dem
+eingebetteten gzip+base64-Bundle (`playerRuntimeWorker.ts`). Die Worker-Fabrik
+der IDE liegt jetzt in `localRuntimeWorkerFactory.ts`; `LocalRuntimeClient`
+verlangt sie als Konstruktorargument.
+
+Nachweise:
+
+- `npm run test:player-worker` (neu): gzip-Roundtrip mit Umlauten/Emoji und
+  Ablehnung ungültiger Daten in Node; der echte Player-Worker, mit dem
+  Vite-Plugin gebaut, kompiliert und startet in einer per `file://` geöffneten
+  Seite ein Zwei-Dateien-Projekt mit `readLine`, `Thread.sleep` und Ausgabe.
+  Keine Netzwerk-Anfragen. Playwright-Chromium und -WebKit erfolgreich
+  (Seite 326 KB). Firefox nicht automatisiert (siehe RT-33).
+- `npm run build:svelte`: erfolgreich, IDE-Worker weiterhin als eigenes Asset
+  (`localRuntimeWorker-*.js`, 13 KB). `smoke-static-architecture` (erweitert:
+  Player-Worker nutzt nur das eingebettete Bundle, kein `fetch`),
+  `smoke-svelte-architecture`, `npm run test:runtime-state`: erfolgreich.
+- `npm run typecheck`: 0 Fehler, 0 Warnungen.
+- Komplette GUI-Suite (`npx playwright test`, Chromium): 98 erfolgreich,
+  7 fehlgeschlagen: GUI-61, GUI-39, GUI-41, GUI-32, GUI-22, GUI-16, GUI-68.
+  Dieselben 7 Tests schlagen auch auf dem unveränderten Stand (alle Änderungen
+  per `git stash` entfernt) identisch fehl; sie erwarten ältere
+  Toolbar-/Fenster-/Settings-Elemente (u. a. `Files`-Button, vier
+  Hauptaktionen) und hängen nicht mit dem Export zusammen. Offen.
+
+## RT-35: Player und Vorlage für den HTML-Export (2026-09-23, Branch `html-export`)
+
+`PlayerApp.svelte` führt ein eingebettetes Programm aus; `scripts/build-player.mjs`
+baut daraus die Vorlage `frontend/public/player/bluek-player.html` (ca. 723 KB,
+generiert und nicht eingecheckt; `npm run build` und `predev` erzeugen sie).
+Die Link-Kodierung (`encodeBlueKLink`/`decodeBlueKLink`) nutzt jetzt wie der
+Kotlite-Decoder `byteStream()` statt `Blob.stream()`.
+
+Nachweise:
+
+- `player.spec.ts` EXP-01 bis EXP-07 (neu): 7/7 erfolgreich. Wegen einer
+  parallel laufenden zweiten Sitzung auf Port 5194 mit identischer
+  Konfiguration auf Port 5195 ausgeführt.
+- `npm run test:ui` (Projektlinks), `npm run test:player-worker`,
+  `npm run test:offline` (erweitert: Vorlage im Offline-Paket, leer, als
+  `text/html` ausgeliefert), `npm run typecheck` (0 Fehler, 0 Warnungen):
+  erfolgreich.
+- Sichtprüfung per Screenshot (Chromium): Konsolenprogramm mit Eingabe,
+  80 Zeilen Ausgabe scrollen im Terminal, Eingabezeile bleibt sichtbar;
+  BluePlay-Welt mit Steuerung; Compilefehler-Meldung.
+
+Befund außerhalb des Exports: Ein Actor-Bild aus `Image.fill()` wird nicht
+gezeichnet (Platzhalter), weil `drawnImageDataUrl` die Operation `fill` nicht
+kennt; betrifft auch die IDE. Der Test verwendet `fillRect`. Inzwischen mit
+GUI-86 behoben.
+
+## RT-36: „Export as HTML“ in der IDE (2026-09-23, Branch `html-export`)
+
+Neuer Eintrag im Save/Export-Dialog nach „Export Project JSON“. Der
+`mainDialog` kennt die Aktion `export`; er schließt bei neuer Generation, aber
+nicht bei laufendem Programm. `htmlExport.ts` lädt die Vorlage einmal von
+`<BASE_URL>player/bluek-player.html` und setzt das Programm ein. Hinweise
+(fehlendes `main()`, fehlende Vorlage) erscheinen im vorhandenen Hinweisfeld
+unten. Projektname-Abfrage und Download teilen sich JSON- und HTML-Export.
+
+Nachweise:
+
+- `html-export.spec.ts` EXP-08 bis EXP-11 (neu): 4/4 erfolgreich, zusammen
+  mit `player.spec.ts` (7/7), `main-selection.spec.ts` (6/6), RT-33 und GUI-67
+  (Dialogreihenfolge um „Export as HTML“ ergänzt).
+- Komplette GUI-Suite auf Port 5195 (zweite Sitzung belegt 5194): 108
+  erfolgreich, 8 fehlgeschlagen. 7 davon sind die bekannten, auch auf dem
+  unveränderten Stand fehlschlagenden Tests (siehe RT-34). GUI-35 schlug nur
+  wegen des Ports fehl: der Test erwartet fest `http://127.0.0.1:5194/load/…`,
+  erhalten wurde dieselbe Adresse mit 5195. Kein Regressionsbefund.
+- `npm run typecheck` (0 Fehler, 0 Warnungen) und `npm run build:svelte`
+  (Vorlage unter `frontend/dist/player/`) erfolgreich.
+
+## Veraltete GUI-Tests nach b4ded3f/1dd2967 (2026-09-23)
+
+Ausgangslage im Worktree auf Branch `claude/vigorous-darwin-73685e` (Stand
+1dd2967, sauber): sieben GUI-Tests schlugen reproduzierbar fehl. Einordnung
+anhand von Git-Historie und Checkliste:
+
+- GUI-39, GUI-68: beabsichtigt. c8c4f7d (GUI-74) kürzte die Feldnamen auf
+  „Font size“ und „Vim mode“; die Tests suchten noch die alten Namen.
+- GUI-32: beabsichtigt. c8c4f7d ersetzte `□` durch ein abgerundetes
+  SVG-Symbol (GUI-06 prüft es bereits); der Test prüft jetzt Symbol und Namen.
+- GUI-16, GUI-41, GUI-22 (Files-Teil): beabsichtigt. fb0666c (GUI-79) entfernte
+  Files. GUI-16 ist entfallen und durch einen neuen Test GUI-79 ersetzt.
+- GUI-61, GUI-22 (Drop-Feld-Text): beabsichtigt (Nutzerbestätigung). 08963a8
+  („Refine editor behavior“) reduzierte den Open/Import-Dialog auf JSON und
+  entfernte die Ordnerwahl. Eine zwischenzeitliche Wiederherstellung wurde
+  zurückgenommen. Die verwaiste `importProjectDirectory` und die CSS-Regel
+  `.project-directory-choice` sind entfernt. Das Ablegen von ZIPs und Ordnern
+  auf dem Drop-Feld funktioniert weiterhin. GUI-61 und GUI-60 legen ihre
+  BlueJ-ZIP per Drop ab statt über die JSON-Dateiauswahl, GUI-22 prüft den
+  JSON-only-Dialog.
+
+Nachweise:
+
+- Vorher: die sieben Tests mit `npx playwright test <datei>:<zeile>` 0/7 grün.
+- Nachher: dieselben plus GUI-06/60/74/80 im echten Chromium-Lauf 12/13 grün;
+  der neue GUI-79-Test scheiterte zunächst, weil ein nicht leeres Startprojekt
+  beim Vorlagenwechsel ein natives `confirm()` auslöst, das Playwright
+  ablehnt. Mit leerem Startprojekt (wie GUI-80) 1/1 grün.
+- Nach Rücknahme der Wiederherstellung: GUI-60/61/22 3/3 grün,
+  `npm run test:gui` 104/104 grün, `npm run typecheck` 0 Fehler, 0 Warnungen.
+
+Offen: visuelle Abnahme von GUI-79; Ablegen eines echten Ordners ist nicht
+automatisiert. Die Fehlermeldung beim Ablegen einer anderen Datei nennt
+weiterhin ZIP und Projektordner, was dem Drop-Verhalten entspricht. Die IDs
+GUI-74 und GUI-80 sind in der Checkliste und in den Testtiteln doppelt
+vergeben; nicht umnummeriert, um stabile IDs nicht eigenmächtig zu ändern.
+
+## GUI-86: Image.fill() in Actor-Bildern (2026-09-23)
+
+Branch `claude/hungry-lewin-5b244e`, Ausgangspunkt `1dd2967`. Die Kotlin-Library
+(`BluePlayLibrary.kt`) erzeugt für `Image` genau die Operationen `fill`,
+`fillRect`, `drawRect`, `fillOval`, `drawOval`, `drawLine`, `drawString` und
+`drawImage`; im Actor-Renderer fehlte nur `fill`. Beide Renderer in
+`uiParity.ts` verwenden jetzt dieselbe Operationsumsetzung.
+
+Nachweise:
+
+- Reproduktion vor der Korrektur: GUI-86 scheiterte (roter Platzhalter mit „B“,
+  zweiter Actor unsichtbar); `test:ui` mit altem `uiParity.ts` scheiterte, weil
+  `drawnImageDataUrl(["fill|…"])` `undefined` lieferte.
+- Nach der Korrektur: GUI-86 grün; `npm run test:ui` grün; alle Tests aus
+  `blueplay.spec.ts`, `blueplay-images.spec.ts` und `main-selection.spec.ts`
+  23/23 grün; `npm run typecheck` 0 Fehler/0 Warnungen; `npm run build:svelte`
+  erfolgreich; `node scripts/smoke-blueplay-browser.mjs` erfolgreich.
+- Vollständiger Chromium-Lauf: 96 bestanden, 9 fehlgeschlagen (GUI-61, GUI-55,
+  GUI-39, GUI-41, GUI-32, GUI-22, GUI-35, GUI-16, GUI-68). Gegenprobe mit dem
+  unveränderten `uiParity.ts` aus `1dd2967`: dieselben 8 Tests ohne GUI-55
+  scheitern auch dort, sie sind also nicht durch diese Änderung verursacht und
+  bleiben offen. GUI-55 war im Einzellauf mit altem und neuem Code grün und
+  scheiterte nur im Gesamtlauf (vermutlich instabil).
+- Port 5194 war durch einen anderen lokalen Prozess belegt; die Läufe nutzten
+  eine temporäre, nicht eingecheckte Playwright-Konfiguration auf Port 5294.

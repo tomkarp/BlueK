@@ -3,8 +3,6 @@
   import {
     encodeBlueKLink as encodeProjectLink,
     decodeBlueKLink as decodeProjectLink,
-    backgroundDataUrl,
-    drawnImageDataUrl,
     runtimeClassName,
     specializeCallable,
     sourceSuperclass,
@@ -16,10 +14,14 @@
     appendTerminal, terminalParts, codepadResult, codepadError, kotlinCallArguments, missingRequired, missingTypeArgument, codepadIsDisabled,
   } from "./uiParity";
   import { LocalRuntimeClient } from "./localRuntimeClient";
+  import { createLocalRuntimeWorker } from "./localRuntimeWorkerFactory";
   import { mainFiles } from "./mainEntries";
+  import { StageAudio, StageRenderer, decorateStage, measureImageSizes, stageKeyName, stageStyle } from "./bluePlayStage";
   import { KotlinFormatterClient } from "./kotlinFormatterClient";
   import { InspectorModel, inspectorFieldText, type InspectionView, type InspectorField } from "./inspectorModel";
   import { createProjectPayload, projectModelFromPayload } from "./projectFormat";
+  import { exportFileName } from "./programExport";
+  import { htmlExport } from "./htmlExport";
   import { blueJProjectFromEntries, entriesFromZip, type ImportEntry } from "./blueJImport";
   import { prepareRuntimeResources } from "./imageAlpha";
   import { standardImages, withStandardImages } from "./standardImages";
@@ -268,7 +270,7 @@
     terminalPosition: { left: number; top: number } | null = null,
     terminalSize = { width: 780, height: 520 };
   let activeWindow: "terminal" | "editor" | null = null;
-  let audioContext: AudioContext | null = null;
+  const stageAudio = new StageAudio();
   let editorWindows: EditorWindowState[] = [],
     activeEditorId = "",
     editorTabbed = false,
@@ -554,16 +556,7 @@
     cardDrag = null;
   }
   function stageKey(event: KeyboardEvent, pressed: boolean) {
-    const key =
-      (
-        {
-          ArrowLeft: "left",
-          ArrowRight: "right",
-          ArrowUp: "up",
-          ArrowDown: "down",
-          " ": "space",
-        } as Record<string, string>
-      )[event.key] || event.key.toLowerCase();
+    const key = stageKeyName(event.key);
     event.preventDefault();
     if (stageKeysDown.has(key) === pressed) return;
     if (pressed) stageKeysDown.add(key);
@@ -579,15 +572,8 @@
     target.focus();
     if (!stage) return;
     event.preventDefault();
-    const bounds = target.getBoundingClientRect();
-    const worldPixelX = ((event.clientX - bounds.left) / Math.max(bounds.width, 1)) * (stage.width || 1) * (stage.cellSize || 1);
-    const worldPixelY = ((event.clientY - bounds.top) / Math.max(bounds.height, 1)) * (stage.height || 1) * (stage.cellSize || 1);
-    const x = Math.max(0, Math.min((stage.width || 1) - 1, Math.floor(worldPixelX / Math.max(stage.cellSize || 1, 1))));
-    const y = Math.max(0, Math.min((stage.height || 1) - 1, Math.floor(worldPixelY / Math.max(stage.cellSize || 1, 1))));
-    const actor = [...(stage.objects || [])].reverse().find((object: any) =>
-      actorContainsVisiblePixel(object, worldPixelX, worldPixelY, stage.cellSize || 1),
-    );
-    client?.sendClick(x, y, actor?.hitId || actor?.objectId).catch(() => undefined);
+    const { x, y, actorId } = stageRenderer.pointer(stage, target.getBoundingClientRect(), event.clientX, event.clientY);
+    client?.sendClick(x, y, actorId).catch(() => undefined);
   }
 
   function bluePlayAction(action: "step" | "start" | "stop" | "setSpeed") {
@@ -1028,10 +1014,13 @@
   $: programActive = runtime.phase === "running" || runtime.phase === "compiling" || inputReady;
   $: if (terminalOpen && inputReady)
     window.setTimeout(() => inputElement?.focus(), 0);
-  type MainAction = "start" | "reset";
+  type MainAction = "start" | "reset" | "export";
   let mainDialog: { action: MainAction; generationId: string } | null = null;
   $: mainEntries = mainFiles(classes);
-  $: if (mainDialog && (mainDialog.generationId !== runtime.generationId || !canExecute)) mainDialog = null;
+  // Exporting reads the compiled entry points only, so a running program does not close its choice.
+  $: if (mainDialog && (mainDialog.generationId !== runtime.generationId || (mainDialog.action !== "export" && !canExecute))) mainDialog = null;
+  $: htmlExportBlocked = runtime.phase !== "uncompiled" && runtime.phase !== "compiling" && !mainEntries.length;
+  let htmlExporting = false;
   $: if (files.length || Object.keys(cardPositions).length || showInheritance)
     window.setTimeout(refreshInheritanceEdges, 0);
   // The graphics BlueK ships with are usable everywhere a project resource is,
@@ -1042,25 +1031,9 @@
   $: if (!runtimeResources.length && Object.keys(resourceSizes).length)
     resourceSizes = {};
   $: if (stage && Object.keys(resourceSizes).length) {
-    const refreshed = decorateStage(stage);
+    const refreshed = decorateStage(stage, runtimeResources, resourceSizes);
     if (JSON.stringify(refreshed.objects) !== JSON.stringify(stage.objects))
       stage = refreshed;
-  }
-
-  function playBlueKBeep() {
-    try {
-      audioContext ||= new AudioContext();
-      const oscillator = audioContext.createOscillator();
-      const gain = audioContext.createGain();
-      oscillator.frequency.value = 880;
-      gain.gain.setValueAtTime(0.08, audioContext.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.15);
-      oscillator.connect(gain).connect(audioContext.destination);
-      oscillator.start();
-      oscillator.stop(audioContext.currentTime + 0.15);
-    } catch {
-      // Audio is optional; a browser audio failure must not fail the program.
-    }
   }
 
   onMount(() => {
@@ -1074,7 +1047,7 @@
     runShortcutLabel = mac ? "Cmd+Enter" : "Ctrl+Enter";
     editorNextShortcutLabel = mac ? "Cmd+E" : "Ctrl+E";
     editorPrevShortcutLabel = mac ? "Cmd+Shift+E" : "Ctrl+Shift+E";
-    client = new LocalRuntimeClient();
+    client = new LocalRuntimeClient(createLocalRuntimeWorker);
     inspectorModel = new InspectorModel(client, () => { inspectorRevision += 1; });
     const unsubscribe = client.subscribe(() => {
       runtime = client.getSnapshot();
@@ -1091,20 +1064,17 @@
         window.setTimeout(renderTerminal, 0);
       }
       value.effects?.forEach((effect) => {
-        if (effect.type === "sound" && effect.name === "beep") playBlueKBeep();
+        if (effect.type === "sound" && effect.name === "beep") stageAudio.beep();
       });
     });
     const unsubscribeStage = client.stageStream((value) => {
-      stage = decorateStage(value);
+      stage = decorateStage(value, runtimeResources, resourceSizes);
       // Runtime snapshots repeat the current BluePlay frame after every codepad
       // command. A dismissed window stays closed until the user starts a world
       // again or explicitly invokes its show() method.
       if (!stageWindowDismissed) stageWindowOpen = true;
       speed = Number(value.speed) || speed;
-      (value.sounds || []).forEach((sound: string) => {
-        const data = resourceData(`sounds/${sound}`);
-        if (data) new Audio(data).play().catch(() => undefined);
-      });
+      stageAudio.playFrameSounds(value, runtimeResources);
     });
     // A link can say that the project introduces itself: `readme=1`, in the hash
     // of a full project link or in the query of a short one.
@@ -1239,228 +1209,15 @@
   }
 
 
-  function resourceData(path: string | undefined) {
-    if (!path) return undefined;
-    return runtimeResources.find(
-      (item) => item.path === path || item.path.endsWith(`/${path}`),
-    )?.data;
-  }
   async function refreshResourceSizes(list: Resource[]) {
-    const entries = await Promise.all(
-      list
-        .filter((item) => item.path.startsWith("images/"))
-        .map((item) =>
-          // The graphics BlueK ships with already carry their size.
-          item.imageWidth && item.imageHeight
-            ? Promise.resolve<[string, { width: number; height: number }] | null>([
-                item.path,
-                { width: item.imageWidth, height: item.imageHeight },
-              ])
-            : new Promise<[string, { width: number; height: number }] | null>(
-                (resolve) => {
-                  const image = new Image();
-                  image.onload = () =>
-                    resolve([
-                      item.path,
-                      { width: image.naturalWidth, height: image.naturalHeight },
-                    ]);
-                  image.onerror = () => resolve(null);
-                  image.src = item.data;
-                },
-              ),
-        ),
-    );
-    const next = Object.fromEntries(
-      entries.filter(
-        (entry): entry is [string, { width: number; height: number }] =>
-          Boolean(entry),
-      ),
-    );
+    const next = await measureImageSizes(list);
     if (JSON.stringify(next) !== JSON.stringify(resourceSizes))
       resourceSizes = next;
   }
-  function decorateStage(value: any) {
-    return {
-      ...value,
-      objects: (value.objects || []).map((object: any) => {
-        const rawImage = object.image;
-        const image = rawImage && typeof rawImage === "object" ? rawImage : {};
-        const imagePath = object.imagePath || image.resourcePath;
-        const operations = object.imageOperations || image.operations;
-        const resource = imagePath
-          ? runtimeResources.find(
-              (item) =>
-                item.path === `images/${imagePath}` ||
-                item.path.endsWith(`/images/${imagePath}`),
-            )
-          : undefined;
-        const size = resource ? resourceSizes[resource.path] : undefined;
-        const width = size?.width || image.width || object.imageWidth || 30,
-          height = size?.height || image.height || object.imageHeight || 30;
-        return {
-          ...object,
-          image: {
-            ...image,
-            resourcePath: imagePath,
-            operations,
-            width,
-            height,
-            opacity: object.imageOpacity ?? image.opacity ?? 1,
-          },
-          imageData:
-            object.imageData ||
-            (typeof rawImage === "string" ? rawImage : undefined) ||
-            resource?.data ||
-            drawnImageDataUrl(operations, width, height, runtimeResources),
-          imagePath,
-          imageOperations: operations,
-          imageWidth: width,
-          imageHeight: height,
-          imageOpacity: object.imageOpacity ?? image.opacity ?? 1,
-        };
-      }),
-    };
-  }
-
-  function stageStyle(value: any) {
-    const width = Math.max(1, (value.width || 1) * (value.cellSize || 1));
-    const height = Math.max(1, (value.height || 1) * (value.cellSize || 1));
-    return `--bluek-world-width:${width}px;--bluek-world-height:${height}px;aspect-ratio:${width}/${height};background-color:${value.backgroundColor || "#fff"}`;
-  }
-  const canvasImages = new Map<string, HTMLImageElement>();
-  const canvasAlphaMasks = new Map<string, { width: number; height: number; alpha: Uint8ClampedArray }>();
-  function canvasImage(data: string) {
-    let image = canvasImages.get(data);
-    if (!image) {
-      image = new Image();
-      image.onload = () => scheduleStageDraw();
-      image.src = data;
-      canvasImages.set(data, image);
-    }
-    return image;
-  }
-  function canvasAlphaMask(data: string) {
-    const cached = canvasAlphaMasks.get(data);
-    if (cached) return cached;
-    const image = canvasImage(data);
-    if (!image.complete || !image.naturalWidth || !image.naturalHeight) return undefined;
-    try {
-      const canvas = document.createElement("canvas");
-      canvas.width = image.naturalWidth;
-      canvas.height = image.naturalHeight;
-      const context = canvas.getContext("2d", { willReadFrequently: true });
-      if (!context) return undefined;
-      context.drawImage(image, 0, 0);
-      const rgba = context.getImageData(0, 0, canvas.width, canvas.height).data;
-      const alpha = new Uint8ClampedArray(canvas.width * canvas.height);
-      for (let source = 3, target = 0; source < rgba.length; source += 4, target += 1)
-        alpha[target] = rgba[source];
-      const mask = { width: canvas.width, height: canvas.height, alpha };
-      canvasAlphaMasks.set(data, mask);
-      return mask;
-    } catch {
-      return undefined;
-    }
-  }
-  function actorContainsVisiblePixel(object: any, worldX: number, worldY: number, cellSize: number) {
-    const frame = object.image && typeof object.image === "object" ? object.image : {};
-    const width = Math.max(1, Number(object.imageWidth || frame.width || 30));
-    const height = Math.max(1, Number(object.imageHeight || frame.height || 30));
-    const opacity = Math.max(0, Math.min(1, Number(object.imageOpacity ?? frame.opacity ?? 1)));
-    if (opacity * 255 <= 16) return false;
-    const centerX = (Number(object.x || 0) + 0.5) * cellSize;
-    const centerY = (Number(object.y || 0) + 0.5) * cellSize;
-    const radians = (Number(object.rotation || 0) * Math.PI) / 180;
-    const cosine = Math.cos(radians), sine = Math.sin(radians);
-    const deltaX = worldX - centerX, deltaY = worldY - centerY;
-    const localX = cosine * deltaX + sine * deltaY + width / 2;
-    const localY = -sine * deltaX + cosine * deltaY + height / 2;
-    if (localX < 0 || localY < 0 || localX >= width || localY >= height) return false;
-    const imageData = object.imageData || (typeof object.image === "string" ? object.image : undefined);
-    if (!imageData) return true;
-    const mask = canvasAlphaMask(imageData);
-    if (!mask) return false;
-    const sourceX = Math.min(mask.width - 1, Math.floor((localX / width) * mask.width));
-    const sourceY = Math.min(mask.height - 1, Math.floor((localY / height) * mask.height));
-    return mask.alpha[sourceY * mask.width + sourceX] * opacity > 16;
-  }
-  function canvasDataUrl(value: string | undefined) {
-    if (!value) return undefined;
-    const match = value.match(/^url\(["']?(.*?)["']?\)$/);
-    return match?.[1] || value;
-  }
+  const stageRenderer = new StageRenderer(() => scheduleStageDraw());
   function drawStageCanvas() {
-    const canvas = stageCanvas;
-    const value = stage;
-    if (!canvas || !value) return;
-    const logicalWidth = Math.max(1, (value.width || 1) * (value.cellSize || 1));
-    const logicalHeight = Math.max(1, (value.height || 1) * (value.cellSize || 1));
-    const pixelRatio = Math.max(1, window.devicePixelRatio || 1);
-    if (canvas.width !== Math.round(logicalWidth * pixelRatio) || canvas.height !== Math.round(logicalHeight * pixelRatio)) {
-      canvas.width = Math.round(logicalWidth * pixelRatio);
-      canvas.height = Math.round(logicalHeight * pixelRatio);
-    }
-    const context = canvas.getContext("2d");
-    if (!context) return;
-    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-    context.clearRect(0, 0, logicalWidth, logicalHeight);
-    context.fillStyle = value.backgroundColor || "#fff";
-    context.fillRect(0, 0, logicalWidth, logicalHeight);
-    const drawImage = (data: string | undefined, x: number, y: number, width: number, height: number, rotation = 0, opacity = 1) => {
-      if (!data) return false;
-      const image = canvasImage(data);
-      if (!image.complete || !image.naturalWidth) return false;
-      context.save();
-      context.globalAlpha = Math.max(0, Math.min(1, opacity));
-      context.translate(x + width / 2, y + height / 2);
-      context.rotate((rotation * Math.PI) / 180);
-      context.drawImage(image, -width / 2, -height / 2, width, height);
-      context.restore();
-      return true;
-    };
-    const backgroundResource = value.backgroundPath ? resourceData(`images/${value.backgroundPath}`) : undefined;
-    const backgroundSvg = backgroundDataUrl(
-      value.backgroundOperations || [],
-      logicalWidth,
-      logicalHeight,
-      runtimeResources,
-    );
-    drawImage(backgroundResource || canvasDataUrl(backgroundSvg), 0, 0, logicalWidth, logicalHeight);
-    (value.objects || []).forEach((object: any) => {
-      const frame = object.image && typeof object.image === "object" ? object.image : {};
-      const width = Number(object.imageWidth || frame.width || 30);
-      const height = Number(object.imageHeight || frame.height || 30);
-      const centerX = (Number(object.x || 0) + 0.5) * (value.cellSize || 1);
-      const centerY = (Number(object.y || 0) + 0.5) * (value.cellSize || 1);
-      const imageData = object.imageData || (typeof object.image === "string" ? object.image : undefined);
-      if (!drawImage(imageData, centerX - width / 2, centerY - height / 2, width, height, Number(object.rotation || 0), Number(object.imageOpacity ?? frame.opacity ?? 1))) {
-        context.save();
-        context.fillStyle = "#f33142";
-        context.strokeStyle = "#111";
-        context.lineWidth = 2;
-        context.fillRect(centerX - width / 2, centerY - height / 2, width, height);
-        context.strokeRect(centerX - width / 2, centerY - height / 2, width, height);
-        context.fillStyle = "#fff";
-        context.font = "bold 14px Arial";
-        context.textAlign = "center";
-        context.textBaseline = "middle";
-        context.fillText(String(object.className || object.type || "?").slice(0, 1), centerX, centerY);
-        context.restore();
-      }
-    });
-    context.save();
-    context.font = `${Math.max(12, value.cellSize || 16)}px Arial`;
-    context.textBaseline = "middle";
-    context.fillStyle = "#fff";
-    context.strokeStyle = "#000";
-    context.lineWidth = 3;
-    (value.texts || []).forEach((text: any) => {
-      const x = Number(text.x || 0) * (value.cellSize || 1);
-      const y = Number(text.y || 0) * (value.cellSize || 1);
-      context.strokeText(String(text.text || ""), x, y);
-      context.fillText(String(text.text || ""), x, y);
-    });
-    context.restore();
+    if (!stageCanvas || !stage) return;
+    stageRenderer.draw(stageCanvas, stage, runtimeResources, window.devicePixelRatio);
   }
   function markUncompiled() {
     client?.invalidate();
@@ -1904,7 +1661,8 @@
   async function chooseMain(fileName: string) {
     const request = mainDialog;
     mainDialog = null;
-    if (request) await executeMain(fileName, request.action, request.generationId);
+    if (request?.action === "export") await writeHtmlExport(fileName, request.generationId);
+    else if (request) await executeMain(fileName, request.action, request.generationId);
   }
   async function executeMain(fileName: string, action: MainAction, generationId: string) {
     if (!canExecute || generationId !== runtime.generationId || !mainEntries.includes(fileName)) return;
@@ -2755,22 +2513,66 @@
     inheritanceMode = false;
     inheritanceSelection = "";
   }
-  function exportProject() {
-    if (!projectName.trim()) {
-      const entered = window.prompt("What should your project be called?", "");
-      if (entered === null) return;
-      projectName = entered.trim();
-    }
-    const blob = new Blob([JSON.stringify(projectPayload(), null, 2)], {
-      type: "application/json",
-    });
+  // A file needs a name; asking once also names the project. Cancel aborts.
+  function ensureProjectName() {
+    if (projectName.trim()) return true;
+    const entered = window.prompt("What should your project be called?", "");
+    if (entered === null) return false;
+    projectName = entered.trim();
+    return true;
+  }
+  function downloadFile(content: string, type: string, fileName: string) {
     const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    const safeFileName = projectName.trim().replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-") || "bluek-project";
-    link.download = `${safeFileName}.bluek.json`;
+    link.href = URL.createObjectURL(new Blob([content], { type }));
+    link.download = fileName;
     link.click();
     URL.revokeObjectURL(link.href);
+  }
+  function exportProject() {
+    if (!ensureProjectName()) return;
+    downloadFile(JSON.stringify(projectPayload(), null, 2), "application/json", exportFileName(projectName, ".bluek.json"));
     status = "Project exported";
+  }
+  // The exported file starts one parameterless main(). Which ones exist is only
+  // known after compiling the current sources; with several, the user chooses.
+  async function exportHtml() {
+    if (!client || !files.length || htmlExporting || mainDialog) return;
+    if (!ensureProjectName()) return;
+    if (runtime.phase === "uncompiled" || runtime.phase === "compiling") {
+      if (!(await compile())) return;
+    }
+    const snapshot = client.getSnapshot();
+    const entries = mainFiles(snapshot.classes);
+    if (!entries.length) {
+      status = "Export failed";
+      showExportNotice("Export as HTML needs a file with a parameterless main().");
+      return;
+    }
+    if (entries.length > 1) {
+      mainDialog = { action: "export", generationId: snapshot.generationId };
+      return;
+    }
+    await writeHtmlExport(entries[0], snapshot.generationId);
+  }
+  function showExportNotice(text: string) {
+    shareNotice = text;
+    window.setTimeout(() => { if (shareNotice === text) shareNotice = ""; }, 5000);
+  }
+  async function writeHtmlExport(mainFile: string, generationId: string) {
+    // Sources edited since the compile would not match the chosen entry point.
+    if (!client || generationId !== client.getSnapshot().generationId) return;
+    htmlExporting = true;
+    status = "Exporting HTML…";
+    try {
+      const html = await htmlExport(projectPayload(), mainFile, import.meta.env.BASE_URL, window.location.href);
+      downloadFile(html, "text/html", exportFileName(projectName, ".html"));
+      status = "HTML exported";
+    } catch (reason) {
+      status = "Export failed";
+      showExportNotice(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      htmlExporting = false;
+    }
   }
   async function shareProject() {
     const url = new URL(window.location.href);
@@ -2883,17 +2685,6 @@
       status = "Project error";
       error = reason instanceof Error ? reason.message : String(reason);
     }
-  }
-  async function importProjectDirectory(event: Event) {
-    const input = event.currentTarget as HTMLInputElement;
-    const chosen = Array.from(input.files || []);
-    input.value = "";
-    if (!chosen.length) return;
-    const entries = await Promise.all(chosen.map(async (file) => ({
-      path: file.webkitRelativePath || file.name,
-      bytes: new Uint8Array(await file.arrayBuffer()),
-    })));
-    await openProjectEntries(entries, chosen[0].webkitRelativePath.split("/")[0] || "project directory");
   }
   // Reads a dropped directory recursively through the File System Entries API.
   async function droppedDirectoryEntries(directory: FileSystemDirectoryEntry): Promise<ImportEntry[]> {
@@ -4049,7 +3840,7 @@
   {#if mainDialog}<div class="modal topmost-modal" role="presentation">
       <div class="dialog main-selection-dialog" role="dialog" aria-modal="true" aria-labelledby="main-selection-title" tabindex="-1" use:containClicks>
         <h2 id="main-selection-title">Choose main</h2>
-        <p>Which main() should {mainDialog.action === "reset" ? "Reset" : "Start main"} run?</p>
+        <p>{mainDialog.action === "export" ? "Which main() should the exported HTML file start?" : `Which main() should ${mainDialog.action === "reset" ? "Reset" : "Start main"} run?`}</p>
         <div class="toolbar-dialog-options main-selection-options">
           {#each mainEntries as fileName, index}
             <button class="toolbar-dialog-option" on:click={() => void chooseMain(fileName)} use:focusOnMount={index === 0}>{fileName} — main()</button>
@@ -4398,6 +4189,7 @@
             >
           </div>{/if}
           <button on:click={() => { exportProject(); toolbarDialog = null; }} disabled={!files.length}><strong>Export Project JSON</strong><span>Export the complete BlueK project as JSON.</span></button>
+          <button on:click={() => { toolbarDialog = null; void exportHtml(); }} disabled={!files.length || htmlExportBlocked || htmlExporting}><strong>Export as HTML (Beta)</strong><span>{htmlExportBlocked ? "Needs a file with a parameterless main()." : "A single web page that runs the program, without BlueK."}</span></button>
           <button disabled><strong>Export BlueJ Project (.zip)</strong><span>Export for BlueJ (not implemented yet).</span></button>
         </div>
         <div class="dialog-actions"><button on:click={() => (toolbarDialog = null)}>Cancel</button></div>

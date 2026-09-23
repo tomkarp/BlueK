@@ -1,7 +1,4 @@
 import { test, expect } from '@playwright/test';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 import { strToU8, zipSync } from 'fflate';
 
 // 1x1 opaque PNG
@@ -13,6 +10,17 @@ async function openImportDialog(page: import('@playwright/test').Page) {
   return page.getByRole('dialog', { name: 'Open / Import' });
 }
 
+// The file chooser only offers JSON; BlueJ ZIPs reach BlueK by dropping them
+// onto the Open / Import drop zone.
+async function dropZip(dialog: import('@playwright/test').Locator, name: string, zip: Uint8Array) {
+  const dataTransfer = await dialog.page().evaluateHandle(({ name, bytes }) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([new Uint8Array(bytes)], name, { type: 'application/zip' }));
+    return transfer;
+  }, { name, bytes: Array.from(zip) });
+  await dialog.locator('.project-dropzone').dispatchEvent('drop', { dataTransfer });
+}
+
 test('GUI-60 a BlueJ ZIP project opens with its classes, positions and hidden private methods', async ({ page }) => {
   const zip = zipSync({
     'blackjack/package.bluej': strToU8('#BlueJ package file\ntarget1.name=Stapel\ntarget1.x=300\ntarget1.y=40\ntarget2.name=Karte\ntarget2.x=60\ntarget2.y=40\n'),
@@ -22,7 +30,7 @@ test('GUI-60 a BlueJ ZIP project opens with its classes, positions and hidden pr
     '__MACOSX/blackjack/._Karte.kt': strToU8('junk'),
   });
   const dialog = await openImportDialog(page);
-  await dialog.getByLabel('Choose project file').setInputFiles({ name: 'blackjack.zip', mimeType: 'application/zip', buffer: Buffer.from(zip) });
+  await dropZip(dialog, 'blackjack.zip', zip);
   await expect(page.locator('.classcard')).toHaveCount(2);
   const karte = await page.locator('.classcard[aria-label="Karte"]').boundingBox();
   const stapel = await page.locator('.classcard[aria-label="Stapel"]').boundingBox();
@@ -47,17 +55,20 @@ test('GUI-60 a BlueJ ZIP project opens with its classes, positions and hidden pr
   await expect(methods.filter({ hasText: 'zieheKarte(' })).toHaveCount(0);
 });
 
-test('GUI-61 a BlueJ BluePlay directory uses the built-in library and its images', async ({ page }) => {
-  const root = path.join(mkdtempSync(path.join(tmpdir(), 'bluek-import-')), 'Ausgebuext');
-  mkdirSync(path.join(root, 'images'), { recursive: true });
-  for (const framework of ['World.kt', 'Actor.kt', 'Image.kt', 'BluePlayFunctions.kt'])
-    writeFileSync(path.join(root, framework), '// historical framework source, replaced by BlueK\n');
-  writeFileSync(path.join(root, 'Ausreisser.kt'), 'class Ausreisser : Actor() {\n    init {\n        image = Image("cat.png")\n    }\n}\n');
-  writeFileSync(path.join(root, 'Main.kt'), 'fun main() {\n    val welt = World(200, 100, 1)\n    welt.addObject(Ausreisser(), 50, 50)\n    welt.show()\n}\n');
-  writeFileSync(path.join(root, 'package.bluej'), '#BlueJ package file\n');
-  writeFileSync(path.join(root, 'images', 'cat.png'), PNG);
+test('GUI-61 a BlueJ BluePlay project uses the built-in library and its images', async ({ page }) => {
+  const framework = strToU8('// historical framework source, replaced by BlueK\n');
+  const zip = zipSync({
+    'Ausgebuext/World.kt': framework,
+    'Ausgebuext/Actor.kt': framework,
+    'Ausgebuext/Image.kt': framework,
+    'Ausgebuext/BluePlayFunctions.kt': framework,
+    'Ausgebuext/Ausreisser.kt': strToU8('class Ausreisser : Actor() {\n    init {\n        image = Image("cat.png")\n    }\n}\n'),
+    'Ausgebuext/Main.kt': strToU8('fun main() {\n    val welt = World(200, 100, 1)\n    welt.addObject(Ausreisser(), 50, 50)\n    welt.show()\n}\n'),
+    'Ausgebuext/package.bluej': strToU8('#BlueJ package file\n'),
+    'Ausgebuext/images/cat.png': new Uint8Array(PNG),
+  });
   const dialog = await openImportDialog(page);
-  await dialog.getByLabel('Choose project directory').setInputFiles(root);
+  await dropZip(dialog, 'Ausgebuext.zip', zip);
   await expect(page.locator('.classcard[aria-label="Ausreisser"]')).toBeVisible();
   await expect(page.locator('.classcard[aria-label="World"]')).toHaveCount(1);
   const input = page.getByLabel('Codepad input');
