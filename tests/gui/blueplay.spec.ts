@@ -165,6 +165,21 @@ test('GUI-52 BluePlay keeps chrome, world and controls in one draggable window',
   await expect(page.locator('.stage-window .game-stage')).toHaveCount(0);
 });
 
+test('GUI-81 codepad evaluation does not reopen a closed BluePlay world', async ({ page }) => {
+  const stage = await loadBluePlay(page);
+  await stage.getByRole('button', { name: 'Close BluePlay world' }).click();
+  await expect(stage).toHaveCount(0);
+
+  const input = page.getByLabel('Codepad input');
+  await input.fill('5 + 3');
+  await input.press('Enter');
+  await expect(page.locator('.codepad-entry').last()).toContainText('8');
+  await expect(page.locator('.stage-window')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Start main' }).click();
+  await expect(page.getByRole('dialog', { name: 'BluePlay – World' })).toBeVisible();
+});
+
 test('GUI-73 the terminal split resize handle stays behind the BluePlay world window', async ({ page }) => {
   await loadBluePlay(page);
   await page.getByLabel('Show terminal', { exact: true }).click();
@@ -172,6 +187,37 @@ test('GUI-73 the terminal split resize handle stays behind the BluePlay world wi
   const dividerZ = await page.locator('.terminal-split-divider').evaluate((el) => getComputedStyle(el).zIndex);
   const stageZ = await page.locator('.stage-window').evaluate((el) => getComputedStyle(el).zIndex);
   expect(Number(dividerZ)).toBeLessThan(Number(stageZ));
+});
+
+test('GUI-82 inherited BluePlay methods are visible without scrolling the context menu', async ({ page }) => {
+  const stage = await loadBluePlay(page);
+  await stage.getByRole('button', { name: 'Close BluePlay world' }).click();
+  const entry = page.locator('.codepad textarea');
+  await entry.fill('MyWorld()');
+  await entry.press('Enter');
+  const result = page.locator('.codepad-entry').last();
+  await result.getByRole('button').click();
+  await page.getByLabel('Name of instance').fill('myWorld1');
+  await page.getByRole('button', { name: 'OK', exact: true }).click();
+
+  const object = page.locator('.bench .object').filter({ hasText: 'myWorld1' });
+  await object.click({ button: 'right' });
+  const popup = page.locator('.popup');
+  const superclass = popup.locator('.popup-submenu-trigger', { hasText: 'inherited from World' });
+  await superclass.hover();
+  const submenu = popup.locator('.popup-submenu-panel');
+  await expect(submenu).toBeVisible();
+  await expect(submenu.locator('.method-menu-item').filter({ hasText: 'show()' })).toBeVisible();
+  await expect(submenu.locator('.method-menu-item').filter({ hasText: 'addObject' })).toBeVisible();
+  await expect(popup).toHaveCSS('overflow-x', 'visible');
+
+  const box = await submenu.boundingBox();
+  const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+  if (!box) throw new Error('Inherited-method submenu bounds unavailable');
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
 });
 
 test('GUI-54 a world without a custom background is rendered on white', async ({ page }) => {

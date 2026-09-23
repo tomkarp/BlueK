@@ -342,6 +342,7 @@
     shareNotice = "",
     shareLinkDialog: { url: string; code: string; copied: boolean } | null = null,
     stageWindowOpen = false,
+    stageWindowDismissed = false,
     stageMaximized = false,
     stagePosition: { left: number; top: number } | null = null,
     codepadOpen = true,
@@ -1095,7 +1096,10 @@
     });
     const unsubscribeStage = client.stageStream((value) => {
       stage = decorateStage(value);
-      stageWindowOpen = true;
+      // Runtime snapshots repeat the current BluePlay frame after every codepad
+      // command. A dismissed window stays closed until the user starts a world
+      // again or explicitly invokes its show() method.
+      if (!stageWindowDismissed) stageWindowOpen = true;
       speed = Number(value.speed) || speed;
       (value.sounds || []).forEach((sound: string) => {
         const data = resourceData(`sounds/${sound}`);
@@ -1457,6 +1461,7 @@
     client?.invalidate();
     stage = null;
     stageWindowOpen = false;
+    stageWindowDismissed = false;
     resultDialog = null;
     invokeDialog = null;
     createDialog = null;
@@ -1880,6 +1885,7 @@
   }
   async function runMain() {
     if (!canExecute || !mainEntries.length) return;
+    stageWindowDismissed = false;
     status = "Running…";
     try {
       const result = await client.execute({
@@ -2053,7 +2059,10 @@
   }
   function invokeObject(object: BenchObject, original: any) {
     const method = specializeCallable(original, object, classes);
-    if (method.name === "show") stageWindowOpen = true;
+    if (method.name === "show") {
+      stageWindowDismissed = false;
+      stageWindowOpen = true;
+    }
     prepareInvoke({ object, method });
   }
   function methodLabel(method: any) {
@@ -2451,17 +2460,40 @@
   function fitPopup(node: HTMLElement) {
     const fit = () => {
       const rect = node.getBoundingClientRect();
+      const left = Math.max(8, Math.min(menu?.x || 8, window.innerWidth - rect.width - 8));
       node.style.top = `${Math.max(8, Math.min(menu?.y || 8, window.innerHeight - rect.height - 8))}px`;
-      node.style.left = `${Math.max(8, Math.min(menu?.x || 8, window.innerWidth - rect.width - 8))}px`;
+      node.style.left = `${left}px`;
+      const submenuWidth = 260;
+      node.classList.toggle(
+        "popup-submenus-left",
+        Boolean(node.querySelector(".popup-submenu-panel")) &&
+          left + rect.width + submenuWidth > window.innerWidth - 8 &&
+          left >= submenuWidth + 8,
+      );
     };
     const observer = new ResizeObserver(fit);
     observer.observe(node);
+    window.addEventListener("resize", fit);
     fit();
     return {
       destroy() {
         observer.disconnect();
+        window.removeEventListener("resize", fit);
       },
     };
+  }
+  function fitPopupSubmenu(node: HTMLElement) {
+    const panel = node.querySelector<HTMLElement>(".popup-submenu-panel");
+    if (!panel) return;
+    const trigger = node.getBoundingClientRect();
+    const availableBelow = Math.max(0, window.innerHeight - trigger.top - 8);
+    const availableAbove = Math.max(0, trigger.bottom - 8);
+    const contentHeight = panel.scrollHeight;
+    const openUp = contentHeight > availableBelow && availableAbove > availableBelow;
+    const available = openUp ? availableAbove : availableBelow;
+    panel.style.maxHeight = `${Math.max(0, Math.min(contentHeight, window.innerHeight * 0.7, available))}px`;
+    panel.style.top = openUp ? "auto" : "-1px";
+    panel.style.bottom = openUp ? "-1px" : "auto";
   }
   function openMenu(
     event: MouseEvent,
@@ -2595,6 +2627,7 @@
     terminal = "";
     stage = null;
     stageWindowOpen = false;
+    stageWindowDismissed = false;
     stageMaximized = false;
     activeInspectorId = "";
     inspectorWindows = [];
@@ -3011,6 +3044,7 @@
           <button
             on:click|stopPropagation={() => {
               stageWindowOpen = false;
+              stageWindowDismissed = true;
               stageMaximized = false;
             }}
             aria-label="Close BluePlay world"
@@ -3445,6 +3479,7 @@
       class:terminal-modal-split={terminalSplit}
       class:window-active={activeWindow === "terminal"}
       class="terminal-modal"
+      role="presentation"
       on:pointerdown={() => (activeWindow = "terminal")}
     >
       <div
@@ -3529,6 +3564,9 @@
           class:maximized={editorGroup.maximized}
           class:floating={Boolean(editorGroup.position) && !editorGroup.maximized}
           class="dialog editor-dialog editor-tabbed-dialog"
+          role="dialog"
+          aria-label={`Editor: ${editorFile.fileName}`}
+          tabindex="-1"
           style={`${editorGroup.maximized ? "" : `width:${editorGroup.size.width}px;height:${editorGroup.size.height}px;`} ${editorGroup.position && !editorGroup.maximized ? `left:${editorGroup.position.left}px;top:${editorGroup.position.top}px;` : ""}`}
           on:pointerdown={() => { activeWindow = "editor"; }}
         >
@@ -3579,6 +3617,8 @@
           </div>
           <div
             class="svelte-editor-host"
+            role="group"
+            aria-label="Code editor content"
             on:pointerdown={() => { activeWindow = "editor"; }}
             use:codeMirror={{ id: activeEditorId, value: editorFile.source, fontSize: editorFontSize, onChange: (value: string) => updateSource(editorFile.id, value), diagnostics: diagnosticsByFile[editorFile.fileName] || [], diagnosticsRun, vim: vimMode, dark: darkMode }}
           ><div class="editor-actions" role="toolbar" aria-label="Editor actions"><button
@@ -3629,6 +3669,9 @@
             class:floating={Boolean(editorWindow.position) && !editorWindow.maximized}
             class:editor-window-active={activeEditorId === editorWindow.id}
             class="dialog editor-dialog"
+            role="dialog"
+            aria-label={`Editor: ${editorFile.fileName}`}
+            tabindex="-1"
             style={`${editorWindow.maximized ? "" : `width:${editorWindow.size.width}px;height:${editorWindow.size.height}px;`} ${editorWindow.position && !editorWindow.maximized ? `left:${editorWindow.position.left}px;top:${editorWindow.position.top}px;` : ""} z-index:${activeEditorId === editorWindow.id ? 2 : 1};`}
             on:pointerdown={() => { activeWindow = "editor"; activeEditorId = editorWindow.id; }}
           >
@@ -3660,6 +3703,8 @@
             </div>
             <div
               class="svelte-editor-host"
+              role="group"
+              aria-label="Code editor content"
               on:pointerdown={() => { activeWindow = "editor"; activeEditorId = editorWindow.id; }}
               use:codeMirror={{ id: editorWindow.id, value: editorFile.source, fontSize: editorFontSize, onChange: (value: string) => updateSource(editorFile.id, value), diagnostics: diagnosticsByFile[editorFile.fileName] || [], diagnosticsRun, vim: vimMode, dark: darkMode }}
             ><div class="editor-actions" role="toolbar" aria-label="Editor actions"><button
@@ -3991,11 +4036,17 @@
             aria-label="What is BluePlay?">?</button
             >
           </div>
-          <div class="project-choice-row">
-            <button on:click={() => chooseTemplate("bluek-demo")}><strong>BlueK Demo Project</strong><span>Explore classes, inheritance and object interaction with Person and Student.</span></button>
-          </div>
-          <div class="project-choice-row">
-            <button on:click={() => chooseTemplate("space-invaders")}><strong>Space Invaders Demo</strong><span>Play a simplified BluePlay game with a movable defender and invaders.</span></button>
+          <div class="project-choice-secondary">
+            <p class="project-choice-note">
+              The following examples currently exist to test and demonstrate
+              BlueK. They will be removed in the long run.
+            </p>
+            <div class="project-choice-row">
+              <button on:click={() => chooseTemplate("bluek-demo")}><strong>BlueK Demo Project</strong><span>Explore classes, inheritance and object interaction with Person and Student.</span></button>
+            </div>
+            <div class="project-choice-row">
+              <button on:click={() => chooseTemplate("space-invaders")}><strong>Space Invaders Demo</strong><span>Play a simplified BluePlay game with a movable defender and invaders.</span></button>
+            </div>
           </div>
         </div>
         <div class="dialog-actions"><button
@@ -4180,7 +4231,7 @@
         <button on:click={() => duplicateFile(menu!.file!)}>Duplicate…</button>
       {:else if menu.object}
         {#each inheritedPopupGroups(menu.object) as group}
-          <div class="popup-submenu">
+          <div role="group" class="popup-submenu" on:pointerenter={(event) => fitPopupSubmenu(event.currentTarget as HTMLElement)}>
             <button class="popup-submenu-trigger" use:containClicks
               >inherited from {group[0]}<span>›</span></button
             >

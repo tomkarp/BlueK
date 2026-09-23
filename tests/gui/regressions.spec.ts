@@ -158,6 +158,9 @@ test('GUI-27 editor window has maximize, close and format controls', async ({ pa
   await project(page, 'class Hund {\nfun bellen() {\nprintln("Wuff")\n}\n}');
   await page.locator('.classcard').dblclick();
   const dialog = page.locator('.editor-dialog');
+  await expect(dialog).toHaveRole('dialog');
+  await expect(dialog).toHaveAttribute('aria-label', 'Editor: Hund.kt');
+  await expect(dialog.locator('.svelte-editor-host')).toHaveRole('group', { name: 'Code editor content' });
   await expect(dialog.getByRole('button', { name: 'Format Kotlin file' })).toHaveAttribute(
     'title',
     /Format Kotlin file \((Cmd|Ctrl)\+I\)/,
@@ -168,6 +171,27 @@ test('GUI-27 editor window has maximize, close and format controls', async ({ pa
   await expect(dialog).toHaveClass(/maximized/);
   await dialog.getByRole('button', { name: 'Close editor' }).click();
   await expect(dialog).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Show terminal', exact: true }).click();
+  await expect(page.locator('.terminal-modal')).toHaveAttribute('role', 'presentation');
+});
+
+test('GUI-80 maximized editor and terminal fill the browser viewport', async ({ page }) => {
+  await project(page, 'class Hund {}');
+  const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+
+  await page.locator('.classcard').dblclick();
+  const editor = page.locator('.editor-dialog');
+  await editor.getByRole('button', { name: 'Maximize editor window' }).click();
+  const editorBox = await editor.boundingBox();
+  expect(editorBox).toEqual({ x: 0, y: 0, width: viewport.width, height: viewport.height });
+  await editor.getByRole('button', { name: 'Close editor' }).click();
+
+  await page.getByRole('button', { name: 'Show terminal', exact: true }).click();
+  const terminal = page.locator('.terminal-window');
+  await terminal.getByRole('button', { name: 'Maximize terminal window' }).click();
+  const terminalBox = await terminal.boundingBox();
+  expect(terminalBox).toEqual({ x: 0, y: 0, width: viewport.width, height: viewport.height });
 });
 
 test('GUI-34 failed formatting shows a dismissible error and clears it on retry', async ({ page }) => {
@@ -762,6 +786,14 @@ test('GUI-01 new project offers all templates and can be cancelled', async ({ pa
     expect(boxes[index]!.y).toBeGreaterThan(boxes[index - 1]!.y);
     expect(Math.abs(boxes[index]!.x - boxes[0]!.x)).toBeLessThan(2);
   }
+  // BlueK Demo Project and Space Invaders Demo are visually set apart from the
+  // three primary templates above them and carry a note that they are only
+  // there to test and demonstrate BlueK.
+  const primaryGap = boxes[2]!.y - boxes[1]!.y;
+  const secondaryGap = boxes[3]!.y - boxes[2]!.y;
+  expect(secondaryGap).toBeGreaterThan(primaryGap);
+  await expect(dialog.locator('.project-choice-note')).toContainText('test and demonstrate BlueK');
+  await expect(dialog.locator('.project-choice-note')).toContainText('removed in the long run');
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
 });
