@@ -415,6 +415,48 @@ test('GUI-83 terminal output brings the terminal above an open editor', async ({
   await expect(terminalModal).toHaveCSS('z-index', '30');
 });
 
+test('GUI-84 object creation dialog stays above an open editor', async ({ page }) => {
+  await project(page, 'class Hund(var alter: Int) {}');
+  const classCard = page.locator('.classcard');
+  await classCard.dblclick();
+  const editorModal = page.locator('.editor-modal.window-active');
+  await expect(editorModal).toBeVisible();
+  await evaluate(page, '1');
+  await classCard.evaluate((element) => element.dispatchEvent(new MouseEvent('contextmenu', {
+    bubbles: true, cancelable: true, button: 2, clientX: 180, clientY: 180,
+  })));
+  await page.locator('.constructor-menu-item').click({ force: true });
+  const createDialog = page.getByRole('dialog', { name: 'Create Hund' });
+  await expect(createDialog).toBeVisible();
+  const dialogLayer = page.locator('.modal.topmost-modal');
+  await expect(dialogLayer).toHaveCSS('z-index', '100');
+  const dialogIndex = Number(await dialogLayer.evaluate((element) => getComputedStyle(element).zIndex));
+  const editorIndex = Number(await editorModal.evaluate((element) => getComputedStyle(element).zIndex));
+  expect(dialogIndex).toBeGreaterThan(editorIndex);
+});
+
+test('GUI-85 method parameter dialog stays above an open editor', async ({ page }) => {
+  await project(page, 'class Hund { fun laufen(weite: Int) {} }');
+  const classCard = page.locator('.classcard');
+  await classCard.dblclick();
+  const editorModal = page.locator('.editor-modal.window-active');
+  await expect(editorModal).toBeVisible();
+  const expression = await evaluate(page, 'Hund()');
+  await expression.getByRole('button').click();
+  await page.getByLabel('Name of instance').fill('hund1');
+  await page.getByRole('button', { name: 'OK', exact: true }).click();
+  const object = page.locator('.bench .object');
+  await object.dispatchEvent('contextmenu', { button: 2, bubbles: true, clientX: 180, clientY: 180 });
+  await page.locator('.method-menu-item').first().click();
+  const methodDialog = page.getByRole('dialog', { name: /hund1\.laufen/ });
+  await expect(methodDialog).toBeVisible();
+  const dialogLayer = page.locator('.modal.topmost-modal');
+  await expect(dialogLayer).toHaveCSS('z-index', '100');
+  const dialogIndex = Number(await dialogLayer.evaluate((element) => getComputedStyle(element).zIndex));
+  const editorIndex = Number(await editorModal.evaluate((element) => getComputedStyle(element).zIndex));
+  expect(dialogIndex).toBeGreaterThan(editorIndex);
+});
+
 test('GUI-31 one editor window can stay open per project file', async ({ page }) => {
   const payload = { format: 'bluek-project', version: 1, files: [
     { fileName: 'Hund.kt', kind: 'class', source: 'class Hund {}' },
