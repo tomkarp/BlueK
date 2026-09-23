@@ -1082,11 +1082,11 @@
         inspectorWindows.filter((item) => !runtime.liveObjectIds.includes(item.id)).forEach((item) => closeInspector(item.id));
       }
       if (runtime.phase === "waitingForInput" || runtime.phase === "faulted")
-        terminalOpen = true;
+        focusTerminalWindow();
     });
     const unsubscribeOutput = client.onResponse((value) => {
       if (value.output) {
-        terminalOpen = true;
+        focusTerminalWindow();
         terminal = appendTerminal(terminal, value.output);
         window.setTimeout(renderTerminal, 0);
       }
@@ -1231,6 +1231,11 @@
       const output = document.querySelector(".terminal-output pre");
       if (output) output.scrollTop = output.scrollHeight;
     });
+  }
+
+  function focusTerminalWindow() {
+    terminalOpen = true;
+    activeWindow = "terminal";
   }
 
 

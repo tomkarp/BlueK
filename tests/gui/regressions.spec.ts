@@ -400,6 +400,21 @@ test('GUI-30 clicking editor or terminal brings that window to the front', async
   await expect(editorModal).not.toHaveClass(/window-active/);
 });
 
+test('GUI-83 terminal output brings the terminal above an open editor', async ({ page }) => {
+  await project(page, 'class Hund {}');
+  await page.locator('.classcard').dblclick();
+  await page.getByRole('button', { name: 'Show terminal', exact: true }).click();
+  await page.locator('.editor-header').click();
+  const editorModal = page.locator('.editor-modal');
+  const terminalModal = page.locator('.terminal-modal');
+  await expect(editorModal).toHaveClass(/window-active/);
+  await evaluate(page, 'println("Terminal output")');
+  await expect(terminalModal.locator('.terminal-output pre')).toContainText('Terminal output');
+  await expect(terminalModal).toHaveClass(/window-active/);
+  await expect(editorModal).not.toHaveClass(/window-active/);
+  await expect(terminalModal).toHaveCSS('z-index', '30');
+});
+
 test('GUI-31 one editor window can stay open per project file', async ({ page }) => {
   const payload = { format: 'bluek-project', version: 1, files: [
     { fileName: 'Hund.kt', kind: 'class', source: 'class Hund {}' },
