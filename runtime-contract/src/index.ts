@@ -129,7 +129,8 @@ export type RuntimeCommand = { generationId?: string } & (
   | { op: 'input'; text: string; inputRequestId?: number; eof?: boolean }
   | { op: 'key'; key: string; pressed: boolean }
   | { op: 'click'; x: number; y: number; actorId?: string }
-  | { op: 'simulation'; action: 'step' | 'start' | 'stop' | 'reset' | 'setSpeed'; speed?: number }
+  | { op: 'simulation'; action: 'step' | 'start' | 'stop' | 'setSpeed'; speed?: number }
+  | { op: 'simulation'; action: 'reset'; fileName?: string }
 );
 export type WorkerCommand = RuntimeCommand | { op: 'compile'; files: ProjectFile[]; library?: ProjectLibrary; resources?: ProjectResource[]; generationId: string };
 export interface WorkerReply {

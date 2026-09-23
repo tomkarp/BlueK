@@ -16,6 +16,7 @@
     appendTerminal, terminalParts, codepadResult, codepadError, kotlinCallArguments, missingRequired, missingTypeArgument, codepadIsDisabled,
   } from "./uiParity";
   import { LocalRuntimeClient } from "./localRuntimeClient";
+  import { mainFiles } from "./mainEntries";
   import { KotlinFormatterClient } from "./kotlinFormatterClient";
   import { InspectorModel, inspectorFieldText, type InspectionView, type InspectorField } from "./inspectorModel";
   import { createProjectPayload, projectModelFromPayload } from "./projectFormat";
@@ -1027,11 +1028,10 @@
   $: programActive = runtime.phase === "running" || runtime.phase === "compiling" || inputReady;
   $: if (terminalOpen && inputReady)
     window.setTimeout(() => inputElement?.focus(), 0);
-  $: mainEntries = classes.filter(
-    (item) =>
-      item.kind === "functions" &&
-      item.methods?.some((method) => method.name === "main"),
-  );
+  type MainAction = "start" | "reset";
+  let mainDialog: { action: MainAction; generationId: string } | null = null;
+  $: mainEntries = mainFiles(classes);
+  $: if (mainDialog && (mainDialog.generationId !== runtime.generationId || !canExecute)) mainDialog = null;
   $: if (files.length || Object.keys(cardPositions).length || showInheritance)
     window.setTimeout(refreshInheritanceEdges, 0);
   // The graphics BlueK ships with are usable everywhere a project resource is,
@@ -1646,6 +1646,7 @@
   // What Escape would close right now — shared by handleWindowKeydown so
   // the Vim-and-editor special case there stays in sync with everything else.
   function escapeWindowAction(): (() => void) | null {
+    if (mainDialog) return () => { mainDialog = null; };
     if (projectInfo) return () => { projectInfo = null; };
     if (readmeOpen) return () => {
       const content = document.querySelector<HTMLElement>(".readme-editor .cm-content");
@@ -1884,13 +1885,35 @@
     return true;
   }
   async function runMain() {
+    await requestMain("start");
+  }
+  async function requestMain(action: MainAction) {
     if (!canExecute || !mainEntries.length) return;
+    if (mainDialog) return;
+    if (mainEntries.length > 1) {
+      mainDialog = { action, generationId: runtime.generationId };
+      return;
+    }
+    await executeMain(mainEntries[0], action, runtime.generationId);
+  }
+  async function chooseMain(fileName: string) {
+    const request = mainDialog;
+    mainDialog = null;
+    if (request) await executeMain(fileName, request.action, request.generationId);
+  }
+  async function executeMain(fileName: string, action: MainAction, generationId: string) {
+    if (!canExecute || generationId !== runtime.generationId || !mainEntries.includes(fileName)) return;
+    if (action === "reset") {
+      await performReset(fileName);
+      return;
+    }
     stageWindowDismissed = false;
     status = "Running…";
     try {
       const result = await client.execute({
         op: "main",
-        fileName: `${mainEntries[0].name}.kt`,
+        fileName,
+        generationId,
       });
       if (result.kind === "error")
         error = result.display || "Execution failed.";
@@ -2623,6 +2646,13 @@
     event.preventDefault();
   }
   async function resetRuntime() {
+    if (library?.id === "blueplay") {
+      await requestMain("reset");
+      return;
+    }
+    await performReset();
+  }
+  async function performReset(fileName?: string) {
     if (!client || runtime.phase === "compiling") return;
     terminal = "";
     stage = null;
@@ -2635,7 +2665,12 @@
     error = "";
     status = "Resetting…";
     try {
-      const result = await client.reset();
+      const result = await client.reset(fileName);
+      if ("kind" in result && result.kind === "error") {
+        status = "Reset failed";
+        error = result.display || "Reset failed.";
+        return;
+      }
       const diagnostics = result.diagnostics || [];
       if (diagnostics.length) {
         status = "Compile error";
@@ -4004,6 +4039,18 @@
               }}>Get</button
             >{/if}<button on:click={() => (resultDialog = null)}>Close</button>
         </div>
+      </div>
+    </div>{/if}
+  {#if mainDialog}<div class="modal topmost-modal" role="presentation">
+      <div class="dialog main-selection-dialog" role="dialog" aria-modal="true" aria-labelledby="main-selection-title" tabindex="-1" use:containClicks>
+        <h2 id="main-selection-title">Choose main</h2>
+        <p>Which main() should {mainDialog.action === "reset" ? "Reset" : "Start main"} run?</p>
+        <div class="toolbar-dialog-options main-selection-options">
+          {#each mainEntries as fileName, index}
+            <button class="toolbar-dialog-option" on:click={() => void chooseMain(fileName)} use:focusOnMount={index === 0}>{fileName} — main()</button>
+          {/each}
+        </div>
+        <div class="dialog-actions"><button on:click={() => (mainDialog = null)}>Cancel</button></div>
       </div>
     </div>{/if}
   {#if newProjectOpen}<div class="modal topmost-modal">

@@ -770,16 +770,22 @@ class KotliteSession {
         return result("started", UnitValue)
     }
 
-    fun startBluePlayMain(onInput: (Int) -> Unit, onComplete: (String) -> Unit): String {
+    fun startBluePlayMain(filename: String?, onInput: (Int) -> Unit, onComplete: (String) -> Unit): String {
+        if (filename != null && filename !in mainFunctionNames) return errorMessage("No main() in $filename.")
+        val selectedName = filename?.let { mainFunctionName(it) }
         val main = analyzedScript?.nodes?.filterIsInstance<FunctionDeclarationNode>()
-            ?.singleOrNull { it.name == "main" && it.valueParameters.isEmpty() }
+            ?.singleOrNull {
+                it.valueParameters.isEmpty() &&
+                    (if (selectedName != null) it.name == selectedName
+                     else it.name == "main" || it.name.startsWith(MAIN_ALIAS_PREFIX))
+            }
             ?: return errorMessage("BluePlay Reset needs an unambiguous parameterless main().")
         if (executionCompleted != null) return errorMessage("Another runtime command is running.")
         inputRequested = onInput
         executionCompleted = onComplete
         bluePlayBatching = true
         (suspend {
-            val call = FunctionCallNode(VariableReferenceNode(main.position, "main"), emptyList(), emptyList(), main.position)
+            val call = FunctionCallNode(VariableReferenceNode(main.position, main.name), emptyList(), emptyList(), main.position)
             interpreter.evalFunctionCall(
                 callNode = call,
                 functionNode = main,
@@ -882,13 +888,18 @@ class KotliteSession {
             }
         }
         // Like Kotlin, every file may declare its own main(). The files share one
-        // script here, so all but the primary main (Main.kt, as BlueJ's Reset
-        // uses) get an internal name; the manifest still presents them as main.
+        // script here, so all but one get an internal name; the manifest still
+        // presents them as main. Buttons always pass the chosen file explicitly.
+        // The unaliased name only preserves the existing Codepad main() binding.
         mainFunctionNames.clear()
         val primaryMain = mainFiles.firstOrNull { it == "Main.kt" } ?: mainFiles.firstOrNull()
         val projectSources = sources.indices.map { index ->
             val filename = filenames[index]
-            if (filename !in mainFiles || filename == primaryMain) return@map sources[index]
+            if (filename !in mainFiles) return@map sources[index]
+            if (filename == primaryMain) {
+                mainFunctionNames[filename] = "main"
+                return@map sources[index]
+            }
             val internalName = MAIN_ALIAS_PREFIX + filename.removeSuffix(".kt").replace(Regex("[^A-Za-z0-9_]"), "_")
             mainFunctionNames[filename] = internalName
             sources[index].replace(Regex("(^|\n)([ \t]*)fun(\\s+)main(\\s*\\()")) { match ->

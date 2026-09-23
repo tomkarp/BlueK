@@ -136,7 +136,7 @@ const awaitCompletion = (start) => new Promise(resolve => {
 });
 const nativeLoad = await awaitCompletion((onInput, onComplete) => nativeSession.startLoadProject(nativeFiles, nativeSources, 'blueplay', 1, onInput, onComplete));
 expectOk(nativeLoad, 'native project load');
-expectOk(await awaitCompletion((onInput, onComplete) => nativeSession.startBluePlayMain(onInput, onComplete)), 'native main');
+expectOk(await awaitCompletion((onInput, onComplete) => nativeSession.startBluePlayMain(null, onInput, onComplete)), 'native main');
 const nativeInitial = JSON.parse(nativeSession.takeStage()).stage;
 if (nativeInitial.objects[0]?.x !== 100) throw new Error('Native BluePlay library did not render the actor from main().');
 expectOk(await awaitCompletion((onInput, onComplete) => nativeSession.startBluePlayStep(onInput, onComplete)), 'native step');
@@ -154,7 +154,7 @@ const removalSources = [
   'val removalWorld = World(30, 20, 1); val removalActor = RemovingActor(); val secondRemovalActor = RemovingActor(); fun main() { removalWorld.addObject(removalActor, 10, 10); removalWorld.addObject(secondRemovalActor, 20, 10); showWorld(removalWorld) }',
 ];
 expectOk(await awaitCompletion((onInput, onComplete) => removalSession.startLoadProject(removalFiles, removalSources, 'blueplay', 1, onInput, onComplete)), 'self-removal project load');
-expectOk(await awaitCompletion((onInput, onComplete) => removalSession.startBluePlayMain(onInput, onComplete)), 'self-removal main');
+expectOk(await awaitCompletion((onInput, onComplete) => removalSession.startBluePlayMain(null, onInput, onComplete)), 'self-removal main');
 const removableStage = JSON.parse(removalSession.takeStage()).stage;
 if (removableStage.objects.length !== 2 || removableStage.objects[0]?.image.width !== 4 || !removableStage.objects[0]?.hitId || !removableStage.objects[1]?.hitId) throw new Error('Runtime image metadata or stable hit identity is missing.');
 expectOk(JSON.parse(removalSession.setClick(7, 10, removableStage.objects[0].hitId)), 'off-centre actor click');
@@ -187,7 +187,7 @@ const collisionSources = [
   'val pixelWorld = World(30, 20, 1); val pixelA = MaskActor(); val pixelB = MaskActor(); fun main() { pixelWorld.addObject(pixelA, 10, 10); pixelWorld.addObject(pixelB, 11, 10); showWorld(pixelWorld) }',
 ];
 expectOk(await awaitCompletion((onInput, onComplete) => collisionSession.startLoadProject(collisionFiles, collisionSources, 'blueplay', 1, onInput, onComplete)), 'alpha collision project load');
-expectOk(await awaitCompletion((onInput, onComplete) => collisionSession.startBluePlayMain(onInput, onComplete)), 'alpha collision main');
+expectOk(await awaitCompletion((onInput, onComplete) => collisionSession.startBluePlayMain(null, onInput, onComplete)), 'alpha collision main');
 const collisionEvaluate = (source, label) => expectOk(JSON.parse(collisionSession.evaluate('<BluePlay alpha smoke>', source)), label);
 if (collisionEvaluate('pixelA.isTouching(pixelB)', 'transparent overlap').display !== 'false') throw new Error('Transparent source pixels incorrectly triggered isTouching.');
 collisionEvaluate('pixelB.x = 10', 'opaque overlap setup');
@@ -205,7 +205,7 @@ expectOk(await awaitCompletion((onInput, onComplete) => typedSession.startLoadPr
   'class Seeker : Actor() { fun one(): Target? = getOneIntersecting<Target>(); fun touching(): Boolean = isTouching<Target>(); fun count(): Int = getIntersecting<Target>().size; fun clear() { removeTouching<Target>() } }',
   'val typedWorld = World(100, 100); val seeker = Seeker(); val target = Target(); fun main() { typedWorld.addObject(seeker, 10, 10); typedWorld.addObject(target, 10, 10); showWorld(typedWorld) }',
 ], 'blueplay', 1, onInput, onComplete)), 'typed collision project load');
-expectOk(await awaitCompletion((onInput, onComplete) => typedSession.startBluePlayMain(onInput, onComplete)), 'typed collision main');
+expectOk(await awaitCompletion((onInput, onComplete) => typedSession.startBluePlayMain(null, onInput, onComplete)), 'typed collision main');
 const typedEvaluate = (source, label) => expectOk(JSON.parse(typedSession.evaluate('<typed collisions>', source)), label).display;
 if (typedEvaluate('seeker.one() === target && seeker.touching() && seeker.count() == 1', 'typed collision queries') !== 'true') throw new Error('Typed collision queries did not find the touching actor.');
 if (typedEvaluate('seeker.clear(); typedWorld.numberOfObjects', 'removeTouching') !== '1') throw new Error('removeTouching did not remove the touching actor.');

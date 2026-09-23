@@ -23,7 +23,7 @@ const loaded = await awaitCompletion((onInput, onComplete) =>
   session.startLoadProject(files, sources, 'blueplay', 1, onInput, onComplete));
 expectOk(loaded, 'Space Invaders project load');
 expectOk(await awaitCompletion((onInput, onComplete) =>
-  session.startBluePlayMain(onInput, onComplete)), 'Space Invaders main');
+  session.startBluePlayMain(null, onInput, onComplete)), 'Space Invaders main');
 
 const initial = JSON.parse(session.takeStage()).stage;
 if (initial.width !== 720 || initial.height !== 480 || initial.objects.length !== 33) {

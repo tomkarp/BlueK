@@ -141,7 +141,7 @@ Worker-/Runtime-Smokes getrennt.
 | RT-22 | Property-Accessors sehen alle Properties der Klasse (auch spätere) und nie Konstruktorparameter; Parameter und Property gleichen Namens (`init { this.alter = alter }`) | `smoke-curriculum-kotlin` | Abgesichert |
 | RT-23 | Property ohne Startwert/Getter und ohne init-Block ist ein Compilefehler | `smoke-curriculum-kotlin` | Mit init-Block wird die Zuweisung erst zur Laufzeit geprüft |
 | RT-24 | Argumente eines Member-Aufrufs werden im Aufrufer-Scope ausgewertet (`karten.add(neueKarte(i))`) | `smoke-curriculum-kotlin` | Benannte, `vararg`- und Lambda-Argumente nutzen den bisherigen Pfad |
-| RT-25 | Jede Datei darf ein eigenes `main()` haben; Rechtsklick startet das der Datei, Reset/Run das von `Main.kt` | `smoke-runtime-state` | Abgesichert |
+| RT-25 | Parameterlose Top-Level-`main()` in beliebiger Funktionsdatei: „Start main“ und BluePlay-Reset starten den einzigen Kandidaten direkt oder fragen bei mehreren jedes Mal nach der Datei; Cancel/Escape führt nichts aus, keine gespeicherte Auswahl. Rechtsklick startet weiterhin die Funktion der Karte. Reset erhält die Session und initialisiert Top-Level-Properties nicht erneut | `smoke-runtime-state`: eindeutiges/mehrdeutiges/ungültiges/fehlendes Ziel, wechselnde Dateien, Session-Erhalt und Eingabe während Reset. Echte Chromium-Tests in `main-selection.spec.ts`: beide Buttons, beliebige Dateinamen, wiederholte Auswahl, Abbruch, Neuladen, Klassenmethode ausgeschlossen, Tastenkürzel und Verwerfen des Dialogs nach Compile | Runtime-Smoke grün; 6/6 neue Chromium-Tests sowie GUI-77 und GUI-81 grün; Typecheck 0 Fehler/0 Warnungen; visuelle Benutzerabnahme offen. Prüflauf siehe unten |
 | RT-26 | Compilefehler zeigen Datei und Zeile auch hinter der BluePlay-Library; „No matching function“ nennt die Argumenttypen | `smoke-runtime-state` | Abgesichert |
 | RT-27 | `stop()`/`start()` funktionieren auch nach `welt.show()` (nicht nur nach `showWorld(welt)`) | Harness Goldrausch (Spieler sammelt letzte Münze), `smoke-curriculum-kotlin` | Abgesichert |
 | RT-28 | `private` gilt für alle Member, nicht nur den ersten (Lookahead für `private set` verschluckte den Modifier der Folge-Property); Semikolons am Zeilenende im Klassenrumpf sind erlaubt | `smoke-curriculum-kotlin` | Abgesichert |
@@ -555,3 +555,31 @@ Halte-/Abbruch-Mechanismus (Timer, Capture-Listener, Pointer-/Fokus-/Blur-/
 Sichtbarkeits-Abbrüche) wurde entfernt. Nachweis:
 `npx playwright test --grep GUI-42` mit 3/3 grün; `npm run typecheck` mit
 0 Fehlern.
+
+## RT-25: main-Auswahl bei Start und BluePlay-Reset (2026-09-23)
+
+Der Arbeitsbaum war vor der Änderung sauber auf `beta`. Die Auswahl wird aus
+dem Runtime-Manifest abgeleitet und nur für den einzelnen Aufruf verwendet.
+Die Prüfung umfasst auch Main.kt als einen von mehreren Kandidaten sowie ein
+Projekt ganz ohne Main.kt.
+
+Nachweise:
+
+- `npm run build:kotlite`: erfolgreich, ausgeliefertes Kotlin/JS-Bundle erneuert.
+- `npm run test:runtime-state`: erfolgreich, einschließlich expliziter und
+  eindeutiger Ziele, Ablehnung mehrdeutiger/ungültiger Ziele ohne Ausführung,
+  Session-Erhalt und interaktiver Eingabe während Reset.
+- `node scripts/smoke-blueplay-browser.mjs` und `npm run test:blueplay-demos`:
+  erfolgreich. Diese Skripte sind Runtime-/VM-Smokes, keine GUI-Abnahme.
+- `main-selection.spec.ts`: sechs echte Chromium-Tests erfolgreich; bestehende
+  GUI-77 (Buttonname) und GUI-81 (Welt wieder öffnen) ebenfalls erfolgreich.
+- `npm run typecheck`: 0 Fehler, 0 Warnungen.
+- `npm run build:svelte`: erfolgreich; Hinweise zu Bundle-Größe,
+  dynamischem Runtime-Pfad und externem Formatter-Modul bleiben bestehen.
+
+Die ersten Ausführungen wurden durch Sandbox-Zugriff auf den Gradle-Cache bzw.
+den lokalen Testport blockiert; freigegebene Wiederholungen funktionierten.
+Die ersten neuen GUI-Fixtures fehlten beim Compile-Schritt; anschließend
+verwendeten sie einen nicht vorhandenen Status-Selektor. Beide Testfehler wurden
+korrigiert und die betroffenen Tests erfolgreich wiederholt. Keine komplette
+Regressionssuite ausgeführt. Visuelle Benutzerabnahme des Auswahldialogs offen.

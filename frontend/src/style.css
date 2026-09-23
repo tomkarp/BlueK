@@ -504,6 +504,7 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 .settings-field{display:flex;align-items:center;justify-content:space-between;gap:24px;margin:18px 0;color:#333}
 .settings-field select{min-width:88px;padding:6px 8px;border:1px solid #999;border-radius:4px;background:#fff;font:inherit}
 .topmost-modal{z-index:100}
+.main-selection-options{max-height:55vh;overflow-y:auto}
 .shared-project-loader{margin:16px 0;padding:14px;border:1px solid #bbb;border-radius:6px;background:#faf9f4}
 .shared-project-loader>strong{display:block;margin-bottom:10px}
 .shared-project-loader label{display:flex;align-items:center;gap:10px;margin:0}

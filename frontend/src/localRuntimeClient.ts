@@ -159,11 +159,11 @@ export class LocalRuntimeClient {
   async sendKey(key: string, pressed: boolean) { return this.execute({ op: 'key', key, pressed }); }
   async sendClick(x: number, y: number, actorId?: string) { return this.execute({ op: 'click', x, y, actorId }); }
   async simulation(action: 'step' | 'start' | 'stop' | 'reset' | 'setSpeed', speed?: number) {
-    return this.execute({ op: 'simulation', action, speed });
+    return this.execute(action === 'reset' ? { op: 'simulation', action } : { op: 'simulation', action, speed });
   }
   async stop() { this.invalidate(); }
-  async reset() {
-    if (this.library?.id === 'blueplay') return this.simulation('reset');
+  async reset(fileName?: string) {
+    if (this.library?.id === 'blueplay') return this.execute({ op: 'simulation', action: 'reset', fileName });
     return this.compile(this.project, Date.now(), this.library, this.resources);
   }
 }

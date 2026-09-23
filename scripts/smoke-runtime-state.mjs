@@ -312,7 +312,7 @@ await nativeClient.reset();
 assert.equal(nativeClient.getSnapshot().simulation, 'paused');
 nativeClient.invalidate();
 projectClient.invalidate();
-// Like Kotlin, every file may declare its own main(); Main.kt stays the primary one.
+// RT-25: explicit per-file entry points retain their identity.
 {
   const mains = new LocalRuntimeClient(() => new TestWorker());
   const mainOutputs = [];
@@ -326,6 +326,56 @@ projectClient.invalidate();
   assert.notEqual((await mains.execute({ op: 'main', fileName: 'Variante.kt' })).kind, 'error');
   assert.notEqual((await mains.execute({ op: 'main', fileName: 'Main.kt' })).kind, 'error');
   assert.equal(mainOutputs.join(''), 'Variante\nHauptprogramm\n');
+  mains.invalidate();
+}
+// RT-25: Reset resolves a unique main anywhere, or requires an explicit choice.
+{
+  const mains = new LocalRuntimeClient(() => new TestWorker());
+  const output = [];
+  mains.onResponse(value => { if (value.output) output.push(value.output); });
+  const program = { id: 'program', fileName: 'Program.kt', kind: 'functions', revision: 1,
+    source: 'val initialized = 7\nvar starts = 0\nfun main() { starts++; println("Program $starts"); World(60, 40, 1).show() }' };
+  const alternative = { id: 'main', fileName: 'Main.kt', kind: 'functions', revision: 1,
+    source: 'fun main() { starts += 10; println("Main $starts"); World(80, 50, 1).show() }' };
+  const library = { id: 'blueplay', version: 1 };
+  assert.deepEqual((await mains.compile([program], 1, library)).diagnostics, []);
+  assert.notEqual((await mains.reset()).kind, 'error', 'single main outside Main.kt runs automatically');
+  assert.equal(output.join(''), 'Program 1\n');
+  assert.equal(mains.getSnapshot().stage.width, 60);
+  output.length = 0;
+  assert.deepEqual((await mains.compile([program, alternative], 2, library)).diagnostics, []);
+  assert.equal((await mains.reset()).kind, 'error', 'multiple mains require a choice even with Main.kt');
+  assert.equal(output.join(''), '', 'ambiguous reset executes nothing');
+  assert.equal(mains.getSnapshot().phase, 'ready', 'missing choice is not a fatal runtime error');
+  assert.notEqual((await mains.reset('Program.kt')).kind, 'error');
+  assert.equal(mains.getSnapshot().stage.width, 60);
+  assert.notEqual((await mains.reset('Main.kt')).kind, 'error');
+  assert.equal(mains.getSnapshot().stage.width, 80);
+  assert.notEqual((await mains.reset('Program.kt')).kind, 'error');
+  assert.equal(output.join(''), 'Program 1\nMain 11\nProgram 12\n', 'selected main runs once in the same session');
+  assert.equal((await mains.execute({ op: 'eval', code: 'initialized' })).display, '7');
+  assert.equal((await mains.reset()).kind, 'error', 'the previous choice is never remembered');
+  assert.equal((await mains.reset('Missing.kt')).kind, 'error', 'invalid selection cannot fall back to Main.kt');
+  assert.equal((await mains.execute({ op: 'main', fileName: 'Missing.kt' })).kind, 'error');
+  assert.equal(output.join(''), 'Program 1\nMain 11\nProgram 12\n');
+  const inputMain = { ...alternative, fileName: 'Eingabe.kt', source: 'fun main() { println(readln()) }' };
+  assert.deepEqual((await mains.compile([program, alternative, inputMain], 3, library)).diagnostics, []);
+  const inputReady = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => { unsubscribe(); reject(new Error('Reset did not request input.')); }, 2000);
+    const unsubscribe = mains.subscribe(() => {
+      if (mains.getSnapshot().phase !== 'waitingForInput') return;
+      clearTimeout(timeout); unsubscribe(); resolve();
+    });
+  });
+  const resetting = mains.reset('Eingabe.kt');
+  await inputReady;
+  await mains.sendInput('selected main input');
+  assert.notEqual((await resetting).kind, 'error');
+  assert.equal(mains.getSnapshot().phase, 'ready');
+  assert.equal(mains.getSnapshot().simulation, 'paused');
+  assert.ok(output.join('').endsWith('selected main input\n'));
+  assert.deepEqual((await mains.compile([], 3, library)).diagnostics, []);
+  assert.equal((await mains.reset()).kind, 'error', 'missing main does not reuse an old entry point');
   mains.invalidate();
 }
 // Diagnostics point into the student's file, also behind the built-in BluePlay library.

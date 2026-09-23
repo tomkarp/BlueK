@@ -5,6 +5,26 @@ Svelte-Oberfläche mit Klassenkarten, Objektbank, Codepad und BluePlay ist die
 einzige gepflegte Anwendung. Schülercode wird ausschließlich in einem
 Browser-Worker mit Kotlite ausgeführt.
 
+## main starten und BluePlay zurücksetzen
+
+Eine parameterlose Top-Level-Funktion `fun main()` kann in jeder Funktionsdatei
+stehen, beispielsweise `Spiel.kt` oder `Program.kt`; `Main.kt` ist nicht
+vorgeschrieben. Der linke Button **Start main** (auch per Tastenkürzel) und
+**Reset** in der BluePlay-Welt verwenden dieselbe Auswahl:
+
+- Bei genau einer `main()` wird sie unmittelbar gestartet.
+- Bei mehreren `main()`-Funktionen erscheint bei jedem Aufruf **Choose main**
+  mit den zugehörigen Dateinamen. Ein Klick startet die gewählte Funktion;
+  **Cancel** oder Escape bricht ohne Ausführung ab.
+- Die Auswahl wird weder gemerkt noch im Projekt oder in Einstellungen gespeichert.
+- Ohne passende Top-Level-`main()` ist **Start main** deaktiviert und der
+  Reset-Button der BluePlay-Welt ausgeblendet. Klassenmethoden zählen nicht als
+  Einstiegspunkt.
+
+BluePlay-Reset ruft die gewählte Funktion erneut in derselben Session auf.
+Top-Level-Properties werden dabei nicht neu initialisiert. Über das Kontextmenü
+einer Funktionskarte lässt sich weiterhin gezielt deren `main()` starten.
+
 ## Start und Build
 
 Für die Entwicklung werden Node.js 22 und einmalig Java 21 für den Kotlin/JS-Build benötigt. Java und Gradle sind kein Bestandteil der ausgelieferten Laufzeit.

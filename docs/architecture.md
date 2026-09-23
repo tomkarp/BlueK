@@ -39,10 +39,26 @@ Archivierter Vergleichs-Commit: `ff1f5d7`.
 
 ## Projektdateien und Codepad
 
-Wie in Kotlin darf jede Datei ein eigenes `main()` deklarieren. Da die Session
-alle Dateien zu einem Skript verbindet, erhalten die `main()` außerhalb von
-`Main.kt` einen internen Namen (`mainFunctionName(datei)`); Manifest und Karten
-zeigen weiterhin `main`, Reset und Run nutzen das `main()` von `Main.kt`.
+Wie in Kotlin darf jede Datei ein eigenes `main()` deklarieren. `Start main`
+und BluePlay-Reset ermitteln parameterlose Top-Level-Einstiegspunkte mit
+`mainEntries.ts` aus den kompilierten Runtime-Metadaten. Bei genau einem
+Einstiegspunkt starten sie ihn unabhängig vom Dateinamen. Bei mehreren zeigt
+Svelte bei jedem Aufruf eine Dateiauswahl; Abbrechen führt nichts aus. Der
+Dialog hält nur Aktion und Runtime-Generation, seine Optionen werden aus dem
+aktuellen Snapshot abgeleitet. Compile/Invalidierung schließt einen veralteten
+Dialog. Es gibt keine gespeicherte Auswahl oder Build-Einstellung.
+
+Die Ausführung erhält die Datei ausdrücklich: `main.fileName` beziehungsweise
+`simulation.reset.fileName`. `RuntimeHost` validiert diese gegen die aktuellen
+Metadaten. Ein Reset ohne Dateiangabe ist nur mit genau einem Kandidaten
+zulässig; fehlende oder mehrdeutige Ziele sind nicht fatale Anforderungsfehler.
+Da die Session alle Dateien zu einem Skript verbindet, erhalten zusätzliche
+`main()`-Funktionen interne Namen (`mainFunctionName(datei)`); Manifest und
+Karten zeigen weiterhin `main`. Das Kontextmenü startet gezielt die Funktion
+seiner Datei. Die bisherige Bindung des unqualifizierten Codepad-Aufrufs
+`main()` bleibt separat erhalten: `Main.kt`, falls dort eine `main` existiert,
+sonst die erste Datei mit `main`. Die beiden Projektaktionen verwenden diese
+implizite Bindung nicht.
 Analyse- und Laufzeitfehler des Projekts werden in der Session auf Datei und
 Zeile abgebildet, auch hinter vorangestellten Library-Quellen.
 
@@ -92,9 +108,12 @@ nächsten Schritt mit `max(1, 100 - speed - elapsed)` Millisekunden, wobei
 Schritte erzeugen keine Nachhol-Warteschlange; der Client hält keinen
 zweiten Simulationstimer. Während eines laufenden Schritts bleiben Tastatur-
 und Mausereignisse zulässig, normale Codepad-/Objektoperationen werden bis zum
-Pause-Zustand abgewiesen. Reset stoppt zunächst, ruft danach das
-parameterlose `main()` direkt in derselben Session auf und meldet einen
-verständlichen Fehler, falls es fehlt oder mehrdeutig ist.
+Pause-Zustand abgewiesen. Der Welt-Reset ist im Pause-Zustand verfügbar. Nach
+der gegebenenfalls nötigen Dateiauswahl stoppt der Host den Scheduler und ruft
+die gewählte parameterlose `main()` direkt in derselben Session auf. Dafür
+erhält `startBluePlayMain` den Dateinamen und löst ihn über die interne
+Namenszuordnung auf. Top-Level-Initialisierer laufen nicht erneut. Die
+Ausführung meldet ihre Laufzeitphase und kann interaktive Eingabe anfordern.
 
 ### BluePlay-Performance und Ausführungsgrenzen
 

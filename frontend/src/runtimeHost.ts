@@ -1,4 +1,5 @@
 import { manifestClasses } from './runtimeMetadata';
+import { resolveMainFile } from './mainEntries';
 import type { BluePlayStage, RuntimeEvent, RuntimeSnapshot, RuntimeValue, SimulationState, WorkerCommand, WorkerReply } from '../../runtime-contract/src/index';
 
 class RequestError extends Error {}
@@ -35,7 +36,7 @@ export interface KotliteSessionBridge {
   setBluePlayResources(manifest: string): void;
   setBluePlaySpeed(speed: number): string;
   startBluePlayStep(onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
-  startBluePlayMain(onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
+  startBluePlayMain(fileName: string | null, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
   takeBluePlayIntent(): string;
 }
 
@@ -197,12 +198,11 @@ export class RuntimeHost {
       let filename = '<Codepad>', source = '';
       if (command.op === 'eval') { filename = command.filename || filename; source = command.code; }
       else if (command.op === 'main') {
-        filename = command.fileName || '<Main>';
-        const owner = command.fileName?.replace(/\.kt$/, '');
-        const main = this.snapshot.classes.find(value => value.kind === 'functions' && value.name === owner)?.methods.find(value => value.name === 'main');
+        try { filename = resolveMainFile(this.snapshot.classes, command.fileName); }
+        catch (error) { throw new RequestError((error as Error).message); }
         // Each file may declare its own main(); the session knows its callable name.
         const name = this.session.mainFunctionName(filename);
-        source = main && main.parameters.length > 0 ? `${name}(emptyArray<String>())` : `${name}()`;
+        source = `${name}()`;
       }
       const executionId = id;
       this.active = { executionId }; this.snapshot.phase = 'running';
@@ -266,13 +266,26 @@ export class RuntimeHost {
     }
     if (command.action === 'reset') {
       if (this.active) throw new RequestError('BluePlay reset waits for the current step to finish.');
+      let fileName: string;
+      try { fileName = resolveMainFile(this.snapshot.classes, command.fileName); }
+      catch (error) { throw new RequestError((error as Error).message); }
+      if (this.simulation.timer !== null) clearTimeout(this.simulation.timer);
+      this.simulation.timer = null;
+      this.session.takeBluePlayIntent();
       this.simulation.state = 'stopping'; const executionId = id; this.active = { executionId };
+      this.snapshot.phase = 'running';
+      const onInput = (inputRequestId: number) => {
+        if (!this.active || this.active.executionId !== executionId) return;
+        this.active.inputRequestId = inputRequestId; this.snapshot.phase = 'waitingForInput';
+        this.emitEvent(executionId, 'inputRequested', emit, { inputRequestId });
+      };
+      this.emitEvent(executionId, 'started', emit);
       const onComplete = (result: string) => {
         if (!this.active || this.active.executionId !== executionId) return;
         this.active = null; const response = JSON.parse(result) as RuntimeValue; this.snapshot.phase = response.fatal ? 'faulted' : 'ready'; this.simulation.state = response.fatal ? 'faulted' : 'paused'; emit(this.publish(id, response));
       };
-      const started = this.session.startBluePlayMain(() => undefined, onComplete); const initial = JSON.parse(started) as RuntimeValue;
-      if (initial.kind === 'error') { this.active = null; this.simulation.state = 'paused'; emit(this.publish(id, initial)); }
+      const started = this.session.startBluePlayMain(fileName, onInput, onComplete); const initial = JSON.parse(started) as RuntimeValue;
+      if (initial.kind === 'error') { this.active = null; this.snapshot.phase = 'ready'; this.simulation.state = 'paused'; emit(this.publish(id, initial)); }
       return;
     }
     if (this.simulation.state === 'running' || this.simulation.state === 'stopping') { emit(this.publish(id, { kind: 'unit', display: 'Unit' })); return; }

@@ -19,7 +19,7 @@ for (const shooting of [false, true]) {
     project.files.map(f => f.fileName),
     project.files.map(f => f.source.replaceAll('x - 5', 'x - 1').replaceAll('x + 5', 'x + 1')),
     'blueplay', 1, input, done));
-  await complete((input, done) => session.startBluePlayMain(input, done));
+  await complete((input, done) => session.startBluePlayMain(null, input, done));
   const initial = JSON.parse(session.takeStage()).stage;
   let previousInvaders = new Map(initial.objects.filter(object => object.className === 'Invader').map(object => [object.hitId, object.x]));
   session.setKey('right', true);
