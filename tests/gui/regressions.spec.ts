@@ -328,7 +328,7 @@ test('GUI-42 Vim Escape leaves insert mode immediately and never closes the edit
   await expect(editor).toHaveCount(1);
 });
 
-test('GUI-42 Shift+Escape closes the editor window while Vim is on', async ({ page }) => {
+test('GUI-42 Shift+Escape closes the active editor tab while Vim is on', async ({ page }) => {
   const payload = { format: 'bluek-project', version: 1, files: [
     { fileName: 'Hund.kt', kind: 'class', source: 'class Hund {}' },
     { fileName: 'Katze.kt', kind: 'class', source: 'class Katze {}' },
@@ -337,9 +337,11 @@ test('GUI-42 Shift+Escape closes the editor window while Vim is on', async ({ pa
   await page.getByRole('button', { name: 'Hund', exact: true }).dblclick();
   await page.getByRole('button', { name: 'Katze', exact: true }).dblclick();
   await page.keyboard.press('ControlOrMeta+Shift+V');
-  await expect(page.locator('.editor-dialog')).toHaveCount(2);
+  await expect(page.locator('.editor-tabbed-dialog')).toHaveCount(1);
+  await expect(page.locator('.editor-tabs [role="tab"]')).toHaveCount(2);
   await page.keyboard.press('Shift+Escape');
   await expect(page.locator('.editor-dialog')).toHaveCount(1);
+  await expect(page.locator('.editor-tabbed-dialog')).toHaveCount(0);
   await expect(page.locator('.editor-header h3')).toHaveText('Hund.kt');
   await page.keyboard.press('Shift+Escape');
   await expect(page.locator('.editor-dialog')).toHaveCount(0);
@@ -454,7 +456,7 @@ test('GUI-85 method parameter dialog stays above an open editor', async ({ page 
   expect(dialogIndex).toBeGreaterThan(editorIndex);
 });
 
-test('GUI-31 one editor window can stay open per project file', async ({ page }) => {
+test('GUI-31 additional editor files open in tabs by default', async ({ page }) => {
   const payload = { format: 'bluek-project', version: 1, files: [
     { fileName: 'Hund.kt', kind: 'class', source: 'class Hund {}' },
     { fileName: 'Katze.kt', kind: 'class', source: 'class Katze {}' },
@@ -463,9 +465,11 @@ test('GUI-31 one editor window can stay open per project file', async ({ page })
   await expect(page.getByLabel('Codepad input')).toBeEnabled();
   await page.getByLabel('Hund', { exact: true }).dblclick();
   await page.getByLabel('Katze', { exact: true }).dblclick();
-  await expect(page.locator('.editor-dialog')).toHaveCount(2);
-  await expect(page.locator('.editor-dialog').filter({ hasText: 'Hund.kt' })).toHaveCount(1);
-  await expect(page.locator('.editor-dialog').filter({ hasText: 'Katze.kt' })).toHaveCount(1);
+  await expect(page.locator('.editor-dialog')).toHaveCount(1);
+  await expect(page.locator('.editor-tabbed-dialog')).toHaveCount(1);
+  await expect(page.locator('.editor-tabs [role="tab"]')).toHaveCount(2);
+  await expect(page.locator('.editor-tabs [role="tab"][aria-selected="true"]')).toHaveText(/Katze\.kt/);
+  await expect(page.locator('.editor-tabbed-dialog .cm-content')).toContainText('class Katze {}');
 });
 
 test('GUI-32 editor and terminal share controls, minimum size and full frame handles', async ({ page }) => {
@@ -539,7 +543,7 @@ test('GUI-32 editor and terminal share controls, minimum size and full frame han
   expect(terminalResizedHeight.height).toBeGreaterThanOrEqual(260);
 });
 
-test('GUI-33 editor windows can be collected into tabs and ungrouped again', async ({ page }) => {
+test('GUI-33 editor tabs can be ungrouped and collected again', async ({ page }) => {
   const payload = { format: 'bluek-project', version: 1, files: [
     { fileName: 'Hund.kt', kind: 'class', source: 'class Hund {}' },
     { fileName: 'Katze.kt', kind: 'class', source: 'class Katze {}' },
@@ -548,10 +552,6 @@ test('GUI-33 editor windows can be collected into tabs and ungrouped again', asy
   await expect(page.getByLabel('Codepad input')).toBeEnabled();
   await page.getByLabel('Hund', { exact: true }).dblclick();
   await page.getByLabel('Katze', { exact: true }).dblclick();
-  await expect(page.locator('.editor-dialog')).toHaveCount(2);
-  await expect(page.locator('.editor-dialog:not(.editor-tabbed-dialog) .editor-window-controls').first()).toHaveCSS('gap', '4px');
-  await expect(page.locator('.editor-dialog:not(.editor-tabbed-dialog) .editor-header').first()).toHaveCSS('margin-bottom', '0px');
-  await page.getByLabel('Collect editor windows into tabs').last().click();
   await expect(page.locator('.editor-tabbed-dialog')).toHaveCount(1);
   await expect(page.locator('.editor-tabbed-dialog .editor-window-controls')).toHaveCSS('gap', '4px');
   await expect(page.locator('.editor-tabs [role="tab"]')).toHaveCount(2);
@@ -572,7 +572,7 @@ test('GUI-33 editor windows can be collected into tabs and ungrouped again', asy
   await expect(page.locator('.editor-tabbed-dialog')).toHaveCount(0);
   await expect(page.locator('.editor-dialog')).toHaveCount(1);
   await page.getByLabel('Katze', { exact: true }).dblclick();
-  await page.getByLabel('Collect editor windows into tabs').last().click();
+  await expect(page.locator('.editor-tabbed-dialog')).toHaveCount(1);
   await page.getByLabel('Ungroup editor tabs').click();
   await expect(page.locator('.editor-tabbed-dialog')).toHaveCount(0);
   await expect(page.locator('.editor-dialog')).toHaveCount(2);

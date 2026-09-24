@@ -57,9 +57,9 @@ Worker-/Runtime-Smokes getrennt.
 | GUI-28 | Kotlin-Editor lässt sich wie das Terminal verschieben und an allen Seiten/Ecken in der Größe verändern; Codepad bleibt dabei sichtbar | Chromium-Test für Verschieben und Resize ergänzt | Abgesichert |
 | GUI-29 | Kotlin-Editor verwendet die Terminal-Fensteroptik, zeigt Verschiebe-Cursor und hat keinen unnötigen Leerraum unter dem Editor | Chromium-Test für Stil, Cursor und unteren Abstand ergänzt | Abgesichert |
 | GUI-30 | Editor und Terminal sind nicht modal; das zuletzt angeklickte Fenster liegt jeweils oben | Chromium-Test für Fensterfokus und aktiven Z-Index ergänzt | Abgesichert |
-| GUI-31 | Pro Klasse bzw. Funktionsdatei kann ein eigenes Editorfenster geöffnet bleiben | Chromium-Test mit zwei gleichzeitig geöffneten Kotlin-Dateien ergänzt | Abgesichert |
+| GUI-31 | Die erste Datei öffnet ein Editorfenster; jede weitere Datei öffnet standardmäßig als Tab im selben Editorfenster und wird aktiv | Chromium-Test prüft Standard-Tabmodus, beide Tabs und den Inhalt der zuletzt geöffneten Datei; 1/1 grün | Abgesichert |
 | GUI-32 | Editor und Terminal verwenden identische Fenster-Buttons (Maximieren als abgerundetes SVG-Symbol wie in GUI-06, Schließen als `×`), gemeinsame Mindestgrößen und vollständig nutzbare Rahmenbereiche für Resize | Chromium-Test für Icons, 24-Pixel-Rahmenbereiche und Mindestgrößen; Maximieren-Prüfung von `□` auf SVG-Symbol und zugänglichen Namen umgestellt | Abgesichert |
-| GUI-33 | Mehrere Editorfenster lassen sich zu einem Tab-Fenster sammeln, der aktive Tab ist durch seine mit dem Codefeld verbundene Hervorhebung eindeutig erkennbar, der vertikale Abstand unter den Fenster-Icons ist in beiden Modi gleich, Tabs lassen sich wechseln, über das Tab-Kreuz oder das X der Gruppe schließen und wieder in einzelne Fenster zerlegen | Chromium-Test für Sammeln, aktive Tab-Markierung, vertikalen Header-Abstand, Tabwechsel, Tab-Schließen, Gruppenschließen und Aufteilen ergänzt | Abgesichert |
+| GUI-33 | Standardmäßig geöffnete Editor-Tabs lassen sich in einzelne Fenster zerlegen und wieder sammeln; aktive Tab-Markierung, vertikaler Header-Abstand, Tabwechsel, Tab-Schließen und Gruppenschließen funktionieren | Chromium-Test für Standard-Tabs, aktive Markierung, Tabwechsel/-Schließen, Aufteilen und erneutes Sammeln; 1/1 grün | Abgesichert |
 | GUI-34 | Eine fehlgeschlagene Formatierung zeigt einen schließbaren Fehler ohne unnötigen Formatter-Paketpräfix; ein neuer Formatierungsversuch entfernt die alte Meldung vor dem erneuten Ergebnis | Chromium-Test für Fehler, Schließen und erneuten Versuch grün | Abgesichert |
 | GUI-36 | Terminal-Splitter bleibt auf der Trennlinie zwischen BlueK und Terminal zentriert und verändert beim Ziehen beide Bereiche | Chromium-Test erweitert: Griffposition und Breitenänderung grün | Abgesichert |
 | GUI-37 | Der Terminal-Splitter wird bei geöffnetem Editorfenster nicht über den Editorinhalt gezeichnet | Chromium-Test für aktives Editorfenster grün | Abgesichert |
@@ -67,7 +67,7 @@ Worker-/Runtime-Smokes getrennt.
 | GUI-39 | Die Editor-Schriftgröße lässt sich über Settings oben rechts (Bereich Editor, Feld „Font size“, siehe GUI-74) von 10 px bis 30 px einstellen und wirkt sofort auf Code und Zeilennummern | GUI-Test erweitert und grün; Feldname nach GUI-74 angepasst | Abgesichert |
 | GUI-40 | Settings und New File liegen beim Öffnen über Editoren, Terminal und Objektinspektoren; der Dialog bietet zusätzlich Kotlin Functions an | Chromium-Test grün: Settings/New File, Kotlin-Functions-Option und kein New-Functions-Button | Abgesichert |
 | GUI-41 | New Project, Open / Import und Save / Export liegen beim Öffnen über Editoren, Terminal und Objektinspektoren (Files entfällt seit GUI-79) | Chromium-Test GUI-41 ohne Files grün | Abgesichert |
-| GUI-42 | Ohne Vim schließt Escape den Editor sofort. Mit Vim gehört ein einfaches Escape ganz Vim (verlässt sofort den Insert-Modus, schließt aber nie das Editorfenster, egal wie oft/lang gedrückt); erst Shift+Escape schließt gezielt den aktiven Editor | 3 echte Chromium-Tests grün: sofortiges Schließen ohne Vim, wiederholtes einfaches Escape in Insert-/Normal-Mode ohne Effekt, Shift+Escape schließt bei mehreren offenen Editorfenstern genau den aktiven | — |
+| GUI-42 | Ohne Vim schließt Escape den Editor sofort. Mit Vim gehört ein einfaches Escape ganz Vim (verlässt sofort den Insert-Modus, schließt aber nie das Editorfenster, egal wie oft/lang gedrückt); erst Shift+Escape schließt gezielt den aktiven Editor-Tab | Chromium-Tests prüfen sofortiges Schließen ohne Vim, Escape in Insert-/Normal-Mode und Shift+Escape für den aktiven Tab; 3/3 grün | — |
 | GUI-43 | Nach dem Laden eines gespeicherten Projekts wird `/load/<code>` aus der URL entfernt; weitere Vorlagen funktionieren normal | GUI-Test grün | Abgesichert |
 | GUI-44 | Open / Import kann einen dreiteiligen Wortcode eingeben und lädt das entsprechende gespeicherte Projekt | GUI-Test grün | Abgesichert |
 | GUI-50 | Nach dem Laden eines vollständigen `#bluek=...`-Projektlinks wird der Link aus der URL entfernt; das geladene Projekt bleibt sichtbar | Chromium-GUI-Test grün | Abgesichert |
@@ -793,3 +793,18 @@ Nachweise:
   scheiterte nur im Gesamtlauf (vermutlich instabil).
 - Port 5194 war durch einen anderen lokalen Prozess belegt; die Läufe nutzten
   eine temporäre, nicht eingecheckte Playwright-Konfiguration auf Port 5294.
+
+## GUI-31: Editor-Tabs standardmäßig öffnen (2026-09-24)
+
+Beim Öffnen der ersten Datei erscheint ein normales Editorfenster. Jede weitere
+Datei wird automatisch als Tab in diesem Fenster geöffnet und aktiviert; die
+Fenstergeometrie bleibt erhalten. Das bewusste Aufteilen in Einzelfenster bleibt
+verfügbar. GUI-31, GUI-33 und GUI-42 decken Standard-Tabs, Aufteilen/Sammeln
+und Shift+Escape für den aktiven Tab ab.
+
+Nachweise: betroffene Chromium-Regressionen GUI-28, GUI-31, GUI-33 und GUI-42
+6/6 grün; `npm run typecheck` 0 Fehler/0 Warnungen. Der erste Testlauf hatte
+5/6 bestanden; der Escape-Test erwartete fälschlich eine Ein-Tab-Leiste, obwohl
+der letzte verbleibende Tab korrekt wieder als Einzelfenster dargestellt wird.
+Nach Anpassung der Erwartung waren alle 6 Tests grün. Der Standard-Dev-Server
+auf Port 5173 war beim Abschluss nicht aktiv.

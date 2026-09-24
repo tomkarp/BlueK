@@ -1356,14 +1356,28 @@
     selected = files.findIndex((item) => item.id === file.id);
     const existing = editorWindows.find((item) => item.fileId === file.id);
     if (!existing) {
-      editorWindows = [...editorWindows, {
+      const currentFrame = editorTabbed && editorGroup
+        ? editorGroup
+        : editorWindows.find((item) => item.id === activeEditorId);
+      const next = {
         id: `editor-${file.id}`,
         fileId: file.id,
-        maximized: false,
-        position: null,
-        size: { width: 780, height: 520 },
+        maximized: currentFrame?.maximized || false,
+        position: currentFrame?.position ? { ...currentFrame.position } : null,
+        size: currentFrame ? { ...currentFrame.size } : { width: 780, height: 520 },
+      };
+      editorWindows = [...editorWindows, {
+        ...next,
       }];
-      activeEditorId = `editor-${file.id}`;
+      activeEditorId = next.id;
+      if (editorWindows.length > 1 && !editorTabbed) {
+        editorGroup = { ...next, ...(currentFrame ? {
+          maximized: currentFrame.maximized,
+          position: currentFrame.position ? { ...currentFrame.position } : null,
+          size: { ...currentFrame.size },
+        } : {}), id: "editor-group" };
+        editorTabbed = true;
+      }
     } else {
       activeEditorId = existing.id;
     }
