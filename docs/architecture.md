@@ -385,6 +385,8 @@ Regressionen: `test:references` (echtes Kotlin/JS-Bundle in Node),
 Die Laufzeit ist die Quelle gespeicherter Feldwerte. Fenster enthalten nur ID
 und Position; der aktive Inspektor wird über seine ID ausgewählt. Ansichten
 werden abgeleitet und nicht als weitere Kopien von Objektdaten gepflegt.
+Die gemeinsame Fensteraktivierung ordnet Inspektor, Editor und Terminal im
+Z-Stapel; innerhalb der Inspektoren bestimmt die aktive ID die Reihenfolge.
 
 Das Inspektormodell hält ausschließlich Ergebnisse expliziter Getter-Aufrufe.
 Rendern oder das Empfangen eines Snapshots löst keine Getter aus: Kotlin-Getter

@@ -582,19 +582,48 @@ test('GUI-33 editor windows can be collected into tabs and ungrouped again', asy
 });
 
 test('GUI-03 GUI-04 computed values update after every inspector edit', async ({ page }) => {
-  await project(page, 'class Hund(var alter: Int = 1) { val steuer: Int get() = alter * 10 }');
+  await project(page, 'class Hund(var alter: Int = 1) { var name: String = "Wuffi und ein langer Name"; val steuer: Int get() = alter * 10 }');
   const entry = await evaluate(page, 'Hund()');
   await entry.getByRole('button').click();
   await page.getByLabel('Name of instance').fill('hund1');
   await page.getByRole('button', { name: 'OK', exact: true }).click();
   await page.locator('.bench .object').dblclick();
   const inspector = page.getByRole('dialog', { name: 'Object inspector' });
+  const inspectorBox = (await inspector.boundingBox())!;
+  expect(inspectorBox.width).toBeLessThanOrEqual(390);
   const computed = inspector.locator('.inspect-row').filter({ hasText: 'steuer :' }).locator('output');
+  await expect(computed).toHaveCSS('font-size', '16px');
+  const editIcon = inspector.getByLabel('Edit alter');
+  await expect(editIcon).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  const nameRow = inspector.locator('.inspect-row').filter({ hasText: 'name :' });
+  const nameValue = nameRow.locator('output');
+  const nameLabel = nameRow.locator('span');
+  await expect(nameValue).toHaveCSS('text-overflow', 'ellipsis');
+  expect(await nameValue.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+  const labelBeforeEdit = (await nameLabel.boundingBox())!;
+  await inspector.getByLabel('Edit name').click();
+  const labelDuringEdit = (await nameLabel.boundingBox())!;
+  expect(labelDuringEdit.width).toBeCloseTo(labelBeforeEdit.width, 1);
+  const nameInput = inspector.getByLabel('Value of name');
+  const [nameInputBox, nameCellBox] = await Promise.all([nameInput.boundingBox(), nameRow.locator('.inspect-value').boundingBox()]);
+  expect(nameCellBox!.x + nameCellBox!.width - (nameInputBox!.x + nameInputBox!.width)).toBeLessThanOrEqual(4);
+  await nameInput.press('Escape');
+  const alterCell = inspector.locator('.inspect-row').filter({ hasText: 'alter :' }).locator('.inspect-value');
+  const [editIconBox, valueBox, valueCellBox] = await Promise.all([editIcon.boundingBox(), alterCell.locator('output').boundingBox(), alterCell.boundingBox()]);
+  expect(editIconBox).not.toBeNull();
+  expect(valueBox).not.toBeNull();
+  expect(editIconBox!.x).toBeGreaterThanOrEqual(valueBox!.x + valueBox!.width);
+  expect(editIconBox!.x + editIconBox!.width).toBeLessThanOrEqual(valueCellBox!.x + valueCellBox!.width);
+  expect(editIconBox!.x + editIconBox!.width).toBeLessThanOrEqual(inspectorBox.x + inspectorBox.width);
   await expect(computed).toHaveText('10');
   for (const age of [2, 3, 7]) {
     await inspector.getByLabel('Edit alter', { exact: true }).click();
-    await inspector.getByLabel('Value of alter').fill(String(age));
-    await inspector.getByLabel('Value of alter').press('Enter');
+    const input = inspector.getByLabel('Value of alter');
+    const inputBox = (await input.boundingBox())!;
+    const rowBox = (await input.locator('xpath=..').boundingBox())!;
+    expect(rowBox.x + rowBox.width - (inputBox.x + inputBox.width)).toBeLessThanOrEqual(4);
+    await input.fill(String(age));
+    await input.press('Enter');
     await expect(computed).toHaveText(String(age * 10));
   }
   await evaluate(page, 'hund1.alter = 9');
@@ -651,7 +680,7 @@ test('GUI-07 every value can be placed on the bench', async ({ page }) => {
   }
 });
 
-test('GUI-18 primitive inspectors show their type and the active inspector is on top', async ({ page }) => {
+test('GUI-18 primitive inspectors stay compact, show their type and the active inspector is on top', async ({ page }) => {
   await project(page);
   for (const [code, name] of [['5', 'zahl'], ['"Hallo"', 'text']]) {
     const entry = await evaluate(page, code);
@@ -668,6 +697,10 @@ test('GUI-18 primitive inspectors show their type and the active inspector is on
   await expect(inspectors.nth(1).locator('h2')).toHaveText('text : String');
   await expect(inspectors.nth(0).locator('.inspect-no-fields')).toHaveText('No fields');
   await expect(inspectors.nth(1).locator('.inspect-no-fields')).toHaveText('No fields');
+  const compactBox = (await inspectors.nth(0).boundingBox())!;
+  expect(compactBox.height).toBeLessThan(200);
+  await expect(inspectors.nth(0)).toHaveCSS('padding', '12px');
+  await expect(inspectors.nth(0).locator('.inspect-no-fields')).toHaveCSS('cursor', 'grab');
   const secondBox = (await inspectors.nth(1).boundingBox())!;
   await page.mouse.move(secondBox.x + secondBox.width / 2, secondBox.y + 16);
   await page.mouse.down();
@@ -677,6 +710,61 @@ test('GUI-18 primitive inspectors show their type and the active inspector is on
   expect(zIndexes[1]).toBeGreaterThan(zIndexes[0]);
   await page.keyboard.press('Escape');
   await expect(inspectors).toHaveCount(1);
+});
+
+test('GUI-87 clicking or dragging an inspector raises it above the editor', async ({ page }) => {
+  await project(page, 'class Hund {}');
+  const entry = await evaluate(page, 'Hund()');
+  await entry.getByRole('button').click();
+  await page.getByLabel('Name of instance').fill('hund1');
+  await page.getByRole('button', { name: 'OK', exact: true }).click();
+  await page.locator('.classcard').dblclick();
+  await page.locator('.bench .object').dblclick();
+  const inspector = page.locator('.inspector');
+  const inspectWindow = inspector.locator('.inspect-window');
+  const editor = page.locator('.editor-modal');
+  await expect(inspector).toHaveClass(/window-active/);
+  const editorHeader = (await editor.locator('.editor-header').boundingBox())!;
+  await page.mouse.click(editorHeader.x + editorHeader.width / 2, editorHeader.y + 12);
+  await expect(editor).toHaveClass(/window-active/);
+  await expect(inspector).not.toHaveClass(/window-active/);
+
+  const initialBox = (await inspectWindow.boundingBox())!;
+  await page.mouse.click(initialBox.x + 16, initialBox.y + 16);
+  await expect(inspector).toHaveClass(/window-active/);
+  await expect(editor).not.toHaveClass(/window-active/);
+  expect(Number(await inspector.evaluate((element) => getComputedStyle(element).zIndex)))
+    .toBeGreaterThan(Number(await editor.evaluate((element) => getComputedStyle(element).zIndex)));
+
+  await page.mouse.click(editorHeader.x + editorHeader.width / 2, editorHeader.y + 12);
+  await expect(editor).toHaveClass(/window-active/);
+  const beforeDrag = (await inspectWindow.boundingBox())!;
+  await page.mouse.move(beforeDrag.x + 16, beforeDrag.y + 16);
+  await page.mouse.down();
+  await page.mouse.move(beforeDrag.x + 116, beforeDrag.y + 96);
+  await page.mouse.up();
+  await expect(inspector).toHaveClass(/window-active/);
+  await expect(editor).not.toHaveClass(/window-active/);
+  const afterDrag = (await inspectWindow.boundingBox())!;
+  expect(afterDrag.x).toBeGreaterThan(beforeDrag.x + 50);
+  expect(afterDrag.y).toBeGreaterThan(beforeDrag.y + 50);
+  const editorBox = (await editor.locator('.editor-dialog').boundingBox())!;
+  const overlap = {
+    left: Math.max(afterDrag.x, editorBox.x),
+    right: Math.min(afterDrag.x + afterDrag.width, editorBox.x + editorBox.width),
+    top: Math.max(afterDrag.y, editorBox.y),
+    bottom: Math.min(afterDrag.y + afterDrag.height, editorBox.y + editorBox.height),
+  };
+  expect(overlap.right - overlap.left).toBeGreaterThan(20);
+  expect(overlap.bottom - overlap.top).toBeGreaterThan(20);
+  expect(await page.evaluate(({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest('.inspect-window')), {
+    x: (overlap.left + overlap.right) / 2,
+    y: (overlap.top + overlap.bottom) / 2,
+  })).toBe(true);
+  await page.mouse.click(editorHeader.x + editorHeader.width / 2, editorHeader.y + 12);
+  await page.keyboard.press('Escape');
+  await expect(editor).toHaveCount(0);
+  await expect(inspectWindow).toBeVisible();
 });
 
 test('GUI-19 codepad rows use uniform compact spacing without separator lines', async ({ page }) => {

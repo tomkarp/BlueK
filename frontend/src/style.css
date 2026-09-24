@@ -73,10 +73,11 @@ footer{flex:0 0 108px}
 .inspect-fields{background:#ff929b;color:#111;padding:12px 20px;margin:20px 20px 34px;min-height:92px}
 .inspect-no-fields{display:flex;align-items:center;justify-content:center;color:#555;font-style:italic}
 .inspect-window{width:min(520px,calc(100vw - 40px));min-width:0}
-.inspect-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr) auto;align-items:center;margin:4px 0;background:#fff0f0;border:1px solid #e65f6b}
-.inspect-row span{padding:8px;font:16px Arial,sans-serif}
-.inspect-row output{padding:8px;background:#fff;border-left:2px solid #e65f6b;font:16px monospace;min-height:35px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.inspect-row input{grid-column:2 / -1;width:100%;min-width:0;padding:8px;border:0;border-left:2px solid #e65f6b;font:16px monospace}
+.inspect-row{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);align-items:center;margin:3px 0;background:#fff0f0;border:1px solid #e65f6b}
+.inspect-row span{min-width:0;padding:5px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:16px Arial,sans-serif}
+.inspect-value{grid-column:2;display:flex;align-items:stretch;min-width:0;background:#fff;border-left:2px solid #e65f6b}
+.inspect-value output{flex:1 1 auto;min-width:0;padding:5px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:16px monospace}
+.inspect-value input{width:100%;min-width:0;padding:5px;border:1px solid #888;font:16px monospace}
 .inspect-row input[aria-invalid="true"]{outline:2px solid #c00000;outline-offset:-2px}
 .inspect-error{grid-column:1 / -1;padding:4px 8px;color:#a00000;font:13px Arial,sans-serif;background:#ffe0e0}
 .dialog-error{margin:4px 0 12px;padding:8px 10px;color:#a00000;background:#ffe0e0;border:1px solid #d66;font-size:14px}
@@ -94,7 +95,8 @@ footer{flex:0 0 108px}
 .result-dialog{width:min(520px,calc(100vw - 40px));min-width:0;box-sizing:border-box;text-align:center;display:flex;flex-direction:column}.result-dialog h3{margin:0 0 14px}.result-method{margin:0 0 14px;padding:10px 12px;background:#eee;border:1px solid #ccc;font:18px monospace;text-align:left;overflow-wrap:anywhere}.result-value{display:block;width:100%;box-sizing:border-box;margin:0 0 18px;padding:16px;background:#fff;border:1px solid #999;font:18px monospace;text-align:left;overflow-wrap:anywhere}.result-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}.result-actions button{margin:0}
 .argument-object-select{display:block;width:max-content;max-width:100%;margin-top:5px;padding:3px 7px;border:1px solid #999;border-radius:3px;background:#e7e5e1;font:12px monospace;cursor:pointer}.argument-object-select:hover{background:#ccecf4}
 .popup-group{padding:7px 12px 5px;background:#eee;border-bottom:1px solid #ccc;color:#555;font-size:12px;font-style:italic}
-.inspector{background:transparent;display:block;pointer-events:none}
+.inspector{z-index:20;background:transparent;display:block;pointer-events:none}
+.inspector.window-active{z-index:30}
 .inspector .inspect-window{pointer-events:auto}
 .inspector .inspect-window h2{cursor:grab;user-select:none}
 .inspector .inspect-window h2:active{cursor:grabbing}
@@ -417,18 +419,14 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 .project-choice-list button:hover,.project-choice-list button:focus-visible{background:#08a6d2;color:#fff;outline:0}
 .project-choice-list strong{font-size:15px}
 .project-choice-list span{font-size:12px;color:inherit}
-.inspect-row{position:relative;grid-template-columns:minmax(0,3fr) minmax(0,2fr) auto}
-.inspect-row span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.inspect-row output{grid-column:2}
 .inspect-row.private-field{background:#dedede;border-color:#999}
-.inspect-row.private-field>span,.inspect-row.private-field>output{color:#666}
-.inspect-row.private-field>output{background:#ededed;border-left-color:#999}
-.inspect-row input{grid-column:2 / -1;width:100%;min-width:0;padding:7px;border:1px solid #888;font:16px monospace}
+.inspect-row.private-field>span,.inspect-row.private-field .inspect-value{color:#666}
+.inspect-row.private-field .inspect-value{background:#ededed;border-left-color:#999}
 .inspect-row.editable output{cursor:text}
-.inspect-edit,.inspect-save{position:absolute;right:-26px;top:50%;transform:translateY(-50%);width:30px;height:32px;margin:0!important;padding:0!important;border:0;border-radius:0;background:transparent;color:#555;font-size:23px;line-height:1;cursor:pointer}
-.inspect-edit:hover,.inspect-save:hover{background:transparent;color:#087c9d}
+.inspect-value .inspect-edit{flex:0 0 30px;align-self:center;width:30px;height:32px;margin:0!important;padding:0!important;-webkit-appearance:none;appearance:none;border:0;border-radius:0;background:transparent;box-shadow:none;color:#555;font-size:23px;line-height:1;cursor:pointer}
+.inspect-value .inspect-edit:hover{background:transparent;color:#087c9d}
 .inspect-edit:disabled,.inspect-edit-disabled{color:#777;cursor:not-allowed;opacity:.85}
-.inspect-edit:disabled:hover,.inspect-edit-disabled:hover{background:transparent;color:#777}
+.inspect-value .inspect-edit:disabled:hover,.inspect-edit-disabled:hover{background:transparent;color:#777}
 .popup-submenu{position:relative}
 .popup-submenu-trigger{display:flex!important;justify-content:space-between;align-items:center}
 .popup-submenu-trigger span{margin-left:24px;font-size:18px}.popup-no-methods{padding:10px 12px;color:#aaa;font-style:italic}
@@ -438,6 +436,16 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 .compiling-overlay{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:rgba(35,38,40,.58);cursor:wait}
 .compiling-message{display:flex;align-items:center;gap:12px;min-width:220px;padding:18px 24px;border:1px solid #777;border-radius:8px;background:#f5f4f1;box-shadow:0 5px 18px #222;color:#333;font-size:18px;font-weight:bold}
 .compiling-message small{display:block;margin-left:4px;color:#666;font-size:12px;font-weight:normal}
+
+/* Reduce inspector chrome while keeping the original content typography. */
+.inspector .inspect-window{width:min(390px,calc(100vw - 24px));min-height:0;padding:12px;cursor:grab}
+.inspector .inspect-window:active{cursor:grabbing}
+.inspector .inspect-window h2{margin:0 0 10px}
+.inspector .inspect-fields{padding:6px 10px;margin:0 10px 10px;min-height:0}
+.inspector .inspect-fields.inspect-no-fields{min-height:36px}
+.inspector .inspect-row{cursor:default}
+.inspector .dialog-actions{margin-top:8px}
+.inspector .dialog-actions button{padding:5px 10px}
 .compiling-spinner{width:18px;height:18px;border:3px solid #bbb;border-top-color:#078fb9;border-radius:50%;animation:bluek-spin .8s linear infinite}
 @keyframes bluek-spin{to{transform:rotate(360deg)}}
 
@@ -690,6 +698,8 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 .dark .toolbar .toolbar-icon-button:nth-child(2)::before{filter:invert(1)}
 .dark button:hover:not(:disabled){background:#45454a;border-color:#707077;color:#f3f3f3}
 .dark button:active:not(:disabled){background:#242428;border-color:#0a9dcc;color:#fff;box-shadow:none}
+.dark .inspect-value .inspect-edit,.dark .inspect-value .inspect-edit:hover:not(:disabled),.dark .inspect-value .inspect-edit:active:not(:disabled){background:transparent;border:0;box-shadow:none}
+.dark .inspect-value .inspect-edit:hover:not(:disabled){color:#087c9d}
 .dark button:focus-visible{outline:2px solid #3794ff;outline-offset:2px}
 .dark button:disabled{opacity:.48}
 .dark .editor-tabbed-dialog .editor-tabs button{background:#323236;color:#c8c8c8;border-color:#515157}

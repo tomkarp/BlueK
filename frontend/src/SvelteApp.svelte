@@ -269,7 +269,7 @@
     terminalSplitWidth = 430,
     terminalPosition: { left: number; top: number } | null = null,
     terminalSize = { width: 780, height: 520 };
-  let activeWindow: "terminal" | "editor" | null = null;
+  let activeWindow: "terminal" | "editor" | "inspector" | null = null;
   const stageAudio = new StageAudio();
   let editorWindows: EditorWindowState[] = [],
     activeEditorId = "",
@@ -1422,7 +1422,7 @@
     if (invokeDialog) return () => { invokeDialog = null; dialogError = ""; };
     if (objectNamePrompt) return () => { objectNamePrompt = null; };
     if (resultDialog) return () => { resultDialog = null; };
-    if (activeInspectorId && inspectorWindows.some((item) => item.id === activeInspectorId))
+    if (activeWindow === "inspector" && activeInspectorId && inspectorWindows.some((item) => item.id === activeInspectorId))
       return () => closeInspector(activeInspectorId);
     if (newClassOpen) return () => { newClassOpen = false; };
     if (shortcutsHelpOpen) return () => { shortcutsHelpOpen = false; };
@@ -2135,14 +2135,16 @@
         ...inspectorWindows.filter((item) => item.id !== object.objectId),
         { id: object.objectId, referenceName: object.name, position },
       ];
-      activeInspectorId = object.objectId;
+      bringInspectorToFront(object.objectId);
       await inspectorModel.refresh(object.objectId);
     }
   }
   function bringInspectorToFront(id: string) {
-    activeInspectorId = id;
     const inspector = inspectorWindows.find((item) => item.id === id);
-    if (!inspector || inspectorWindows.at(-1)?.id === id) return;
+    if (!inspector) return;
+    activeInspectorId = id;
+    activeWindow = "inspector";
+    if (inspectorWindows.at(-1)?.id === id) return;
     inspectorWindows = [
       ...inspectorWindows.filter((item) => item.id !== id),
       inspector,
@@ -2151,9 +2153,11 @@
   function closeInspector(id: string) {
     inspectorWindows = inspectorWindows.filter((item) => item.id !== id);
     inspectorModel.forget(id);
-    if (inspected?.objectId === id) {
+    if (activeInspectorId === id) {
       const next = inspectorWindows.at(-1);
       activeInspectorId = next?.id || "";
+      if (!next && activeWindow === "inspector")
+        activeWindow = editorWindows.length ? "editor" : terminalOpen ? "terminal" : null;
     }
   }
   function beginInspectorDrag(event: PointerEvent, objectId: string) {
@@ -2455,7 +2459,7 @@
   }
   function beginFieldEdit(field: InspectorField, data = inspected) {
     if (!data) return;
-    activeInspectorId = data.objectId || "";
+    bringInspectorToFront(data.objectId || "");
     editingField = field.name;
     fieldDraft = fieldValue(data, field);
     fieldError = "";
@@ -3609,7 +3613,7 @@
     </div>{/if}
 
   {#each inspectorViews as inspector, index (inspector.id)}
-    <div class="inspector">
+    <div class="inspector" class:window-active={activeWindow === "inspector" && inspector.id === activeInspectorId}>
       <div
         class="inspect-window"
         role="dialog"
@@ -3661,36 +3665,38 @@
                   field.type?.displayName ||
                   "Any?"}</span
               >
-              {#if editing}
-                <input
-                  use:focusOnMount
-                  aria-label={`Value of ${field.name}`}
-                  aria-invalid={Boolean(fieldError)}
-                  bind:value={fieldDraft}
-                  on:keydown={(event) => {
-                    if (event.key === "Escape") {
-                      event.stopPropagation();
-                      editingField = "";
-                    }
-                    if (event.key === "Enter") saveField(field);
-                  }}
-                />
-                {#if fieldError}<small class="inspect-error">{fieldError}</small
-                  >{/if}
-              {:else}
-                <output title={fieldValue(inspector.data, field)}
-                  >{fieldValue(inspector.data, field)}</output
-                >
-                {#if editable || field.setterPrivate}<button
-                    class="inspect-edit"
-                    class:inspect-edit-disabled={!editable}
-                    disabled={!editable}
-                    aria-label={`Edit ${field.name}`}
-                    title={field.setterPrivate ? "The setter is private" : "Edit"}
-                    on:click={() => beginFieldEdit(field, inspector.data)}
-                    >✎</button
-                  >{/if}
-              {/if}
+              <div class="inspect-value">
+                {#if editing}
+                  <input
+                    use:focusOnMount
+                    aria-label={`Value of ${field.name}`}
+                    aria-invalid={Boolean(fieldError)}
+                    bind:value={fieldDraft}
+                    on:keydown={(event) => {
+                      if (event.key === "Escape") {
+                        event.stopPropagation();
+                        editingField = "";
+                      }
+                      if (event.key === "Enter") saveField(field);
+                    }}
+                  />
+                {:else}
+                  <output title={fieldValue(inspector.data, field)}
+                    >{fieldValue(inspector.data, field)}</output
+                  >
+                  {#if editable || field.setterPrivate}<button
+                      class="inspect-edit"
+                      class:inspect-edit-disabled={!editable}
+                      disabled={!editable}
+                      aria-label={`Edit ${field.name}`}
+                      title={field.setterPrivate ? "The setter is private" : "Edit"}
+                      on:click={() => beginFieldEdit(field, inspector.data)}
+                      >✎</button
+                    >{/if}
+                {/if}
+              </div>
+              {#if editing && fieldError}<small class="inspect-error">{fieldError}</small
+                >{/if}
             </div>
           {:else}No fields{/each}
         </div>
