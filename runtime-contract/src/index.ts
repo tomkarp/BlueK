@@ -81,7 +81,7 @@ export type SimulationState = 'inactive' | 'paused' | 'running' | 'stopping' | '
 
 /** A session has exactly one phase, shared by every UI surface. */
 export type Phase = 'uncompiled' | 'compiling' | 'ready' | 'running' | 'waitingForInput' | 'faulted';
-export interface InspectedField { name: string; value: string; type?: TypeRef | null; setterPrivate?: boolean }
+export interface InspectedField { name: string; value: string; type?: TypeRef | null; setterPrivate?: boolean; reference?: boolean }
 export interface RuntimeValue {
   kind: 'unit' | 'null' | 'scalar' | 'object' | 'inspect' | 'error';
   display?: string;
@@ -124,6 +124,7 @@ export type RuntimeCommand = { generationId?: string } & (
   | { op: 'get'; objectId: string; property: string }
   | { op: 'set'; objectId: string; property: string; value: string }
   | { op: 'inspect'; objectId: string }
+  | { op: 'inspectField'; objectId: string; property: string }
   | { op: 'bind'; objectId: string; name: string }
   | { op: 'remove'; objectId: string; name: string }
   | { op: 'input'; text: string; inputRequestId?: number; eof?: boolean }

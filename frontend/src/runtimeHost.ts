@@ -24,6 +24,7 @@ export interface KotliteSessionBridge {
   bind(objectId: string, name: string): string;
   remove(objectId: string, name: string): string;
   inspect(objectId: string): string;
+  inspectField(objectId: string, property: string): string;
   enqueueInput(text: string): string;
   enqueueEof(): string;
   setKey(key: string, pressed: boolean): string;
@@ -189,6 +190,7 @@ export class RuntimeHost {
       }
       if (this.active || this.snapshot.phase !== 'ready' || (this.simulation.state !== 'inactive' && this.simulation.state !== 'paused')) throw new RequestError('Another runtime command is running.');
       if (command.op === 'inspect') { emit(this.publish(id, JSON.parse(this.session.inspect(command.objectId)))); return; }
+      if (command.op === 'inspectField') { emit(this.publish(id, JSON.parse(this.session.inspectField(command.objectId, command.property)))); return; }
       if (command.op === 'bind') { emit(this.publish(id, JSON.parse(this.session.bind(command.objectId, command.name)))); return; }
       if (command.op === 'remove') { emit(this.publish(id, JSON.parse(this.session.remove(command.objectId, command.name)))); return; }
 

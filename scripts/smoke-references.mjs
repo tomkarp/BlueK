@@ -112,6 +112,18 @@ const named = (s, name) => snapshot(s).references.find(r => r.name === name);
 }
 
 // Indirect references (fields, cycles, containers, captured values) keep identity.
+{
+  const s = session();
+  evaluate(s, 'val box = Box(Timer())');
+  const box = evaluate(s, 'box');
+  const child = ok(s.inspectField(box.objectId, 'item'));
+  assert.equal(child.kind, 'inspect');
+  assert.equal(child.fields.find(field => field.name === 'min').value, '0');
+  assert.equal(snapshot(s).liveObjectIds.includes(child.objectId), true);
+  evaluate(s, 'box.item = null');
+  fail(s.inspect(child.objectId));
+  fail(s.inspectField(box.objectId, 'item'));
+}
 for (const [setup, access, release] of [
   ['val box = Box(o)', 'box.item', 'box.item = null'],
   ['val items = mutableListOf(o)', 'items[0]', 'items.clear()'],

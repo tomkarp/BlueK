@@ -291,6 +291,7 @@
   let inspectorWindows: Array<{
     id: string;
     referenceName: string;
+    preserveReferenceName?: boolean;
     position: { left: number; top: number };
   }> = [];
   let inspectorModel: InspectorModel;
@@ -302,8 +303,9 @@
     void inspectorRevision;
     inspectorViews = inspectorWindows.map(item => ({
     ...item,
-    referenceName: runtime.references.find(reference => reference.name === item.referenceName && reference.objectId === item.id)?.name
-      || runtime.references.find(reference => reference.objectId === item.id)?.name || "<object>",
+    referenceName: item.preserveReferenceName ? item.referenceName :
+      runtime.references.find(reference => reference.name === item.referenceName && reference.objectId === item.id)?.name
+      || runtime.references.find(reference => reference.objectId === item.id)?.name || item.referenceName || "<object>",
     data: inspectorModel?.view(item.id),
     })).filter((item): item is typeof item & { data: InspectionView } => Boolean(item.data));
   }
@@ -2128,30 +2130,63 @@
       objectNamePrompt = null;
     } else objectNameError = result.display || "The reference could not be added.";
   }
-  async function inspectObject(object: BenchObject) {
+  function waitForInspectorReady(allowFaulted = false) {
+    const generation = client.getSnapshot().generationId;
+    if (client.getSnapshot().phase !== "running")
+      return Promise.resolve(client.getSnapshot().phase === "ready" || (allowFaulted && client.getSnapshot().phase === "faulted"));
+    return new Promise<boolean>((resolve) => {
+      const unsubscribe = client.subscribe(() => {
+        const snapshot = client.getSnapshot();
+        if (snapshot.generationId !== generation || snapshot.phase !== "running") {
+          unsubscribe();
+          resolve(snapshot.generationId === generation && (snapshot.phase === "ready" || (allowFaulted && snapshot.phase === "faulted")));
+        }
+      });
+    });
+  }
+  async function executeInspectorCommand(command: Extract<RuntimeCommand, { op: "inspect" | "inspectField" }>, allowFaulted = false) {
+    const generation = client.getSnapshot().generationId;
+    while (client.getSnapshot().generationId === generation) {
+      if (!(await waitForInspectorReady(allowFaulted))) return null;
+      const phase = client.getSnapshot().phase;
+      if (phase !== "ready" && !(allowFaulted && phase === "faulted" && command.op === "inspect")) continue;
+      try {
+        return await client.execute(command);
+      } catch (reason) {
+        if (client.getSnapshot().generationId !== generation || client.getSnapshot().phase !== "running") throw reason;
+      }
+    }
+    return null;
+  }
+  async function showInspection(object: BenchObject, preserveReferenceName = false) {
+    const existing = inspectorWindows.find((item) => item.id === object.objectId);
+    const position = existing?.position || {
+      left: Math.max(12, Math.min(window.innerWidth - 552, 80 + inspectorWindows.length * 28)),
+      top: 90 + inspectorWindows.length * 28,
+    };
+    inspectorWindows = [
+      ...inspectorWindows.filter((item) => item.id !== object.objectId),
+      { id: object.objectId, referenceName: object.name, preserveReferenceName, position },
+    ];
+    bringInspectorToFront(object.objectId);
+    await inspectorModel.refresh(object.objectId);
+  }
+  async function inspectObject(object: BenchObject, preserveReferenceName = false) {
     menu = null;
-    const result = await client.execute({
+    const result = await executeInspectorCommand({
       op: "inspect",
       objectId: object.objectId,
-    });
-    if (result.kind !== "error") {
-      const existing = inspectorWindows.find(
-        (item) => item.id === object.objectId,
-      );
-      const position = existing?.position || {
-        left: Math.max(
-          12,
-          Math.min(window.innerWidth - 552, 80 + inspectorWindows.length * 28),
-        ),
-        top: 90 + inspectorWindows.length * 28,
-      };
-      inspectorWindows = [
-        ...inspectorWindows.filter((item) => item.id !== object.objectId),
-        { id: object.objectId, referenceName: object.name, position },
-      ];
-      bringInspectorToFront(object.objectId);
-      await inspectorModel.refresh(object.objectId);
+    }, true);
+    if (result?.kind === "inspect") await showInspection(object, preserveReferenceName);
+  }
+  async function inspectFieldReference(ownerId: string, field: InspectorField) {
+    if (field.computed && field.objectId) {
+      await inspectObject({ objectId: field.objectId, className: field.type?.displayName || "Object", name: field.name }, true);
+      return;
     }
+    const result = await executeInspectorCommand({ op: "inspectField", objectId: ownerId, property: field.name });
+    if (result?.kind === "inspect" && result.objectId)
+      await showInspection({ objectId: result.objectId, className: result.className || "Object", name: field.name }, true);
   }
   function bringInspectorToFront(id: string) {
     const inspector = inspectorWindows.find((item) => item.id === id);
@@ -3635,11 +3670,12 @@
         tabindex="-1"
         style={`position:fixed;left:${inspector.position.left}px;top:${inspector.position.top}px;margin:0;z-index:${inspector.id === activeInspectorId ? 100 : 10 + index}`}
         on:pointerdown={(event) => {
-          bringInspectorToFront(inspector.id);
           if (
             !(event.target as HTMLElement).closest("button,input,.inspect-row")
-          )
+          ) {
+            bringInspectorToFront(inspector.id);
             beginInspectorDrag(event, inspector.id);
+          }
         }}
         on:click={() => bringInspectorToFront(inspector.id)}
         on:keydown={(event) => {
@@ -3670,8 +3706,6 @@
               class:private-setter={field.setterPrivate === true}
               class="inspect-row"
               role="group"
-              on:dblclick={() =>
-                editable && !editing && beginFieldEdit(field, inspector.data)}
             >
               <span
                 >{field.name} : {fieldProperty(inspector.data, field)?.type
@@ -3695,9 +3729,15 @@
                     }}
                   />
                 {:else}
-                  <output title={fieldValue(inspector.data, field)}
-                    >{fieldValue(inspector.data, field)}</output
-                  >
+                  {#if field.reference}<button
+                      class="inspect-reference"
+                      aria-label={`Open referenced object ${field.name}`}
+                      title={`Open ${field.name}`}
+                      on:click={() => inspectFieldReference(inspector.id, field)}
+                      ><svg viewBox="0 0 48 24" aria-hidden="true"><path d="M3 12h32"/><path d="m29 5 8 7-8 7"/></svg></button
+                    >{:else}<output title={fieldValue(inspector.data, field)}
+                      >{fieldValue(inspector.data, field)}</output
+                    >{/if}
                   {#if editable || field.setterPrivate}<button
                       class="inspect-edit"
                       class:inspect-edit-disabled={!editable}

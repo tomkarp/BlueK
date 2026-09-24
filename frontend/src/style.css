@@ -422,11 +422,15 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 .inspect-row.private-field{background:#dedede;border-color:#999}
 .inspect-row.private-field>span,.inspect-row.private-field .inspect-value{color:#666}
 .inspect-row.private-field .inspect-value{background:#ededed;border-left-color:#999}
-.inspect-row.editable output{cursor:text}
+.inspect-row.editable output{cursor:default}
 .inspect-value .inspect-edit{flex:0 0 30px;align-self:center;width:30px;height:32px;margin:0!important;padding:0!important;-webkit-appearance:none;appearance:none;border:0;border-radius:0;background:transparent;box-shadow:none;color:#555;font-size:23px;line-height:1;cursor:pointer}
 .inspect-value .inspect-edit:hover{background:transparent;color:#087c9d}
 .inspect-edit:disabled,.inspect-edit-disabled{color:#777;cursor:not-allowed;opacity:.85}
 .inspect-value .inspect-edit:disabled:hover,.inspect-edit-disabled:hover{background:transparent;color:#777}
+.inspect-value .inspect-reference{flex:1 1 auto;min-width:52px;height:32px;margin:0!important;padding:4px 12px!important;border:0;border-radius:0;background:#fff;cursor:pointer}
+.inspect-value .inspect-reference:hover{background:#ffe2e4}
+.inspect-value .inspect-reference svg{display:block;width:46px;height:24px;margin:auto;overflow:visible}
+.inspect-value .inspect-reference path{fill:none;stroke:#b51f2c;stroke-width:4;stroke-linecap:round;stroke-linejoin:round}
 .popup-submenu{position:relative}
 .popup-submenu-trigger{display:flex!important;justify-content:space-between;align-items:center}
 .popup-submenu-trigger span{margin-left:24px;font-size:18px}.popup-no-methods{padding:10px 12px;color:#aaa;font-style:italic}

@@ -8,6 +8,7 @@ export interface InspectorRuntime {
 
 export interface InspectorField extends InspectedField {
   computed: boolean;
+  objectId?: string;
   error?: string;
 }
 export interface InspectionView extends Omit<RuntimeValue, 'fields'> {
@@ -51,6 +52,8 @@ export class InspectorModel {
           computed,
           value: value ? value.display ?? (value.kind === 'null' ? 'null' : `<object> : ${value.className || 'Object'}`) : field.value,
           type: value?.type || field.type,
+          objectId: value?.kind === 'object' ? value.objectId : undefined,
+          reference: field.reference || value?.kind === 'object',
           error: value?.kind === 'error' ? value.display || 'Getter failed.' : undefined,
         };
       }),

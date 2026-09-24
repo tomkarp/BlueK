@@ -140,7 +140,8 @@ export class LocalRuntimeClient {
     if (command.generationId && command.generationId !== this.snapshot.generationId) throw new Error('Stale runtime command.');
     const epoch = this.epoch;
     const previous = this.snapshot;
-    if (!inputCommand && !simulationCommand && !deviceInput) this.update({ ...previous, phase: 'running' });
+    if (!inputCommand && !simulationCommand && !deviceInput && command.op !== 'inspect' && command.op !== 'inspectField')
+      this.update({ ...previous, phase: 'running' });
     try {
       const reply = await this.request({ ...command, generationId: previous.generationId, ...(inputCommand ? { inputRequestId: this.inputRequestId } : {}) });
       // Input acknowledgements do not change interpreter state or publish frames.

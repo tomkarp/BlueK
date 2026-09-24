@@ -1281,10 +1281,26 @@ class KotliteSession {
             } else {
                 val member = value.readBackingPropertyByDeclaredName(name)
                 val display = member?.let(::inspectorDisplay) ?: "<uninitialized>"
-                "{\"name\":\"${escape(name)}\",\"value\":\"${escape(display)}\",\"type\":${member?.let { jsonType(it.type().toTypeNode()) } ?: "null"},\"setterPrivate\":$setterPrivate}"
+                val reference = member is ClassInstance && member !is DelegatedValue<*>
+                "{\"name\":\"${escape(name)}\",\"value\":\"${escape(display)}\",\"type\":${member?.let { jsonType(it.type().toTypeNode()) } ?: "null"},\"setterPrivate\":$setterPrivate,\"reference\":$reference}"
             }
         }
         return "{\"kind\":\"inspect\",\"objectId\":\"${escape(objectId)}\",\"className\":\"${escape(value.type().toTypeNode().descriptiveName())}\",\"fields\":$fields}"
+    }
+
+    /** Follow a stored object reference without running its getter or toString(). */
+    fun inspectField(objectId: String, propertyName: String): String {
+        val owner = handles[objectId] as? ClassInstance
+            ?: return errorMessage("Object handle is no longer available.")
+        if (!propertyName.matches(Regex("[A-Za-z_]\\w*")) || propertyName !in propertyNames[owner.type().name].orEmpty() ||
+            propertyName in computedPropertyNames[owner.type().name].orEmpty())
+            return errorMessage("Object reference is not available.")
+        val value = owner.readBackingPropertyByDeclaredName(propertyName)
+        if (value !is ClassInstance || value is DelegatedValue<*>)
+            return errorMessage("Object reference is not available.")
+        val referenceId = registerExpressionValue(value)
+        reconcileReferences()
+        return inspect(referenceId)
     }
 
     /**
