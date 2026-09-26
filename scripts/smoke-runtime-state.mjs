@@ -378,6 +378,44 @@ projectClient.invalidate();
   assert.equal((await mains.reset()).kind, 'error', 'missing main does not reuse an old entry point');
   mains.invalidate();
 }
+// RT-37: lambdas passed to the binary stdlib may suspend (loop checkpoint, input, sleep).
+{
+  const lambdas = new LocalRuntimeClient(() => new TestWorker());
+  const lambdaOutputs = [];
+  lambdas.onResponse(value => { if (value.output) lambdaOutputs.push(value.output); });
+  assert.deepEqual((await lambdas.compile([{ id: 'Ask.kt', fileName: 'Ask.kt', kind: 'functions', revision: 1,
+    source: 'var asked = 0\nfun ask(prompt: String): String { asked++; print(prompt); return readln() }' }], 1)).diagnostics, []);
+  const run = async code => {
+    const value = await lambdas.execute({ op: 'eval', code });
+    assert.notEqual(value.kind, 'error', value.display);
+    return value;
+  };
+  const inputRequested = () => new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => { unsubscribe(); reject(new Error('RT-37: the lambda did not request input')); }, 2000);
+    const check = () => {
+      if (lambdas.getSnapshot().phase !== 'waitingForInput') return;
+      clearTimeout(timeout); unsubscribe(); resolve();
+    };
+    const unsubscribe = lambdas.subscribe(check);
+    check();
+  });
+  // 150 loop checkpoints inside forEach; the scheduler yields after 128.
+  assert.equal((await run('var s = 0; (1..50).toList().forEach { for (i in 1..3) { s += i } }; s')).display, '300');
+  const mapped = lambdas.execute({ op: 'eval', code: 'listOf(1, 2).map { ask("q$it: ") + it }' });
+  await inputRequested();
+  await lambdas.sendInput('a');
+  await inputRequested();
+  await lambdas.sendInput('b');
+  const mappedValue = await mapped;
+  assert.notEqual(mappedValue.kind, 'error', mappedValue.display);
+  assert.equal(mappedValue.display, '[a1, b2]');
+  assert.equal(lambdaOutputs.splice(0).join(''), 'q1: q2: ');
+  assert.equal((await run('asked')).display, '2', 'every lambda call runs exactly once');
+  assert.equal((await run('listOf(1, 2).forEach { Thread.sleep(5); print(it) }; 1')).display, '1');
+  assert.equal(lambdaOutputs.splice(0).join(''), '12');
+  assert.equal(lambdas.getSnapshot().phase, 'ready');
+  lambdas.invalidate();
+}
 // Diagnostics point into the student's file, also behind the built-in BluePlay library.
 {
   const diagnosticsClient = new LocalRuntimeClient(() => new TestWorker());

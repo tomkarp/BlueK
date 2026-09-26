@@ -21,6 +21,7 @@ internal object StdlibInlineMetadata {
         return definition.copy(modifiers = definition.modifiers + FunctionModifier.inline).also {
             it.extraTypeParameters = definition.extraTypeParameters
             it.suspendExecutable = definition.suspendExecutable
+            it.isReplayable = definition.isReplayable
         }
     }
 }

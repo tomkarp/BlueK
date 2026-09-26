@@ -401,12 +401,14 @@ test('GUI-30 clicking editor or terminal brings that window to the front', async
 
 test('GUI-83 terminal output brings the terminal above an open editor', async ({ page }) => {
   await project(page, 'class Hund {}');
-  await page.locator('.classcard').dblclick();
+  // Terminal and editor open at the same centered default place, so an editor
+  // opened after the terminal covers it completely (see GUI-30 for clicks).
   await page.getByRole('button', { name: 'Show terminal', exact: true }).click();
-  await page.locator('.editor-header').click();
+  await page.locator('.classcard').dblclick();
   const editorModal = page.locator('.editor-modal');
   const terminalModal = page.locator('.terminal-modal');
   await expect(editorModal).toHaveClass(/window-active/);
+  await expect(terminalModal).not.toHaveClass(/window-active/);
   await evaluate(page, 'println("Terminal output")');
   await expect(terminalModal.locator('.terminal-output pre')).toContainText('Terminal output');
   await expect(terminalModal).toHaveClass(/window-active/);
@@ -1333,7 +1335,7 @@ test('GUI-67 a link can open the README, and the export dialog attaches that to 
   const save = page.getByRole('dialog', { name: 'Save / Export' });
   // The links come first, then the file exports.
   await expect(save.locator('.project-choice-list button strong')).toHaveText([
-    'Copy Full Project Link', 'Copy Short Link', 'Export Project JSON', 'Export as HTML', 'Export BlueJ Project (.zip)',
+    'Copy Full Project Link', 'Copy Short Link', 'Export Project JSON', 'Export as HTML (Beta)', 'Export BlueJ Project (.zip)',
   ]);
   // Each link box carries the option at its right edge; both mean the same.
   await expect(save.getByLabel(/Open README.md with the link/)).toHaveCount(2);

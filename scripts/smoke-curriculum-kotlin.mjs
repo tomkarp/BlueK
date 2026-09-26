@@ -61,6 +61,67 @@ const fails = (value, label, pattern) => {
   assert.equal(ok(q.evaluate('try { throw IllegalStateException("x") } catch (e: IllegalStateException) { "gefangen" }'), 'catch').display, 'gefangen');
 }
 
+// Exceptions from native stdlib functions are caught by their class and its superclasses (RT-38);
+// integer division by zero throws ArithmeticException instead of yielding 0.
+{
+  const p = await project({ 'Zahl.kt': 'fun zahl(text: String): Int = text.toInt()' });
+  ok(p.result, 'native exception project');
+  const caught = [
+    ['try { zahl("x") } catch (e: NumberFormatException) { e.message }', "Invalid number format: 'x'"],
+    ['try { "x".toInt() } catch (e: IllegalArgumentException) { "IllegalArgumentException" }', 'IllegalArgumentException'],
+    ['try { "x".toInt() } catch (e: Exception) { e is NumberFormatException }', 'true'],
+    ['try { "x".toInt() } catch (e: ArithmeticException) { "falsch" } catch (e: Exception) { "Exception" }', 'Exception'],
+    ['try { require(false) { "require" } } catch (e: IllegalArgumentException) { e.message }', 'require'],
+    ['try { check(false) { "check" } } catch (e: IllegalStateException) { e.message }', 'check'],
+    ['try { listOf(1)[5] } catch (e: IndexOutOfBoundsException) { e.message }', 'index: 5, size: 1'],
+    ['try { listOf<Int>().first() } catch (e: NoSuchElementException) { e.message }', 'List is empty.'],
+    ['try { 1 / 0 } catch (e: ArithmeticException) { e.message }', '/ by zero'],
+    ['try { 5L % 0L } catch (e: Exception) { e is ArithmeticException }', 'true'],
+  ];
+  for (const [source, expected] of caught) assert.equal(ok(p.evaluate(source), source).display, expected, source);
+  ok(p.evaluate('try { "x".toInt() } catch (e: Exception) { e.printStackTrace() }'), 'printStackTrace');
+  assert.equal(p.output(), "NumberFormatException: Invalid number format: 'x'\n");
+  // An uncaught runtime error ends the session, so each of these needs its own.
+  fails((await project({ 'Main.kt': 'fun main() {}' })).evaluate('try { "x".toInt() } catch (e: IllegalStateException) { -1 }'), 'unrelated catch type', /^NumberFormatException: Invalid number format: 'x'$/);
+  fails((await project({ 'Main.kt': 'fun main() {}' })).evaluate('7 / 0'), 'uncaught division by zero', /^ArithmeticException: \/ by zero$/);
+}
+
+// String.substring checks its bounds like Kotlin instead of clamping and swapping like JavaScript (RT-39).
+{
+  const p = await project({ 'Main.kt': 'fun main() {}' });
+  const cases = [
+    ['"Hallo Welt".substring(6)', 'Welt'],
+    ['"abc".substring(1, 3)', 'bc'],
+    ['"abc".substring(3)', ''],
+    ['try { "abc".substring(5) } catch (e: IndexOutOfBoundsException) { e.message }', 'begin 5, end 3, length 3'],
+    ['try { "abc".substring(1, 10) } catch (e: IndexOutOfBoundsException) { e.message }', 'begin 1, end 10, length 3'],
+    ['try { "abc".substring(2, 1) } catch (e: Exception) { e.message }', 'begin 2, end 1, length 3'],
+    ['try { "abc".substring(-1) } catch (e: IndexOutOfBoundsException) { e.message }', 'begin -1, end 3, length 3'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), source).display, expected, source);
+  fails((await project({ 'Main.kt': 'fun main() {}' })).evaluate('"abc".substring(5)'), 'uncaught substring', /^IndexOutOfBoundsException: begin 5, end 3, length 3$/);
+}
+
+// A stdlib callback that suspends is replayed (RT-37); what it throws keeps its class for `catch` (RT-38, RT-39).
+// BlueK's "cannot pause here" error is a limit of BlueK, not a program exception: no `catch` hides it.
+{
+  const p = await project({ 'Z.kt': 'class Z {\n    override fun toString(): String {\n        Thread.sleep(1)\n        return "z"\n    }\n}' });
+  ok(p.result, 'toString with Thread.sleep');
+  const run = source => new Promise(resolve => {
+    const started = JSON.parse(p.session.startEvaluate('<curriculum>', source, () => {}, value => resolve(JSON.parse(value))));
+    if (started.kind === 'error') resolve(started);
+  });
+  const cases = [
+    ['try { listOf("1", "x").map { Thread.sleep(1); it.toInt() } } catch (e: NumberFormatException) { e.message }', "Invalid number format: 'x'"],
+    ['try { listOf(1, 0).map { Thread.sleep(1); 10 / it } } catch (e: ArithmeticException) { e.message }', '/ by zero'],
+    ['try { listOf("abc").map { Thread.sleep(1); it.substring(5) } } catch (e: IndexOutOfBoundsException) { e.message }', 'begin 5, end 3, length 3'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(await run(source), source).display, expected, source);
+  // Last: an uncaught runtime error ends the session.
+  fails(await run('try { println(Z()) } catch (e: Throwable) { println("gefangen") } finally { println("finally") }'), 'pause in toString() inside catch (e: Throwable)', /^InterpreterStateException: Thread\.sleep\(\) cannot pause inside toString\(\)/);
+  assert.equal(p.output(), 'finally\n');
+}
+
 // Kotlin output formats: whole doubles keep `.0`, collections print their elements.
 {
   const p = await project({ 'Main.kt': 'fun main() {\n    println(2.0 * 3.0)\n    println(listOf(1, 2, 3))\n    println(mutableListOf("a"))\n    println(19.75)\n}' });

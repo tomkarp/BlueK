@@ -7,6 +7,7 @@ import com.sunnychung.lib.multiplatform.kotlite.lexer.Lexer
 import com.sunnychung.lib.multiplatform.kotlite.model.ASTNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.error.EvaluateRuntimeException
+import com.sunnychung.lib.multiplatform.kotlite.error.InterpreterStateException
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassInstance
 import com.sunnychung.lib.multiplatform.kotlite.model.FunctionCallNode
 import com.sunnychung.lib.multiplatform.kotlite.model.BooleanValue
@@ -151,10 +152,27 @@ class KotliteSession {
         }
     }
 
+    /**
+     * Pausing here would leave a continuation behind that is never resumed: in a
+     * legacy synchronous call, or in a callback that has to return first
+     * (Interpreter.canSuspend). This is a limit of BlueK, not an exception of the
+     * program, so no catch block of the program may hide it.
+     */
+    private fun checkCanPause(currentInterpreter: Interpreter, operation: String) {
+        if (executionCompleted == null) {
+            throw InterpreterStateException("$operation requires asynchronous execution (startEvaluate).")
+        }
+        if (!currentInterpreter.canSuspend) {
+            throw InterpreterStateException(
+                "$operation cannot pause inside toString(), equals(), hashCode(), compareTo() or a library callback " +
+                    "that must return immediately. Call it outside and pass the result in."
+            )
+        }
+    }
+
     private fun resetInterpreter() {
         environment = ExecutionEnvironment(sleepHandler = { millis ->
-            // Do not leave a suspended continuation behind in legacy sync calls.
-            check(executionCompleted != null) { "Thread.sleep requires asynchronous execution (startEvaluate)." }
+            checkCanPause(interpreter, "Thread.sleep()")
             awaitRuntimeSleep(millis)
         })
         environment.registerClass(BlueKClass.definition())
@@ -179,7 +197,7 @@ class KotliteSession {
             executable = { _, receiver, _, _ ->
                 val error = receiver as ThrowableValue
                 appendOutput(buildString {
-                    append(error.externalExceptionClassName ?: error.fullClassName)
+                    append(error.externalExceptionClassName ?: error.type().name)
                     error.message?.let { append(": "); append(it) }
                     append('\n')
                     error.stacktrace.forEach { append("    at "); append(it); append('\n') }
@@ -188,9 +206,11 @@ class KotliteSession {
             },
         ))
         // The published Kotlite stdlib 1.1.0 exposes collection callbacks through
-        // synchronous Kotlin function types. Keep the standard library surface,
-        // but provide its suspendable generated equivalent for the callback that
-        // must be able to cross a readln suspension.
+        // synchronous Kotlin function types. The interpreter replays those calls
+        // when a callback suspends (StdlibReplayMetadata). Keep the standard
+        // library surface, but provide suspendable equivalents for `count`,
+        // whose loops then yield as well, and for the in-place filters, which
+        // cannot be replayed.
         environment.patchFunction(
             receiverType = "Iterable<T>",
             functionName = "count",
@@ -204,8 +224,47 @@ class KotliteSession {
             }
             IntValue(count, currentInterpreter.symbolTable())
         }
-        suspend fun readBufferedLine(currentInterpreter: Interpreter, nullable: Boolean): RuntimeValue {
+        fun patchInPlaceFilter(functionName: String, removeMatching: Boolean) {
+            environment.patchFunction(
+                receiverType = "MutableList<T>",
+                functionName = functionName,
+                parameterTypes = listOf("(T) -> Boolean"),
+            ) { currentInterpreter, receiver, args, _ ->
+                val list = (receiver as DelegatedValue<*>).value as MutableList<RuntimeValue>
+                val predicate = args[0] as LambdaValue
+                // Evaluate every predicate before changing the list.
+                val kept = list.toList().filter { element ->
+                    (predicate.executeSuspended(arrayOf(element)) as BooleanValue).value != removeMatching
+                }
+                val changed = kept.size != list.size
+                if (changed) {
+                    list.clear()
+                    list.addAll(kept)
+                }
+                BooleanValue(changed, currentInterpreter.symbolTable())
+            }
+        }
+        patchInPlaceFilter("removeAll", removeMatching = true)
+        patchInPlaceFilter("retainAll", removeMatching = false)
+        // The stdlib calls Kotlin/JS's String.substring, which follows JavaScript:
+        // it clamps and swaps out-of-range indices instead of throwing, so
+        // "abc".substring(5) would yield "". Check the bounds as Kotlin does.
+        environment.patchFunction(
+            receiverType = "String",
+            functionName = "substring",
+            parameterTypes = listOf("Int", "Int"),
+        ) { currentInterpreter, receiver, args, _ ->
+            val text = (receiver as StringValue).value
+            val startIndex = (args[0] as IntValue).value
+            val endIndex = (args[1] as IntValue).value
+            if (startIndex < 0 || startIndex > endIndex || endIndex > text.length) {
+                throw IndexOutOfBoundsException("begin $startIndex, end $endIndex, length ${text.length}")
+            }
+            StringValue(text.substring(startIndex, endIndex), currentInterpreter.symbolTable())
+        }
+        suspend fun readBufferedLine(currentInterpreter: Interpreter, name: String, nullable: Boolean): RuntimeValue {
             if (inputLines.isEmpty()) {
+                checkCanPause(currentInterpreter, "$name()")
                 return suspendCoroutine { continuation ->
                     inputNullable = nullable
                     inputContinuation = continuation
@@ -225,7 +284,7 @@ class KotliteSession {
                 parameterTypes = emptyList(),
                 executable = { _, _, _, _ -> throw IllegalStateException("$name requires asynchronous evaluation") }
             )
-            definition.suspendExecutable = { currentInterpreter, _, _, _ -> readBufferedLine(currentInterpreter, nullable) }
+            definition.suspendExecutable = { currentInterpreter, _, _, _ -> readBufferedLine(currentInterpreter, name, nullable) }
             environment.registerFunction(definition)
         }
         registerRead("readln", false)

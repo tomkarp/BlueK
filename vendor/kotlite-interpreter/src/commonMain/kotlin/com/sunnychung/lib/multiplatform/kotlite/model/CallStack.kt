@@ -1,5 +1,6 @@
 package com.sunnychung.lib.multiplatform.kotlite.model
 
+import com.sunnychung.lib.multiplatform.kotlite.error.InterpreterStateException
 import com.sunnychung.lib.multiplatform.kotlite.lexer.BuiltinFilename
 
 class CallStack {
@@ -71,7 +72,7 @@ class CallStack {
     fun pop(scopeType: ScopeType) {
         val ar = activationRecords.removeLast()
         if (ar.scopeType != scopeType) {
-            throw IllegalStateException("A wrong scope is completed")
+            throw InterpreterStateException("A wrong scope is completed")
         }
     }
 

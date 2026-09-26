@@ -279,6 +279,49 @@ for (const answer of ['ja', 'nein', 'ja']) {
   expectOk(JSON.parse(lambdaInputSession.enqueueInput(answer)), `stdlib callback input ${requestId}`);
 }
 if (lambdaResult?.display !== '2' || lambdaRequests.length !== 0) throw new Error('A stdlib callback did not resume exactly once per input.');
+
+// RT-37: every other callback of the binary stdlib may suspend as well. A
+// suspended callback abandons the library call, which then runs again with the
+// recorded callback results. The outcome must equal a run that never suspends
+// (all input buffered in advance), and interpreted code must run exactly once.
+const runCallbackCase = (source, lines, buffered) => new Promise((resolve, reject) => {
+  const target = api.bluekCreateKotliteSession();
+  const queue = [...lines];
+  if (buffered) while (queue.length) target.enqueueInput(queue.shift());
+  const timeout = setTimeout(() => reject(new Error(`RT-37 did not complete: ${source}`)), 5000);
+  const started = JSON.parse(target.startEvaluate('<rt37>', source,
+    () => setTimeout(() => queue.length ? target.enqueueInput(queue.shift()) : target.enqueueEof(), 0),
+    value => { clearTimeout(timeout); const result = JSON.parse(value); resolve(`${result.kind}:${result.display}|${target.takeOutput()}`); }));
+  if (started.kind === 'error') { clearTimeout(timeout); resolve(`error:${started.display}|`); }
+});
+for (const [source, lines, expected] of [
+  ['var calls = 0; val r = (1..5).map { calls++; if (it % 2 == 0) readln() else "-" }; "$calls $r"', ['x', 'y'], 'scalar:5 [-, x, -, y, -]|'],
+  ['listOf(1, 2).forEach { println("before $it"); println("after " + readln()) }', ['a', 'b'], 'unit:Unit|before 1\nafter a\nbefore 2\nafter b\n'],
+  ['fun find(): String { listOf(1, 2, 3).forEach { if (readln() == "stop") return "stopped at $it" }; return "none" }; find()', ['go', 'stop'], 'scalar:stopped at 2|'],
+  ['try { listOf(1, 2).map { val l = readln(); if (l == "x") throw IllegalStateException("bad $it"); l } } catch (e: Exception) { "caught " + e.message }', ['ok', 'x'], 'scalar:caught bad 2|'],
+  ['listOf(1, 2).map { a -> listOf(10, 20).map { b -> readln() + (a + b) } }', ['p', 'q', 'r', 's'], 'object:[[p11, q21], [r12, s22]]|'],
+  ['fun walk(n: Int): Int { if (n == 0) return 0; var s = 0; listOf(n).forEach { s += readln().toInt() + walk(n - 1) }; return s }; walk(3)', ['1', '2', '3'], 'scalar:6|'],
+  ['repeat(2) { val n = readln().toInt(); var s = 0; for (i in 1..n) s += i; println(s) }', ['1000', '300'], 'unit:Unit|500500\n45150\n'],
+  ['val l = mutableListOf(1, 2, 3, 4); val removed = l.removeAll { readln() == "y" }; val kept = mutableListOf(1, 2, 3).retainAll { readln() == "y" }; "$removed $kept $l"', ['y', 'n', 'y', 'n', 'y', 'y', 'y'], 'scalar:true false [2, 4]|'],
+  ['val l = mutableListOf("c", "a", "b"); l.sortBy { it + readln() }; l', ['1', '1', '1', '1', '1', '1', '1', '1'], 'object:[a, b, c]|'],
+  ['class Box { var s = "" }; "${1.let { readln() }} ${"x".also { readln() }} ${run { readln() }} ${with(Box()) { s + readln() }} ${Box().apply { s = readln() }.s} ${"t".takeIf { readln() == "y" }}"', ['a', 'b', 'c', 'd', 'e', 'y'], 'scalar:a x c d e t|'],
+  ['"${"abc".filter { readln() == "y" }} ${mapOf(1 to "a").map { it.value + readln() }} ${(1..4).groupBy { readln() }} ${List(2) { readln() + it }}"', ['y', 'n', 'y', 'm', 'a', 'b', 'a', 'b', 'p', 'q'], 'scalar:ac [am] {a=[1, 3], b=[2, 4]} [p0, q1]|'],
+]) {
+  const suspended = await runCallbackCase(source, lines, false);
+  const direct = await runCallbackCase(source, lines, true);
+  if (suspended !== expected || direct !== expected) {
+    throw new Error(`RT-37 callback result differs for ${source}: suspended ${JSON.stringify(suspended)}, buffered ${JSON.stringify(direct)}`);
+  }
+}
+if (await runCallbackCase('listOf(3, 1, 2).filter { Thread.sleep(1); it > 1 }', [], false) !== 'object:[3, 2]|') throw new Error('Thread.sleep inside a stdlib callback did not resume.');
+if (await runCallbackCase('class A { override fun toString(): String { var s = ""; for (i in 1..300) s = "$i"; return s } }; println(A())', [], false) !== 'unit:Unit|300\n') {
+  throw new Error('A loop inside toString() called by println did not complete.');
+}
+// toString() must return synchronously; pausing there is reported instead of corrupting the call stack.
+const pauseInToString = await runCallbackCase('class A { override fun toString(): String = readln() }; println(A())', ['x'], false);
+if (!pauseInToString.startsWith('error:') || !pauseInToString.includes('readln() cannot pause inside toString()')) {
+  throw new Error(`readln() inside toString() was not rejected clearly: ${pauseInToString}`);
+}
 collectionsEvaluate('val mutableNumbers = mutableListOf(1, 2)', 'mutable list construction');
 if (collectionsEvaluate('mutableNumbers.add(3)', 'mutable list add').display !== 'true') throw new Error('Mutable list add failed in an incremental session.');
 if (collectionsEvaluate('mutableNumbers[2]', 'mutable list index access').display !== '3') throw new Error('Mutable list mutation was not retained.');

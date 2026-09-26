@@ -1,5 +1,8 @@
 package com.sunnychung.lib.multiplatform.kotlite.model
 
+import com.sunnychung.lib.multiplatform.kotlite.error.InterpreterStateException
+import kotlin.coroutines.cancellation.CancellationException
+
 /**
  * The difference between Exception and Throwable is that, Throwable includes exceptions thrown outside the interpreter
  * scope.
@@ -240,5 +243,20 @@ class StandardExceptionValue(
             definition("NoSuchElementException", "Exception"),
             definition("UnsupportedOperationException", "Exception"),
         )
+
+        /**
+         * The class of [classes] for an exception thrown by host code, e.g. by a native stdlib function, or null.
+         * `UnsupportedOperationException` is left out: the interpreter throws it for its own unsupported paths.
+         */
+        fun classNameOf(error: Throwable): String? = when (error) {
+            is InterpreterStateException, is CancellationException -> null
+            is NumberFormatException -> "NumberFormatException"
+            is IllegalArgumentException -> "IllegalArgumentException"
+            is IllegalStateException -> "IllegalStateException"
+            is ArithmeticException -> "ArithmeticException"
+            is IndexOutOfBoundsException -> "IndexOutOfBoundsException"
+            is NoSuchElementException -> "NoSuchElementException"
+            else -> null
+        }
     }
 }

@@ -41,8 +41,11 @@ class CustomFunctionDeclarationNode(
     transformedRefName = transformedRefName,
 ) {
     override suspend fun execute(interpreter: Interpreter, receiver: RuntimeValue?, arguments: List<RuntimeValue>, typeArguments: Map<String, DataType>): RuntimeValue {
-        return definition.suspendExecutable?.invoke(interpreter, receiver, arguments, typeArguments)
-            ?: definition.executable(interpreter, receiver, arguments, typeArguments)
+        definition.suspendExecutable?.let { return it(interpreter, receiver, arguments, typeArguments) }
+        if (definition.isReplayable) {
+            return interpreter.callReplayable { definition.executable(interpreter, receiver, arguments, typeArguments) }
+        }
+        return definition.executable(interpreter, receiver, arguments, typeArguments)
     }
 
     override fun copy(

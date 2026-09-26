@@ -1,7 +1,7 @@
 # BlueK share words
 
-`data/share-words-en.txt` is the first BlueK-specific English word list for
-short project links.
+`data/share-words-en.txt` is the BlueK-specific English word list for short
+project links.
 
 ## Source and curation
 
@@ -22,5 +22,8 @@ sexual, abusive, or extremist terms and common easily confused pairs such as
 should receive a further human review for rare, ambiguous, culturally
 sensitive, or otherwise unsuitable school vocabulary.
 
-The list is an input for future server-side code generation; it is not yet
-used by the application.
+The share service (`server/share-server.mjs`) draws the three words of every
+code from this list at random (`BLUEK_SHARE_WORDS` overrides the path). It
+ignores lines that are not four to six lowercase ASCII letters and refuses to
+start with fewer than 100 words. The deployment workflow copies the file to
+the server; see `docs/deployment.md`.

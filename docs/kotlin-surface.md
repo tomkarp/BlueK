@@ -1,9 +1,12 @@
 # Kotlin-Oberfläche von BlueK
 
-BlueK führt Kotlin nicht aus, sondern interpretiert es mit
-[Kotlite](https://github.com/sunny-chung/kotlite). Kotlite bildet eine Teilmenge
-von Kotlin ab; alles, was Schülercode darüber hinaus erwartet, muss BlueK selbst
-bereitstellen. Diese Seite hält fest, was zugesagt ist — und was nicht.
+BlueK kompiliert Kotlin nicht, sondern interpretiert es mit
+[Kotlite](https://github.com/sunny-chung/kotlite) (siehe [kotlite.md](kotlite.md)).
+Kotlite bildet eine Teilmenge von Kotlin ab; alles, was Schülercode darüber
+hinaus erwartet, muss BlueK selbst bereitstellen. Diese Seite hält fest, welche
+Standardbibliothek zugesagt ist — und welche nicht. Sprachkonstrukte
+(`data class`, `object`, Destrukturierung …) stehen im README unter „Aktuelle
+Grenzen“.
 
 Maßgeblich ist nicht dieser Text, sondern `scripts/smoke-kotlin-surface.mjs`:
 dort steht jeder Eintrag als ausführbarer Ausdruck, und die bekannten Lücken
@@ -17,8 +20,8 @@ verschwindet. Nach Kotlin-Änderungen zuerst `npm run build:kotlite`.
 | --- | --- |
 | `kotlite-stdlib` 1.1.0 | Listen, Maps, Sets, Ranges, `kotlin.math`, der Großteil von `String` |
 | `BlueKStdlibModule` | Die unten gelisteten Ergänzungen |
-| `KotliteSession` | Host-Funktionen: `readln`, BluePlay, Ton, Eingabe |
-| `vendor/kotlite-interpreter` | Nur Interpreter-Semantik, siehe `vendor/kotlite-interpreter/PATCH.md` |
+| `KotliteSession` | Host-Funktionen (`readln`, BluePlay, Ton, Eingabe) und per `patchFunction` ersetzte Stdlib-Funktionen: suspendierbares `count { }`, `removeAll { }`/`retainAll { }`, `substring` mit Kotlins Bereichsprüfung |
+| `vendor/kotlite-interpreter` | Interpreter-Semantik sowie `filterIsInstance` und `Thread.sleep`, siehe `vendor/kotlite-interpreter/PATCH.md` |
 
 Fehlt eine reine Stdlib-Funktion, gehört sie in `BlueKStdlibModule`, nicht in den
 Fork. Sie wird dort als native `CustomFunctionDefinition` registriert und nicht
@@ -50,6 +53,9 @@ funktioniert ebenso wie `listOf(1,2).sum()`.
   Überladungen nicht am Rückgabetyp des Lambdas.
 - Gemischte Zahlentypen lösen nicht auf: `minOf(3, 2.5)` findet keine Überladung.
 - `Float` ist durchgängig `Double` (bereits vor dieser Seite so).
+- Ungültige Indizes in `substring` werfen `IndexOutOfBoundsException`; die
+  JVM-Unterklasse `StringIndexOutOfBoundsException` gibt es in BlueK nicht
+  (RT-39).
 
 ## Bekannte Lücken
 
@@ -62,6 +68,11 @@ funktioniert ebenso wie `listOf(1,2).sum()`.
 | `kotlin.math.abs(-5)` als qualifizierter Aufruf | `import kotlin.math.abs` und dann `abs(-5)` funktioniert |
 | `Math.abs`, `java.*` | Java, bewusst nicht verfügbar |
 | `Double.MAX_VALUE`, `Char.MIN_VALUE` | Nicht nachgerüstet; `Int.MAX_VALUE`/`MIN_VALUE` gibt es |
+
+Außerhalb dieser Tabelle fehlen unter anderem `buildString`/`StringBuilder`,
+`Triple`, `kotlin.random.Random` und `String.lines()`. Sie sind nicht Teil der
+Lückenliste im Test; BlueK meldet sie mit den allgemeinen Fällen unten
+(Vorschlag eines ähnlichen Namens oder „unknown“).
 
 ## Fehlermeldungen bei fehlenden Namen
 

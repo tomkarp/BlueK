@@ -21,8 +21,13 @@ Worker-/Runtime-Smokes getrennt.
 - Neue Fehler erhalten eine ID und möglichst einen reproduzierbaren Test, bevor
   sie korrigiert werden. Bei Änderungen betroffene Nachbarabläufe mitprüfen.
 - Keine Tests als bestanden markieren, die nur geschrieben, aber nicht ausgeführt wurden.
+- Alle Testbefehle im Überblick: `DEVELOPMENT.md`.
 
 ## Checkliste
+
+GUI-74 und GUI-80 sind historisch doppelt vergeben (je zwei Verhalten, auch in
+den Testtiteln von `tests/gui/regressions.spec.ts`). Die IDs bleiben stabil;
+bei Verweisen die Beschreibung mitnennen.
 
 | ID | Erwartetes Verhalten / Reproduktion | Bisheriger Nachweis | Automatisierung / offen |
 | --- | --- | --- | --- |
@@ -43,7 +48,7 @@ Worker-/Runtime-Smokes getrennt.
 | GUI-15 | Keine EOF/Stop/Close-Leiste oder Hinweiszeile; aktives Eingabefeld farblich erkennbar | GUI grün: Eingabe aktiv/inaktiv, keine Hinweiszeile | Visuelle Details noch offen |
 | GUI-16 | Entfallen: Der Files-Button mit Hinweis-Popup wurde durch GUI-79 entfernt (fb0666c) | Chromium-Test GUI-16 durch GUI-79 ersetzt, der das Fehlen des Buttons prüft | Durch GUI-79 abgelöst |
 | GUI-17 | Vorlagen erscheinen untereinander; Escape bricht Projekt-, Konstruktor- und Methodendialoge ab; Eingabefokus startet sinnvoll | GUI grün: 17/17 Chromium-Tests | Weitere visuelle Abnahmen offen |
-| GUI-18 | Primitive Inspektoren zeigen ihren Typ, bleiben feldlos und kompakt durch schlankere Innenabstände; Schriftgrößen bleiben unverändert; Hand-Cursor zeigt verschiebbare Flächen; Escape schließt den aktiven Inspector | GUI-03/04, GUI-18 und GUI-48 im Chromium 3/3 grün; GUI-03 prüft 390-px-Breite, 16-px-Schrift, konstante Spalten, gekürzten langen Wert neben dem Stift und volle Eingabebreite im Edit-Modus; beide Zustände im Chromium-Screenshot geprüft; Typecheck 0 Fehler/0 Warnungen | Automatisiert abgesichert; Nutzerabnahme der Optik offen |
+| GUI-18 | Primitive Inspektoren zeigen ihren Typ, bleiben feldlos und kompakt durch schlankere Innenabstände; Schriftgrößen bleiben unverändert; Hand-Cursor zeigt verschiebbare Flächen; Escape schließt den aktiven Inspector | GUI-03/04, GUI-18 und GUI-48 im Chromium 3/3 grün; GUI-03 prüft 390-px-Breite, 16-px-Schrift, konstante Spalten, gekürzten langen Wert neben dem Stift und volle Eingabebreite im Edit-Modus; beide Zustände im Chromium-Screenshot geprüft; Typecheck 0 Fehler/0 Warnungen. 2026-09-25: Regression durch c146fb1 (primitive Werte öffneten keinen Inspektor mehr) behoben, GUI-18 wieder grün, siehe Prüflauf unten | Automatisiert abgesichert; Nutzerabnahme der Optik offen |
 | GUI-19 | Codepad-Eingaben und Ergebnisse stehen mit kompaktem vertikalem Abstand wie im BlueJ-Stil | GUI-Test grün | Visuelle Abnahme offen |
 | GUI-20 | Lange Codepad-Werte werden per CSS dynamisch einzeilig gekürzt, behalten den Typ sichtbar und zeigen den vollständigen Wert per Hover | GUI-Test grün | Visuelle Abnahme offen |
 | GUI-21 | Dasselbe Codepad-Objekt kann unter mehreren Referenznamen auf der Objektbank abgelegt werden; der gemeinsame Inspector zeigt den jeweils aufgerufenen Referenznamen | GUI-Test grün | Visuelle Abnahme offen |
@@ -112,7 +117,7 @@ Worker-/Runtime-Smokes getrennt.
 | GUI-64 | Compilerfehler erscheinen nicht mehr im zentralen Dialog, sondern am Ort des Fehlers: der Editor der betroffenen Datei öffnet sich, markiert die Zeile (roter Hintergrund, Wellenlinie) und meldet den Text unter dem Editor wie die Parser-Meldungen des Formatierers; Tippen löscht die Markierung, der nächste Compile setzt sie neu. Der Dialog bleibt nur für Fehler ohne Quelltextstelle (z. B. fehlgeschlagener Methodenaufruf) | Chromium-GUI-Test GUI-64 (Markierung, Meldung unter dem Editor, kein Dialog, Löschen beim Tippen, erneutes Melden, Verschwinden nach der Korrektur) und GUI-24 (Fehler in `Actions.kt`) | Abgesichert |
 | GUI-65 | Compilerfehler lesen sich kompakt (kein `Token(...)`-Dump, keine wiederholte Position), lassen sich wie die Formatierer-Meldung per Kreuz schließen (samt Markierung), und ein Parser-Fehler des Formatierers markiert und zeigt seine Zeile ebenfalls | Chromium-GUI-Test GUI-65 (kompakter Text `Line 4: Unexpected token `fn``, Schließkreuz, markierte Zeile nach Format, Markierung verschwindet beim Schließen) | Abgesichert |
 | GUI-66 | Projekte mit Dateien, Ressourcen oder einer README zeigen das dezente README-Blatt links oben im Diagramm; ein vollständig leeres Projekt bleibt leer. Im Fenster wird Markdown direkt beim Tippen formatiert dargestellt, die Marker sind nur auf der Cursor-Zeile sichtbar, bei Codeblöcken und Zitaten im ganzen Block (inkl. der Zaunzeilen), Kotlin in Codeblöcken wird eingefärbt; beim Öffnen liegt der Fokus nicht im Text, erstes Escape verlässt den Text, zweites schließt das Fenster; das Fragezeichen oben rechts zeigt die Syntax am Minimalbeispiel und verschwindet beim Klick daneben; Export/Autosave enthalten die README nur, wenn sie nicht leer ist, beim Import ist sie optional (BlueJ-`README.TXT` wird übernommen) | Chromium-GUI-Test GUI-66 (Blatt sichtbar bei vorhandenem Inhalt, leer nicht gespeichert, kein Fokus beim Öffnen, Formatierung beim Tippen, Marker auf der Cursor-Zeile, Hilfe inkl. Schließen daneben, Codeblock mit Zäunen und Einfärbung, Escape-Folge, Wiederöffnen) und `smoke-project-format` (Export nur bei Inhalt, optionaler Import, Formatierungsmarken, Block-Regionen, Kotlin-Token, BlueJ-README); GUI-01 prüft Empty Project ohne README-Blatt | Abgesichert |
-| GUI-67 | Ein Projektlink kann die README beim Start öffnen (`readme=1` im Hash des vollen Links bzw. in der Query des Kurzlinks); der Save/Export-Dialog trägt die Option als Häkchen am rechten Rand beider Link-Kästen, nur bei nicht-leerer README wählbar, und listet zuerst die beiden Links, dann JSON, dann das BlueJ-ZIP | Chromium-GUI-Test GUI-67 (ohne Flag kein Fenster, mit Flag gerenderte README, Reihenfolge der Einträge, beide Häkchen gemeinsam, Flag im kopierten Link, bei leerer README deaktiviert) | Abgesichert |
+| GUI-67 | Ein Projektlink kann die README beim Start öffnen (`readme=1` im Hash des vollen Links bzw. in der Query des Kurzlinks); der Save/Export-Dialog trägt die Option als Häkchen am rechten Rand beider Link-Kästen, nur bei nicht-leerer README wählbar, und listet zuerst die beiden Links, dann JSON, dann „Export as HTML (Beta)“ (EXP-08), dann das BlueJ-ZIP | Chromium-GUI-Test GUI-67 (ohne Flag kein Fenster, mit Flag gerenderte README, Reihenfolge der Einträge, beide Häkchen gemeinsam, Flag im kopierten Link, bei leerer README deaktiviert); 2026-09-25 veraltete Erwartung ohne „(Beta)“ korrigiert, 1/1 grün | Abgesichert |
 | GUI-68 | Der Code-Editor hat einen Vim-Modus: standardmäßig aus, umschaltbar über Cmd/Ctrl+Shift+V oder die Einstellungen; im Modus zeigt der Editor unten die Vim-Statuszeile, Normal-Mode-Befehle (`j`, `dd`, `u`) wirken, ausgeschaltet tippt der Editor wieder normal | Chromium-GUI-Test GUI-68 (ohne Modus tippt `j` ein `j`, Kürzel schaltet ein, `--NORMAL--`, `dd`/`u`, Einstellungs-Checkbox synchron, Ausschalten beendet den Modus) | Abgesichert |
 | GUI-69 | BlueK liefert die BluePlay-Standardgrafiken mit (`assets/standard-images/`, im Bundle erzeugt): `Image("duck.png")` und `setBackground("pizza.png")` sind ohne Projektimport nutzbar, die Grafik wird auf die Weltfläche gezeichnet; eine gleichnamige Projektressource hat Vorrang; die Grafiken stehen nicht im Projekt und werden nicht gespeichert | Chromium-GUI-Test GUI-69 (Standardgrafik im Codepad und auf dem Canvas) und `smoke-blueplay-browser` (Auflösung über `images/`, Vorrang der Projektressource) | Abgesichert |
 | GUI-70 | Die im Build erzeugten Pixelmasken der Standardgrafiken stimmen mit der Browserdekodierung überein (Größe und Alphakanal), damit pixelgenaue Klicks und `isTouching` für sie stimmen | Chromium-GUI-Test GUI-70 über alle mitgelieferten Grafiken | Abgesichert |
@@ -129,7 +134,7 @@ Worker-/Runtime-Smokes getrennt.
 | GUI-79 | Der unbrauchbare Files-Button entfällt; nur BluePlay-Projekte erhalten zwei icon-only Aktionen für Bilder und Audio. Images öffnet eine Kachelansicht für ungefähr fünf Spalten mit Dateiname und Vorschau, einer wirkungslosen Add-Kachel mit Implementierungshinweis sowie mittigem Close-Button darunter; Audio zeigt ebenfalls einen Implementierungshinweis | Chromium-GUI-Test GUI-79 (ersetzt GUI-16): kein Files-Button, Images/Audio nur im BluePlay-Projekt und ohne Text, Add-Kachel zuerst, `duck.png` mit Vorschau und Namen, beide Hinweise, Close | Chromium-Test 1/1 grün; Spaltenzahl, Zentrierung des Close-Buttons und visuelle Abnahme offen |
 | GUI-80 | Beim Maximieren füllen Editor und Terminal den vollständigen Browser-Viewport ohne Außenrand aus | Chromium-GUI-Test GUI-80 misst beide Fenster von `0,0` bis `innerWidth,innerHeight` | Abgesichert |
 | GUI-81 | Eine geschlossene BluePlay-Welt bleibt bei gewöhnlichen Codepad-Auswertungen geschlossen; erneutes Starten von `main()` oder explizites `show()` öffnet sie wieder | Chromium-GUI-Test GUI-81 schließt die Welt, führt `5 + 3` aus und prüft Ergebnis `8` bei weiterhin fehlendem Weltfenster; danach startet `main()` die Welt erneut | Abgesichert |
-| GUI-83 | Wenn Laufzeiteingabe oder Programmausgabe das Terminal öffnet, wird es auch über bereits geöffnete Editoren nach vorn geholt | Chromium-Test GUI-83 prüft Terminalausgabe, aktives Fenster und Z-Index über einem Editor | Implementiert; nicht ausgeführt |
+| GUI-83 | Wenn Laufzeiteingabe oder Programmausgabe das Terminal öffnet, wird es auch über bereits geöffnete Editoren nach vorn geholt | Chromium-Test GUI-83 prüft Terminalausgabe, aktives Fenster und Z-Index über einem Editor; Testaufbau am 2026-09-25 korrigiert (öffnet erst das Terminal, dann den Editor), 1/1 grün | Abgesichert |
 | GUI-84 | Der Dialog zur Objekterzeugung per Rechtsklick auf eine Klasse liegt über einem geöffneten Editor | Chromium-Test GUI-84 prüft den Dialog und dessen Z-Index über dem aktiven Editor | Implementiert; nicht ausgeführt |
 | GUI-85 | Der Parameterdialog eines per Mausklick aufgerufenen Objekts liegt über einem geöffneten Editor | Chromium-Test GUI-85 prüft den Methodendialog und dessen Z-Index über dem aktiven Editor | Implementiert; nicht ausgeführt |
 | GUI-82 | Geerbte Methoden im Objekt-Kontextmenü sind beim Öffnen des Oberklassen-Untermenüs vollständig sichtbar, ohne horizontalen Scrollen; das Untermenü bleibt auch vertikal im Browser-Viewport | Chromium-GUI-Test GUI-82 prüft sichtbare `World`-Methoden, deaktiviertes horizontales Scrollen und vollständig im Viewport liegende Grenzen des Untermenüs | Abgesichert |
@@ -169,8 +174,17 @@ Worker-/Runtime-Smokes getrennt.
 | EXP-09 | Bei mehreren `main()` fragt der Export jedes Mal („Which main() should the exported HTML file start?“); Abbrechen lädt nichts herunter; die gewählte Datei startet im Export | `html-export.spec.ts` EXP-09 | Abgesichert |
 | EXP-10 | Ohne parameterloses `main()` gibt es keinen Export: Hinweis nach dem Kompilieren, danach ist „Export as HTML“ deaktiviert mit „Needs a file with a parameterless main().“; bei Compilefehlern öffnet sich wie bei Compile die Datei mit markiertem Fehler, kein Download | `html-export.spec.ts` EXP-10 | Abgesichert |
 | EXP-11 | Ein BluePlay-Projekt aus der IDE exportiert zeigt im Player seine Welt (pausiert) und die Ausgabe von `main()` | `html-export.spec.ts` EXP-11 | Abgesichert |
+| RT-37 | Ein Lambda, das an eine Stdlib-Funktion übergeben wird (`forEach`, `map`, `filter`, `repeat`, `let` …), darf suspendieren: Schleifen mit Checkpoint, `readln()` und `Thread.sleep()` darin funktionieren; jedes Lambda läuft genau einmal, Ergebnis und Ausgabe gleichen einem Lauf ohne Suspension. Reproduktion über die asynchrone API: `(1..50).toList().forEach { for (i in 1..3) { } }` bzw. `listOf(1, 2).map { readln() }`, `listOf(1).forEach { Thread.sleep(5) }`. In `toString()`/`equals()`/`hashCode()`/`compareTo()` melden `readln()`/`Thread.sleep()` einen verständlichen Fehler statt den Aufrufstapel zu beschädigen | 2026-09-24: Probe gegen das eingecheckte Bundle schlug fehl (`A wrong scope is completed`; bei `sleep`: `Execution suspended at a synchronous compatibility boundary`). 2026-09-25: behoben durch Wiederholung des nativen Stdlib-Aufrufs mit gemerkten Callback-Ergebnissen und Checkpoint-Verzicht in synchronen Callbacks (`vendor/kotlite-interpreter`, `PATCH.md`); `test:runtime-state` (echter Client/Host: Checkpoint, Eingabe, `sleep`) und RT-37-Block in `smoke-kotlite-browser.mjs` (11 Fälle suspendiert = gepuffert, `removeAll`/`retainAll`/`sortBy`, Scope-Funktionen, nichtlokaler Return, Ausnahmen, Rekursion, Ablehnung in `toString()`) grün; beide gegen das alte Bundle rot | Abgesichert (Node, echtes Bundle); nicht im echten Browser/GUI geprüft. Bekannte Grenze: Schleifen in synchronen Callbacks geben nicht an den Worker ab. Mit RT-38 und RT-39 zusammengeführt (2026-09-25): der RT-38-Fall, der diesen Fehler nutzte, ist ersetzt (siehe Prüfprotokoll „Zusammenführung RT-37, RT-38 und RT-39“). Die Meldung „cannot pause …“ fängt seit der Nutzerentscheidung vom 2026-09-25 kein `catch` mehr (Prüfprotokoll „„cannot pause“ nicht mehr fangbar“); abgesichert in `smoke-curriculum-kotlin.mjs` |
+| RT-38 | Eine Ausnahme aus einer nativen Stdlib-Funktion ist mit ihrer Kotlin-Klasse fangbar: `try { "x".toInt() } catch (e: NumberFormatException) { -1 }` ergibt `-1`, ebenso mit `catch (e: Exception)`; gilt für `NumberFormatException`, `IllegalArgumentException`, `IllegalStateException`, `IndexOutOfBoundsException`, `NoSuchElementException` und `ArithmeticException` (auch Ganzzahldivision durch 0) | 2026-09-24: Probe gegen das eingecheckte Bundle: nur `catch (e: Throwable)` fängt; selbst geworfene `NumberFormatException` wird korrekt gefangen. 2026-09-25: `node scripts/smoke-curriculum-kotlin.mjs` prüft alle sechs Klassen (u. a. `"x".toInt()`, `require`, `check`, `listOf(1)[5]`, `first()`, `1 / 0`, `5L % 0L`), Fangen über Oberklasse und `Exception`, eine unpassende Klausel, `printStackTrace()` und die ungefangene Meldung; scheitert gegen das alte Bundle, grün gegen das neue. Nach Zusammenführung mit RT-37 zusätzlich Ausnahmen aus suspendierten und wiederholten Stdlib-Lambdas | **Behoben**, abgesichert durch Node-Laufzeittest (Teil von `browser-smoke`); kein GUI-Test. Offen: andere Host-Ausnahmen (z. B. `UnsupportedOperationException`) nur mit `Throwable` fangbar; kein Stacktrace für native Ausnahmen |
+| RT-39 | `String.substring` prüft die Grenzen wie Kotlin: `"abc".substring(5)`, `substring(1, 10)`, `substring(2, 1)` und `substring(-1)` werfen `IndexOutOfBoundsException` („begin 5, end 3, length 3“), fangbar mit ihrer Klasse und `Exception` (RT-38); gültige Aufrufe bleiben unverändert (`"abc".substring(3)` ergibt `""`) | 2026-09-25: vorher JavaScript-Semantik (`"abc".substring(5)` → `""`, `substring(2, 1)` → `"b"`); `smoke-curriculum-kotlin.mjs` prüft gültige und ungültige Aufrufe, das Fangen und die ungefangene Meldung; scheitert mit dem Bundle vor der Korrektur, grün mit dem neuen | **Behoben**, abgesichert durch Node-Laufzeittest (Teil von `browser-smoke`); die JVM-Unterklasse `StringIndexOutOfBoundsException` gibt es in BlueK nicht |
 
-## Letzter Prüflauf
+## Prüfprotokoll
+
+Tatsächlich ausgeführte Prüfläufe. Die Einträge bis 2026-09-22 stehen nicht
+streng chronologisch; ab 2026-09-23 hat jede Änderung einen eigenen Abschnitt.
+Neue Einträge unten anhängen.
+
+### Prüfläufe 2026-09-15 bis 2026-09-22
 
 2026-09-19, inf-schule „OOP mit Kotlin“, Kapitel 1–3 (Blackjack, Goldrausch,
 Tierisch Glücklich, Ausgebüxt, Snap/Timer einschließlich Fachkonzepte und
@@ -574,7 +588,7 @@ Sichtbarkeits-Abbrüche) wurde entfernt. Nachweis:
 `npx playwright test --grep GUI-42` mit 3/3 grün; `npm run typecheck` mit
 0 Fehlern.
 
-## RT-25: main-Auswahl bei Start und BluePlay-Reset (2026-09-23)
+### RT-25: main-Auswahl bei Start und BluePlay-Reset (2026-09-23)
 
 Der Arbeitsbaum war vor der Änderung sauber auf `beta`. Die Auswahl wird aus
 dem Runtime-Manifest abgeleitet und nur für den einzelnen Aufruf verwendet.
@@ -602,7 +616,7 @@ verwendeten sie einen nicht vorhandenen Status-Selektor. Beide Testfehler wurden
 korrigiert und die betroffenen Tests erfolgreich wiederholt. Keine komplette
 Regressionssuite ausgeführt. Visuelle Benutzerabnahme des Auswahldialogs offen.
 
-## RT-32: BluePlay-Canvas als eigenes Modul (2026-09-23, Branch `html-export`)
+### RT-32: BluePlay-Canvas als eigenes Modul (2026-09-23, Branch `html-export`)
 
 Vorbereitung für den HTML-Export: Zeichnen, Bildauflösung, pixelgenaue
 Klickziele, Tastennamen und Sounds des BluePlay-Canvas liegen jetzt in
@@ -625,7 +639,7 @@ Nachweise:
 Keine komplette Regressionssuite ausgeführt. Sounds (`playSound`, Beep) sind
 nicht automatisiert geprüft; visuelle Abnahme des laufenden Spiels offen.
 
-## RT-33: Exportformat für den HTML-Export (2026-09-23, Branch `html-export`)
+### RT-33: Exportformat für den HTML-Export (2026-09-23, Branch `html-export`)
 
 `frontend/src/programExport.ts` definiert das eingebettete Programm
 (`mainFile`, `blueKUrl`, `project` im `.bluek.json`-Format) und setzt es in die
@@ -657,7 +671,7 @@ folder“); Nutzerbestätigung im installierten Firefox per Screenshot
 (Phase `ready`, vollständige Ausgabe). `Blob.stream()` scheitert in WebKit
 unter `file://`; ein `data:`-Worker ist in WebKit etwa sechsmal langsamer.
 
-## RT-34: Kotlite-Laden für IDE und Player getrennt (2026-09-23, Branch `html-export`)
+### RT-34: Kotlite-Laden für IDE und Player getrennt (2026-09-23, Branch `html-export`)
 
 `runtimeWorker.ts` enthält den gemeinsamen Worker-Start. Die IDE lädt Kotlite
 weiterhin per `fetch` (`localRuntimeWorker.ts`), der Player aus dem
@@ -685,7 +699,7 @@ Nachweise:
   Toolbar-/Fenster-/Settings-Elemente (u. a. `Files`-Button, vier
   Hauptaktionen) und hängen nicht mit dem Export zusammen. Offen.
 
-## RT-35: Player und Vorlage für den HTML-Export (2026-09-23, Branch `html-export`)
+### RT-35: Player und Vorlage für den HTML-Export (2026-09-23, Branch `html-export`)
 
 `PlayerApp.svelte` führt ein eingebettetes Programm aus; `scripts/build-player.mjs`
 baut daraus die Vorlage `frontend/public/player/bluek-player.html` (ca. 723 KB,
@@ -711,7 +725,7 @@ gezeichnet (Platzhalter), weil `drawnImageDataUrl` die Operation `fill` nicht
 kennt; betrifft auch die IDE. Der Test verwendet `fillRect`. Inzwischen mit
 GUI-86 behoben.
 
-## RT-36: „Export as HTML“ in der IDE (2026-09-23, Branch `html-export`)
+### RT-36: „Export as HTML“ in der IDE (2026-09-23, Branch `html-export`)
 
 Neuer Eintrag im Save/Export-Dialog nach „Export Project JSON“. Der
 `mainDialog` kennt die Aktion `export`; er schließt bei neuer Generation, aber
@@ -733,7 +747,7 @@ Nachweise:
 - `npm run typecheck` (0 Fehler, 0 Warnungen) und `npm run build:svelte`
   (Vorlage unter `frontend/dist/player/`) erfolgreich.
 
-## Veraltete GUI-Tests nach b4ded3f/1dd2967 (2026-09-23)
+### Veraltete GUI-Tests nach b4ded3f/1dd2967 (2026-09-23)
 
 Ausgangslage im Worktree auf Branch `claude/vigorous-darwin-73685e` (Stand
 1dd2967, sauber): sieben GUI-Tests schlugen reproduzierbar fehl. Einordnung
@@ -770,7 +784,7 @@ weiterhin ZIP und Projektordner, was dem Drop-Verhalten entspricht. Die IDs
 GUI-74 und GUI-80 sind in der Checkliste und in den Testtiteln doppelt
 vergeben; nicht umnummeriert, um stabile IDs nicht eigenmächtig zu ändern.
 
-## GUI-86: Image.fill() in Actor-Bildern (2026-09-23)
+### GUI-86: Image.fill() in Actor-Bildern (2026-09-23)
 
 Branch `claude/hungry-lewin-5b244e`, Ausgangspunkt `1dd2967`. Die Kotlin-Library
 (`BluePlayLibrary.kt`) erzeugt für `Image` genau die Operationen `fill`,
@@ -796,7 +810,7 @@ Nachweise:
 - Port 5194 war durch einen anderen lokalen Prozess belegt; die Läufe nutzten
   eine temporäre, nicht eingecheckte Playwright-Konfiguration auf Port 5294.
 
-## GUI-31: Editor-Tabs standardmäßig öffnen (2026-09-24)
+### GUI-31: Editor-Tabs standardmäßig öffnen (2026-09-24)
 
 Beim Öffnen der ersten Datei erscheint ein normales Editorfenster. Jede weitere
 Datei wird automatisch als Tab in diesem Fenster geöffnet und aktiviert; die
@@ -810,3 +824,368 @@ Nachweise: betroffene Chromium-Regressionen GUI-28, GUI-31, GUI-33 und GUI-42
 der letzte verbleibende Tab korrekt wieder als Einzelfenster dargestellt wird.
 Nach Anpassung der Erwartung waren alle 6 Tests grün. Der Standard-Dev-Server
 auf Port 5173 war beim Abschluss nicht aktiv.
+
+### RT-38: Ausnahmen aus nativen Funktionen fangen (2026-09-25)
+
+Branch `claude/affectionate-khayyam-3185c6`, Ausgangspunkt `c146fb1`. Ursache:
+`TryNode.eval` ließ Kotlin-Ausnahmen des Hosts (etwa die `NumberFormatException`
+der binären Stdlib) nur auf `catch (e: Throwable)` passen. Jetzt ordnet
+`StandardExceptionValue.classNameOf` die sechs Standardklassen der
+gleichnamigen Kotlite-Klasse zu; danach wird wie bei selbst geworfenen
+Ausnahmen nach Typ verglichen. Mitgeändert:
+
+- Ganzzahldivision und `%` durch 0 werfen `ArithmeticException: / by zero`
+  (vorher ergab `1 / 0` den Wert `0` und `1L / 0L` eine einfache
+  `Exception: division by zero`, weil Kotlin/JS so rechnet). Sonst gäbe es in
+  BlueK keine `ArithmeticException` aus nativem Code.
+- Interpreterfehler (Suspension an der synchronen Grenze, falscher Scope in
+  `CallStack.pop`, fehlendes Rücksprungziel) sind `InterpreterStateException`
+  und werden von keinem `catch` gefangen, auch nicht von `Throwable`. Sonst
+  hätte `catch (e: Exception)` den RT-37-Fehler als `IllegalStateException`
+  verschluckt und mit inkonsistentem Aufrufstapel weitergerechnet.
+- `printStackTrace()` (`KotliteSession`) nennt die Kotlin-Klasse der Ausnahme.
+  Vorher stand dort der Name der Host-Klasse, bei selbst geworfenen Ausnahmen
+  etwa `ThrowableValue: x`.
+
+Nachweise:
+
+- Probe gegen das eingecheckte Bundle vor der Änderung (Node, `evaluate`):
+  `"x".toInt()` mit `catch (e: NumberFormatException)`,
+  `IllegalArgumentException`, `Exception` → Laufzeitfehler
+  `NumberFormatException: Invalid number format: 'x'`; mit `Throwable` → `-1`.
+  Ebenso ungefangen: `listOf<Int>().first()`, `listOf(1)[5]`,
+  `mutableListOf(1).removeAt(3)`, `require(false)`, `check(false)`,
+  `mapOf(1 to 2).getValue(3)`, `"12a".toDouble()`.
+- Dieselbe Probe gegen das neu gebaute Bundle: alle Fälle von ihrer Klasse, der
+  Oberklasse und `Exception` gefangen; `e.message`, `e is NumberFormatException`
+  stimmen; `catch (e: IllegalStateException)` fängt die
+  `NumberFormatException` weiterhin nicht; `finally` läuft; `1.0 / 0` bleibt
+  `Infinity`, `7 / 2` ergibt `3`, `-7 % 3` ergibt `-1`.
+- RT-37 über `startEvaluate`: vorher `IllegalStateException: A wrong scope is
+  completed`, von `catch (e: Throwable)` gefangen; jetzt
+  `InterpreterStateException: …` (bzw. `… Execution suspended at a
+  synchronous compatibility boundary` bei `Thread.sleep`), auch innerhalb von
+  `try`/`catch (e: Throwable)`.
+- `node scripts/smoke-curriculum-kotlin.mjs` gegen das alte Bundle: scheitert
+  am ersten neuen Fall; gegen das neue: grün.
+- `npm run build:kotlite` erfolgreich. `npm run browser-smoke` grün, nachdem
+  `build:player`, `build:offline` und `build:svelte` `frontend/dist` erzeugt
+  hatten (der erste Lauf scheiterte in `smoke-static-architecture.mjs`, weil
+  im frischen Worktree `frontend/dist` fehlte). `npm run test:runtime-state`
+  grün. Zusätzlich grün: `test:generics`, `test:references`,
+  `test:kotlin-surface`, `node scripts/check-interactive-core.mjs`,
+  `test:blueplay-demos`, `test:player-worker`, `test:codepad-flow`.
+- Nicht ausgeführt: `npm run typecheck`, `npm run test:gui`,
+  `npm run test:regression`; kein GUI-Test.
+- Nebenbefund, nicht behoben und ohne eigene ID: `"abc".substring(5)` liefert
+  `""` statt einer `IndexOutOfBoundsException` (JavaScript-Semantik der
+  Stdlib). Inzwischen behoben als RT-39.
+
+### RT-37: Suspendierende Lambdas der binären Stdlib (2026-09-25)
+
+Worktree `claude/eloquent-swirles-0ff577` auf `c146fb1` plus die zu diesem
+Zeitpunkt nicht eingecheckten Dokumentationsänderungen des Hauptcheckouts.
+Ein Lambda, das die binäre `kotlite-stdlib` 1.1.0 aufruft, lief über
+`runImmediately`; jede Suspension darin (Checkpoint nach 128 Iterationen,
+`readln()`, `Thread.sleep()`) brach die Ausführung ab. Betroffen waren alle 197
+Stdlib-Funktionen mit Funktionsparameter (u. a. auch `repeat`, `let`, `run`,
+`with`, `also`, `takeIf`, `String.forEach`, `sortedBy`) sowie Schleifen in
+`toString()`, wenn `println` es aufrief.
+
+Korrektur (Einzelheiten in `docs/kotlite.md` und `PATCH.md`): Stdlib-Aufrufe
+mit Funktionsparameter werden bei einem suspendierten Callback verlassen und
+danach mit den gemerkten Callback-Ergebnissen wiederholt; Schülercode läuft
+genau einmal. Checkpoints in synchronen Callbacks geben nicht ab.
+`MutableList.removeAll { }`/`retainAll { }` sind nicht wiederholbar und wie
+`count { }` suspendierbar ersetzt. Wo nicht unterbrochen werden kann
+(`toString()` usw.), melden `readln()`/`Thread.sleep()` einen Fehler; die
+synchrone Alt-API meldet bei leerem Eingabepuffer jetzt auch für `readln`
+„requires asynchronous execution“ statt eine Continuation zurückzulassen.
+
+Nachweise:
+
+- Vorher (eingechecktes Bundle): temporäre Probe in Node mit 21 Fällen, 14
+  Laufzeitfehler (`A wrong scope is completed` bzw. `Execution suspended at a
+  synchronous compatibility boundary`); 3 weitere Fälle scheitern an
+  unabhängigen Analysegrenzen (`add` in `apply`, Destrukturierung, `compareBy`).
+- Nachher: dieselbe Probe ohne Laufzeitfehler (die 3 Analysefehler bleiben);
+  zusätzliche temporäre Probe mit
+  31 Fällen, jeweils mit vorab gepufferter Eingabe (ohne Suspension) und mit
+  Eingabe erst auf Anforderung: 31/31 gleiche Ergebnisse und Ausgaben.
+- Neue Tests: RT-37-Block in `scripts/smoke-runtime-state.mjs` und in
+  `scripts/smoke-kotlite-browser.mjs`; beide scheitern mit dem alten Bundle
+  (`A wrong scope is completed`) und sind mit dem neuen grün.
+- `npm run build:kotlite` erfolgreich; `npm run browser-smoke` grün (nach
+  `npm run build:player` und `npm run build:svelte`, weil der Worktree kein
+  `frontend/dist` hatte); `npm run test:generics`, `test:references`,
+  `test:kotlin-surface`, `test:blueplay-demos`, `test:player-worker`,
+  `test:codepad-flow` und `node scripts/check-interactive-core.mjs` grün.
+- `node scripts/benchmark-blueplay.mjs` mit altem und neuem Bundle je zweimal:
+  Tick-Mittel ohne Schießen 0,98/0,95 ms → 0,95/0,98 ms, mit Schießen
+  3,09/3,05 ms → 3,15/3,16 ms (im Rauschen). Lambda-lastige Mikromessung
+  (`(1..200000).forEach`, `map`/`filter` über 100 000 Elemente) 3–8 % langsamer.
+- `npm run test:gui` (`npx playwright test`): 120/123 grün. GUI-83, GUI-18 und
+  GUI-67 scheitern auch mit dem alten Bundle (Gegenprobe nur dieser drei Tests)
+  und sind nicht durch RT-37 verursacht: GUI-67 erwartet noch „Export as HTML“
+  ohne „(Beta)“ (EXP-08), GUI-83 scheitert, weil das Terminal den Klick auf den
+  Editor-Kopf abfängt, GUI-18 findet nach Doppelklick auf die Objekte keine
+  Inspektoren. Sie bleiben offen.
+
+Zusammenspiel mit RT-38 (parallel im Worktree
+`claude/affectionate-khayyam-3185c6`, dort nicht committet; bei diesen
+Nachweisen nicht enthalten): Beide ändern `Interpreter.runImmediately`; beim
+Zusammenführen wirft der verbleibende Rückfall „Execution suspended at a
+synchronous compatibility boundary“ die `InterpreterStateException` aus RT-38.
+Das Bundle muss danach neu gebaut werden. Der RT-38-Fall „interpreter failure
+inside catch (e: Throwable)“ in `smoke-curriculum-kotlin.mjs` löst den
+Interpreterfehler über `(1..200).toList().forEach { for (…) { } }` aus; mit
+RT-37 läuft dieser Code fehlerfrei, der Fall muss daher ersetzt werden. Die
+Fehlermeldungen für `readln()`/`Thread.sleep()` in `toString()` usw. sind
+gewöhnliche `IllegalStateException`s, die vor jeder Suspension geworfen werden;
+mit RT-38 sollten sie daher per `catch` fangbar sein. RT-37 und RT-38 wurden
+nicht gemeinsam gebaut oder getestet. (Inzwischen zusammengeführt, siehe
+„Zusammenführung RT-37, RT-38 und RT-39“.)
+
+Offen: kein Browser-/GUI-Test mit Eingabe in einem Stdlib-Lambda; Schleifen in
+synchronen Callbacks geben nicht an den Worker ab (lange Rechnungen dort
+blockieren Ausgabe-Streaming bis zum Ende). Kein Commit und kein Push.
+
+### RT-39: `String.substring` prüft die Grenzen (2026-09-25)
+
+Worktree `claude/affectionate-khayyam-3185c6` auf `c146fb1` mit den dort nicht
+committeten RT-38-Änderungen; die RT-37-Änderungen des Hauptcheckouts sind
+nicht enthalten. Die binäre Stdlib registriert
+`String.substring(startIndex: Int, endIndex: Int = length)` und ruft das
+`substring` von Kotlin/JS auf. Das verhält sich wie in JavaScript: Ungültige
+Indizes werden auf den gültigen Bereich begrenzt, vertauschte Grenzen
+getauscht. `KotliteSession` ersetzt die Funktion wie `count { }` per
+`patchFunction` durch eine Fassung mit Kotlins Prüfung (`startIndex < 0`,
+`startIndex > endIndex`, `endIndex > length`). Sie wirft
+`IndexOutOfBoundsException("begin …, end …, length …")`, die über RT-38 fangbar
+ist. Andere String-Funktionen mit Indizes werfen bereits (`"abc"[5]`,
+`take(-1)`, `drop(-1)`, `repeat(-1)`, `padStart(-1)`, `removeRange(1, 10)`,
+`"".first()`) oder sind in BlueK nicht verfügbar (`subSequence`, `slice`,
+`substring(IntRange)`).
+
+Nachweise:
+
+- Vorher (Bundle mit RT-38): `"abc".substring(5)` → `""`,
+  `substring(1, 10)` → `"bc"`, `substring(2, 1)` → `"b"`, `substring(-1)` →
+  `"abc"`, `substring(-1, 2)` → `"ab"`.
+- Nachher: diese Aufrufe werfen `IndexOutOfBoundsException: begin 5, end 3,
+  length 3` usw.; gültige Aufrufe unverändert (`substring(3)` → `""`,
+  `substring(0)`, `substring(1, 1)`, `"".substring(0)`, benannte Argumente),
+  ebenso `substringBefore`.
+- Neuer Block in `scripts/smoke-curriculum-kotlin.mjs`: scheitert mit dem
+  Bundle vor der Korrektur, grün mit dem neuen.
+- `npm run build:kotlite` erfolgreich. `npm run browser-smoke` (nach
+  `build:player`, `build:offline`, `build:svelte`) und
+  `npm run test:runtime-state` grün, ebenso `test:generics`,
+  `test:references`, `test:kotlin-surface`,
+  `node scripts/check-interactive-core.mjs`, `test:blueplay-demos`,
+  `test:blueplay-stage`, `test:player-worker`, `test:codepad-flow`.
+- BluePlay-Library und Beispiele benutzen `substring` in Zeichenschleifen
+  (`drawString`, `drawImage`, `drawingJson`), immer im gültigen Bereich.
+  `node scripts/benchmark-blueplay.mjs` je zweimal mit dem Bundle vor und nach
+  der Korrektur: Tick-Mittel ohne Schießen 0,93/0,96 ms → 0,97/0,96 ms, mit
+  Schießen 3,11/3,10 ms → 3,12/3,10 ms (im Rauschen).
+  `npx playwright test tests/gui/blueplay-images.spec.ts tests/gui/blueplay.spec.ts`:
+  17/17 grün.
+- Nicht ausgeführt: `npm run typecheck` und der vollständige
+  `npm run test:gui`.
+
+Zusammenführen mit RT-37: Beide Stände ändern `KotliteSession.kt` an derselben
+Stelle (Patches neben `count { }`); das Bundle muss danach neu gebaut werden.
+(Inzwischen zusammengeführt, siehe „Zusammenführung RT-37, RT-38 und RT-39“.)
+Kein Commit und kein Push.
+
+### GUI-18, GUI-67, GUI-83: rote GUI-Tests auf c146fb1 (2026-09-25)
+
+Worktree `claude/bold-galileo-64c9d3`, Ausgangspunkt `c146fb1`. Drei
+Chromium-Tests in `regressions.spec.ts` scheiterten reproduzierbar, auch mit
+dem eingecheckten Kotlite-Bundle; der Interpreter ist nicht beteiligt.
+
+- GUI-67: veraltete Testerwartung. 67671c2 führte „Export as HTML (Beta)“ ein
+  (EXP-08, `html-export.spec.ts` prüft den Zusatz bereits); GUI-67 erwartete
+  noch „Export as HTML“. Nur die Erwartung ist angepasst.
+- GUI-83: fehlerhafter Testaufbau, kein Fehler in Platzierung oder
+  Z-Stapel. Terminal und Editor öffnen beide zentriert mit 780 × 520 px; das
+  danach geöffnete Terminal verdeckt die Editor-Titelleiste vollständig, sodass
+  der Klick auf `.editor-header` nicht ankommen kann. Gegenprobe: Auf dem
+  einführenden Commit 1de37a1 (Export per `git archive`) scheitert GUI-83
+  identisch; 5e61ef0 ist also nicht die Ursache. Der Test war seit der
+  Einführung nie grün (Checkliste: „nicht ausgeführt“). GUI-30 behandelt die
+  Überdeckung bereits durch Verschieben des Terminals. GUI-83 öffnet jetzt erst
+  das Terminal, dann per Doppelklick den Editor, prüft die Ausgangslage (Editor
+  aktiv, Terminal nicht) und danach wie bisher Aktivierung und Z-Index 30 des
+  Terminals nach Programmausgabe.
+- GUI-18: echte Regression durch c146fb1. `inspectObject` öffnete den Inspektor
+  nur noch bei `kind === "inspect"`; primitive Werte antworten auf `inspect`
+  aber mit `kind: "scalar"` (`KotliteSession.inspect` → `result("value", …)`).
+  Doppelklick auf `5` oder `"Hallo"` auf der Objektbank öffnete daher nichts.
+  `inspectObject` akzeptiert wieder jede Antwort außer `error` (wie vor
+  c146fb1); Generationswechsel (`null`) öffnet weiterhin nichts. Der Pfeilpfad
+  `inspectFieldReference` bleibt auf Objekte beschränkt.
+
+Nachweise:
+
+- Vorher: `npx playwright test -g "GUI-83|GUI-18 primitive|GUI-67"` 0/3 grün
+  (GUI-83 Timeout, weil `.terminal-modal` den Klick abfängt; GUI-18 0 statt 2
+  `.inspect-window`; GUI-67 „Export as HTML (Beta)“ statt „Export as HTML“).
+- Nachher: derselbe Aufruf 3/3 grün; `npm run typecheck` 0 Fehler/0 Warnungen;
+  `npm run test:ui` grün; `node scripts/smoke-svelte-architecture.mjs` grün.
+- `npm run test:gui` komplett: 123/123 grün (2,9 min).
+- Nicht ausgeführt: `node scripts/smoke-static-architecture.mjs` bricht im
+  Worktree ohne Produktionsbuild ab (`frontend/dist/kotlite/…` fehlt); kein
+  `npm run build:svelte` in diesem Lauf. `node_modules` ist im Worktree ein
+  Symlink auf den Hauptcheckout.
+
+Offen: visuelle Abnahme der primitiven Inspektoren (GUI-18) durch den Nutzer.
+Kein Push.
+
+### Zusammenführung RT-37, RT-38 und RT-39 (2026-09-25)
+
+Worktree `claude/affectionate-khayyam-3185c6` auf `c146fb1`: der RT-38/RT-39-Stand
+plus die nicht committeten RT-37-Codeänderungen des Hauptcheckouts von diesem
+Tag. Die Korrektur für GUI-18, GUI-67 und GUI-83 (Worktree
+`claude/bold-galileo-64c9d3`) ist nicht enthalten. Konflikte gab es nur an
+zwei Stellen: In `KotliteSession.kt` stehen jetzt die RT-37-Patches für
+`removeAll`/`retainAll` und der `substring`-Patch aus RT-39 nebeneinander. In
+`Interpreter.runImmediately` gilt die RT-37-Fassung; ihr verbleibender
+Fehlerfall für nicht wiederholbare Callbacks wirft die
+`InterpreterStateException` aus RT-38.
+
+Verhalten des kombinierten Stands:
+
+- Ausnahmen aus Lambdas, die suspendiert und danach wiederholt werden,
+  behalten ihre Klasse: `try { listOf("1", "x").map { Thread.sleep(1);
+  it.toInt() } } catch (e: NumberFormatException)` fängt, ebenso eine im Lambda
+  geworfene `IllegalArgumentException`, `ArithmeticException` aus `10 / 0` und
+  die `substring`-Ausnahme aus RT-39.
+- RT-37 meldet `readln()`/`Thread.sleep()`, wo nicht pausiert werden kann
+  („… cannot pause inside toString() …“, in der synchronen Alt-API „…
+  requires asynchronous execution“), per `check` vor jeder Suspension. Das ist
+  eine gewöhnliche `IllegalStateException`; `catch (e: IllegalStateException)`
+  und `catch (e: Exception)` fangen sie. Ohne `catch` bleibt es ein
+  Laufzeitfehler. (Inzwischen geändert, siehe „„cannot pause“ nicht mehr
+  fangbar“.)
+- Aus Schülercode ist keine `InterpreterStateException` mehr erreichbar:
+  `(1..200).toList().forEach { for (…) { } }` in `try`/`catch (e: Throwable)`
+  läuft jetzt fehlerfrei durch. Die Umgehung von `catch` bleibt als
+  Absicherung und ist nicht getestet. (Inzwischen wieder erreichbar und
+  getestet, siehe „„cannot pause“ nicht mehr fangbar“.) `AbandonedNativeCall` läuft nur durch
+  nativen Bibliothekscode und erreicht kein `try`.
+
+Test: Der RT-38-Fall „interpreter failure inside catch (e: Throwable)“ in
+`smoke-curriculum-kotlin.mjs` ist durch einen Block über die asynchrone API
+ersetzt. Er prüft drei Ausnahmen aus suspendierten `map`-Lambdas
+(`NumberFormatException`, `ArithmeticException`, `IndexOutOfBoundsException`
+aus `substring`) und die gefangene Meldung aus einem `toString()` mit
+`Thread.sleep`.
+
+Nachweise:
+
+- `npm run build:kotlite` erfolgreich.
+- `node scripts/smoke-curriculum-kotlin.mjs`: grün mit dem kombinierten
+  Bundle. Mit dem RT-37-Bundle des Hauptcheckouts scheitert er an den
+  RT-38-Fällen, mit dem RT-38/39-Bundle am neuen Block
+  (`InterpreterStateException: A wrong scope is completed`).
+- Zusätzliche Probe über die asynchrone API: `IllegalArgumentException` aus
+  einem suspendierten Lambda gefangen; ungefangen bleiben
+  `NumberFormatException: Invalid number format: 'x'` bzw.
+  `IllegalStateException: Thread.sleep() cannot pause …` die Meldung; eine
+  `for`-Schleife mit `Thread.sleep` und `try`/`catch` um `toInt()` ergibt
+  `104`.
+- Nach `build:player`, `build:offline` und `build:svelte` grün:
+  `npm run browser-smoke`, `test:runtime-state`, `test:generics`,
+  `test:references`, `test:kotlin-surface`,
+  `node scripts/check-interactive-core.mjs`, `test:blueplay-demos`,
+  `test:blueplay-stage`, `test:player-worker`, `test:codepad-flow`,
+  `test:ui`, `test:inspector`, `test:project-format`, `test:program-export`,
+  `test:offline`; `npm run typecheck` 0 Fehler/0 Warnungen. Damit liefen alle
+  Bestandteile von `npm run test:regression` einzeln.
+- `npx playwright test`: 120/123 grün. GUI-83, GUI-18 und GUI-67 scheitern
+  auch mit dem Bundle aus `c146fb1` (Gegenprobe nur dieser drei); ihre
+  Korrektur steht im Eintrag „GUI-18, GUI-67, GUI-83“ und ist hier nicht
+  enthalten.
+- `node scripts/benchmark-blueplay.mjs` je zweimal, RT-37-Bundle gegen das
+  kombinierte: Tick-Mittel ohne Schießen 0,95/0,96 ms → 0,97/0,96 ms, mit
+  Schießen 3,13/3,20 ms → 3,18/3,13 ms (im Rauschen).
+
+Kein Commit und kein Push.
+
+### RT-37/RT-38: „cannot pause“ nicht mehr fangbar (2026-09-25)
+
+Nutzerentscheidung. `readln()` und `Thread.sleep()` können in `toString()`,
+`equals()`, `hashCode()`, `compareTo()`, in nicht wiederholbaren
+Bibliotheks-Callbacks und in der synchronen Alt-API nicht warten; BlueK meldet
+das vor jeder Suspension. Die Meldung war bisher eine `IllegalStateException`,
+sodass ein umgebendes `catch (e: Exception)` sie verschluckte und das Warten
+stillschweigend entfiel. Sie ist eine Grenze von BlueK, keine Ausnahme des
+Programms (echtes Kotlin würde hier nicht werfen). `KotliteSession.checkCanPause`
+wirft deshalb jetzt `InterpreterStateException`. Die geht an jedem `catch`
+vorbei, `finally` läuft weiterhin. Angezeigt wird jetzt
+`InterpreterStateException: Thread.sleep() cannot pause inside toString() …`;
+die Meldung der synchronen Alt-API lautet einheitlich
+`Thread.sleep() requires asynchronous execution (startEvaluate).` bzw.
+`readln() requires …` (vorher ohne Klammern).
+
+Worktree `claude/affectionate-khayyam-3185c6`; Code-Ausgangsstand gleich dem
+Hauptcheckout nach der Zusammenführung von RT-37, RT-38 und RT-39.
+
+Nachweise:
+
+- `smoke-curriculum-kotlin.mjs`:
+  `try { println(Z()) } catch (e: Throwable) { println("gefangen") } finally { println("finally") }`
+  mit `Thread.sleep` in `Z.toString()` endet mit
+  `InterpreterStateException: Thread.sleep() cannot pause inside toString() …`;
+  ausgegeben wird nur `finally`. Mit dem Bundle vor der Änderung scheitert der
+  Fall (der Fehler wurde gefangen), mit dem neuen ist er grün.
+- Probe: `readln()` in `toString()` mit `catch (e: IllegalStateException)` und
+  `Thread.sleep` in `toString()` mit `catch (e: Exception)` werden nicht
+  gefangen. `Thread.sleep` in einem `forEach`-Lambda innerhalb von `try` wartet
+  weiterhin. In der synchronen Alt-API meldet
+  `try { Thread.sleep(1) } catch (e: Throwable) { … }` den Fehler.
+- `npm run build:kotlite` erfolgreich. Nach `build:player`, `build:offline` und
+  `build:svelte` grün: `npm run browser-smoke`, `test:runtime-state`,
+  `test:generics`, `test:references`, `test:kotlin-surface`,
+  `node scripts/check-interactive-core.mjs`, `test:blueplay-demos`,
+  `test:blueplay-stage`, `test:player-worker`, `test:codepad-flow`,
+  `test:ui`, `test:inspector`, `test:project-format`, `test:program-export`,
+  `test:offline`; `npm run typecheck` 0 Fehler/0 Warnungen.
+- `npx playwright test`: 120/123 grün; es scheitern nur GUI-83, GUI-18 und
+  GUI-67 (unabhängig, siehe „GUI-18, GUI-67, GUI-83“).
+
+Kein Commit und kein Push.
+
+### Gesamtstand RT-37/38/39 mit GUI-18/67/83 (2026-09-25)
+
+Prüfung des Hauptcheckouts (`beta` auf `7d13adb` plus die nicht committeten
+Änderungen für RT-37, RT-38, RT-39 und „cannot pause“), Datei für Datei
+gespiegelt im Worktree `claude/eloquent-swirles-0ff577`. Die bisherigen
+Einträge prüften die Zusammenführung ohne die GUI-Korrektur aus `7d13adb`.
+
+Nachweise:
+
+- Bundle: `npm run build:kotlite` aus diesem Quellstand erzeugt denselben
+  Programmcode wie das Bundle im Hauptcheckout. Beide unterscheiden sich nur in
+  der Reihenfolge der 14 Kotlin/JS-`Math`-Polyfills am Dateianfang (Bytes
+  1663–4412; gleiche Größe, gleiche Zeichen, Rest byteidentisch). Zwei Builds
+  im selben Worktree waren byteidentisch; die Reihenfolge hängt also an der
+  Build-Umgebung. Alle Tests liefen mit dem Bundle des Hauptcheckouts.
+- Nach `build:player` und `build:svelte` grün: `npm run typecheck`,
+  `browser-smoke`, `test:runtime-state`, `test:generics`, `test:references`,
+  `test:kotlin-surface`, `node scripts/check-interactive-core.mjs`,
+  `test:blueplay-demos`, `test:blueplay-stage`, `test:player-worker`,
+  `test:codepad-flow`, `test:ui`, `test:inspector`, `test:project-format`,
+  `test:program-export`, `test:offline`. Damit liefen alle Bestandteile von
+  `npm run test:regression` einzeln.
+- `npx playwright test`: 123/123 grün.
+- Temporäre RT-37-Probe (31 Fälle, Eingabe vorab gepuffert gegen erst auf
+  Anforderung): 31/31 gleiche Ergebnisse und Ausgaben. `readln()`/
+  `Thread.sleep()` in `toString()` (auch über String-Template und innerhalb von
+  `forEach`) und im `withDefault`-Lambda enden mit
+  `InterpreterStateException: … cannot pause …`.
+
+Offen wie bisher: kein GUI-Test mit Eingabe in einem Stdlib-Lambda; Schleifen
+in synchronen Callbacks geben nicht an den Worker ab. Kein Commit und kein Push.

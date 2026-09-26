@@ -2177,7 +2177,8 @@
       op: "inspect",
       objectId: object.objectId,
     }, true);
-    if (result?.kind === "inspect") await showInspection(object, preserveReferenceName);
+    // Primitive values answer with their scalar value; they are inspectable too.
+    if (result && result.kind !== "error") await showInspection(object, preserveReferenceName);
   }
   async function inspectFieldReference(ownerId: string, field: InspectorField) {
     if (field.computed && field.objectId) {
