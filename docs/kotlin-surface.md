@@ -1,9 +1,12 @@
 # Kotlin-Oberfläche von BlueK
 
-BlueK führt Kotlin nicht aus, sondern interpretiert es mit
-[Kotlite](https://github.com/sunny-chung/kotlite). Kotlite bildet eine Teilmenge
-von Kotlin ab; alles, was Schülercode darüber hinaus erwartet, muss BlueK selbst
-bereitstellen. Diese Seite hält fest, was zugesagt ist — und was nicht.
+BlueK kompiliert Kotlin nicht, sondern interpretiert es mit
+[Kotlite](https://github.com/sunny-chung/kotlite) (siehe [kotlite.md](kotlite.md)).
+Kotlite bildet eine Teilmenge von Kotlin ab; alles, was Schülercode darüber
+hinaus erwartet, muss BlueK selbst bereitstellen. Diese Seite hält fest, welche
+Standardbibliothek zugesagt ist — und welche nicht. Sprachkonstrukte
+(`data class`, `object`, Destrukturierung …) stehen im README unter „Aktuelle
+Grenzen“.
 
 Maßgeblich ist nicht dieser Text, sondern `scripts/smoke-kotlin-surface.mjs`:
 dort steht jeder Eintrag als ausführbarer Ausdruck, und die bekannten Lücken
@@ -17,8 +20,8 @@ verschwindet. Nach Kotlin-Änderungen zuerst `npm run build:kotlite`.
 | --- | --- |
 | `kotlite-stdlib` 1.1.0 | Listen, Maps, Sets, Ranges, `kotlin.math`, der Großteil von `String` |
 | `BlueKStdlibModule` | Die unten gelisteten Ergänzungen |
-| `KotliteSession` | Host-Funktionen: `readln`, BluePlay, Ton, Eingabe |
-| `vendor/kotlite-interpreter` | Nur Interpreter-Semantik, siehe `vendor/kotlite-interpreter/PATCH.md` |
+| `KotliteSession` | Host-Funktionen (`readln`, BluePlay, Ton, Eingabe) und per `patchFunction` ersetzte Stdlib-Funktionen: suspendierbares `count { }`, `removeAll { }`/`retainAll { }`, `substring` mit Kotlins Bereichsprüfung |
+| `vendor/kotlite-interpreter` | Interpreter-Semantik sowie `filterIsInstance` und `Thread.sleep`, siehe `vendor/kotlite-interpreter/PATCH.md` |
 
 Fehlt eine reine Stdlib-Funktion, gehört sie in `BlueKStdlibModule`, nicht in den
 Fork. Sie wird dort als native `CustomFunctionDefinition` registriert und nicht
@@ -39,6 +42,13 @@ funktioniert ebenso wie `listOf(1,2).sum()`.
 **String als Zeichenfolge.** `for (c in wort)`, `wort[i]`, `split(String)`,
 `split(Char)`, `toList()`, `indices`.
 
+**Nullable Empfänger.** `toString()`, `equals()` und `hashCode()` auf `T?`
+(`Any?.toString()` liefert `"null"`, `hashCode()` von `null` ist `0`). Eigene
+Überschreibungen in der Klasse werden auch über einen nullable Empfänger
+aufgerufen. Mit `?.` (`n?.toString()`, `s?.equals("a")`) gilt wie in Kotlin
+die Funktion des nicht-nullable Typs; die `Any?`-Fassung kommt dort nicht zum
+Zug, und der Aufruf ist nicht mehrdeutig (RT-44).
+
 ## Abweichungen von echtem Kotlin
 
 - `minOf(vararg values: Int)` statt Kotlins `minOf(a, vararg other)`. Kotlite
@@ -50,6 +60,16 @@ funktioniert ebenso wie `listOf(1,2).sum()`.
   Überladungen nicht am Rückgabetyp des Lambdas.
 - Gemischte Zahlentypen lösen nicht auf: `minOf(3, 2.5)` findet keine Überladung.
 - `Float` ist durchgängig `Double` (bereits vor dieser Seite so).
+- Ungültige Indizes in `substring` werfen `IndexOutOfBoundsException`; die
+  JVM-Unterklasse `StringIndexOutOfBoundsException` gibt es in BlueK nicht
+  (RT-39).
+- `StackOverflowError` entsteht nach genau 1000 verschachtelten Aufrufen statt
+  abhängig von der Stack-Größe, und `message` nennt die Grenze und die übliche
+  Ursache (Kotlin/JVM: `null`). `Error` und `StackOverflowError` sind als
+  Klassen vorhanden, andere `Error`-Unterklassen nicht (RT-42).
+- Ein Accessor, der seine eigene Property statt `field` benutzt, ergibt beim
+  Compile eine Warnung, ähnlich IntelliJs Hinweis „Recursive property
+  accessor“ (RT-43).
 
 ## Bekannte Lücken
 
@@ -62,6 +82,11 @@ funktioniert ebenso wie `listOf(1,2).sum()`.
 | `kotlin.math.abs(-5)` als qualifizierter Aufruf | `import kotlin.math.abs` und dann `abs(-5)` funktioniert |
 | `Math.abs`, `java.*` | Java, bewusst nicht verfügbar |
 | `Double.MAX_VALUE`, `Char.MIN_VALUE` | Nicht nachgerüstet; `Int.MAX_VALUE`/`MIN_VALUE` gibt es |
+
+Außerhalb dieser Tabelle fehlen unter anderem `buildString`/`StringBuilder`,
+`Triple`, `kotlin.random.Random` und `String.lines()`. Sie sind nicht Teil der
+Lückenliste im Test; BlueK meldet sie mit den allgemeinen Fällen unten
+(Vorschlag eines ähnlichen Namens oder „unknown“).
 
 ## Fehlermeldungen bei fehlenden Namen
 
@@ -86,6 +111,15 @@ existiert, aber die Argumenttypen passen nicht" denselben Wortlaut. Ist der
 Name im Projekt deklariert oder von BlueK bereitgestellt, bleibt Kotlites
 Meldung stehen — nur sie nennt die Argumenttypen. Beispiel: `zeige(5)` bei
 `fun zeige(text: String)` meldet weiterhin „argument types (Int)".
+
+**Nullable Empfänger:** Ruft man ein Mitglied mit `.` auf einem Wert vom Typ
+`T?` auf (`alle.add(x)` bei `var alle: MutableList<Mensch>?`), existiert das
+Mitglied, nur der Aufruf ist unsicher. Der Semantic Analyzer meldet dann wie
+kotlinc „Only safe (?.) or non-null asserted (!!.) calls are allowed on a
+nullable receiver of type 'MutableList<Mensch>?'." (Patch in
+`vendor/kotlite-interpreter/PATCH.md`); `KotlinSurfaceHints` reicht diese
+Meldung unverändert durch. Ein Mitglied, das es auch für `T` nicht gibt,
+bleibt „unknown“.
 
 Die Lückentabelle oben, die `gaps`-Liste im Smoke-Test und diese Meldungen
 stammen aus derselben Quelle und werden vom Test zusammengehalten.

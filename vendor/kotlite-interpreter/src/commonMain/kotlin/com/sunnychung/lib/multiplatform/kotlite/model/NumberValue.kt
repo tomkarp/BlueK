@@ -16,6 +16,9 @@ sealed interface NumberValue<T> : ComparableRuntimeValueHolder<T, Number>, Runti
         return LongValue(operation(num1.unbox(), num2.unbox()), (this as PrimitiveValue).rootSymbolTable)
     }
 
+    /** Kotlin/JS itself yields 0 for `Int` and throws a plain `Exception` for `Long`. */
+    private fun divisionByZero(): Nothing = throw ArithmeticException("/ by zero")
+
     operator fun plus(other: NumberValue<*>): NumberValue<*> {
         if (type() isPrimitiveTypeOf PrimitiveTypeName.Int && other.type() isPrimitiveTypeOf PrimitiveTypeName.Int) {
             this as IntValue
@@ -60,9 +63,10 @@ sealed interface NumberValue<T> : ComparableRuntimeValueHolder<T, Number>, Runti
         if (type() isPrimitiveTypeOf PrimitiveTypeName.Int && other.type() isPrimitiveTypeOf PrimitiveTypeName.Int) {
             this as IntValue
             other as IntValue
+            if (other.value == 0) divisionByZero()
             return IntValue(value / other.value, rootSymbolTable)
         }
-        longOp(this, other) { a, b -> a / b }?.let { return it }
+        longOp(this, other) { a, b -> if (b == 0L) divisionByZero() else a / b }?.let { return it }
         val result = value.toDouble() / other.value.toDouble()
         return DoubleValue(result, (this as PrimitiveValue).rootSymbolTable)
     }
@@ -70,9 +74,10 @@ sealed interface NumberValue<T> : ComparableRuntimeValueHolder<T, Number>, Runti
         if (type() isPrimitiveTypeOf PrimitiveTypeName.Int && other.type() isPrimitiveTypeOf PrimitiveTypeName.Int) {
             this as IntValue
             other as IntValue
+            if (other.value == 0) divisionByZero()
             return IntValue(value % other.value, rootSymbolTable)
         }
-        longOp(this, other) { a, b -> a % b }?.let { return it }
+        longOp(this, other) { a, b -> if (b == 0L) divisionByZero() else a % b }?.let { return it }
         val result = value.toDouble() % other.value.toDouble()
         return DoubleValue(result, (this as PrimitiveValue).rootSymbolTable)
     }

@@ -52,6 +52,8 @@ object KotlinSurfaceHints {
         ("Char.Companion" to "MIN_VALUE") to "BlueK provides `Int.MAX_VALUE` and `Int.MIN_VALUE`, but no Double or Char limits.",
     )
 
+    /** Kotlin's own wording for `.` on a nullable receiver; already the message BlueK wants to show. */
+    private val unsafeCall = Regex("^Only safe \\(\\?\\.\\) or non-null asserted")
     private val notDeclared = Regex("^Property `([^`]+)` is not declared")
     private val noFunction = Regex("^No matching function or constructor `([^`]+)` found for the argument types")
     private val noMemberFunction = Regex("^No matching function `([^`]+)` found for type ([^ ]+) and the argument types")
@@ -81,6 +83,8 @@ object KotlinSurfaceHints {
          * for String).
          */
         fun exists(name: String) = name in knownNames || name in declaredNames
+
+        if (unsafeCall.containsMatchIn(body)) return body
 
         notDeclared.find(body)?.let { match ->
             val name = match.groupValues[1]

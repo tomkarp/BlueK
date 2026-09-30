@@ -13,6 +13,11 @@ actual fun runtimeCheckpointResume(resume: () -> Unit) {
     }
 }
 
+// A microtask runs once the current host stack is empty, without the delay of a timer.
+actual fun runtimeStackResume(resume: () -> Unit) {
+    kotlin.js.Promise.resolve(Unit).then { resume() }
+}
+
 actual fun runtimeSleepResume(millis: Long, resume: () -> Unit) {
     val chunk = millis.coerceAtMost(Int.MAX_VALUE.toLong())
     setTimeout({

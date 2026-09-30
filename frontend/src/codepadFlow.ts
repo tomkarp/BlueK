@@ -1,4 +1,5 @@
 import type { CompileResult, ProjectFile, ProjectLibrary, ProjectResource, RuntimeCommand, RuntimeSnapshot, RuntimeValue } from "../../runtime-contract/src/index";
+import { isCompileError } from "./compileDiagnostics";
 
 export type CodepadClient = {
   getSnapshot(): RuntimeSnapshot;
@@ -23,7 +24,7 @@ export async function compileProject(
   try {
     const result = await client.compile(files, revision, library, resources);
     return {
-      ok: result.diagnostics.length === 0,
+      ok: !result.diagnostics.some(isCompileError),
       generationId: result.generationId,
       diagnostics: result.diagnostics,
     };

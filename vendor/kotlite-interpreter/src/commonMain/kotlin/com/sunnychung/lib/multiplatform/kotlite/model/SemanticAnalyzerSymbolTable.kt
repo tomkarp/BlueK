@@ -24,6 +24,13 @@ class SemanticAnalyzerSymbolTable(
      */
     private val tempTypeAlias = mutableListOf<Map<String, DataType>>()
 
+    /**
+     * Runs with the declared name before a function lookup reaches this scope.
+     * `SemanticAnalyzer` sets it on the script scope, so that a top-level
+     * declaration is analyzed before code that uses it earlier in the source.
+     */
+    internal var beforeFunctionLookup: ((String) -> Unit)? = null
+
     fun TypeNode.toClass(): ClassDefinition {
         return (findClass(name) ?: throw RuntimeException("Could not find class `$name`"))
             .first
@@ -74,6 +81,7 @@ class SemanticAnalyzerSymbolTable(
     }
 
     fun findFunctionsByOriginalName(originalName: String, isThisScopeOnly: Boolean = false): List<Pair<FunctionDeclarationNode, SymbolTable>> {
+        beforeFunctionLookup?.invoke(originalName)
         return functionDeclarations.filter { it.value.name == originalName }
             .map { it.value to this } +
                 (Unit.takeIf { !isThisScopeOnly }?.let {
@@ -83,6 +91,7 @@ class SemanticAnalyzerSymbolTable(
 
     // only use in semantic analyzer
     private fun findAllMatchingCallables(currentSymbolTable: SymbolTable, originalName: String, receiverClass: ClassDefinition?, receiverType: DataType?, arguments: List<FunctionCallArgumentInfo>, modifierFilter: SearchFunctionModifier): List<FindCallableResult> {
+        beforeFunctionLookup?.invoke(originalName)
         var thisScopeCandidates = mutableListOf<FindCallableResult>()
         if (receiverClass == null) {
             if (modifierFilter != SearchFunctionModifier.ConstructorOnly) findFunctionsByOriginalName(originalName, isThisScopeOnly = true).map {
@@ -462,6 +471,7 @@ class SemanticAnalyzerSymbolTable(
     }
 
     fun findExtensionFunctions(receiverType: DataType, functionName: String, isThisScopeOnly: Boolean = false): List<Pair<FunctionDeclarationNode, SymbolTable>> {
+        beforeFunctionLookup?.invoke(functionName)
         return extensionFunctionDeclarations.values.filter { (funcReceiverType, func) ->
             func.name == functionName && (funcReceiverType.let {
                 if (!it.isConvertibleFrom(receiverType)) {

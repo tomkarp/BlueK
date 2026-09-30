@@ -9,5 +9,11 @@ suspend fun awaitRuntimeSleep(millis: Long) = suspendCoroutine<Unit> { continuat
     runtimeSleepResume(millis) { continuation.resume(Unit) }
 }
 
+/** Continues deep recursion on an empty host stack; see `Interpreter.stackResetHook`. */
+suspend fun awaitRuntimeStackReset() = suspendCoroutine<Unit> { continuation ->
+    runtimeStackResume { continuation.resume(Unit) }
+}
+
 expect fun runtimeCheckpointResume(resume: () -> Unit)
+expect fun runtimeStackResume(resume: () -> Unit)
 expect fun runtimeSleepResume(millis: Long, resume: () -> Unit)

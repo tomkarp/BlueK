@@ -89,6 +89,9 @@ footer{flex:0 0 108px}
 .card-menu{position:absolute;top:7px;right:8px;width:28px;height:24px;border:1px solid #9a6b2f;border-radius:4px;background:#f8d59f;color:#333;font:bold 18px/16px Arial;cursor:pointer}
 .card-menu:hover{background:#fff1d4}
 .object{position:relative}
+/* While an inspector field is edited, a bench click inserts the object name. */
+.bench-picking .object{cursor:copy}
+.bench-picking .object:hover{outline:3px dashed #222;outline-offset:3px}
 .object-menu{position:absolute;top:8px;right:13px;width:26px;height:23px;border:1px solid #d85a65;border-radius:4px;background:#fb5260;color:#fff;font:bold 18px/15px Arial;cursor:pointer}
 .object-menu:hover{background:#ff7b85}
 .console{display:flex;flex-direction:column}.console-toolbar{display:flex;justify-content:flex-end;height:22px}.console-toolbar button{border:1px solid #aaa;background:#e7e5e1;border-radius:3px;padding:1px 8px;font-size:11px;cursor:pointer}.console pre{flex:1;height:auto}.terminal-output{position:relative;flex:1;min-height:0;margin:0 0 8px}.terminal-output pre{height:100%;box-sizing:border-box;margin:0}.terminal-input-echo{color:#1769aa}.terminal-clear{z-index:2;position:absolute;right:10px;bottom:10px;width:30px;height:30px;padding:0;border:1px solid #999;border-radius:4px;background:#f5f4f1cc;color:#444;font-size:19px;line-height:1;cursor:pointer}.terminal-clear:hover{background:#fff;color:#111}.terminal-modal{position:fixed;inset:0;z-index:20;background:#0006;display:grid;place-items:center;padding:5vh 8vw}.terminal-window{width:min(1000px,100%);height:min(680px,90vh);display:flex;flex-direction:column;background:#f5f4f1;border:2px solid #555;border-radius:8px;box-shadow:none;padding:12px}.terminal-header{display:flex;justify-content:space-between;align-items:center;font-weight:bold;margin-bottom:8px}.terminal-header button,.terminal-actions button{border:1px solid #999;border-radius:4px;background:linear-gradient(#fff,#d5d5d5);padding:5px 12px;cursor:pointer}.terminal-window pre{flex:1;overflow:auto;white-space:pre-wrap;background:#fff;border:1px solid #aaa;margin:0 0 8px;padding:10px;font:14px monospace}.terminal-window input{width:100%;border:1px solid #888;padding:8px;font:14px monospace;background:#ecebea;color:#777}.terminal-window input:not(:disabled){border-color:#2878c8;background:#eef7ff;color:#111;box-shadow:0 0 0 2px #2878c833}.terminal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
@@ -714,3 +717,6 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 .dark .editor-action:hover,.dark .editor-action:focus-visible{background:#505057!important;color:#fff!important}
 .dark option{background:#252526;color:#d4d4d4}
 .cm-vim-panel input{display:inline-block;width:auto;margin:0;padding:0;border:0;background:transparent;font:inherit}
+/* Compile warnings: the program runs, but the marked code will misbehave. */
+.dialog-error.editor-warnings{color:#6b4700;background:#fff4d6;border-color:#d9a400}
+.dark .dialog-error.editor-warnings{color:#e5b94a}

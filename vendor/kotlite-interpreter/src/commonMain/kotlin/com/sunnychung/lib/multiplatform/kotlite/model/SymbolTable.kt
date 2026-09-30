@@ -22,21 +22,21 @@ open class SymbolTable(
             throw RuntimeException("There is an immediate cycle in symbol table hierarchy")
         }
 
-        // Only `this` can close a cycle while it is being constructed; avoid a
-        // set allocation here because a scope is created for every call/block.
-        var parent = parentScope
-        while (parent != null) {
-            if (parent == this) {
-                throw RuntimeException("There is a cycle in symbol table hierarchy")
-            }
-            parent = parent.parentScope
-        }
+        // No longer chain can contain a scope that is still being constructed.
+        // Walking it cost time proportional to the call depth for every call/block.
     }
 
     // Invocation tokens captured by inline lambdas. Tokens contain no runtime objects.
     private var returnTargetsStore: MutableMap<String, Any>? = null
     internal val returnTargets: MutableMap<String, Any> get() = returnTargetsStore ?: mutableMapOf<String, Any>().also { returnTargetsStore = it }
-    internal fun findReturnTarget(id: String): Any? = returnTargetsStore?.get(id) ?: parentScope?.findReturnTarget(id)
+    internal fun findReturnTarget(id: String): Any? {
+        var scope: SymbolTable? = this
+        while (scope != null) {
+            scope.returnTargetsStore?.get(id)?.let { return it }
+            scope = scope.parentScope
+        }
+        return null
+    }
 
     // Scopes of blocks and calls frequently declare no local property at all.
     private var propertyDeclarationsStore: MutableMap<String, PropertyType>? = null
@@ -193,7 +193,14 @@ open class SymbolTable(
     }
 
     open fun findTypeAlias(name: String): Pair<DataType, SymbolTable>? {
-        return typeAliasStore?.get(name)?.let { it to this } ?: parentScope?.findTypeAlias(name)
+        var scope: SymbolTable = this
+        while (true) {
+            scope.typeAliasStore?.get(name)?.let { return it to scope }
+            val parent = scope.parentScope ?: return null
+            // The analyzer's scopes add temporary aliases in their override.
+            if (parent is SemanticAnalyzerSymbolTable) return parent.findTypeAlias(name)
+            scope = parent
+        }
     }
 
     fun declareTypeAlias(position: SourcePosition, name: String, typeUpperBound: TypeNode?, referenceSymbolTable: SymbolTable = this) {
@@ -242,7 +249,12 @@ open class SymbolTable(
     }
 
     fun findTypeAliasResolution(name: String): DataType? {
-        return typeAliasResolutionStore?.get(name) ?: parentScope?.findTypeAliasResolution(name)
+        var scope: SymbolTable? = this
+        while (scope != null) {
+            scope.typeAliasResolutionStore?.get(name)?.let { return it }
+            scope = scope.parentScope
+        }
+        return null
     }
 
     /**
@@ -570,21 +582,22 @@ open class SymbolTable(
     }
 
     fun assign(name: String, value: RuntimeValue): Boolean {
-        val type = propertyDeclarationsStore?.get(name)
-        if (type != null) {
-//            if (!type.isMutable && propertyValues.containsKey(name)) {
-//                throw RuntimeException("val cannot be reassigned")
-//            }
-            if (!type.type.isCastableFrom(value.type()) && type.type != value.type()) {
-                throw RuntimeException("Expected type ${type.type.descriptiveName} but actual type is ${value.type().descriptiveName}")
+        var scope: SymbolTable? = this
+        while (scope != null) {
+            val type = scope.propertyDeclarationsStore?.get(name)
+            if (type != null) {
+//                if (!type.isMutable && propertyValues.containsKey(name)) {
+//                    throw RuntimeException("val cannot be reassigned")
+//                }
+                if (!type.type.isCastableFrom(value.type()) && type.type != value.type()) {
+                    throw RuntimeException("Expected type ${type.type.descriptiveName} but actual type is ${value.type().descriptiveName}")
+                }
+                scope.propertyValues.getOrPut(name) { RuntimeValueHolder(type.type, type.isMutable, null) }.assign(value = value)
+                return true
             }
-            propertyValues.getOrPut(name) { RuntimeValueHolder(type.type, type.isMutable, null) }.assign(value = value)
-            return true
-        } else if (parentScope?.assign(name, value) == true) {
-            return true
-        } else {
-            throw RuntimeException("The variable `$name` has not been declared")
+            scope = scope.parentScope
         }
+        throw RuntimeException("The variable `$name` has not been declared")
     }
 
     fun hasAssignedInThisScope(name: String): Boolean {
@@ -592,16 +605,29 @@ open class SymbolTable(
     }
 
     fun getPropertyTypeOrNull(name: String, isThisScopeOnly: Boolean = false): Pair<PropertyType, SymbolTable>? {
-        return (propertyDeclarationsStore?.get(name)?.let { it to this }
-            ?: Unit.takeIf { !isThisScopeOnly }?.let { parentScope?.getPropertyTypeOrNull(name) })
-            ?.let { result ->
-                if (result.first.type is TypeParameterType) {
-                    findTypeAliasResolution(result.first.type.name)?.let {
-                        return@let PropertyType(it, result.first.isMutable) to result.second
-                    }
+        var scope: SymbolTable? = this
+        var result: Pair<PropertyType, SymbolTable>? = null
+        while (scope != null) {
+            scope.propertyDeclarationsStore?.get(name)?.let { result = it to scope }
+            if (result != null || isThisScopeOnly) break
+            scope = scope.parentScope
+        }
+        val found = result ?: return null
+        val type = found.first.type
+        if (type is TypeParameterType) {
+            // Like the former recursion: the declaring scope resolves first, then
+            // each scope below it up to this one (the one nearest the declaration wins).
+            var resolution = found.second.findTypeAliasResolution(type.name)
+            if (resolution == null) {
+                var below: SymbolTable? = this
+                while (below != null && below !== found.second) {
+                    below.typeAliasResolutionStore?.get(type.name)?.let { resolution = it }
+                    below = below.parentScope
                 }
-                result
             }
+            resolution?.let { return PropertyType(it, found.first.isMutable) to found.second }
+        }
+        return found
     }
 
     fun getPropertyType(name: String, isThisScopeOnly: Boolean = false): Pair<PropertyType, SymbolTable> {
@@ -610,9 +636,13 @@ open class SymbolTable(
     }
 
     fun read(name: String, isThisScopeOnly: Boolean = false): RuntimeValue {
-        return propertyValuesStore?.get(name)?.read()
-            ?: Unit.takeIf { !isThisScopeOnly }?.let { parentScope?.read(name) }
-            ?: throw RuntimeException("The variable `$name` has not been declared")
+        var scope: SymbolTable? = this
+        while (scope != null) {
+            scope.propertyValuesStore?.get(name)?.read()?.let { return it }
+            if (isThisScopeOnly) break
+            scope = scope.parentScope
+        }
+        throw RuntimeException("The variable `$name` has not been declared")
     }
 
     fun putPropertyHolder(name: String, isMutable: Boolean, holder: RuntimeValueAccessor) {
@@ -624,9 +654,13 @@ open class SymbolTable(
     }
 
     fun getPropertyHolder(name: String, isThisScopeOnly: Boolean = false): RuntimeValueAccessor {
-        return propertyValuesStore?.get(name)
-            ?: Unit.takeIf { !isThisScopeOnly }?.let { parentScope?.getPropertyHolder(name) }
-            ?: throw RuntimeException("The variable `$name` has not been declared")
+        var scope: SymbolTable? = this
+        while (scope != null) {
+            scope.propertyValuesStore?.get(name)?.let { return it }
+            if (isThisScopeOnly) break
+            scope = scope.parentScope
+        }
+        throw RuntimeException("The variable `$name` has not been declared")
     }
 
     fun hasProperty(name: String, isThisScopeOnly: Boolean = false): Boolean {
@@ -634,7 +668,12 @@ open class SymbolTable(
         if (isThisScopeOnly) {
             return thisScopeResult
         }
-        return thisScopeResult || (parentScope?.hasProperty(name) ?: false)
+        var scope = parentScope
+        while (!thisScopeResult && scope != null) {
+            if (scope.propertyDeclarationsStore?.containsKey(name) == true) return true
+            scope = scope.parentScope
+        }
+        return thisScopeResult
     }
 
     fun declareFunction(position: SourcePosition, name: String, node: FunctionDeclarationNode): String {
@@ -648,8 +687,13 @@ open class SymbolTable(
     }
 
     fun findFunction(name: String, isThisScopeOnly: Boolean = false): Pair<FunctionDeclarationNode, SymbolTable>? {
-        return functionDeclarationsStore?.get(name)?.let { it  to this }
-            ?: Unit.takeIf { !isThisScopeOnly }?.let { parentScope?.findFunction(name) }
+        var scope: SymbolTable? = this
+        while (scope != null) {
+            scope.functionDeclarationsStore?.get(name)?.let { return it to scope }
+            if (isThisScopeOnly) break
+            scope = scope.parentScope
+        }
+        return null
     }
 
     fun declareExtensionFunction(position: SourcePosition, name: String, node: FunctionDeclarationNode, receiverType: DataType? = null): String {
@@ -681,13 +725,26 @@ open class SymbolTable(
     }
 
     fun findExtensionFunctionWithReceiver(transformedName: String, isThisScopeOnly: Boolean = false): Pair<DataType, FunctionDeclarationNode>? {
-        return extensionFunctionDeclarationsStore?.get(transformedName)
-            ?: Unit.takeIf { !isThisScopeOnly }?.let { parentScope?.findExtensionFunctionWithReceiver(transformedName) }
+        var scope: SymbolTable? = this
+        while (scope != null) {
+            scope.extensionFunctionDeclarationsStore?.get(transformedName)?.let { return it }
+            if (isThisScopeOnly) break
+            scope = scope.parentScope
+        }
+        return null
     }
 
     fun findExtensionFunctionsByDeclaredName(receiver: TypeNode, declaredName: String, isThisScopeOnly: Boolean = false): Collection<FunctionDeclarationNode> {
-        return (extensionFunctionDeclarationsStore ?: emptyMap()).filter { it.value.first.name == receiver.name && it.value.second.name == declaredName }.values.map { it.second } + // TODO handle generics
-            (Unit.takeIf { !isThisScopeOnly }?.let { parentScope?.findExtensionFunctionsByDeclaredName(receiver, declaredName, isThisScopeOnly) } ?: emptyList())
+        val result = mutableListOf<FunctionDeclarationNode>()
+        var scope: SymbolTable? = this
+        while (scope != null) {
+            (scope.extensionFunctionDeclarationsStore ?: emptyMap()).values
+                .filterTo(mutableListOf()) { it.first.name == receiver.name && it.second.name == declaredName } // TODO handle generics
+                .mapTo(result) { it.second }
+            if (isThisScopeOnly) break
+            scope = scope.parentScope
+        }
+        return result
     }
 
     fun declareExtensionProperty(position: SourcePosition, transformedName: String, extensionProperty: ExtensionProperty) {
@@ -743,44 +800,58 @@ open class SymbolTable(
     }
 
     fun findExtensionProperty(name: String, isThisScopeOnly: Boolean = false): ExtensionProperty? {
-        return extensionPropertiesStore?.get(name)
-            ?: Unit.takeIf { !isThisScopeOnly }?.let { parentScope?.findExtensionProperty(name) }
+        var scope: SymbolTable? = this
+        while (scope != null) {
+            scope.extensionPropertiesStore?.get(name)?.let { return it }
+            if (isThisScopeOnly) break
+            scope = scope.parentScope
+        }
+        return null
     }
 
     /**
      * @param resolvedReceiver resolved means there is no generic type parameter
      */
     fun findExtensionPropertyByDeclaration(resolvedReceiver: TypeNode, declaredName: String, isThisScopeOnly: Boolean = false): Pair<String, ExtensionProperty>? {
-        return (extensionPropertiesStore ?: emptyMap()).asSequence()
-            .filter {
-                it.value.receiverType!!.name == resolvedReceiver.name &&
-                        (!resolvedReceiver.isNullable || it.value.receiverType!!.isNullable) &&
-                        it.value.declaredName == declaredName
-            }
-            // Here assumes at most 3 same-name extension properties declared: exact type or Any? or Any. exact type one has higher precedence
-            .let {
-                it.firstOrNull { it.value.receiverType!!.descriptiveName() == resolvedReceiver.descriptiveName() }
-                    ?: it.firstOrNull()
-            }
-            ?.toPair()
-            ?: Unit.takeIf { !isThisScopeOnly }?.let { parentScope?.findExtensionPropertyByDeclaration(resolvedReceiver, declaredName, isThisScopeOnly) }
+        var scope: SymbolTable? = this
+        while (scope != null) {
+            (scope.extensionPropertiesStore ?: emptyMap()).asSequence()
+                .filter {
+                    it.value.receiverType!!.name == resolvedReceiver.name &&
+                            (!resolvedReceiver.isNullable || it.value.receiverType!!.isNullable) &&
+                            it.value.declaredName == declaredName
+                }
+                // Here assumes at most 3 same-name extension properties declared: exact type or Any? or Any. exact type one has higher precedence
+                .let {
+                    it.firstOrNull { it.value.receiverType!!.descriptiveName() == resolvedReceiver.descriptiveName() }
+                        ?: it.firstOrNull()
+                }
+                ?.let { return it.toPair() }
+            if (isThisScopeOnly) break
+            scope = scope.parentScope
+        }
+        return null
     }
 
     /**
      * @param resolvedReceiver resolved means there is no generic type parameter
      */
     fun findExtensionPropertyByReceiver(resolvedReceiver: TypeNode, isThisScopeOnly: Boolean = false): List<Pair<String, ExtensionProperty>> {
-        return (extensionPropertiesStore ?: emptyMap())
-            .asSequence()
-            .filter { it.value.receiverType!!.name == resolvedReceiver.name && (resolvedReceiver.isNullable || !it.value.receiverType!!.isNullable) }
-            .map { it.toPair() }
-            .groupBy { it.second.declaredName }
-            // Here assumes at most 3 same-name extension properties declared: exact type or Any? or Any. exact type one has higher precedence
-            .mapValues { it.value.firstOrNull { it.second.receiverType!!.descriptiveName() == resolvedReceiver.descriptiveName() } ?: it.value.first() }
-            .map { it.value }
-            .toList() +
-            (Unit.takeIf { !isThisScopeOnly }?.let { parentScope?.findExtensionPropertyByReceiver(resolvedReceiver, isThisScopeOnly) }
-                ?: emptyList())
+        val result = mutableListOf<Pair<String, ExtensionProperty>>()
+        var scope: SymbolTable? = this
+        while (scope != null) {
+            (scope.extensionPropertiesStore ?: emptyMap())
+                .asSequence()
+                .filter { it.value.receiverType!!.name == resolvedReceiver.name && (resolvedReceiver.isNullable || !it.value.receiverType!!.isNullable) }
+                .map { it.toPair() }
+                .groupBy { it.second.declaredName }
+                // Here assumes at most 3 same-name extension properties declared: exact type or Any? or Any. exact type one has higher precedence
+                .mapValues { it.value.firstOrNull { it.second.receiverType!!.descriptiveName() == resolvedReceiver.descriptiveName() } ?: it.value.first() }
+                .mapTo(result) { it.value }
+            if (isThisScopeOnly) break
+            scope = scope.parentScope
+        }
+        return result
     }
 
     fun findTransformedNameByDeclaredName(declaredName: String): String
@@ -799,14 +870,13 @@ open class SymbolTable(
     }
 
     fun findClass(fullQualifiedName: String, isThisScopeOnly: Boolean = false): Pair<ClassDefinition, SymbolTable>? {
-        val classDefinition = classDeclarationsStore?.get(fullQualifiedName)
-        return if (classDefinition != null) {
-            classDefinition to this
-        } else if (!isThisScopeOnly) {
-            parentScope?.findClass(fullQualifiedName)
-        } else {
-            null
+        var scope: SymbolTable? = this
+        while (scope != null) {
+            scope.classDeclarationsStore?.get(fullQualifiedName)?.let { return it to scope }
+            if (isThisScopeOnly) break
+            scope = scope.parentScope
         }
+        return null
     }
 
     open fun functionNameTransform(name: String, function: FunctionDeclarationNode): String {
@@ -878,8 +948,12 @@ open class SymbolTable(
     }
 
     private fun findTransformedSymbol(key: Pair<IdentifierClassifier, String>): Pair<String, SymbolTable>? {
-        return transformedSymbolsStore?.get(key)?.let { it to this }
-            ?: parentScope?.findTransformedSymbol(key)
+        var scope: SymbolTable? = this
+        while (scope != null) {
+            scope.transformedSymbolsStore?.get(key)?.let { return it to scope }
+            scope = scope.parentScope
+        }
+        return null
     }
 
     fun listTypeAliasInThisScope(): List<TypeParameterNode> {
@@ -889,7 +963,13 @@ open class SymbolTable(
     }
 
     fun listTypeAliasInAllScopes(): List<TypeParameterNode> {
-        return listTypeAliasInThisScope() + (parentScope?.listTypeAliasInAllScopes() ?: emptyList())
+        val result = mutableListOf<TypeParameterNode>()
+        var scope: SymbolTable? = this
+        while (scope != null) {
+            result += scope.listTypeAliasInThisScope()
+            scope = scope.parentScope
+        }
+        return result
     }
 
     fun listTypeAliasResolutionInThisScope(): Map<String, DataType> {

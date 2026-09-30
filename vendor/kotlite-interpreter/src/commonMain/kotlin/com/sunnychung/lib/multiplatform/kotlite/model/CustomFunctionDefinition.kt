@@ -25,6 +25,14 @@ data class CustomFunctionDefinition(
      */
     var extraTypeParameters: List<TypeParameter> = emptyList()
     var suspendExecutable: (suspend (Interpreter, RuntimeValue?, List<RuntimeValue>, Map<String, DataType>) -> RuntimeValue)? = null
+
+    /**
+     * [executable] is deterministic and has no side effects of its own before
+     * it returns, so a suspending callback can abandon it and it can be run
+     * again with the recorded callback results (`Interpreter.callReplayable`).
+     * Ignored when [suspendExecutable] is set.
+     */
+    var isReplayable: Boolean = false
 }
 
 class CustomFunctionParameter(val name: String, val type: String, val defaultValueExpression: String? = null, val modifiers: Set<String> = emptySet())

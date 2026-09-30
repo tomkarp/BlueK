@@ -296,7 +296,7 @@ class ExecutionEnvironment(
             registerGlobalProperty(it)
         }
         module.functions.forEach {
-            registerFunction(StdlibInlineMetadata.restore(module.name, it))
+            registerFunction(StdlibReplayMetadata.mark(module.name, StdlibInlineMetadata.restore(module.name, it)))
         }
     }
 

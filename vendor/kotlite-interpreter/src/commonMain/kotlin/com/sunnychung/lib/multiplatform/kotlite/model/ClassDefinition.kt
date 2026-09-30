@@ -97,16 +97,50 @@ open class ClassDefinition(
     }
 
     var enumValues: Map<String, ClassInstance> = emptyMap()
+        get() { ensureMembers(); return field }
+
+    /**
+     * Semantic analysis only: every class of a script is declared before any
+     * declaration is analyzed, so classes can name each other. Its members are
+     * analyzed on first use (see `SemanticAnalyzer.declareClassesAhead`).
+     */
+    internal var pendingAnalysis: (() -> Unit)? = null
+    internal var isDeclaredAhead = false
+
+    // Interpreter only: member property types may name classes that the
+    // script declares later, so they are resolved when members are first used.
+    private var deferredProperties: List<PropertyDeclarationNode>? = null
+
+    internal fun deferProperties(properties: List<PropertyDeclarationNode>) {
+        deferredProperties = properties
+    }
+
+    private fun ensureMembers() {
+        pendingAnalysis?.let { analyze ->
+            pendingAnalysis = null
+            analyze()
+        }
+        deferredProperties?.let { properties ->
+            deferredProperties = null
+            properties.forEach { addProperty(currentScope, it) }
+        }
+    }
 
     internal var isInInterpreter = false
     internal var interpreter: Interpreter? = null
     internal var memberFunctionsForInterpreter: Map<String, FunctionDeclarationNode>? = null
     internal var memberFunctionsForSA: Map<String, FunctionDeclarationNode>? = null
     val memberFunctionsMap: Map<String, FunctionDeclarationNode>
-        get() = if (isInInterpreter) {
-            memberFunctionsForInterpreter ?: throw RuntimeException("memberFunctionsForInterpreter not initialized for type $fullQualifiedName")
-        } else {
-            memberFunctionsForSA ?: throw RuntimeException("memberFunctionsForSA not initialized for type $fullQualifiedName")
+        get() {
+            ensureMembers()
+            return if (isInInterpreter) {
+                memberFunctionsForInterpreter ?: throw RuntimeException("memberFunctionsForInterpreter not initialized for type $fullQualifiedName")
+            } else {
+                // Until its analysis reaches the member functions, a class declared
+                // ahead has none, as if it was not declared yet (e.g. while its
+                // constructor parameters are analyzed).
+                memberFunctionsForSA ?: if (isDeclaredAhead) emptyMap() else throw RuntimeException("memberFunctionsForSA not initialized for type $fullQualifiedName")
+            }
         }
 
     protected val specialFunctions = mutableMapOf<SpecialFunction.Name, SpecialFunction>()
@@ -495,6 +529,7 @@ open class ClassDefinition(
      * Key: Original declared name
      */
     fun getAllMemberPropertiesExcludingCustomAccessors(): Map<String, PropertyType> {
+        ensureMembers()
         return memberProperties mergeIfNotExists (superClass?.getAllMemberPropertiesExcludingCustomAccessors() ?: emptyMap())
     }
 
@@ -502,38 +537,54 @@ open class ClassDefinition(
      * Key: Original declared name
      */
     fun getAllMemberProperties(): Map<String, PropertyType> {
+        ensureMembers()
         return memberPropertyTypes mergeIfNotExists (superClass?.getAllMemberProperties() ?: emptyMap())
     }
 
-    fun getDeclaredPropertiesInThisClass() = memberProperties
-    fun getDeclaredPropertyAccessorsInThisClass() = memberPropertyCustomAccessors
+    fun getDeclaredPropertiesInThisClass(): Map<String, PropertyType> {
+        ensureMembers()
+        return memberProperties
+    }
 
-    fun findMemberPropertyWithIndex(declaredName: String, inThisClassOnly: Boolean = false) : Pair<PropertyType, Int>? =
-        memberPropertyTypes[declaredName]?.let { it to index } ?:
+    fun getDeclaredPropertyAccessorsInThisClass(): Map<String, PropertyAccessorsNode> {
+        ensureMembers()
+        return memberPropertyCustomAccessors
+    }
+
+    fun findMemberPropertyWithIndex(declaredName: String, inThisClassOnly: Boolean = false) : Pair<PropertyType, Int>? {
+        ensureMembers()
+        return memberPropertyTypes[declaredName]?.let { it to index } ?:
             Unit.takeIf { !inThisClassOnly }?.let { superClass?.findMemberPropertyWithIndex(declaredName, inThisClassOnly) }
+    }
 
     fun findMemberProperty(declaredName: String, inThisClassOnly: Boolean = false) =
         findMemberPropertyWithIndex(declaredName, inThisClassOnly)?.first
 
-    fun findMemberPropertyWithoutAccessorWithIndex(declaredName: String, inThisClassOnly: Boolean = false): Pair<PropertyType, Int>? =
-        memberProperties[declaredName]?.let { it to index } ?:
+    fun findMemberPropertyWithoutAccessorWithIndex(declaredName: String, inThisClassOnly: Boolean = false): Pair<PropertyType, Int>? {
+        ensureMembers()
+        return memberProperties[declaredName]?.let { it to index } ?:
             Unit.takeIf { !inThisClassOnly }?.let { superClass?.findMemberPropertyWithoutAccessorWithIndex(declaredName, inThisClassOnly) }
+    }
 
     fun findMemberPropertyWithoutAccessor(declaredName: String, inThisClassOnly: Boolean = false) =
         findMemberPropertyWithoutAccessorWithIndex(declaredName, inThisClassOnly)?.first
 
-    fun findMemberPropertyCustomAccessorWithIndex(declaredName: String, inThisClassOnly: Boolean = false): Pair<PropertyAccessorsNode, Int>? =
-        memberPropertyCustomAccessors[declaredName]?.let { it to index } ?:
+    fun findMemberPropertyCustomAccessorWithIndex(declaredName: String, inThisClassOnly: Boolean = false): Pair<PropertyAccessorsNode, Int>? {
+        ensureMembers()
+        return memberPropertyCustomAccessors[declaredName]?.let { it to index } ?:
             Unit.takeIf { !inThisClassOnly }?.let { superClass?.findMemberPropertyCustomAccessorWithIndex(declaredName, inThisClassOnly) }
+    }
 
     fun findMemberPropertyCustomAccessor(declaredName: String, inThisClassOnly: Boolean = false): PropertyAccessorsNode? =
         findMemberPropertyCustomAccessorWithIndex(declaredName, inThisClassOnly)?.first
 
-    fun findMemberPropertyOwnerName(declaredName: String): String? =
-        when {
+    fun findMemberPropertyOwnerName(declaredName: String): String? {
+        ensureMembers()
+        return when {
             memberPropertyTypes.containsKey(declaredName) -> fullQualifiedName
             else -> superClass?.findMemberPropertyOwnerName(declaredName)
         }
+    }
 
     fun isPrivateMemberProperty(declaredName: String): Boolean =
         findMemberPropertyOwnerName(declaredName)?.let { owner ->
@@ -541,15 +592,19 @@ open class ClassDefinition(
                 || superClass?.isPrivateMemberProperty(declaredName) == true
         } ?: false
 
-    fun findMemberPropertyTransformedName(declaredName: String, inThisClassOnly: Boolean = false): String? =
-        memberPropertyNameToTransformedName[declaredName] ?:
+    fun findMemberPropertyTransformedName(declaredName: String, inThisClassOnly: Boolean = false): String? {
+        ensureMembers()
+        return memberPropertyNameToTransformedName[declaredName] ?:
             Unit.takeIf { !inThisClassOnly }?.let { superClass?.findMemberPropertyTransformedName(declaredName, inThisClassOnly) }
+    }
 
-    fun findMemberPropertyDeclaredName(transformedName: String, inThisClassOnly: Boolean = false): String? =
-        memberTransformedNameToPropertyName[transformedName]
+    fun findMemberPropertyDeclaredName(transformedName: String, inThisClassOnly: Boolean = false): String? {
+        ensureMembers()
+        return memberTransformedNameToPropertyName[transformedName]
             ?: transformedName.takeIf { memberPropertyTypes.containsKey(it) }
             ?: transformedName.substringBeforeLast('/').takeIf { memberPropertyTypes.containsKey(it) } ?:
             Unit.takeIf { !inThisClassOnly }?.let { superClass?.findMemberPropertyDeclaredName(transformedName, inThisClassOnly) }
+    }
 
     /**
      * Key: Function signature
@@ -629,6 +684,7 @@ open class ClassDefinition(
         findMemberFunctionWithEnclosingTypeNameByTransformedName(transformedName, inThisClassOnly)?.first
 
     fun findDeclarations(filter: (clazz: ClassDefinition, declaration: ASTNode) -> Boolean): List<ASTNode> {
+        ensureMembers()
         return declarations.filter { filter(this, it) } +
             (superClass?.findDeclarations(filter) ?: emptyList())
     }

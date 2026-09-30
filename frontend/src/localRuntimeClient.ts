@@ -1,5 +1,6 @@
 import type { CompileResult, Diagnostic, ProjectFile, ProjectLibrary, ProjectResource, BluePlayStage } from '../../runtime-contract/src/index';
 import type { RuntimeCommand, RuntimeEvent, RuntimeSnapshot, RuntimeValue, WorkerCommand, WorkerReply } from '../../runtime-contract/src/index';
+import { isCompileError } from './compileDiagnostics';
 
 type Pending = { resolve: (reply: WorkerReply) => void; reject: (error: Error) => void };
 const initial = (): RuntimeSnapshot => ({ generationId: '', revision: 0, phase: 'uncompiled', classes: [], inspections: {}, references: [], liveObjectIds: [], error: null, simulation: 'inactive' });
@@ -106,9 +107,9 @@ export class LocalRuntimeClient {
       this.start();
       const reply = await this.request({ op: 'compile', files: this.project, library, resources, generationId });
       const response = this.accept(reply, epoch);
-      const diagnostics = (response.kind === 'error' ? response.diagnostics ?? [this.diagnostic(response.display || 'Compilation failed.', files)] : [])
+      const diagnostics = (response.kind === 'error' ? response.diagnostics ?? [this.diagnostic(response.display || 'Compilation failed.', files)] : response.diagnostics ?? [])
         .map(item => ({ ...item, message: readableMessage(item.message) }));
-      return { generationId: diagnostics.length ? '' : generationId, sourceRevision: revision, classes: reply.snapshot.classes, diagnostics };
+      return { generationId: diagnostics.some(isCompileError) ? '' : generationId, sourceRevision: revision, classes: reply.snapshot.classes, diagnostics };
     } catch (error) {
       if (epoch === this.epoch) this.fail(error instanceof Error ? error.message : String(error));
       throw error;

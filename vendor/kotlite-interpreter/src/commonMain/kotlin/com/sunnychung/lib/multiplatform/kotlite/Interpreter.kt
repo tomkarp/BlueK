@@ -4,6 +4,7 @@ import com.sunnychung.lib.multiplatform.kotlite.error.EvaluateNullPointerExcepti
 import com.sunnychung.lib.multiplatform.kotlite.error.EvaluateRuntimeException
 import com.sunnychung.lib.multiplatform.kotlite.error.EvaluateTypeCastException
 import com.sunnychung.lib.multiplatform.kotlite.error.IdentifierClassifier
+import com.sunnychung.lib.multiplatform.kotlite.error.InterpreterStateException
 import com.sunnychung.lib.multiplatform.kotlite.error.controlflow.NormalBreakException
 import com.sunnychung.lib.multiplatform.kotlite.error.controlflow.NormalContinueException
 import com.sunnychung.lib.multiplatform.kotlite.error.controlflow.NormalReturnException
@@ -13,6 +14,7 @@ import com.sunnychung.lib.multiplatform.kotlite.extension.isValidIntegerLiteralA
 import com.sunnychung.lib.multiplatform.kotlite.extension.resolveGenericParameterTypeArguments
 import com.sunnychung.lib.multiplatform.kotlite.extension.resolveGenericParameterTypeToUpperBound
 import com.sunnychung.lib.multiplatform.kotlite.model.ASTNode
+import com.sunnychung.lib.multiplatform.kotlite.model.AbandonedNativeCall
 import com.sunnychung.lib.multiplatform.kotlite.model.acceptsRuntimeType
 import com.sunnychung.lib.multiplatform.kotlite.model.AsOpNode
 import com.sunnychung.lib.multiplatform.kotlite.model.AssignmentNode
@@ -82,6 +84,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.PrimitiveTypeName
 import com.sunnychung.lib.multiplatform.kotlite.model.PrimitiveValue
 import com.sunnychung.lib.multiplatform.kotlite.model.PropertyAccessorsNode
 import com.sunnychung.lib.multiplatform.kotlite.model.PropertyDeclarationNode
+import com.sunnychung.lib.multiplatform.kotlite.model.ReplayableNativeCall
 import com.sunnychung.lib.multiplatform.kotlite.model.ReturnNode
 import com.sunnychung.lib.multiplatform.kotlite.model.RuntimeValue
 import com.sunnychung.lib.multiplatform.kotlite.model.RuntimeValueAccessor
@@ -89,9 +92,11 @@ import com.sunnychung.lib.multiplatform.kotlite.model.ScopeType
 import com.sunnychung.lib.multiplatform.kotlite.model.ScriptNode
 import com.sunnychung.lib.multiplatform.kotlite.model.SourcePosition
 import com.sunnychung.lib.multiplatform.kotlite.model.SpecialFunction
+import com.sunnychung.lib.multiplatform.kotlite.model.StandardExceptionValue
 import com.sunnychung.lib.multiplatform.kotlite.model.StringLiteralNode
 import com.sunnychung.lib.multiplatform.kotlite.model.StringNode
 import com.sunnychung.lib.multiplatform.kotlite.model.StringValue
+import com.sunnychung.lib.multiplatform.kotlite.model.SuspendedCallback
 import com.sunnychung.lib.multiplatform.kotlite.model.SymbolTable
 import com.sunnychung.lib.multiplatform.kotlite.model.ThrowNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ThrowableValue
@@ -117,8 +122,83 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
     /** Optional host scheduler hook used by interactive runtimes. */
     var checkpointHook: (suspend () -> Unit)? = null
 
+    /** Synchronous callbacks ([runImmediately]) currently on the stack. */
+    private var synchronousCallbacks = 0
+
+    /** Those of [synchronousCallbacks] that cannot be resumed by a replay. */
+    private var nonResumableCallbacks = 0
+
+    /** Replayable library code that is currently executing synchronously. */
+    private var activeReplayableCall: ReplayableNativeCall? = null
+
+    /**
+     * Whether execution may suspend here. Hosts check this before suspending
+     * (input, sleep): a callback of `toString`, `equals`, `compareTo` or of a
+     * non-replayable library function must return synchronously.
+     */
+    val canSuspend: Boolean
+        get() = nonResumableCallbacks == 0
+
+    /**
+     * A loop inside a synchronous callback never yields. Yielding there would
+     * abandon (and later replay) the surrounding library call every few
+     * iterations, or fail if it cannot be replayed.
+     */
     suspend fun checkpoint() {
-        checkpointHook?.invoke()
+        if (synchronousCallbacks == 0) checkpointHook?.invoke()
+    }
+
+    /**
+     * Most nested calls (functions, accessors, lambdas, constructors) before
+     * interpreted code gets a `StackOverflowError`, like a thread stack on the JVM.
+     */
+    var maxCallDepth = DEFAULT_MAX_CALL_DEPTH
+
+    /**
+     * Optional host hook that suspends and resumes on an empty host stack.
+     * Every interpreted call takes many host stack frames; without this hook a
+     * browser runs out of stack after roughly a hundred nested calls.
+     */
+    var stackResetHook: (suspend () -> Unit)? = null
+
+    private var callDepth = 0
+
+    /** [callDepth] at the bottom of the current host stack. */
+    private var hostStackBase = 0
+
+    private suspend fun enterCall(position: SourcePosition) {
+        if (callDepth >= maxCallDepth) {
+            throwStackOverflow(position)
+        }
+        // Like a checkpoint, a synchronous callback must finish on its own host stack.
+        if (callDepth - hostStackBase >= CALLS_PER_STACK_RESET && synchronousCallbacks == 0) {
+            stackResetHook?.let { reset ->
+                reset()
+                hostStackBase = callDepth
+            }
+        }
+        callDepth += 1
+    }
+
+    private fun leaveCall() {
+        callDepth -= 1
+        // Resumed callers continue on the fresh host stack.
+        if (callDepth < hostStackBase) hostStackBase = callDepth
+    }
+
+    private fun throwStackOverflow(position: SourcePosition): Nothing {
+        val fullStacktrace = callStack.getStacktrace(position)
+        val stacktrace = if (fullStacktrace.size <= STACK_TRACE_LIMIT) fullStacktrace else {
+            fullStacktrace.take(STACK_TRACE_LIMIT) + "... ${fullStacktrace.size - STACK_TRACE_LIMIT} more"
+        }
+        val error = StandardExceptionValue(
+            currentScope = symbolTable(),
+            message = StandardExceptionValue.stackOverflowMessage(maxCallDepth),
+            cause = null,
+            stacktrace = stacktrace,
+            thisClazz = symbolTable().findClass("StackOverflowError")!!.first,
+        )
+        throw EvaluateRuntimeException(stacktrace = stacktrace, error = error)
     }
 
     internal val callStack = CallStack()
@@ -397,7 +477,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                         transformedRefName = ownerRef!!.extensionPropertyRef
                     ).write(value)
                 } else {
-                    callStack.currentSymbolTable().assign(this.transformedRefName ?: this.variableName, value)
+                    accessTopLevelProperty(this) { callStack.currentSymbolTable().assign(it, value) }
                 }
             }
 
@@ -533,7 +613,24 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 emptyList(),
             )
         }
-        return callStack.currentSymbolTable().read(transformedRefName ?: variableName)
+        return accessTopLevelProperty(this) { callStack.currentSymbolTable().read(it) }
+    }
+
+    /**
+     * Top-level properties are initialized in source order. Code that runs
+     * before one is initialized (e.g. a function called by an earlier
+     * initializer) gets a clear error instead of an unknown runtime name.
+     */
+    private inline fun <T> accessTopLevelProperty(node: VariableReferenceNode, access: (String) -> T): T {
+        val name = node.transformedRefName ?: node.variableName
+        return try {
+            access(name)
+        } catch (e: RuntimeException) {
+            if (node.isTopLevelProperty && !globalScope.hasProperty(name)) {
+                throw InterpreterStateException("`${node.variableName}` is used before it is initialized. Top-level properties are initialized in the order in which they are written, and this code ran before `${node.variableName}` was initialized.")
+            }
+            throw e
+        }
     }
 
     suspend fun FunctionDeclarationNode.eval() {
@@ -841,6 +938,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             ),
         )
 
+        enterCall(callPosition)
         callStack.push(
             functionFullQualifiedName = functionNode.name,
             isFunctionCall = true,
@@ -983,10 +1081,12 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             return FunctionCallResult(returnValue, symbolTable)
         } finally {
             callStack.pop(scopeType)
+            leaveCall()
         }
     }
 
     suspend fun FunctionCallNode.evalCreateClassInstance(clazz: ClassDefinition, typeArguments: List<TypeNode>, replaceArguments: Map<Int, RuntimeValue> = emptyMap()): ClassInstance {
+        enterCall(position)
         callStack.push(functionFullQualifiedName = "class", scopeType = ScopeType.ClassInitializer, callPosition = this.position)
         try {
             // TODO generalize duplicated code
@@ -1024,6 +1124,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             return clazz.construct(this@Interpreter, callArguments as Array<RuntimeValue>, typeArguments.map { symbolTable().assertToDataType(it) }.toTypedArray(), position)
         } finally {
             callStack.pop(ScopeType.ClassInitializer)
+            leaveCall()
         }
     }
 
@@ -1271,7 +1372,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         val value = (value?.eval() ?: UnitValue) as RuntimeValue
         throw NormalReturnException(returnToAddress = returnToAddress, returnToLabel = returnToLabel, value = value,
             target = if (returnToAddress.isEmpty()) null else symbolTable().findReturnTarget(returnToAddress)
-                ?: error("Return target is no longer active: $returnToAddress"))
+                ?: throw InterpreterStateException("Return target is no longer active: $returnToAddress"))
     }
 
     suspend fun BreakNode.eval() {
@@ -1366,23 +1467,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 typeParameters = typeParameters,
                 isInstanceCreationAllowed = true,
                 primaryConstructor = primaryConstructor,
-                rawMemberProperties = ((primaryConstructor?.parameters
-                    ?.filter { it.isProperty }
-                    ?.map {
-                        val p = it.parameter
-                        PropertyDeclarationNode(
-                            position = p.position,
-                            name = p.name,
-                            declaredModifiers = it.modifiers,
-                            typeParameters = emptyList(),
-                            receiver = classType,
-                            declaredType = p.type,
-                            isMutable = it.isMutable,
-                            initialValue = p.defaultValue,
-                            transformedRefName = p.transformedRefName,
-                        )
-                    } ?: emptyList()) +
-                        declarations.filterIsInstance<PropertyDeclarationNode>()),
+                rawMemberProperties = emptyList(),
                 memberFunctions = declarations
                     .filterIsInstance<FunctionDeclarationNode>()
                     .filter { it.receiver == null },
@@ -1403,6 +1488,25 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 },
             ).also {
                 clazz = it
+                // Property types may name classes declared later (e.g. two
+                // classes referencing each other), so resolve them on first use.
+                it.deferProperties((primaryConstructor?.parameters
+                    ?.filter { it.isProperty }
+                    ?.map {
+                        val p = it.parameter
+                        PropertyDeclarationNode(
+                            position = p.position,
+                            name = p.name,
+                            declaredModifiers = it.modifiers,
+                            typeParameters = emptyList(),
+                            receiver = classType,
+                            declaredType = p.type,
+                            isMutable = it.isMutable,
+                            initialValue = p.defaultValue,
+                            transformedRefName = p.transformedRefName,
+                        )
+                    } ?: emptyList()) +
+                        declarations.filterIsInstance<PropertyDeclarationNode>())
                 it.attachToInterpreter(this@Interpreter)
             })
             // register extension functions in global scope
@@ -1565,7 +1669,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         val runtimeRefs = SymbolTable(Int.MAX_VALUE, "lambda-symbol-ref", ScopeType.Closure, currentSymbolTable.rootScope)
         refs.returnTargets.forEach { id ->
             runtimeRefs.returnTargets[id] = currentSymbolTable.findReturnTarget(id)
-                ?: error("Missing lexical return target: $id")
+                ?: throw InterpreterStateException("Missing lexical return target: $id")
         }
         refs.properties.forEach {
             runtimeRefs.putPropertyHolder(it, false /* TODO review */, currentSymbolTable.getPropertyHolder(it))
@@ -1689,10 +1793,15 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             throw e
         } catch (e: com.sunnychung.lib.multiplatform.kotlite.error.controlflow.NormalControlFlowException) {
             throw e
+        } catch (e: InterpreterStateException) {
+            throw e
         } catch (e: Throwable) {
+            // Thrown by host code, e.g. `NumberFormatException` from the stdlib's `"x".toInt()`.
+            if (catchBlocks.isEmpty()) throw e
+            val error = e.toValue()
             for (catch in catchBlocks) {
-                if (catch.catchType.name == "Throwable") {
-                    return catch.eval(e.toValue())
+                if (symbolTable().assertToDataType(catch.catchType).isAssignableFrom(error.type())) {
+                    return catch.eval(error)
                 }
             }
             throw e
@@ -1701,8 +1810,18 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
+    /**
+     * A host exception as seen by interpreted code: a standard Kotlin exception gets its Kotlite class, so that
+     * `catch (e: NumberFormatException)` and `catch (e: Exception)` match; anything else is a plain `Throwable`.
+     */
     fun Throwable.toValue(): ThrowableValue {
-        return ThrowableValue(symbolTable(), message, cause?.toValue(), emptyList(), this.fullClassName)
+        val cause = cause?.toValue()
+        val standardClass = StandardExceptionValue.classNameOf(this)?.let { symbolTable().findClass(it)?.first }
+        return if (standardClass != null) {
+            StandardExceptionValue(symbolTable(), message, cause, emptyList(), standardClass)
+        } else {
+            ThrowableValue(symbolTable(), message, cause, emptyList(), fullClassName, symbolTable().findClass("Throwable")!!.first)
+        }
     }
 
     suspend fun CatchNode.eval(value: ThrowableValue): RuntimeValue {
@@ -1931,15 +2050,87 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
     /** Synchronous compatibility boundary for legacy host callers. */
     fun eval(): RuntimeValue = runImmediately { evalSuspended() }
 
+    /**
+     * Runs interpreted code for a synchronous caller: legacy host APIs and the
+     * callbacks of library code (lambdas, `toString`, `equals`, `compareTo`).
+     *
+     * Inside replayable library code ([callReplayable]) a callback may suspend:
+     * the library code is abandoned, and replayed once the callback completed.
+     * Anywhere else a suspension fails; hosts avoid it by checking [canSuspend].
+     */
     fun <T> runImmediately(block: suspend () -> T): T {
+        val replayable = activeReplayableCall
+        if (replayable != null) {
+            if (replayable.hasRecordedOutcome()) {
+                @Suppress("UNCHECKED_CAST")
+                return replayable.replayOutcome() as T
+            }
+            // Library code that swallowed the unwinding must not run further callbacks.
+            if (replayable.suspendedCallback != null) throw AbandonedNativeCall()
+        }
         var completed: Result<T>? = null
-        block.startCoroutine(object : kotlin.coroutines.Continuation<T> {
-            override val context: kotlin.coroutines.CoroutineContext = kotlin.coroutines.EmptyCoroutineContext
-            override fun resumeWith(result: Result<T>) { completed = result }
-        })
-        return completed?.getOrThrow() ?: throw IllegalStateException("Execution suspended at a synchronous compatibility boundary")
+        var suspendedCallback: SuspendedCallback? = null
+        activeReplayableCall = null
+        synchronousCallbacks += 1
+        if (replayable == null) nonResumableCallbacks += 1
+        try {
+            block.startCoroutine(object : kotlin.coroutines.Continuation<T> {
+                override val context: kotlin.coroutines.CoroutineContext = kotlin.coroutines.EmptyCoroutineContext
+                override fun resumeWith(result: Result<T>) {
+                    val suspended = suspendedCallback
+                    if (suspended == null) completed = result else suspended.complete(result)
+                }
+            })
+        } finally {
+            synchronousCallbacks -= 1
+            if (replayable == null) nonResumableCallbacks -= 1
+            activeReplayableCall = replayable
+        }
+        completed?.let { result ->
+            replayable?.record(result)
+            return result.getOrThrow()
+        }
+        if (replayable == null) throw InterpreterStateException("Execution suspended at a synchronous compatibility boundary")
+        replayable.abandon(SuspendedCallback().also { suspendedCallback = it })
+    }
+
+    /**
+     * Runs synchronous library code whose callbacks may suspend. The code must
+     * be deterministic and free of side effects of its own until it returns
+     * (see [CustomFunctionDefinition.isReplayable]): after a suspended callback
+     * completes, it runs again from the start with the recorded callback
+     * outcomes.
+     */
+    internal suspend fun <T> callReplayable(block: () -> T): T {
+        val call = ReplayableNativeCall()
+        while (true) {
+            val enclosing = activeReplayableCall
+            activeReplayableCall = call
+            call.beginAttempt()
+            val outcome = try {
+                Result.success(block())
+            } catch (error: Throwable) {
+                Result.failure(error)
+            } finally {
+                activeReplayableCall = enclosing
+            }
+            val suspended = call.suspendedCallback ?: return outcome.getOrThrow()
+            call.record(suspended.await())
+        }
     }
 
     suspend fun evaluateNode(node: ASTNode): Any = node.eval()
 
+    companion object {
+        /**
+         * Python's default limit. Each call searches its callers' scopes, so the
+         * time grows with the square of the depth: endless recursion must fail fast.
+         */
+        const val DEFAULT_MAX_CALL_DEPTH = 1_000
+
+        /** Well below the roughly one hundred calls a browser worker stack holds. */
+        private const val CALLS_PER_STACK_RESET = 32
+
+        private const val STACK_TRACE_LIMIT = 64
+    }
 }

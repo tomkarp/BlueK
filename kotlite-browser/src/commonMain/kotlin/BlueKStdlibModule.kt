@@ -1,4 +1,5 @@
 import com.sunnychung.lib.multiplatform.kotlite.Interpreter
+import com.sunnychung.lib.multiplatform.kotlite.model.BooleanValue
 import com.sunnychung.lib.multiplatform.kotlite.model.CharValue
 import com.sunnychung.lib.multiplatform.kotlite.model.CustomFunctionDefinition
 import com.sunnychung.lib.multiplatform.kotlite.model.CustomFunctionParameter
@@ -13,6 +14,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.IteratorValue
 import com.sunnychung.lib.multiplatform.kotlite.model.LambdaValue
 import com.sunnychung.lib.multiplatform.kotlite.model.LibraryModule
 import com.sunnychung.lib.multiplatform.kotlite.model.ListValue
+import com.sunnychung.lib.multiplatform.kotlite.model.NullValue
 import com.sunnychung.lib.multiplatform.kotlite.model.ProvidedClassDefinition
 import com.sunnychung.lib.multiplatform.kotlite.model.RuntimeValue
 import com.sunnychung.lib.multiplatform.kotlite.model.SourcePosition
@@ -301,8 +303,29 @@ object BlueKStdlibModule : LibraryModule("bluek-stdlib") {
         ),
     )
 
+    // ---- nullable receivers ------------------------------------------------
+
+    /**
+     * Kotlin allows `toString()`, `equals()` and `hashCode()` on any nullable
+     * receiver (`Any?.toString()` and friends). Kotlite only has them as
+     * members of `Any`, so `x.toString()` with `x: Int?` was rejected as an
+     * unsafe call. A non-null receiver still resolves to the member.
+     */
+    private val nullableFunctions = listOf(
+        function("Any?", "toString", "String") { interpreter, receiver, _, _ ->
+            StringValue(if (receiver == null || receiver === NullValue) "null" else receiver.convertToString(), interpreter.symbolTable())
+        },
+        function("Any?", "equals", "Boolean", listOf(parameter("other", "Any?"))) { interpreter, receiver, args, _ ->
+            val isNull = receiver == null || receiver === NullValue
+            BooleanValue(if (isNull) args[0] === NullValue else receiver == args[0], interpreter.symbolTable())
+        },
+        function("Any?", "hashCode", "Int") { interpreter, receiver, _, _ ->
+            IntValue(if (receiver == null || receiver === NullValue) 0 else receiver.hashCode(), interpreter.symbolTable())
+        },
+    )
+
     override val classes: List<ProvidedClassDefinition> = emptyList()
     override val properties: List<ExtensionProperty> = numberProperties + listProperties + stringProperties
     override val globalProperties: List<GlobalProperty> = emptyList()
-    override val functions: List<CustomFunctionDefinition> = numberFunctions + listFunctions + stringFunctions
+    override val functions: List<CustomFunctionDefinition> = numberFunctions + listFunctions + stringFunctions + nullableFunctions
 }

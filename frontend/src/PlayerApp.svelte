@@ -2,6 +2,7 @@
   import { onDestroy, onMount, tick } from "svelte";
   import type { Diagnostic, RuntimeSnapshot } from "../../runtime-contract/src/index";
   import { LocalRuntimeClient } from "./localRuntimeClient";
+  import { isCompileError } from "./compileDiagnostics";
   import { mainFiles } from "./mainEntries";
   import { projectModelFromPayload } from "./projectFormat";
   import { MAX_PROJECT_LINK_LENGTH, exportFileName, type ExportedProgram } from "./programExport";
@@ -85,8 +86,8 @@
     try {
       const compiled = await client.compile(model.files, Date.now(), model.library, await prepareRuntimeResources(resources));
       if (current !== run) return;
-      if (compiled.diagnostics.length) {
-        diagnostics = compiled.diagnostics;
+      if (compiled.diagnostics.some(isCompileError)) {
+        diagnostics = compiled.diagnostics.filter(isCompileError);
         return;
       }
       if (!mainFiles(compiled.classes).includes(program.mainFile)) {

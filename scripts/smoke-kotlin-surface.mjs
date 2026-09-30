@@ -23,6 +23,31 @@ const evaluate = source => JSON.parse(session.evaluate('<surface>', source));
 // Expression -> expected `display`. Grouped as in docs/kotlin-surface.md.
 const supported = [
   // Numbers: minOf/maxOf/coerce* and the Int/Char conversions (BlueKStdlibModule, group B).
+  ['val ok1: String? = "ab"; ok1?.length', '2'],
+  ['val ok2: String? = "ab"; ok2!!.length', '2'],
+  ['val ok3: String? = "ab"; if (ok3 != null) ok3.length else 0', '2'],
+  // toString/equals/hashCode on nullable receivers (BlueKStdlibModule, Any?)
+  ['val nn1: Int? = 5; nn1.toString()', '5'],
+  ['val nn2: Int? = null; nn2.toString()', 'null'],
+  ['val nn3: Int? = 5; nn3.equals(5)', 'true'],
+  ['val nn4: Int? = null; nn4.equals(null)', 'true'],
+  ['val nn5: Int? = null; nn5.equals(1)', 'false'],
+  ['val nn6: Int? = 5; nn6.hashCode()', '5'],
+  ['val nn7: Int? = null; nn7.hashCode()', '0'],
+  ['class NnQ(val n: Int) {\n  override fun toString(): String = "Q$n"\n  override fun equals(other: Any?): Boolean = other is NnQ && (other as NnQ).n == n\n  override fun hashCode(): Int = n + 100\n}\nval nn8: NnQ? = NnQ(1)\nnn8.toString() + nn8.equals(NnQ(1)) + nn8.hashCode()', 'Q1true101'],
+  // `?.` calls them on the non-null receiver: the member of T wins over the Any?
+  // extensions above instead of being ambiguous with them (RT-44, World.kt in examples/blueplay).
+  ['val sc1: Int? = 5; sc1?.toString()', '5'],
+  ['val sc2: Int? = null; sc2?.toString()', 'null'],
+  ['val sc3: Int? = null; sc3?.toString() ?: "255"', '255'],
+  ['val sc4: Int? = 5; sc4?.equals(5)', 'true'],
+  ['val sc5: Int? = 5; sc5?.hashCode()', '5'],
+  ['val sc6: String? = "a"; sc6?.toString()', 'a'],
+  ['val sc7: String? = "a"; sc7?.equals("a")', 'true'],
+  ['val sc8: String? = "a"; sc8?.hashCode()', '97'],
+  ['class ScQ(val n: Int) {\n  override fun toString(): String = "Q$n"\n  override fun equals(other: Any?): Boolean = other is ScQ && (other as ScQ).n == n\n  override fun hashCode(): Int = n + 100\n}\nval sc9: ScQ? = ScQ(1)\n"${sc9?.toString()}${sc9?.equals(ScQ(1))}${sc9?.hashCode()}"', 'Q1true101'],
+  ['class ScP(val n: Int)\nval sc10: ScP? = ScP(1)\nsc10?.toString()?.startsWith("ScP")', 'true'],
+  ['class ScR(val n: Int)\nval sc11: ScR? = null\n"${sc11?.toString()}${sc11?.equals(null)}${sc11?.hashCode()}"', 'nullnullnull'],
   ['minOf(3, 1)', '1'],
   ['minOf(4, 2, 3)', '2'],
   ['minOf(9, 8, 7, 6)', '6'],
@@ -124,6 +149,19 @@ const messages = [
   ['"abc".zzz()', /^(?!.*has no member)/],
 ];
 
+// `.` on a nullable receiver: the member exists, only the call is unsafe. Kotlin
+// says so in its own words; "unknown for ..." would send the student hunting for
+// a spelling mistake. A genuinely unknown member on a nullable receiver stays unknown.
+const nullableReceiver = [
+  ['val nl1: MutableList<Int>? = null; nl1.add(1)', /^Only safe \(\?\.\) or non-null asserted \(!!\.\) calls are allowed on a nullable receiver of type 'MutableList<Int>\?'\./],
+  // A class property, as in a student's Hund class: the receiver is `alle`, not a local.
+  ['class NlHund {\n  var alle: MutableList<Int>? = mutableListOf()\n  fun neu(x: Int) {\n    alle.add(x)\n  }\n}', /^Only safe \(\?\.\) or non-null asserted \(!!\.\) calls are allowed on a nullable receiver of type 'MutableList<Int>\?'\./],
+  ['class NlHund2 {\n  var name: String? = null\n  fun laenge(): Int = name.length\n}', /nullable receiver of type 'String\?'/],
+  ['val nl2: String? = null; nl2.length', /nullable receiver of type 'String\?'/],
+  ['class NlBox(var n: Int); val nl3: NlBox? = null; nl3.n = 3', /nullable receiver of type 'NlBox\?'/],
+  ['val nl4: String? = null; nl4.zzz()', /`zzz` is unknown for String/],
+];
+
 // A name that exists but is called wrongly is NOT a gap: Kotlite words both the
 // same way, and only its message names the argument types. It must pass through.
 const passedThrough = [
@@ -138,6 +176,11 @@ for (const [expression, expected] of supported) {
   else if (result.display !== expected) failures.push(`${expression}\n    ${result.display} statt ${expected}`);
 }
 for (const [expression, pattern] of messages) {
+  const result = evaluate(expression);
+  if (result.kind !== 'error') failures.push(`${expression}\n    sollte eine Fehlermeldung ergeben`);
+  else if (!pattern.test(result.display)) failures.push(`${expression}\n    Meldung passt nicht: ${result.display.split('\n')[0]}`);
+}
+for (const [expression, pattern] of nullableReceiver) {
   const result = evaluate(expression);
   if (result.kind !== 'error') failures.push(`${expression}\n    sollte eine Fehlermeldung ergeben`);
   else if (!pattern.test(result.display)) failures.push(`${expression}\n    Meldung passt nicht: ${result.display.split('\n')[0]}`);
@@ -158,4 +201,4 @@ if (failures.length > 0) {
   for (const failure of failures) console.error(`  ${failure}`);
   process.exit(1);
 }
-console.log(`Kotlin surface smoke test passed (${supported.length} supported, ${gaps.length} known gaps, ${messages.length + passedThrough.length} messages).`);
+console.log(`Kotlin surface smoke test passed (${supported.length} supported, ${gaps.length} known gaps, ${messages.length + nullableReceiver.length + passedThrough.length} messages).`);

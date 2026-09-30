@@ -10,6 +10,9 @@ export const setEditorDiagnostics = StateEffect.define<Diagnostic[]>();
 
 const errorLine = Decoration.line({ class: "cm-bluek-error-line" });
 const errorSpan = Decoration.mark({ class: "cm-bluek-error-span" });
+// A warning marks code that compiles but will misbehave, e.g. an accessor calling itself.
+const warningLine = Decoration.line({ class: "cm-bluek-warning-line" });
+const warningSpan = Decoration.mark({ class: "cm-bluek-warning-span" });
 
 function decorate(state: EditorState, diagnostics: Diagnostic[]): DecorationSet {
   const byLine = new Map<number, Diagnostic[]>();
@@ -20,14 +23,15 @@ function decorate(state: EditorState, diagnostics: Diagnostic[]): DecorationSet 
   const ranges: Range<Decoration>[] = [];
   for (const [number, items] of byLine) {
     const line = state.doc.line(number);
-    ranges.push(errorLine.range(line.from));
+    const warning = items.every((item) => item.severity === "warning");
+    ranges.push((warning ? warningLine : errorLine).range(line.from));
     const column = Math.min(Math.max(1, items[0].column || 1), line.text.length + 1);
     const from = line.from + column - 1;
     // Underline the word the compiler points at, or the rest of the line when
     // it points at punctuation or at the end of the line.
     const word = line.text.slice(column - 1).match(/^[\p{L}\p{N}_$]+/u);
     const to = word ? from + word[0].length : line.from + line.text.trimEnd().length;
-    if (to > from) ranges.push(errorSpan.range(from, to));
+    if (to > from) ranges.push((warning ? warningSpan : errorSpan).range(from, to));
   }
   return Decoration.set(ranges, true);
 }
@@ -49,6 +53,12 @@ const diagnosticTheme = EditorView.theme({
   ".cm-bluek-error-line": { backgroundColor: "#fdecec" },
   ".cm-bluek-error-span": {
     textDecoration: "underline wavy #cc0000",
+    textDecorationSkipInk: "none",
+    textUnderlineOffset: "3px",
+  },
+  ".cm-bluek-warning-line": { backgroundColor: "#fff6d6" },
+  ".cm-bluek-warning-span": {
+    textDecoration: "underline wavy #c28a00",
     textDecorationSkipInk: "none",
     textUnderlineOffset: "3px",
   },

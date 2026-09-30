@@ -109,20 +109,68 @@ import com.sunnychung.lib.multiplatform.kotlite.util.ClassMemberResolver
 import com.sunnychung.lib.multiplatform.kotlite.util.ClassSemanticAnalyzer
 import com.sunnychung.lib.multiplatform.kotlite.util.FunctionAndTypes
 
-open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: ExecutionEnvironment, private val retiredProperties: Map<Int, List<String>> = emptyMap()) {
+/**
+ * @param unitStarts indices of the script nodes that start a new source unit.
+ * A REPL host appends every accepted input as a unit; code may use top-level
+ * functions and properties declared later in its own unit, never in a later one.
+ */
+open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: ExecutionEnvironment, private val retiredProperties: Map<Int, List<String>> = emptyMap(), private val unitStarts: Set<Int> = emptySet()) {
     val builtinSymbolTable = SemanticAnalyzerSymbolTable(scopeLevel = 0, scopeName = ":builtin", scopeType = ScopeType.Script, parentScope = null)
     val symbolTable = SemanticAnalyzerSymbolTable(scopeLevel = 1, scopeName = ":global", scopeType = ScopeType.Script, parentScope = builtinSymbolTable)
     var currentScope = builtinSymbolTable
     var functionDefIndex = 0
     var variableDefIndex = 0
     val symbolRecorders = mutableListOf<SymbolReferenceSet>()
-    private val smartCastNonNullVariables = mutableSetOf<String>()
+    /**
+     * Smart casts. A condition narrows the type of a variable in the code that only runs when the
+     * condition held (or did not hold). Narrowings are keyed by the variable's transformed name, so
+     * a shadowing declaration is not affected. They exist for the analysis only: the interpreter
+     * reads members from the actual value, exactly as after an explicit `as`.
+     */
+    private class SmartCastFact(val key: String, val type: TypeNode, val isMutable: Boolean)
+    private class SmartCast(val type: TypeNode, val isMutable: Boolean, val assignmentVersion: Int)
+    private class SmartCastSubject(val key: String, val type: TypeNode, val isStableForTypeTest: Boolean, val isMutable: Boolean)
+
+    private val smartCasts = mutableMapOf<String, SmartCast>()
+
+    /** Counts assignments per variable; a narrowing made before the latest assignment is void. */
+    private val assignmentVersions = mutableMapOf<String, Int>()
     private val activeReifiedTypeParameters = mutableMapOf<String, Boolean>()
     private data class CallableContext(val node: CallableNode, val returnType: DataType?)
     private data class InlineParameter(val owner: CallableNode, val crossinline: Boolean)
     private val callableContexts = mutableListOf<CallableContext>()
     private val inlineParameters = mutableMapOf<String, InlineParameter>()
     private val permittedInlineReferences = mutableSetOf<VariableReferenceNode>()
+
+    // Top-level classes declared before any declaration is analyzed (see
+    // `declareClassesAhead`), keyed by the position of their declaration.
+    private class DeclaredClass(
+        val node: ClassDeclarationNode,
+        val definition: ClassDefinition,
+        val companion: ClassDefinition,
+        // type parameter, superclass and class scope of `visitClassBody`
+        val scopes: List<SemanticAnalyzerSymbolTable>,
+    ) {
+        var state = ClassAnalysisState.Declared
+    }
+    private enum class ClassAnalysisState { Declared, AnalyzingSupertypes, Analyzing, Analyzed }
+    private val declaredClasses = mutableMapOf<SourcePosition, DeclaredClass>()
+    private val cyclicClasses = mutableSetOf<SourcePosition>()
+
+    // Top-level functions and properties not analyzed yet, by declared name and
+    // with their node index (see `analyzeTopLevelAhead`).
+    private val pendingTopLevel = mutableMapOf<String, MutableList<IndexedValue<ASTNode>>>()
+    private val startedTopLevel = mutableSetOf<Int>()
+    private val topLevelIndexByPosition = mutableMapOf<SourcePosition, Int>()
+    private var unitOfIndex = IntArray(0)
+    private var currentUnit = 0
+    // Index of the top-level property or statement whose own code is analyzed
+    // (null in functions and classes), and the index of every analyzed
+    // top-level property by transformed name, to keep initialization order.
+    private var topLevelCodeIndex: Int? = null
+    private val topLevelPropertyIndex = mutableMapOf<String, Int>()
+    // Top-level properties whose initializer is being analyzed.
+    private val initializingTopLevel = mutableListOf<String>()
 
     private fun checkInlineInvocation(symbol: String?, position: SourcePosition) {
         val parameter = inlineParameters[symbol] ?: return
@@ -221,6 +269,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         }
 
         symbolTable.init()
+        symbolTable.beforeFunctionLookup = { analyzeTopLevelAhead(it) }
 
         currentScope = symbolTable
     }
@@ -315,26 +364,185 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         val isSkipGenerics: Boolean = false,
     )
 
-    private fun nullCheckVariable(node: ASTNode, operator: String): String? {
+    private fun nullCheckedVariable(node: ASTNode, operator: String): VariableReferenceNode? {
         if (node !is BinaryOpNode || node.operator != operator) return null
         return when {
-            node.node1 is VariableReferenceNode && node.node2 is NullNode -> (node.node1 as VariableReferenceNode).variableName
-            node.node2 is VariableReferenceNode && node.node1 is NullNode -> (node.node2 as VariableReferenceNode).variableName
+            node.node1 is VariableReferenceNode && node.node2 is NullNode -> node.node1 as VariableReferenceNode
+            node.node2 is VariableReferenceNode && node.node1 is NullNode -> node.node2 as VariableReferenceNode
             else -> null
         }
     }
 
-    private fun blockAlwaysReturns(block: BlockNode?): Boolean {
-        return block?.statements?.lastOrNull() is ReturnNode
+    /** Whether control never continues after the last statement, so facts of the other branch hold afterwards. */
+    private fun blockNeverCompletes(block: BlockNode?): Boolean {
+        return when (val last = block?.statements?.lastOrNull()) {
+            is ReturnNode, is ThrowNode, is BreakNode, is ContinueNode -> true
+            is FunctionCallNode -> last.type().name == "Nothing"
+            else -> false
+        }
     }
 
-    private fun variableNonNullAfterCondition(node: ASTNode): String? {
-        return nullCheckVariable(node, "==")
-            ?: if (node is BinaryOpNode && node.operator == "||") {
-                nullCheckVariable(node.node1, "==")
-            } else {
-                null
+    private fun smartCastKey(variable: VariableReferenceNode): String? {
+        variable.transformedRefName?.let { return it }
+        val name = variable.variableName
+        if (name == "this" || name == "super" || !currentScope.hasProperty(name)) return null
+        var scope: SymbolTable = currentScope
+        while (!scope.hasProperty(name, isThisScopeOnly = true)) {
+            scope = scope.parentScope ?: return null
+        }
+        return scope.transformedSymbolsByDeclaredName[IdentifierClassifier.Property to name]
+    }
+
+    private fun activeSmartCast(key: String?): SmartCast? {
+        if (key == null) return null
+        return smartCasts[key]?.takeIf { it.assignmentVersion == (assignmentVersions[key] ?: 0) }
+    }
+
+    private fun addSmartCasts(facts: List<SmartCastFact>) {
+        facts.forEach {
+            smartCasts[it.key] = SmartCast(it.type, it.isMutable, assignmentVersions[it.key] ?: 0)
+        }
+    }
+
+    private inline fun <T> withSmartCasts(facts: List<SmartCastFact>, block: () -> T): T {
+        if (facts.isEmpty()) return block()
+        val saved = smartCasts.toMap()
+        addSmartCasts(facts)
+        try {
+            return block()
+        } finally {
+            smartCasts.clear()
+            smartCasts.putAll(saved)
+        }
+    }
+
+    /** Narrowings made inside [block] (e.g. by `if (x == null) return`) end with it. */
+    private inline fun <T> scopedSmartCasts(block: () -> T): T {
+        val saved = smartCasts.toMap()
+        try {
+            return block()
+        } finally {
+            smartCasts.clear()
+            smartCasts.putAll(saved)
+        }
+    }
+
+    /**
+     * A property is stable for a type test unless it is a `var`, has a custom getter, or is open,
+     * like in Kotlin. Locals and parameters are always stable; a `var` local is voided by assignment.
+     * Null checks stay more lenient and narrow every variable.
+     */
+    private fun isStableForTypeTest(variable: VariableReferenceNode): Boolean {
+        val (propertyType, ownerScope) = currentScope.getPropertyTypeOrNull(variable.variableName) ?: return false
+        val owner = variable.ownerRef
+        if (owner != null) {
+            if (owner.extensionPropertyRef != null || propertyType.isMutable) return false
+            val clazz = currentScope.findClass(owner.ownerRefName.removePrefix("this/"))?.first ?: return false
+            return !isOverridableOrComputedProperty(clazz, variable.variableName)
+        }
+        return ownerScope.scopeType != ScopeType.Script || !propertyType.isMutable
+    }
+
+    private fun isOverridableOrComputedProperty(clazz: ClassDefinition, name: String): Boolean {
+        var current: ClassDefinition? = clazz
+        while (current != null) {
+            current.declarations.firstOrNull { it is PropertyDeclarationNode && it.name == name }?.let {
+                it as PropertyDeclarationNode
+                return it.accessors != null || PropertyModifier.open in it.modifiers
             }
+            current.primaryConstructor?.parameters?.firstOrNull { it.isProperty && it.parameter.name == name }?.let {
+                return PropertyModifier.open in it.modifiers || PropertyModifier.override in it.modifiers
+            }
+            current = current.superClass
+        }
+        return false
+    }
+
+    private fun smartCastSubject(node: ASTNode?): SmartCastSubject? {
+        if (node is WhenSubjectNode) {
+            val binding = node.valueTransformedRefName
+            if (node.hasValueDeclaration() && binding != null) {
+                return node.type?.let { SmartCastSubject(binding, it, isStableForTypeTest = true, isMutable = false) }
+            }
+            return smartCastSubject(node.value)
+        }
+        val variable = node as? VariableReferenceNode ?: return null
+        val key = smartCastKey(variable) ?: return null
+        val isMutable = currentScope.getPropertyTypeOrNull(variable.variableName)?.first?.isMutable == true
+        return SmartCastSubject(key, variable.type(), isStableForTypeTest(variable), isMutable)
+    }
+
+    private fun nonNullFact(subject: SmartCastSubject?): SmartCastFact? {
+        if (subject == null || !subject.type.isNullable) return null
+        return SmartCastFact(subject.key, subject.type.copy(isNullable = false), subject.isMutable)
+    }
+
+    /**
+     * `x is T` narrows `x` to `T` if that is a subtype of `x`'s type. A type parameter, a type alias or an
+     * unrelated type (Kotlin would intersect them) leave the type unchanged.
+     */
+    private fun typeTestFact(subject: SmartCastSubject?, tested: ASTNode?): SmartCastFact? {
+        if (subject == null || !subject.isStableForTypeTest || tested !is TypeNode || tested is FunctionTypeNode) return null
+        if (subject.type is FunctionTypeNode || subject.type is ClassTypeNode) return null
+        if (currentScope.findTypeAlias(tested.name) != null) return null
+        val currentType = subject.type.toDataType()
+        val testedType = tested.toDataType()
+        if (currentType is TypeParameterType || !currentType.copyOf(true).isAssignableFrom(testedType.copyOf(false))) return null
+        val narrowed = testedType.copyOf(currentType.isNullable && testedType.isNullable)
+        if (narrowed == currentType) return null
+        return SmartCastFact(subject.key, narrowed.toTypeNode(), subject.isMutable)
+    }
+
+    /** Narrowings that hold in the code that runs only if [node] evaluated to `true`. */
+    private fun smartCastsWhenTrue(node: ASTNode): List<SmartCastFact> {
+        return when {
+            node is BinaryOpNode && node.operator == "&&" -> {
+                val first = smartCastsWhenTrue(node.node1)
+                first + withSmartCasts(first) { smartCastsWhenTrue(node.node2) }
+            }
+            node is BinaryOpNode && node.operator == "!=" ->
+                listOfNotNull(nonNullFact(smartCastSubject(nullCheckedVariable(node, "!="))))
+            node is InfixFunctionCallNode && node.functionName == "is" ->
+                listOfNotNull(typeTestFact(smartCastSubject(node.node1), node.node2))
+            node is UnaryOpNode && node.operator == "!" -> smartCastsWhenFalse(node.node!!)
+            else -> emptyList()
+        }
+    }
+
+    /** Narrowings that hold in the code that runs only if [node] evaluated to `false`. */
+    private fun smartCastsWhenFalse(node: ASTNode): List<SmartCastFact> {
+        return when {
+            node is BinaryOpNode && node.operator == "||" -> {
+                val first = smartCastsWhenFalse(node.node1)
+                first + withSmartCasts(first) { smartCastsWhenFalse(node.node2) }
+            }
+            node is BinaryOpNode && node.operator == "==" ->
+                listOfNotNull(nonNullFact(smartCastSubject(nullCheckedVariable(node, "=="))))
+            node is InfixFunctionCallNode && node.functionName == "!is" ->
+                listOfNotNull(typeTestFact(smartCastSubject(node.node1), node.node2))
+            node is UnaryOpNode && node.operator == "!" -> smartCastsWhenTrue(node.node!!)
+            else -> emptyList()
+        }
+    }
+
+    /** Narrowings of a `when` subject after one condition of an entry matched (or did not match). */
+    private fun whenConditionSmartCasts(condition: WhenConditionNode, subject: ASTNode?, isConditionTrue: Boolean): List<SmartCastFact> {
+        if (subject == null) {
+            return if (isConditionTrue) smartCastsWhenTrue(condition.expression) else smartCastsWhenFalse(condition.expression)
+        }
+        return when (condition.testType) {
+            // `is T` matched, or `!is T` did not match
+            WhenConditionNode.TestType.TypeTest ->
+                if (isConditionTrue != condition.isNegateResult) {
+                    listOfNotNull(typeTestFact(smartCastSubject(subject), condition.expression))
+                } else emptyList()
+            // `null ->` did not match
+            WhenConditionNode.TestType.Regular ->
+                if (!isConditionTrue && !condition.isNegateResult && condition.expression is NullNode) {
+                    listOfNotNull(nonNullFact(smartCastSubject(subject)))
+                } else emptyList()
+            WhenConditionNode.TestType.RangeTest -> emptyList()
+        }
     }
 
     fun ASTNode.visit(modifier: Modifier = Modifier()) {
@@ -433,6 +641,38 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     /**
      * This method is stateful and modifies data.
      */
+    /** The property whose accessor is being analyzed; see [noteSelfCallingAccessor]. */
+    private var accessorUnderAnalysis: AccessorUnderAnalysis? = null
+
+    private class AccessorUnderAnalysis(val property: PropertyDeclarationNode, val isSetter: Boolean, val outerScopeLevel: Int)
+
+    private inline fun visitAccessor(property: PropertyDeclarationNode, isSetter: Boolean, visit: () -> Unit) {
+        val enclosing = accessorUnderAnalysis
+        accessorUnderAnalysis = AccessorUnderAnalysis(property, isSetter, currentScope.scopeLevel)
+        try {
+            visit()
+        } finally {
+            accessorUnderAnalysis = enclosing
+        }
+    }
+
+    /**
+     * A setter that assigns its own property, or a getter that reads it, calls
+     * itself until the stack overflows. Kotlin compiles it (IntelliJ warns), so
+     * this only records the place for a warning. [scopeLevel] is where the name
+     * was found: the accessor's own scopes lie above [AccessorUnderAnalysis.outerScopeLevel].
+     */
+    private fun noteSelfCallingAccessor(position: SourcePosition, name: String, isWrite: Boolean, scopeLevel: Int?) {
+        val accessor = accessorUnderAnalysis ?: return
+        if (accessor.isSetter != isWrite || name != accessor.property.name) return
+        if (scopeLevel != null && scopeLevel > accessor.outerScopeLevel) return
+        if (isWrite) {
+            accessor.property.selfCallingSetter = accessor.property.selfCallingSetter ?: position
+        } else {
+            accessor.property.selfCallingGetter = accessor.property.selfCallingGetter ?: position
+        }
+    }
+
     fun checkPropertyWriteAccess(accessNode: ASTNode, name: String): Int {
         if (!currentScope.hasProperty(name)) {
             throw SemanticException(accessNode.position, "Property `$name` is not declared")
@@ -462,11 +702,263 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     }
 
     fun ScriptNode.visit(modifier: Modifier = Modifier()) {
+        smartCasts.clear()
+        var unit = 0
+        unitOfIndex = IntArray(nodes.size)
+        nodes.forEachIndexed { index, node ->
+            if (index > 0 && index in unitStarts) ++unit
+            unitOfIndex[index] = unit
+            topLevelIndexByPosition[node.position] = index
+        }
+        declareClassesAhead(nodes.filterIsInstance<ClassDeclarationNode>())
+        declareTopLevelAhead(nodes)
         nodes.forEachIndexed { index, node ->
             retiredProperties[index].orEmpty().forEach { currentScope.retireAnalyzedProperty(it) }
-            node.visit(modifier = modifier)
+            val declared = (node as? ClassDeclarationNode)?.let { declaredClasses[it.position] }
+            if (declared != null) {
+                analyzeDeclaredClass(declared, isOnDemand = false)
+            } else if (startTopLevel(index, node)) {
+                visitTopLevel(index, node, modifier)
+            }
         }
         retiredProperties[nodes.size].orEmpty().forEach { currentScope.retireAnalyzedProperty(it) }
+    }
+
+    private fun topLevelName(node: ASTNode): String? = when (node) {
+        is FunctionDeclarationNode -> node.name
+        is PropertyDeclarationNode -> node.name
+        else -> null
+    }
+
+    /**
+     * Top-level functions (also extension functions) and properties may be
+     * used before their position, like in Kotlin: `fun main() { hilfe() }`
+     * before `fun hilfe()`, or a class using `val maximum` of a later file.
+     * They are analyzed in source order, or earlier on demand when code of
+     * the same source unit first looks up their name (`analyzeTopLevelAhead`).
+     * Nothing is declared ahead, so declarations analyzed before get the same
+     * transformed names whatever follows; the persistent REPL relies on that.
+     */
+    private fun declareTopLevelAhead(nodes: List<ASTNode>) {
+        nodes.forEachIndexed { index, node ->
+            val name = topLevelName(node) ?: return@forEachIndexed
+            pendingTopLevel.getOrPut(name) { mutableListOf() } += IndexedValue(index, node)
+        }
+    }
+
+    /** Marks the top-level node at [index] as analyzed; false if it already is. */
+    private fun startTopLevel(index: Int, node: ASTNode): Boolean {
+        if (!startedTopLevel.add(index)) return false
+        val name = topLevelName(node) ?: return true
+        pendingTopLevel[name]?.let { pending ->
+            pending.removeAll { it.index == index }
+            if (pending.isEmpty()) pendingTopLevel.remove(name)
+        }
+        return true
+    }
+
+    /**
+     * Analyzes the pending top-level declarations named [name] of the current
+     * source unit, in source order, so that a lookup sees all of them (also
+     * every overload). Declarations of a later unit stay invisible.
+     */
+    private fun analyzeTopLevelAhead(name: String) {
+        val pending = pendingTopLevel[name]?.filter { unitOfIndex[it.index] == currentUnit } ?: return
+        pending.forEach { (index, node) ->
+            if (startTopLevel(index, node)) analyzeAtTopLevel(index) { visitTopLevel(index, node, Modifier()) }
+        }
+    }
+
+    private fun visitTopLevel(index: Int, node: ASTNode, modifier: Modifier) {
+        currentUnit = unitOfIndex[index]
+        topLevelCodeIndex = if (node is FunctionDeclarationNode || node is ClassDeclarationNode) null else index
+        if (node is PropertyDeclarationNode) initializingTopLevel += node.name
+        try {
+            node.visit(modifier = modifier)
+        } finally {
+            topLevelCodeIndex = null
+            if (node is PropertyDeclarationNode) initializingTopLevel.removeLast()
+        }
+        if (node is PropertyDeclarationNode) topLevelPropertyIndex[node.transformedRefName!!] = index
+    }
+
+    /**
+     * Top-level properties are initialized in source order at runtime. Code
+     * that runs while they are initialized (their initializers and top-level
+     * statements, but not functions, lambdas or classes) must not read a later one.
+     */
+    private fun checkInitializedBeforeUse(node: ASTNode, name: String, transformedName: String) {
+        val codeIndex = topLevelCodeIndex ?: return
+        if (callableContexts.isNotEmpty()) return
+        val declaredAt = topLevelPropertyIndex[transformedName] ?: return
+        if (declaredAt > codeIndex) {
+            throw SemanticException(node.position, "`$name` is initialized after this code in file order. Top-level properties are initialized in the order in which they are written, so declare `$name` before it is used here.")
+        }
+    }
+
+    /**
+     * Analyzes a top-level declaration in the script scope, also in the middle
+     * of another declaration (on demand), which gets its state back afterwards.
+     */
+    private fun analyzeAtTopLevel(index: Int, analyze: () -> Unit) {
+        val previousScope = currentScope
+        val previousUnit = currentUnit
+        val previousTopLevelCodeIndex = topLevelCodeIndex
+        val previousSmartCasts = smartCasts.toMap()
+        val previousReified = activeReifiedTypeParameters.toMap()
+        val previousCallableContexts = callableContexts.toList()
+        val previousInlineParameters = inlineParameters.toMap()
+        val previousSymbolRecorders = symbolRecorders.toList()
+        val previousAccessor = accessorUnderAnalysis
+        accessorUnderAnalysis = null
+        smartCasts.clear()
+        activeReifiedTypeParameters.clear()
+        callableContexts.clear()
+        inlineParameters.clear()
+        symbolRecorders.clear()
+        currentScope = symbolTable
+        currentUnit = unitOfIndex[index]
+        topLevelCodeIndex = null
+        try {
+            analyze()
+        } finally {
+            currentScope = previousScope
+            currentUnit = previousUnit
+            topLevelCodeIndex = previousTopLevelCodeIndex
+            smartCasts.clear()
+            smartCasts.putAll(previousSmartCasts)
+            activeReifiedTypeParameters.clear()
+            activeReifiedTypeParameters += previousReified
+            callableContexts.clear()
+            callableContexts += previousCallableContexts
+            inlineParameters.clear()
+            inlineParameters += previousInlineParameters
+            symbolRecorders.clear()
+            symbolRecorders += previousSymbolRecorders
+            accessorUnderAnalysis = previousAccessor
+        }
+    }
+
+    private fun superTypeName(node: ASTNode): String? = when (node) {
+        is FunctionCallNode -> superTypeName(node.function)
+        is TypeNode -> node.name
+        else -> null
+    }
+
+    /**
+     * Declares every top-level class of the script before any declaration is
+     * analyzed, like Kotlin: classes may name each other in any order, also in
+     * a cycle (`class Hund { var herrchen: Mensch? }`, `class Mensch { var hund:
+     * Hund? }`). A declared class is the same `ClassDefinition` its analysis
+     * completes later, so types resolved earlier stay identical. Declaring uses
+     * no symbol counters: names of declarations analyzed before a class stay
+     * the same whatever follows, which the persistent REPL relies on.
+     *
+     * A class is analyzed at its position or, if earlier code needs its
+     * members, on demand (`ClassDefinition.pendingAnalysis`), after its
+     * supertypes. Members of a class whose analysis is still in progress are
+     * those analyzed so far; in particular an expression-bodied function
+     * without a declared return type has no type before its own analysis.
+     */
+    private fun declareClassesAhead(classes: List<ClassDeclarationNode>) {
+        // Only the first declaration of a name: duplicates are reported by the ordinary analysis.
+        val byName = classes.groupBy { it.name }.mapValues { it.value.first() }
+        val declaring = mutableListOf<SourcePosition>()
+        fun declare(node: ClassDeclarationNode) {
+            if (node.position in declaredClasses) return
+            if (symbolTable.findClass(node.fullQualifiedName) != null) return // e.g. a built-in class
+            if (node.position in declaring) {
+                // Reached again through its own supertypes: every class on the way is in the cycle.
+                cyclicClasses += declaring.subList(declaring.indexOf(node.position), declaring.size)
+                return
+            }
+            declaring += node.position
+            // Supertypes first: they determine the type hierarchy of this class.
+            node.superInvocations.orEmpty().mapNotNull { superTypeName(it) }.mapNotNull { byName[it] }.forEach { declare(it) }
+
+            val name = node.name
+            val fullQualifiedClassName = node.fullQualifiedName
+            val typeParameters = node.typeParameters
+            if (ClassModifier.abstract in node.modifiers) {
+                node.inferredModifiers += ClassModifier.open
+            }
+            if (node.isInterface) {
+                node.inferredModifiers += ClassModifier.open
+                node.inferredModifiers += ClassModifier.abstract
+            }
+            val classType = TypeNode(
+                position = node.position,
+                name = fullQualifiedClassName,
+                arguments = typeParameters.map { TypeNode(it.position, it.name, null, false) }.emptyToNull(),
+                isNullable = false,
+            )
+            symbolTable.declareClass(node.position, nullableClassDefinition(node).also { it.attachToSemanticAnalyzer(this@SemanticAnalyzer) })
+            val companion = companionClassDefinition(node, classType)
+            symbolTable.declareClass(node.position, companion)
+
+            val superClassInvocation = if (node.isInterface) null else node.superInvocations?.filterIsInstance<FunctionCallNode>()?.firstOrNull()
+            val superClass = (superClassInvocation?.function as? TypeNode)?.let { symbolTable.findClass(it.name)?.first }
+            val interfaceTypes = node.superInvocations?.filterIsInstance<TypeNode>() ?: emptyList()
+            val typeParameterScope = SemanticAnalyzerSymbolTable(symbolTable.scopeLevel + 1, name, ScopeType.Class, parentScope = symbolTable)
+            val superClassScope = SemanticAnalyzerSymbolTable(symbolTable.scopeLevel + 2, name, ScopeType.Class, parentScope = typeParameterScope)
+            val classScope = SemanticAnalyzerSymbolTable(symbolTable.scopeLevel + 3, name, ScopeType.Class, parentScope = superClassScope)
+            val definition = ClassDefinition(
+                currentScope = classScope,
+                name = name,
+                fullQualifiedName = fullQualifiedClassName,
+                isInterface = node.isInterface,
+                modifiers = node.modifiers,
+                typeParameters = typeParameters,
+                isInstanceCreationAllowed = !node.isInterface,
+                primaryConstructor = node.primaryConstructor,
+                // Constructor properties are added by the analysis, after their parameters.
+                rawMemberProperties = emptyList(),
+                memberFunctions = node.declarations.filterIsInstance<FunctionDeclarationNode>(),
+                orderedInitializersAndPropertyDeclarations = node.declarations
+                    .filter { it is ClassInstanceInitializerNode || it is PropertyDeclarationNode },
+                declarations = node.declarations,
+                superClassInvocation = superClassInvocation,
+                superClass = superClass,
+                superInterfaceTypes = interfaceTypes,
+                superInterfaces = interfaceTypes.mapNotNull { symbolTable.findClass(it.name)?.first },
+            )
+            // The hierarchy is needed to resolve (generic) types before the analysis.
+            if (superClass != null) definition.superClassInvocation = superClassInvocation
+            definition.isDeclaredAhead = true
+            symbolTable.declareClass(node.position, definition)
+            declaring.removeLast()
+            val declared = DeclaredClass(node, definition, companion, listOf(typeParameterScope, superClassScope, classScope))
+            declaredClasses[node.position] = declared
+            val analyze = { analyzeDeclaredClass(declared, isOnDemand = true) }
+            definition.pendingAnalysis = analyze
+            companion.pendingAnalysis = analyze
+        }
+        classes.forEach { if (byName[it.name] === it) declare(it) }
+    }
+
+    private fun analyzeDeclaredClass(declared: DeclaredClass, isOnDemand: Boolean) {
+        when (declared.state) {
+            ClassAnalysisState.Declared -> {
+                declared.state = ClassAnalysisState.AnalyzingSupertypes
+                declared.node.superInvocations.orEmpty()
+                    .mapNotNull { superTypeName(it) }
+                    .mapNotNull { name -> symbolTable.findClass(name)?.first }
+                    .mapNotNull { definition -> declaredClasses.values.firstOrNull { it.definition === definition } }
+                    .forEach { analyzeDeclaredClass(it, isOnDemand = false) }
+                // A supertype may have needed the members of this class already.
+                if (declared.state != ClassAnalysisState.AnalyzingSupertypes) return
+            }
+            // Its members are needed while its supertypes are analyzed.
+            ClassAnalysisState.AnalyzingSupertypes -> if (!isOnDemand) return
+            ClassAnalysisState.Analyzing, ClassAnalysisState.Analyzed -> return
+        }
+        declared.state = ClassAnalysisState.Analyzing
+        declared.definition.pendingAnalysis = null
+        declared.companion.pendingAnalysis = null
+        // An on-demand analysis interrupts another declaration: analyze the
+        // class at top level and give the interrupted one its state back.
+        analyzeAtTopLevel(topLevelIndexByPosition.getValue(declared.node.position)) { declared.node.visit() }
+        declared.state = ClassAnalysisState.Analyzed
     }
 
     fun TypeNode.visit(modifier: Modifier = Modifier()) {
@@ -499,17 +991,12 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         }
 
         node1.visit(modifier = modifier)
-        val smartCastVariable = when (operator) {
-            "||" -> nullCheckVariable(node1, "==")
-            "&&" -> nullCheckVariable(node1, "!=")
-            else -> null
+        val smartCastsInNode2 = when (operator) {
+            "&&" -> smartCastsWhenTrue(node1)
+            "||" -> smartCastsWhenFalse(node1)
+            else -> emptyList()
         }
-        if (smartCastVariable != null) smartCastNonNullVariables += smartCastVariable
-        try {
-            node2.visit(modifier = modifier)
-        } finally {
-            if (smartCastVariable != null) smartCastNonNullVariables -= smartCastVariable
-        }
+        withSmartCasts(smartCastsInNode2) { node2.visit(modifier = modifier) }
         val functionName = if (operator in setOf("+", "-", "*", "/", "%", "<", ">", "<=", ">=", "..", "..<")) {
             operatorToFunctionName(operator)
         } else null
@@ -553,6 +1040,14 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
      *     Otherwise, try to generate code for a = a + b (this includes a type check: the type of a + b must be a subtype of a).
      */
     fun AssignmentNode.visit(modifier: Modifier = Modifier()) {
+        visitAssignment(modifier)
+        // an assignment voids what was known about the variable's type; the value was analysed before
+        (subject as? VariableReferenceNode)?.let { smartCastKey(it) }?.let {
+            assignmentVersions[it] = (assignmentVersions[it] ?: 0) + 1
+        }
+    }
+
+    private fun AssignmentNode.visitAssignment(modifier: Modifier) {
         if (subject !is VariableReferenceNode && subject !is NavigationNode && subject !is IndexOpNode) {
             throw SemanticException(position, "$subject cannot be assigned")
         }
@@ -566,6 +1061,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     if (isWrite) {
                         val variableName = subject.variableName
                         val l = checkPropertyWriteAccess(this, variableName)
+                        noteSelfCallingAccessor(subject.position, variableName, isWrite = true, scopeLevel = l)
                         if (transformedRefName == null) {
                             transformedRefName = "$variableName/$l"
                         }
@@ -613,7 +1109,15 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         } else {
             visitSubject(isRead = true, isWrite = false)
         }
-        val subjectRawType = subject.type()
+        // The target of `x = ...` has the declared type, not a smart-cast one.
+        val subjectRawType = if (operator == "=" && subject is VariableReferenceNode) {
+            scopedSmartCasts {
+                smartCastKey(subject)?.let { smartCasts.remove(it) }
+                subject.type()
+            }
+        } else {
+            subject.type()
+        }
         val subjectType = subjectRawType.toDataType()
 
         if (operator == "=" && subjectRawType is FunctionTypeNode && value is LambdaLiteralNode) {
@@ -767,8 +1271,8 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 //            throw SemanticException("Custom setter is currently not supported")
 //        }
         if (isVisitInitialValue && isVisitAccessors && accessors != null) {
-            accessors.getter?.visit(modifier = modifier, isPropertyAccessor = true, propertyAccessorType = accessors.type)
-            accessors.setter?.visit(modifier = modifier, isPropertyAccessor = true, propertyAccessorType = accessors.type)
+            accessors.getter?.let { getter -> visitAccessor(this, isSetter = false) { getter.visit(modifier = modifier, isPropertyAccessor = true, propertyAccessorType = accessors.type) } }
+            accessors.setter?.let { setter -> visitAccessor(this, isSetter = true) { setter.visit(modifier = modifier, isPropertyAccessor = true, propertyAccessorType = accessors.type) } }
         }
         if (initialValue != null) {
             val valueType = initialValue.type().toDataType()
@@ -795,13 +1299,34 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         evaluateAndRegisterReturnType(this)
     }
 
+    private fun isDeclaredBelowScript(name: String): Boolean {
+        var scope: SymbolTable? = currentScope
+        while (scope != null && scope !== symbolTable) {
+            if (scope.hasProperty(name, isThisScopeOnly = true)) return true
+            scope = scope.parentScope
+        }
+        return false
+    }
+
     fun VariableReferenceNode.visit(modifier: Modifier = Modifier()) {
+        // A top-level property later in this unit, unless a local or member shadows it.
+        if (variableName in pendingTopLevel && !isDeclaredBelowScript(variableName)) {
+            analyzeTopLevelAhead(variableName)
+        }
         if (!currentScope.hasProperty(variableName)) {
             if (currentScope.findClass(variableName) != null) {
                 return
             }
+            if (variableName in initializingTopLevel) {
+                throw SemanticException(position, "`$variableName` is used before it is initialized: the initializer of `$variableName` needs its value, directly or through a function.")
+            }
         }
         val (l, transformedName) = checkPropertyReadAccessAndGetScopeLevelAndTransformedName(this, variableName)
+        noteSelfCallingAccessor(position, variableName, isWrite = false, scopeLevel = l)
+        if (l == symbolTable.scopeLevel) {
+            checkInitializedBeforeUse(this, variableName, transformedName)
+            isTopLevelProperty = true
+        }
         if (variableName != "this" && variableName != "super" && transformedRefName == null) {
             transformedRefName = transformedName
             currentScope.findPropertyOwner(transformedRefName!!)?.let {
@@ -1052,7 +1577,8 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             }
         }
 
-        smartCastNonNullVariables.clear()
+        val outerSmartCasts = smartCasts.toMap()
+        smartCasts.clear()
         if (body != null) {
             body.returnTypeUpperBound = declaredReturnType
             val previousReified = activeReifiedTypeParameters.toMap()
@@ -1084,7 +1610,8 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 }
             }
         }
-        smartCastNonNullVariables.clear()
+        smartCasts.clear()
+        smartCasts.putAll(outerSmartCasts)
 
         while (additionalScopeCount-- > 0) {
             popScope()
@@ -1247,6 +1774,9 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 callableType = resolution.type
                 resolvedDeclaration = resolution.definition as? FunctionDeclarationNode
                 if (resolution.type == CallableType.Property) checkInlineInvocation(resolution.transformedName, position)
+                if (resolution.type == CallableType.Property && resolution.scope === symbolTable) {
+                    checkInitializedBeforeUse(function, functionName, resolution.transformedName)
+                }
 
                 if (callableType == CallableType.Constructor) {
                     val clazz = resolution.definition as ClassDefinition
@@ -1310,21 +1840,20 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     )
                 }
 
-                val resolutions = lookupReceiverTypes.flatMap {
+                // `?.` calls on the non-null receiver, which also accepts every
+                // callable of the nullable type; the search for it already keeps
+                // only the most specific one (member of `Int` over `Any?.toString()`).
+                // The nullable type is a fallback, like in NavigationNode.visitMember.
+                // Merging both searches made such pairs ambiguous.
+                val resolutions = lookupReceiverTypes.firstNotNullOfOrNull {
                     currentScope.findMatchingCallables(
                         currentSymbolTable = currentScope,
                         originalName = function.member.name,
                         receiverType = it,
                         arguments = arguments.map { FunctionCallArgumentInfo(it.name, it.type(ResolveTypeModifier(isSkipGenerics = true)).toDataType()) },
                         modifierFilter = modifierFilter!!,
-                    )
-                }.distinctBy { // distinct again because results of searching non-nullable and nullable types may duplicate
-                    if (it.type == CallableType.ExtensionFunction) {
-                        it.transformedName
-                    } else {
-                        it.signature
-                    }
-                }
+                    ).takeIf { it.isNotEmpty() }
+                } ?: emptyList()
                 if (resolutions.size > 1) {
                     throw SemanticException(position, "Ambiguous function call for `${function.member.name}`. ${resolutions.size} candidates match:\n${resolutions.joinToString("") { "- ${it.toDisplayableSignature()}\n" }}")
                 }
@@ -1857,16 +2386,18 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             scopeType = if (type == ScopeType.Function) ScopeType.FunctionBlock else type,
         )
 
-        statements.forEachIndexed { i, it ->
-            if (returnTypeUpperBound is FunctionTypeNode && i == statements.lastIndex && it is LambdaLiteralNode) {
-                val returnTypeUpperBound = returnTypeUpperBound as FunctionTypeNode
-                it.parameterTypesUpperBound = returnTypeUpperBound.parameterTypes
-                it.returnTypeUpperBound = returnTypeUpperBound.returnType
+        scopedSmartCasts {
+            statements.forEachIndexed { i, it ->
+                if (returnTypeUpperBound is FunctionTypeNode && i == statements.lastIndex && it is LambdaLiteralNode) {
+                    val returnTypeUpperBound = returnTypeUpperBound as FunctionTypeNode
+                    it.parameterTypesUpperBound = returnTypeUpperBound.parameterTypes
+                    it.returnTypeUpperBound = returnTypeUpperBound.returnType
+                }
+                it.visit(modifier = modifier)
             }
-            it.visit(modifier = modifier)
-        }
 
-        returnType = type()
+            returnType = type()
+        }
 
         popScope()
     }
@@ -1922,25 +2453,22 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
     fun IfNode.visit(modifier: Modifier = Modifier()) {
         condition.visit(modifier = modifier)
-        val trueBranchSmartCast = nullCheckVariable(condition, "!=")
-        if (trueBranchSmartCast != null) smartCastNonNullVariables += trueBranchSmartCast
-        try {
-            trueBlock?.visit(modifier = modifier)
-        } finally {
-            if (trueBranchSmartCast != null) smartCastNonNullVariables -= trueBranchSmartCast
-        }
-        falseBlock?.visit(modifier = modifier)
+        val whenTrue = smartCastsWhenTrue(condition)
+        val whenFalse = smartCastsWhenFalse(condition)
+        withSmartCasts(whenTrue) { trueBlock?.visit(modifier = modifier) }
+        withSmartCasts(whenFalse) { falseBlock?.visit(modifier = modifier) }
 
         // After `if (value == null) return ...`, Kotlin smart-casts value
-        // to its non-null type for the remainder of the surrounding block.
-        variableNonNullAfterCondition(condition)
-            ?.takeIf { blockAlwaysReturns(trueBlock) }
-            ?.let { smartCastNonNullVariables += it }
+        // for the remainder of the surrounding block (see BlockNode.visit).
+        val trueBlockNeverCompletes = blockNeverCompletes(trueBlock)
+        val falseBlockNeverCompletes = blockNeverCompletes(falseBlock)
+        if (trueBlockNeverCompletes && !falseBlockNeverCompletes) addSmartCasts(whenFalse)
+        if (falseBlockNeverCompletes && !trueBlockNeverCompletes) addSmartCasts(whenTrue)
     }
 
     fun WhileNode.visit(modifier: Modifier = Modifier()) {
         condition.visit(modifier = modifier)
-        body?.visit(modifier = modifier)
+        withSmartCasts(smartCastsWhenTrue(condition)) { body?.visit(modifier = modifier) }
     }
 
     fun DoWhileNode.visit(modifier: Modifier = Modifier()) {
@@ -1949,6 +2477,21 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     }
 
     fun NavigationNode.visit(modifier: Modifier = Modifier(), lookupType: IdentifierClassifier = IdentifierClassifier.Property, isCheckWriteAccess: Boolean = false): DataType {
+        if (lookupType == IdentifierClassifier.Property && (subject as? VariableReferenceNode)?.variableName == "this") {
+            noteSelfCallingAccessor(member.position, member.name, isWrite = isCheckWriteAccess, scopeLevel = null)
+        }
+        val found = visitMember(modifier, lookupType, isCheckWriteAccess)
+        // `.` on a nullable receiver finds a member of the non-null type only
+        // as a last resort (see visitMember): Kotlin rejects that as unsafe
+        // instead of calling the member unknown.
+        val receiverType = subject.type().unboxClassTypeAsCompanion().toDataType()
+        if (operator == "." && receiverType.isNullable && !found.isNullable) {
+            throw SemanticException(position, "Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type '${subject.type().unboxClassTypeAsCompanion().descriptiveName()}'.")
+        }
+        return found
+    }
+
+    private fun NavigationNode.visitMember(modifier: Modifier, lookupType: IdentifierClassifier, isCheckWriteAccess: Boolean): DataType {
         subject.visit(modifier = modifier)
 
         member.visit(modifier = modifier)
@@ -1958,6 +2501,8 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         log.v { "NavigationNode pos=${position} member=${member.name} subjectType = ${subjectType.descriptiveName} ${subjectType.nameWithNullable} ${subjectType.isNullable}" }
         val subjectTypesToSearch = if (operator == "?." && subjectType.isNullable) {
             listOf(subjectType.copyOf(isNullable = false), subjectType)
+        } else if (subjectType.isNullable) {
+            listOf(subjectType, subjectType.copyOf(isNullable = false))
         } else {
             listOf(subjectType)
         }
@@ -2083,8 +2628,53 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         }
     }
 
+    private fun nullableClassDefinition(node: ClassDeclarationNode) = ClassDefinition(
+        currentScope = currentScope,
+        name = "${node.name}?",
+        fullQualifiedName = "${node.fullQualifiedName}?",
+        isInterface = node.isInterface,
+        modifiers = emptySet(),
+        typeParameters = node.typeParameters,
+        isInstanceCreationAllowed = false,
+        orderedInitializersAndPropertyDeclarations = emptyList(),
+        declarations = emptyList(),
+        rawMemberProperties = emptyList(),
+        memberFunctions = emptyList(),
+        primaryConstructor = null,
+    )
+
+    private fun companionClassDefinition(node: ClassDeclarationNode, classType: TypeNode) = ClassDefinition(
+        currentScope = currentScope,
+        name = "${node.name}.Companion",
+        fullQualifiedName = "${node.fullQualifiedName}.Companion",
+        modifiers = emptySet(),
+        typeParameters = emptyList(),
+        isInstanceCreationAllowed = false,
+        orderedInitializersAndPropertyDeclarations = emptyList(),
+        declarations = emptyList(),
+        rawMemberProperties = emptyList(),
+        memberFunctions = buildList {
+            if (ClassModifier.enum in node.modifiers) {
+                add(CustomFunctionDeclarationNode(CustomFunctionDefinition(
+                    position = node.position,
+                    receiverType = "${node.fullQualifiedName}.Companion",
+                    functionName = "valueOf",
+                    returnType = classType.descriptiveName(),
+                    parameterTypes = listOf(CustomFunctionParameter("value", "String")),
+                    executable = { interpreter, receiver, args, typeArgs ->
+                        throw NotImplementedError()
+                    }
+                )))
+            }
+        },
+        primaryConstructor = null,
+    )
+
     private fun ClassDeclarationNode.visitClassBody(modifier: Modifier) {
         if (typeParameters.any { it.isReified }) throw SemanticException(position, "Class type parameters cannot be reified")
+        if (position in cyclicClasses) {
+            throw SemanticException(superInvocations?.firstOrNull()?.position ?: position, "There is a cycle in the inheritance hierarchy of `$name`")
+        }
         val fullQualifiedClassName = fullQualifiedName
         val classType = TypeNode(
             position = position,
@@ -2115,55 +2705,17 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             inferredModifiers += ClassModifier.abstract
         }
 
-        // Declare nullable class type
-        declarationScope.declareClass(
-            position,
-            ClassDefinition(
-                currentScope = currentScope,
-                name = "$name?",
-                fullQualifiedName = "$fullQualifiedClassName?",
-                isInterface = isInterface,
-                modifiers = emptySet(),
-                typeParameters = typeParameters,
-                isInstanceCreationAllowed = false,
-                orderedInitializersAndPropertyDeclarations = emptyList(),
-                declarations = emptyList(),
-                rawMemberProperties = emptyList(),
-                memberFunctions = emptyList(),
-                primaryConstructor = null,
-            ).also { it.attachToSemanticAnalyzer(this@SemanticAnalyzer) }
-        )
-
-        // Declare companion object
-        declarationScope.declareClass(
-            position,
-            ClassDefinition(
-                currentScope = currentScope,
-                name = "$name.Companion",
-                fullQualifiedName = "$fullQualifiedClassName.Companion",
-                modifiers = emptySet(),
-                typeParameters = emptyList(),
-                isInstanceCreationAllowed = false,
-                orderedInitializersAndPropertyDeclarations = emptyList(),
-                declarations = emptyList(),
-                rawMemberProperties = emptyList(),
-                memberFunctions = buildList {
-                    if (ClassModifier.enum in modifiers) {
-                        add(CustomFunctionDeclarationNode(CustomFunctionDefinition(
-                            position = position,
-                            receiverType = "$fullQualifiedClassName.Companion",
-                            functionName = "valueOf",
-                            returnType = classType.descriptiveName(),
-                            parameterTypes = listOf(CustomFunctionParameter("value", "String")),
-                            executable = { interpreter, receiver, args, typeArgs ->
-                                throw NotImplementedError()
-                            }
-                        )))
-                    }
-                },
-                primaryConstructor = null,
-            ).also { it.attachToSemanticAnalyzer(this@SemanticAnalyzer) }
-        )
+        val declared = declaredClasses[position]?.takeIf { it.node === this }
+        if (declared == null) {
+            declarationScope.declareClass(position, nullableClassDefinition(this).also { it.attachToSemanticAnalyzer(this@SemanticAnalyzer) })
+            declarationScope.declareClass(position, companionClassDefinition(this, classType).also { it.attachToSemanticAnalyzer(this@SemanticAnalyzer) })
+        } else {
+            declared.companion.attachToSemanticAnalyzer(this@SemanticAnalyzer)
+        }
+        // A class declared ahead reuses the scopes its definition was created with.
+        fun pushClassScope(index: Int) {
+            if (declared != null) pushScope(declared.scopes[index]) else pushScope(name, ScopeType.Class)
+        }
 
         if (ClassModifier.enum in modifiers) {
             ExtensionProperty(
@@ -2183,7 +2735,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             }
         }
 
-        pushScope(name, ScopeType.Class)
+        pushClassScope(0)
         // copy this class's type parameter to superclass scope, so that
         // generic types in superclass can be resolved when it returns to this class.
         // declared type parameters here will be overwritten in this class's scope
@@ -2209,7 +2761,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             superClassInvocation = superClassInvocations?.firstOrNull()
         }
 
-        pushScope(name, ScopeType.Class)
+        pushClassScope(1)
         val superClassScope = currentScope
         val superClass = (superClassInvocation?.function as? TypeNode)
             ?.let { declarationScope.findClass(it.name) ?: throw RuntimeException("Super class `${it.name}` not found") }
@@ -2245,7 +2797,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             }
         }
 
-        pushScope(name, ScopeType.Class)
+        pushClassScope(2)
         run {
             var numExtraSuperScopes = 0
 
@@ -2312,42 +2864,51 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     currentScope.assign(p.name, SemanticDummyRuntimeValue(currentScope.getPropertyType(p.name).first.type))
                 }
 
-            val classDefinition = ClassDefinition(
-                currentScope = currentScope!!,
-                name = name,
-                fullQualifiedName = fullQualifiedName,
-                isInterface = isInterface,
-                modifiers = modifiers,
-                typeParameters = typeParameters,
-                isInstanceCreationAllowed = !isInterface,
-                primaryConstructor = primaryConstructor,
-                rawMemberProperties = primaryConstructor?.parameters
-                    ?.filter { it.isProperty }
-                    ?.map {
-                        val p = it.parameter
-                        PropertyDeclarationNode(
-                            position = p.position,
-                            name = p.name,
-                            declaredModifiers = it.modifiers,
-                            typeParameters = emptyList(),
-                            receiver = classType,
-                            declaredType = p.type,
-                            isMutable = it.isMutable,
-                            initialValue = p.defaultValue,
-                            transformedRefName = p.transformedRefName,
-                        ).also { checkForOverriddenProperties(it) }
-                    } ?: emptyList() /* intentionally exclude non-constructor property declarations, in order to allow inferring types */,
-                memberFunctions = declarations
-                    .filterIsInstance<FunctionDeclarationNode>(),
-                orderedInitializersAndPropertyDeclarations = declarations
-                    .filter { it is ClassInstanceInitializerNode || it is PropertyDeclarationNode },
-                declarations = declarations,
-                superClassInvocation = superClassInvocation,
-                superClass = superClass,
-                superInterfaceTypes = interfaceInvocations,
-                superInterfaces = superInterfaces,
-            )
-            declarationScope.declareClass(position, classDefinition)
+            val constructorProperties = primaryConstructor?.parameters
+                ?.filter { it.isProperty }
+                ?.map {
+                    val p = it.parameter
+                    PropertyDeclarationNode(
+                        position = p.position,
+                        name = p.name,
+                        declaredModifiers = it.modifiers,
+                        typeParameters = emptyList(),
+                        receiver = classType,
+                        declaredType = p.type,
+                        isMutable = it.isMutable,
+                        initialValue = p.defaultValue,
+                        transformedRefName = p.transformedRefName,
+                    ).also { checkForOverriddenProperties(it) }
+                } ?: emptyList() /* intentionally exclude non-constructor property declarations, in order to allow inferring types */
+            val classDefinition = if (declared != null) {
+                if (declared.definition.superClass !== superClass) {
+                    throw RuntimeException("Declared superclass of `$fullQualifiedName` changed during analysis")
+                }
+                declared.definition.also { definition ->
+                    constructorProperties.forEach { definition.addProperty(currentScope, it) }
+                }
+            } else {
+                ClassDefinition(
+                    currentScope = currentScope!!,
+                    name = name,
+                    fullQualifiedName = fullQualifiedName,
+                    isInterface = isInterface,
+                    modifiers = modifiers,
+                    typeParameters = typeParameters,
+                    isInstanceCreationAllowed = !isInterface,
+                    primaryConstructor = primaryConstructor,
+                    rawMemberProperties = constructorProperties,
+                    memberFunctions = declarations
+                        .filterIsInstance<FunctionDeclarationNode>(),
+                    orderedInitializersAndPropertyDeclarations = declarations
+                        .filter { it is ClassInstanceInitializerNode || it is PropertyDeclarationNode },
+                    declarations = declarations,
+                    superClassInvocation = superClassInvocation,
+                    superClass = superClass,
+                    superInterfaceTypes = interfaceInvocations,
+                    superInterfaces = superInterfaces,
+                ).also { declarationScope.declareClass(position, it) }
+            }
             classDefinition.attachToSemanticAnalyzer(this@SemanticAnalyzer)
 
             // define an empty class for ClassMemberResolver's use to resolve functions from superclasses and
@@ -2419,10 +2980,10 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 property.accessors?.let { accessors ->
                     // Each accessor declares its own `get`/`set`; keep them apart.
                     pushScope("property-accessor", ScopeType.ClassInitializer)
-                    accessors.getter?.visit(modifier = modifier, isPropertyAccessor = true, propertyAccessorType = accessors.type)
+                    accessors.getter?.let { getter -> visitAccessor(property, isSetter = false) { getter.visit(modifier = modifier, isPropertyAccessor = true, propertyAccessorType = accessors.type) } }
                     popScope()
                     pushScope("property-accessor", ScopeType.ClassInitializer)
-                    accessors.setter?.visit(modifier = modifier, isPropertyAccessor = true, propertyAccessorType = accessors.type)
+                    accessors.setter?.let { setter -> visitAccessor(property, isSetter = true) { setter.visit(modifier = modifier, isPropertyAccessor = true, propertyAccessorType = accessors.type) } }
                     popScope()
                 }
             }
@@ -2503,9 +3064,16 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     }
 
     fun LambdaLiteralNode.visit(modifier: Modifier = Modifier()) {
-//        val type = type() as FunctionTypeNode
-
         if (modifier.isSkipGenerics) return
+        // A lambda may run after a `var` was reassigned, so only stable variables stay narrowed inside it.
+        scopedSmartCasts {
+            smartCasts.values.removeAll { it.isMutable }
+            visitLambda(modifier)
+        }
+    }
+
+    private fun LambdaLiteralNode.visitLambda(modifier: Modifier) {
+//        val type = type() as FunctionTypeNode
 
         symbolRecorders += SymbolReferenceSet(scopeLevel = currentScope.scopeLevel)
         pushScope(
@@ -2764,14 +3332,24 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         type = expressionType
     }
 
-    fun WhenEntryNode.visit(modifier: Modifier = Modifier(), subject: ASTNode?) {
+    /**
+     * @param smartCastsFromEarlierEntries what is known because the entries before this one did not match
+     * @return what is known after this entry did not match
+     */
+    private fun WhenEntryNode.visit(modifier: Modifier = Modifier(), subject: ASTNode?, smartCastsFromEarlierEntries: List<SmartCastFact> = emptyList()): List<SmartCastFact> {
         if (subject == null && conditions.size > 1) {
             throw SemanticException(position, "Use '||' instead of commas in when-condition for 'when' without argument")
         }
-        conditions.forEach { it.visit(modifier = modifier, subject = subject) }
+        return withSmartCasts(smartCastsFromEarlierEntries) {
+            conditions.forEach { it.visit(modifier = modifier, subject = subject) }
 
-        body.visit(modifier = modifier)
-        bodyType = body.type()
+            val smartCastsInBody = conditions.singleOrNull()?.let { whenConditionSmartCasts(it, subject, isConditionTrue = true) }.orEmpty()
+            withSmartCasts(smartCastsInBody) {
+                body.visit(modifier = modifier)
+                bodyType = body.type()
+            }
+            conditions.flatMap { whenConditionSmartCasts(it, subject, isConditionTrue = false) }
+        }
     }
 
     fun WhenNode.visit(modifier: Modifier = Modifier()) {
@@ -2795,7 +3373,10 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             throw SemanticException(entries[elseIndex].position, "`else` branch must be the last branch of a `when` expression")
         }
 
-        entries.forEach { it.visit(modifier = modifier, subject = subject) }
+        var smartCastsFromEarlierEntries = emptyList<SmartCastFact>()
+        entries.forEach {
+            smartCastsFromEarlierEntries += it.visit(modifier = modifier, subject = subject, smartCastsFromEarlierEntries = smartCastsFromEarlierEntries)
+        }
 
         // there is at least 1 else branch, so there is at least 1 branch
         type = superTypeOf(*entries.map { it.bodyType }.toTypedArray())
@@ -3068,12 +3649,8 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 ?: currentScope.findClass(variableName)?.let { ClassTypeNode(TypeNode(position, variableName, null, false)) }
                 ?: error("Unable to resolve variable `$variableName`")
             ).let { resolvedType ->
-                if (variableName in smartCastNonNullVariables && resolvedType.isNullable) {
-                    resolvedType.copy(isNullable = false)
-                } else {
-                    resolvedType
-                }
-            }.also { if (variableName !in smartCastNonNullVariables) type = it }
+                activeSmartCast(smartCastKey(this))?.type ?: resolvedType
+            }.also { if (activeSmartCast(smartCastKey(this)) == null) type = it }
 
     fun IndexOpNode.type(modifier: ResolveTypeModifier = ResolveTypeModifier()): TypeNode {
         return call!!.type(modifier = modifier)

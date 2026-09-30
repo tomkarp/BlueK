@@ -1,5 +1,9 @@
 package com.sunnychung.lib.multiplatform.kotlite.model
 
+import com.sunnychung.lib.multiplatform.kotlite.error.InterpreterStateException
+import com.sunnychung.lib.multiplatform.kotlite.extension.isHostStackOverflow
+import kotlin.coroutines.cancellation.CancellationException
+
 /**
  * The difference between Exception and Throwable is that, Throwable includes exceptions thrown outside the interpreter
  * scope.
@@ -192,7 +196,7 @@ class TypeCastExceptionValue(
     }
 }
 
-/** Standard library exceptions without extra state, e.g. `IllegalArgumentException`. */
+/** Standard library throwables without extra state, e.g. `IllegalArgumentException` or `StackOverflowError`. */
 class StandardExceptionValue(
     currentScope: SymbolTable,
     message: String?,
@@ -239,6 +243,30 @@ class StandardExceptionValue(
             definition("IndexOutOfBoundsException", "Exception"),
             definition("NoSuchElementException", "Exception"),
             definition("UnsupportedOperationException", "Exception"),
+            // Not exceptions: `catch (e: Exception)` does not handle them.
+            definition("Error", "Throwable"),
+            definition("StackOverflowError", "Error"),
         )
+
+        /** Kotlin leaves the message empty; BlueK names the usual cause instead. */
+        fun stackOverflowMessage(maxCallDepth: Int?): String =
+            (if (maxCallDepth != null) "More than $maxCallDepth nested calls" else "Too many nested calls") +
+                ". Does a function or property accessor call itself endlessly?"
+
+        /**
+         * The class of [classes] for an exception thrown by host code, e.g. by a native stdlib function, or null.
+         * `UnsupportedOperationException` is left out: the interpreter throws it for its own unsupported paths.
+         */
+        fun classNameOf(error: Throwable): String? = when {
+            error is InterpreterStateException || error is CancellationException -> null
+            error.isHostStackOverflow -> "StackOverflowError"
+            error is NumberFormatException -> "NumberFormatException"
+            error is IllegalArgumentException -> "IllegalArgumentException"
+            error is IllegalStateException -> "IllegalStateException"
+            error is ArithmeticException -> "ArithmeticException"
+            error is IndexOutOfBoundsException -> "IndexOutOfBoundsException"
+            error is NoSuchElementException -> "NoSuchElementException"
+            else -> null
+        }
     }
 }

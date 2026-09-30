@@ -28,6 +28,7 @@
   import { loadProjectFromServer, saveProjectToServer } from "./shareApi";
   import { compileProject, executeCodepad } from "./codepadFlow";
   import { applyDiagnostics, editorDiagnostics } from "./editorDiagnostics";
+  import { isCompileError } from "./compileDiagnostics";
   import { markdownPreview } from "./markdownEditor";
   import { vim } from "@replit/codemirror-vim";
   import { minimalSetup } from "codemirror";
@@ -417,6 +418,8 @@
     editingField = "",
     fieldDraft = "",
     fieldError = "";
+  // Set while a field value is being edited; bench clicks then insert names.
+  let fieldInput: HTMLInputElement | null = null;
   $: stageRunning = library?.id === "blueplay"
     ? runtime.simulation === "running" || runtime.simulation === "stopping" || runtime.simulation === "waiting"
     : Boolean(stage?.running);
@@ -1658,10 +1661,14 @@
         compilerDialog = !markDiagnostics(result.diagnostics, true);
         return false;
     }
-    markDiagnostics(result.diagnostics);
+    // A warning (an accessor calling itself) opens its editor like an error would.
+    markDiagnostics(result.diagnostics, true);
     status = "Compiled";
     return true;
   }
+  const onlyWarnings = (diagnostics: Diagnostic[] = []) =>
+    diagnostics.length > 0 && !diagnostics.some(isCompileError);
+
   async function runMain() {
     await requestMain("start");
   }
@@ -2177,7 +2184,8 @@
       op: "inspect",
       objectId: object.objectId,
     }, true);
-    if (result?.kind === "inspect") await showInspection(object, preserveReferenceName);
+    // Primitive values answer with their scalar value; they are inspectable too.
+    if (result && result.kind !== "error") await showInspection(object, preserveReferenceName);
   }
   async function inspectFieldReference(ownerId: string, field: InspectorField) {
     if (field.computed && field.objectId) {
@@ -2488,7 +2496,7 @@
         return;
       }
       const diagnostics = result.diagnostics || [];
-      if (diagnostics.length) {
+      if (diagnostics.some(isCompileError)) {
         status = "Compile error";
         error = diagnostics
           .map(
@@ -2498,7 +2506,7 @@
           .join("\n");
         compilerDialog = !markDiagnostics(diagnostics, true);
       } else {
-        markDiagnostics([]);
+        markDiagnostics(diagnostics);
         status = "Compiled";
       }
     } catch (reason) {
@@ -2510,11 +2518,29 @@
     if (!data) return;
     bringInspectorToFront(data.objectId || "");
     editingField = field.name;
-    fieldDraft = fieldValue(data, field);
+    // Object and collection texts are no Kotlin expressions; `Hund()` would
+    // silently create a new object when confirmed unchanged.
+    fieldDraft = field.reference || field.summary ? "" : fieldValue(data, field);
     fieldError = "";
+  }
+  function insertBenchName(name: string) {
+    const input = fieldInput;
+    if (!input) return;
+    const start = input.selectionStart ?? fieldDraft.length,
+      end = input.selectionEnd ?? start;
+    fieldDraft = fieldDraft.slice(0, start) + name + fieldDraft.slice(end);
+    tick().then(() => {
+      input.focus();
+      input.setSelectionRange(start + name.length, start + name.length);
+    });
   }
   async function saveField(field: InspectorField) {
     if (!inspected?.objectId) return;
+    if (!fieldDraft.trim()) {
+      editingField = "";
+      fieldError = "";
+      return;
+    }
     try {
       const objectId = inspected.objectId,
         result = await client.execute({
@@ -3223,7 +3249,7 @@
         on:pointerdown={beginPaneResize}
       ></div>
       <div class:codepad-collapsed={!codepadOpen} class="lower">
-        <section class="bench">
+        <section class="bench" class:bench-picking={Boolean(fieldInput)}>
           <div class="bench-items">
             {#each bench as object (object.name)}
               <div
@@ -3231,8 +3257,15 @@
                 tabindex="0"
                 class:selected={selectedObjectId === object.objectId}
                 class="object"
-                on:click={() => (selectedObjectId = object.objectId)}
-                on:dblclick={() => inspectObject(object)}
+                title={fieldInput ? `Insert ${object.name}` : undefined}
+                on:mousedown={(event) => fieldInput && event.preventDefault()}
+                on:click={(event) => {
+                  // Like BlueJ's call dialogs: while a field is edited, a
+                  // click inserts the object's name instead of selecting it.
+                  if (!fieldInput) selectedObjectId = object.objectId;
+                  else if (event.detail <= 1) insertBenchName(object.name);
+                }}
+                on:dblclick={() => !fieldInput && inspectObject(object)}
                 on:keydown={(event) =>
                   event.key === "Enter" && inspectObject(object)}
                 on:contextmenu={(event) => {
@@ -3516,17 +3549,7 @@
               aria-label="Format Kotlin file"
               title={`Format Kotlin file (${formatShortcutLabel})`}
             >≡</button></div></div>
-          {#if (diagnosticsByFile[editorFile.fileName] || []).length}<div
-            class="dialog-error editor-dialog-error editor-diagnostics"
-            role="alert"
-            aria-label="Compiler errors"
-          ><span>{#each diagnosticsByFile[editorFile.fileName] as diagnostic}<span
-              class="editor-diagnostic"
-            ><strong>Line {diagnostic.line}:</strong> {diagnostic.message}</span>{/each}</span><button
-              type="button"
-              class="dialog-error-close"
-              aria-label="Close compiler errors"
-              title="Close compiler errors"
+          {#if (diagnosticsByFile[editorFile.fileName] || []).length}<div            class="dialog-error editor-dialog-error editor-diagnostics"            class:editor-warnings={onlyWarnings(diagnosticsByFile[editorFile.fileName])}            role="alert"            aria-label={onlyWarnings(diagnosticsByFile[editorFile.fileName]) ? "Compiler warnings" : "Compiler errors"}          ><span>{#each diagnosticsByFile[editorFile.fileName] as diagnostic}<span              class="editor-diagnostic"            ><strong>Line {diagnostic.line}{isCompileError(diagnostic) ? "" : " (warning)"}:</strong> {diagnostic.message}</span>{/each}</span><button              type="button"              class="dialog-error-close"              aria-label={onlyWarnings(diagnosticsByFile[editorFile.fileName]) ? "Close compiler warnings" : "Close compiler errors"}              title={onlyWarnings(diagnosticsByFile[editorFile.fileName]) ? "Close compiler warnings" : "Close compiler errors"}
               on:click={() => markDiagnostics([])}
             >×</button></div>{/if}
           {#if dialogError}<div class="dialog-error editor-dialog-error" role="alert"><span>{dialogError}</span><button
@@ -3602,17 +3625,7 @@
                 aria-label="Format Kotlin file"
                 title={`Format Kotlin file (${formatShortcutLabel})`}
               >≡</button></div></div>
-            {#if (diagnosticsByFile[editorFile.fileName] || []).length}<div
-              class="dialog-error editor-dialog-error editor-diagnostics"
-              role="alert"
-              aria-label="Compiler errors"
-            ><span>{#each diagnosticsByFile[editorFile.fileName] as diagnostic}<span
-                class="editor-diagnostic"
-              ><strong>Line {diagnostic.line}:</strong> {diagnostic.message}</span>{/each}</span><button
-                type="button"
-                class="dialog-error-close"
-                aria-label="Close compiler errors"
-                title="Close compiler errors"
+            {#if (diagnosticsByFile[editorFile.fileName] || []).length}<div              class="dialog-error editor-dialog-error editor-diagnostics"              class:editor-warnings={onlyWarnings(diagnosticsByFile[editorFile.fileName])}              role="alert"              aria-label={onlyWarnings(diagnosticsByFile[editorFile.fileName]) ? "Compiler warnings" : "Compiler errors"}            ><span>{#each diagnosticsByFile[editorFile.fileName] as diagnostic}<span                class="editor-diagnostic"              ><strong>Line {diagnostic.line}{isCompileError(diagnostic) ? "" : " (warning)"}:</strong> {diagnostic.message}</span>{/each}</span><button                type="button"                class="dialog-error-close"                aria-label={onlyWarnings(diagnosticsByFile[editorFile.fileName]) ? "Close compiler warnings" : "Close compiler errors"}                title={onlyWarnings(diagnosticsByFile[editorFile.fileName]) ? "Close compiler warnings" : "Close compiler errors"}
                 on:click={() => markDiagnostics([])}
               >×</button></div>{/if}
             {#if dialogError}<div class="dialog-error editor-dialog-error" role="alert"><span>{dialogError}</span><button
@@ -3717,8 +3730,10 @@
                 {#if editing}
                   <input
                     use:focusOnMount
+                    bind:this={fieldInput}
                     aria-label={`Value of ${field.name}`}
                     aria-invalid={Boolean(fieldError)}
+                    placeholder="expression"
                     bind:value={fieldDraft}
                     on:keydown={(event) => {
                       if (event.key === "Escape") {

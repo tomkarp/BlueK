@@ -1,154 +1,255 @@
 # BlueK
 
-BlueK ist eine browserbasierte Kotlin-Lernumgebung nach dem BlueJ-Prinzip. Die
-Svelte-Oberfläche mit Klassenkarten, Objektbank, Codepad und BluePlay ist die
-einzige gepflegte Anwendung. Schülercode wird ausschließlich in einem
-Browser-Worker mit Kotlite ausgeführt.
+BlueK ist eine browserbasierte Kotlin-Lernumgebung nach dem Vorbild von BlueJ:
+Klassenkarten, Objektbank, Objektinspektor, Codepad, Terminal und die
+Spielbibliothek BluePlay. Schülercode läuft vollständig im Browser – in einem
+Web Worker mit einem eingebundenen, erweiterten
+[Kotlite](https://github.com/sunny-chung/kotlite)-Interpreter. Es gibt weder
+serverseitige Kotlin-Ausführung noch einen Kotlin-Compiler zur Laufzeit.
 
-## main starten und BluePlay zurücksetzen
+- Öffentliche Version: <https://bluek.de> (Branch `main`)
+- Beta: <https://beta.bluek.de> (Branch `beta`)
 
-Eine parameterlose Top-Level-Funktion `fun main()` kann in jeder Funktionsdatei
-stehen, beispielsweise `Spiel.kt` oder `Program.kt`; `Main.kt` ist nicht
-vorgeschrieben. Der linke Button **Start main** (auch per Tastenkürzel) und
-**Reset** in der BluePlay-Welt verwenden dieselbe Auswahl:
+## Schnellstart
 
-- Bei genau einer `main()` wird sie unmittelbar gestartet.
-- Bei mehreren `main()`-Funktionen erscheint bei jedem Aufruf **Choose main**
-  mit den zugehörigen Dateinamen. Ein Klick startet die gewählte Funktion;
-  **Cancel** oder Escape bricht ohne Ausführung ab.
-- Die Auswahl wird weder gemerkt noch im Projekt oder in Einstellungen gespeichert.
-- Ohne passende Top-Level-`main()` ist **Start main** deaktiviert und der
-  Reset-Button der BluePlay-Welt ausgeblendet. Klassenmethoden zählen nicht als
-  Einstiegspunkt.
-
-BluePlay-Reset ruft die gewählte Funktion erneut in derselben Session auf.
-Top-Level-Properties werden dabei nicht neu initialisiert. Über das Kontextmenü
-einer Funktionskarte lässt sich weiterhin gezielt deren `main()` starten.
-
-## Start und Build
-
-Für die Entwicklung werden Node.js 22 und einmalig Java 21 für den Kotlin/JS-Build benötigt. Java und Gradle sind kein Bestandteil der ausgelieferten Laufzeit.
+Voraussetzung ist Node.js 22. Java 21 wird nur gebraucht, wenn der Kotlin-Teil
+(`kotlite-browser/`, `vendor/kotlite-interpreter/`) neu gebaut wird; das
+fertige Interpreter-Bundle `frontend/public/kotlite/bluek-kotlite-browser.js`
+ist eingecheckt.
 
 ```sh
 npm install
-npm run build
-npm run dev
+npm run dev     # Entwicklungsserver, http://localhost:5173
+npm run build   # vollständiger Produktionsbuild nach frontend/dist/
 ```
 
-Die Anwendung verwendet Svelte und den `LocalRuntimeClient` direkt. Ein
-Produktionsbuild ist mit `npm run build:svelte` möglich. Die Oberfläche ist
-lokal unter dem von Vite ausgegebenen Port
-erreichbar; es wird nichts gepusht oder auf GitHub Pages verändert.
+Build-Pipeline, Tests und Deployment stehen in [DEVELOPMENT.md](DEVELOPMENT.md).
 
-`npm run build:kotlite` erzeugt den lokal eingebundenen Bundle unter `frontend/public/kotlite/`; `npm run build` baut die statische Vite-Anwendung nach `frontend/dist/`. Die Produktionsdateien können mit jedem statischen Webserver ausgeliefert werden:
+## Funktionen
 
-```sh
-python3 -m http.server 4173 --directory frontend/dist
-```
+- **Projekte:** Jede Kotlin-Datei ist eine Karte – entweder genau eine Klasse
+  oder Top-Level-Funktionen und -Properties. Vererbung wird als Pfeil
+  gezeichnet. Dazu kommen Projektname und README-Notiz. Das Projekt wird im
+  Browser automatisch gesichert (localStorage), als `.bluek.json`
+  exportiert/importiert, als BlueJ-Projekt (ZIP oder Ordner) importiert oder
+  als Link geteilt: vollständig im Link (`#bluek=…`) oder optional als
+  Drei-Wort-Kurzlink über den Share-Dienst.
+- **Editor:** CodeMirror mit Kotlin-Highlighting, Tabs und Fenstern,
+  Formatierung über einen lokal gebündelten ktfmt-WASM-Build,
+  Compilerfehler an Zeile/Spalte, optionaler Vim-Modus.
+- **Compile und Start main:** siehe unten.
+- **Objektbank und Inspektor:** Objekte über den Konstruktor-Dialog erzeugen,
+  Methoden (direkt/geerbt) aufrufen, Felder passiv inspizieren, Getter auf
+  Anfrage auswerten, Felder setzen (Objekte per Klick auf die Objektbank
+  einsetzen), gespeicherten Objektreferenzen folgen.
+- **Codepad:** Ausdrücke und Anweisungen; Variablen bleiben bis Compile/Reset
+  erhalten. Ergebnisse lassen sich per „Get“ auf die Objektbank legen.
+- **Terminal:** `print`/`println`, `readln`/`readLine`/`readlnOrNull` mit
+  echter Wartestellung, EOF, Stop und BlueJ-artigem Löschen per Form Feed.
+- **BluePlay:** eingebaute Bibliothek mit `World`, `Actor`, `Image` und
+  Hilfsfunktionen; Weltfenster mit Act, Run/Pause, Reset und Speed;
+  Tastatur und Maus; pixelgenaue Kollision; mitgelieferte Standardgrafiken.
+  Siehe [docs/blueplay.md](docs/blueplay.md).
+- **HTML-Export (Beta):** ein Programm als einzelne HTML-Datei, die ohne
+  Server und ohne Netzwerk läuft.
+- **Vorlagen:** New Project bietet Empty Project, BluePlay Template, BluePlay
+  Example sowie zwei Demo-Projekte (BlueK Demo, Space Invaders).
 
-`npm run build:standard-images` erzeugt aus `assets/standard-images/` das
-Modul `frontend/src/standardImages.generated.ts`. Es enthält die
-BluePlay-Standardgrafiken samt Pixelmasken und wird mitgebaut, damit sie ohne
-Netzwerkzugriff und ohne Dekodierung vor dem ersten Compile bereitstehen. Nach
-dem Hinzufügen oder Entfernen einer Datei dort ist das Skript erneut
-auszuführen.
+Hinzufügen eigener Bilder und Sounds ist in der Oberfläche noch nicht
+freigeschaltet; Ressourcen gelangen derzeit über BlueJ-Import oder
+Projekt-JSON ins Projekt.
 
-Zur Laufzeit werden keine Interpreter von CDNs geladen. Optional kann der
-schlanke SQLite-Dienst `server/share-server.mjs` Projekt-Kurz-Links für 30 Tage
-speichern. Er führt keinen Benutzeraccount und keine serverseitige Kotlin-
-Verarbeitung ein, sondern speichert nur das Projekt-JSON.
+## Compile, main und Reset
 
-Lokal werden Vite und der Dienst getrennt gestartet:
+**Compile** startet einen neuen Worker, analysiert alle Kotlin-Dateien
+gemeinsam, führt die Top-Level-Property-Initialisierer einmal aus und
+aktualisiert die Klassenkarten. Dabei wird Kotlin nicht in JavaScript
+übersetzt: „Compile“ bedeutet Parsen, semantische Analyse und Laden in eine
+neue Interpreter-Sitzung. Codepad-Eingaben kompilieren bei Bedarf automatisch.
 
-```sh
-npm run share:server
-npm run dev
-```
+Eine parameterlose Top-Level-Funktion `fun main()` darf in jeder
+Funktionsdatei stehen; `Main.kt` ist nicht vorgeschrieben. **Start main** (auch
+per Tastenkürzel) und **Reset** der BluePlay-Welt verwenden dieselbe Auswahl:
 
-Vite leitet `/api` im Entwicklungsbetrieb an `127.0.0.1:8787` weiter. Für den
-Produktivbetrieb kann Caddy die statische Anwendung ausliefern und `/api/*` an
-denselben Dienst weiterleiten. Siehe [Serverbetrieb](docs/server-deployment.md).
+- Bei genau einer `main()` startet sie sofort.
+- Bei mehreren erscheint bei jedem Aufruf **Choose main** mit den Dateinamen;
+  **Cancel** oder Escape bricht ohne Ausführung ab. Die Wahl wird nirgends
+  gespeichert.
+- Ohne passende `main()` ist **Start main** deaktiviert und der Reset-Button der
+  BluePlay-Welt ausgeblendet. Klassenmethoden zählen nicht als Einstiegspunkt.
+- Über das Kontextmenü einer Funktionskarte lässt sich gezielt deren `main()`
+  starten.
+
+**Reset** kompiliert ein normales Projekt neu. In einem BluePlay-Projekt ruft
+Reset dagegen die gewählte `main()` in derselben Sitzung erneut auf;
+Top-Level-Properties werden dabei nicht neu initialisiert. **Stop** beendet den
+Worker sofort, auch mitten in einer Endlosschleife.
 
 ## Offline-Paket für Prüfungen
 
-`npm run build:offline` erzeugt unter `dist-offline/` einen eigenständigen
-Ordner `BlueK-offline/` samt ZIP. Er enthält die Anwendung (`app/`), einen
-kleinen Server und Startskripte für Windows (`start.bat`) und macOS/Linux
-(`start.command`). Auf dem Zielrechner wird nichts installiert, der Server
-lauscht nur auf `127.0.0.1`, und es wird kein einziger externer Request
-ausgelöst.
+`npm run build:offline` erzeugt unter `dist-offline/` den Ordner
+`BlueK-offline/` samt ZIP: die Anwendung (`app/`), einen kleinen Server und
+Startskripte für Windows (`start.bat`) und macOS/Linux (`start.command`). Auf
+dem Zielrechner wird nichts installiert; der Server lauscht nur auf
+`127.0.0.1:8901` und es gibt keinen externen Request. `start.bat` nutzt Node.js
+oder Python, falls vorhanden, sonst einen mitgelieferten PowerShell-Server.
 
-`start.bat` nutzt Node.js oder Python, falls vorhanden, sonst den mitgelieferten
-PowerShell-Server (Windows-Bordmittel). Das ZIP landet zusätzlich unter
-`frontend/public/downloads/`; die Online-Version verlinkt es unten links in der
-Seitenleiste. `npm run build` baut es jedes Mal neu, `npm run dev` legt es über
-`predev` an, falls es fehlt.
+Das ZIP wird zusätzlich nach `frontend/public/downloads/` kopiert; die
+Online-Version verlinkt es in der Seitenleiste. `npm run build` baut es jedes
+Mal neu, `npm run dev` nur, falls es fehlt (ein veraltetes ZIP bleibt dort
+also liegen). Im Offline-Build sind die
+Kurzlink-Funktionen ausgeblendet; JSON-Export/-Import und „Copy Full Project
+Link“ funktionieren. Anleitung für Lehrkräfte: `scripts/offline/LIESMICH.txt`.
 
-Im Offline-Build sind die Funktionen
-ausgeblendet, die den Kurz-Link-Dienst brauchen; Export/Import als JSON und
-`Copy Full Project Link` funktionieren weiter. Absicherung:
-`npm run test:offline`.
+## Kurz-Links (optional)
 
-## Lokale Architektur
-
-Die verbindlichen Zuständigkeiten, Zustandsübergänge, Einschränkungen und die
-Übergabe für weitere Tests stehen in [Runtime-Architektur](docs/runtime-architecture.md).
-
-Die Klassenkarten-Metadaten für Klassen, Properties, Konstruktoren und Methoden stammen aus dem von Kotlite analysierten AST. Der Browser-Adapter ergänzt nur geerbte Mitglieder für die vorhandene GUI und ordnet Top-Level-Funktionen ihren Dateikarten zu.
-
-- `frontend/src/SvelteApp.svelte` enthält die Svelte-GUI.
-- `frontend/src/entry.ts` ist der alleinige Browser-Einstiegspunkt.
-- `frontend/src/localRuntimeClient.ts` ist der einzige Befehlszugang und liefert einen gemeinsamen beobachtbaren Runtime-Snapshot an die GUI.
-- `frontend/src/localRuntimeWorker.ts` lädt das statische Kotlite-Asset und serialisiert Worker-Nachrichten.
-- `frontend/src/runtimeHost.ts` übersetzt Befehle in die Kotlin/JS-Schnittstelle und veröffentlicht danach Ausgaben und passive Objektzustände.
-- `frontend/src/runtimeMetadata.ts` gruppiert ausschließlich die Metadaten aus Kotlite für die GUI.
-- `kotlite-browser` baut die `KotliteSession` als Kotlin/JS-Browserbundle.
-- `runtime-contract` enthält die weiterhin sinnvolle GUI-/Runtime-Schnittstelle.
-- `examples` enthält lokale Projektdateien und Medien.
-
-Die Svelte-GUI deckt die zentralen Bedienpfade (Editor, Compile, main, Codepad,
-interaktive Eingabe/EOF, Terminal, Objektbank, Konstruktor-/Methodendialoge,
-Inspector, BluePlay sowie Projekt- und Dateifunktionen) ab. Add Media bleibt in
-dieser Vorschau entsprechend der aktuellen Produktentscheidung deaktiviert.
-
-Kotlite ist auf `io.github.sunny-chung:kotlite-interpreter:1.1.2` und `io.github.sunny-chung:kotlite-stdlib:1.1.0` festgelegt. Herkunft ist [sunny-chung/kotlite](https://github.com/sunny-chung/kotlite), Lizenz MIT (Upstream-Lizenzdatei). Der Bundle wird während des Builds in die Anwendung kopiert; ein installiertes Kotlin-System ist beim Betrieb nicht nötig.
-
-## Zustandsmodell
-
-Pro Compile wird ein neuer Worker und damit eine neue Kotlite-Sitzung gestartet. Innerhalb einer Sitzung bleibt ein `Interpreter` bestehen. Projektdateien werden gemeinsam analysiert und einschließlich ihrer Top-Level-Initialisierungen ausgewertet. Eine neue Codepad-Eingabe wird gegen den bisherigen Quelltext analysiert, aber nur ihr neuer Quelltextbereich ausgeführt. Dadurch werden frühere Konstruktoren und Seiteneffekte nicht wiederholt. Analysefehler sind korrigierbar; nach einem Laufzeitfehler ist ein Reset oder Compile erforderlich, da bereits ausgeführte Seiteneffekte nicht zurückgerollt werden.
-
-Objekte bleiben echte Kotlite-Instanzen. Codepad und Objektbank verwenden einen gemeinsamen Namensraum. Die Runtime besitzt die Namensbindungen; die Oberfläche zeigt ihren Snapshot an und verwaltet keine unabhängige Referenzliste.
-
-- Ein über die Objektbank erzeugter Name ist auch im Codepad verfügbar. Entfernen löscht diese Namensbindung und gibt den Namen frei.
-- Codepad-Variablen bleiben bis Compile/Reset bestehen. Übernimmt man ein Ergebnis unter einem bereits vorhandenen Namen für **dasselbe Objekt**, wird nur die Objektbank-Ansicht eingeblendet. Entfernen blendet diese Ansicht aus, löscht aber nicht die Codepad-Variable.
-- Ein neuer Name erzeugt eine zusätzliche, unabhängig entfernbare Referenz. Ein vorhandener Name für ein anderes Objekt oder einen anderen Wert wird abgewiesen.
-- Bei `var` folgt die Objektbank-Ansicht dem aktuellen Wert der Variablen. Ein anderer Alias behält seinen eigenen Wert.
-- Weitere Referenzen – auch über Objektfelder, unterstützte Collections oder eingefangene Lambda-Variablen – halten das Objekt erreichbar. Erst wenn keine solche Referenz mehr existiert, werden seine alten UI-Handles ungültig: Inspektoren schließen sich und alte Codepad-Ergebnisse können das Objekt nicht wiederherstellen. Neue Ausdrucksergebnisse können zunächst übernommen werden; das gilt auch für einen gerade zurückgegebenen Wert wie bei `items.removeAt(0)`, ohne alte Ergebnis-Schaltflächen wieder zu aktivieren.
-
-Beispiel: Nach interaktivem Erzeugen von `timer1` und `val t3 = timer1` kann `timer1` entfernt werden. `t3` funktioniert weiter, ebenso eine unabhängige Eingabe wie `val a = 5`. Ein später neu erzeugtes `timer1` ist eine neue Referenz und verändert `t3` nicht. Details zur Analyse-Historie und zu Host-Datentypen stehen in [docs/architecture.md](docs/architecture.md).
-
-Inspektoren lesen Backing-Felder passiv; berechnete Getter werden nicht beim Rendern ausgeführt. `Stop`, `Reset` und `Compile` verwerfen Worker beziehungsweise Sitzung; verspätete Antworten alter Worker werden nicht weiterverwendet. Reset lädt die zuletzt kompilierten Projektdateien neu.
-
-## Bedienung
-
-`Compile` analysiert alle Kotlin-Dateien gemeinsam und aktualisiert die Klassenkarten. Über den Konstruktor-Dialog der Klassenkarten lassen sich benannte Objekte erzeugen; Rechtsklick auf ein Objekt bietet Methoden, Inspektion und Entfernen. Codepad-Ergebnisse können unter einem neuen Namen oder – falls der Name bereits dieselbe Referenz bezeichnet – als vorhandene Referenz in die Objektbank übernommen werden. Codepad-Eingaben werden einzeln ausgeführt, und Variablen aus früheren Eingaben bleiben bis zum Reset verfügbar. Projektdateien und Medien werden lokal geöffnet, gespeichert und eingebettet.
-
-## Tests
-
-Die Tests umfassen außerdem `init`-Blöcke ohne Wiederholung sowie Safe-Call/Elvis-Ausdrücke mit nullbaren und später gesetzten Werten.
+Der Dienst `server/share-server.mjs` (Node.js + SQLite) speichert Projekt-JSON
+für 30 Tage unter einem Code aus drei englischen Wörtern
+(`/load/wort-wort-wort`). Er kennt keine Benutzer und führt keinen Kotlin-Code
+aus. Lokal:
 
 ```sh
-npm run typecheck
-npm run browser-smoke
-npm run test:references
+npm run share:server   # 127.0.0.1:8787
+npm run dev            # Vite leitet /api dorthin weiter
 ```
 
-Die Smoke-Tests prüfen getrennte Sitzungsaktionen, Objekt-Handles, Alias-Identität, getrennte Instanzen, Vererbung, dynamischen Dispatch, Host-Aufrufe, Sichtbarkeit privater Properties, Reset und die Ablehnung einer `val`-Neuzuweisung. `npm run test:runtime-state` prüft zusätzlich den echten Client und Host mit dem gebauten Kotlite-Bundle: gemeinsame Objektzustände, passive Inspektion, Fehlerphasen, konkurrierende Befehle und verspätete Worker-Antworten. Die Browser-Abnahme prüft außerdem den realen Compile-/Main-Dialog, `waitingForInput`, Fortsetzung nach Return sowie Reset während einer offenen Eingabe.
+Betrieb auf dem Server: [docs/deployment.md](docs/deployment.md).
 
-## Aktuelle Grenzen und bewusste Entscheidungen
+## Aktuelle Grenzen
 
-Die Klassenkarten-Metadaten werden aus dem von Kotlite erzeugten AST-Manifest gewonnen; der TypeScript-Adapter ergänzt nur geerbte Mitglieder und Top-Level-Funktionskarten für die vorhandene GUI. Der Kotlite-Kern enthält eine suspendierbare Aufrufkette sowie Continuation-basierte Zeilen-/EOF-Eingabe. Worker, Client und UI führen dazu ein generation- und request-id-gesichertes Ereignisprotokoll; während `waitingForInput` bleiben Ausgabe, Eingabefeld, EOF und Stop aktiv, ohne die Worker-Warteschlange zu blockieren. Lange Schleifen geben über kooperative Checkpoints an die Event-Schleife zurück. BluePlay ist für eine browserlokale Welt mit `World`, `Actor`, `act`, `show`, `start`, `stop`, `step`, Geschwindigkeit, Tastaturzustand, Klickabfragen, `setBackground`, `showText`, `getObjectsAt` sowie grundlegenden Actor-Zugriffen (`getX`, `getY`, `setLocation`, `getRotation`, `setRotation`, `move`, `turn`) angeschlossen. `move(distance)` unterstützt dabei beliebige Winkel und rundet die Bewegung auf ganze Zellen. Das Beispiel ist über `?example=blueplay` ladbar; die vollständige BluePlay-API ist noch nicht portiert.
+Stand: 26. September 2026, geprüft gegen das eingecheckte Interpreter-Bundle.
 
-Kotlites dokumentierte Sprachgrenzen gelten weiterhin, unter anderem bei `protected`, Packages, sekundären Konstruktoren, `data class`/`object`/`companion object`/`sealed`, verschachtelten Klassen und Teilen der Standardbibliothek. JVM-Bibliotheken (`java.*`, `javax.*`) stehen im Browser nicht zur Verfügung; ein solcher Import wird mit Datei und Zeile gemeldet, `kotlin.*`-Imports sind erlaubt. Private Properties und Methoden werden innerhalb der jeweiligen Schülerklasse zugelassen und außerhalb bereits beim Kompilieren abgewiesen; private Methoden erscheinen nicht im Objektmenü. BlueJ-Projekte lassen sich als ZIP oder Ordner öffnen (siehe `frontend/src/blueJImport.ts`). Einfache benutzerdefinierte Getter und Setter für Klassen-Properties werden vom eingebundenen Interpreter unterstützt; Property-Typ und ein separates Speicherfeld sind dafür erforderlich. In BlueK ist dafür ein gepinnter Quellstand des eigenen Kotlite-Forks eingebunden; der Patch hält eingebaute Erweiterungsfunktionen auch nach mehreren Analyseläufen einer dauerhaften Sitzung auflösbar und erlaubt dem Objektinspektor den passiven Zugriff auf Setter-Backing-Felder. Grundlegende Listenoperationen wie Indexzugriff, `size`, `count { ... }` und `MutableList.add` sind damit inkrementell nutzbar; der parameterlose Aufruf `count()` ist in der aktuellen Kotlite-Stdlib noch nicht vorhanden. Die BluePlay-API umfasst zusätzlich `turnTowards(x, y)` und `distanceTo(actor)`; die Berechnung erfolgt lokal über die Browser-Bridge. `Image` unterstützt lokale Zeichenoperationen (`setColor`, `fill`, `fillRect`, `drawRect`, `fillOval`, `drawOval`, `drawLine`, `drawString`, `drawImage`, `clear`) sowie Transparenz; diese werden als Stage-Daten im Browser gerendert. Die BluePlay-Standardgrafiken (`duck.png`, `cat.png`, `pizza.png` und weitere, siehe `assets/standard-images/`) sind in jedem Projekt ohne Import nutzbar und werden nicht im Projekt gespeichert; eine gleichnamige Projektressource hat Vorrang. Eine Grafik, die es weder im Projekt noch unter den Standardgrafiken gibt, meldet wie in BluePlay einen Laufzeitfehler (`Image file not found: duckk.png (expected e.g. in the folder 'images/')`) statt still einen unsichtbaren Platzhalter zu liefern. Nicht unterstützter oder fehlerhafter Code wird lokal als Fehler zurückgegeben und nicht an einen Backend-Fallback weitergereicht.
+**Projektdateien.** Eine Datei enthält entweder genau eine Klasse (bzw. ein
+Interface oder Enum) oder Top-Level-Funktionen und -Properties. Direkte
+Anweisungen auf oberster Ebene sind ein Compilefehler (im Codepad erlaubt).
+Imports sind nur aus `kotlin.*` zulässig; `java.*`/`javax.*` werden mit Datei
+und Zeile abgewiesen. `package`-Deklarationen gibt es nicht.
 
-Kotlite bildet die Grundlage für die lokale OOP-Ausführung und eine dauerhafte Codepad-/Objektbank-Sitzung. Der eingebundene Kotlite-Fork löst geerbte Methoden auch über den impliziten Empfänger auf; innerhalb einer Unterklasse funktionieren daher sowohl `move(1)` als auch `this.move(1)`. Die BluePlay-Integration bleibt bewusst auf die im Abschnitt beschriebenen Funktionen begrenzt und bietet noch keine vollständige Funktionsparität.
+**Sprache.** BlueK unterstützt die Kotlite-Teilmenge von Kotlin plus die
+Erweiterungen des eigenen Forks (siehe [docs/kotlite.md](docs/kotlite.md)).
+Es funktionieren unter anderem Klassen mit Primärkonstruktor und `init`,
+Klassen, die einander in beliebiger Datei- und Deklarationsreihenfolge und
+auch gegenseitig verwenden (`Hund` mit `var herrchen: Mensch?`, `Mensch` mit
+`val hunde = mutableListOf<Hund>()`, RT-40), Top-Level-Funktionen und
+-Properties, die in Dateireihenfolge erst später stehen (`main()` ruft
+`hilfe()` aus `Util.kt`, eine Klasse liest `val maximum` einer späteren
+Datei, RT-45),
+Vererbung (`open`, `abstract`, `override`, `super`), Interfaces mit abstrakten
+Methoden, Generics einschließlich `inline`/`reified`, Extension-Funktionen,
+Operator-Überladung, Lambdas und Scope-Funktionen, `enum class` (auch mit
+Konstruktor), eigene Getter/Setter mit `field`, `private` (auch `private set`),
+Default- und Named-Arguments, `vararg`, `try`/`catch`/`finally` mit
+Standardausnahmen, `Long`, `Float` (als `Double`), Nullability mit `?.`/`?:`,
+Smart Casts nach `is` und Null-Prüfungen,
+List/Map/Set und Ranges.
+
+Nicht unterstützt sind derzeit:
+
+- `data class`, `object`, `companion object`, `sealed`, verschachtelte und
+  innere Klassen, anonyme Objekte, `fun interface`, `typealias`
+- sekundäre Konstruktoren (mit eigener Fehlermeldung), `protected`,
+  `internal`, `lateinit`, `const`
+- Default-Methoden und Properties in Interfaces, abstrakte Properties,
+  Extension-Properties mit Getter
+- Destrukturierung (auch `for ((k, v) in map)`), Funktionsreferenzen (`::f`),
+  Labels an Schleifen (`break@outer`)
+- Smart Casts nach `is` und Null-Prüfungen wirken nur auf einfache Namen
+  (nicht auf `objekt.eigenschaft` oder `this.eigenschaft`) und, wie in Kotlin,
+  bei `is` nur auf lokale Variablen, Parameter und `val`-Properties ohne eigenen
+  Getter, nicht auf `var`-Properties. Ein Test auf einen nicht verwandten Typ
+  (Kotlin bildet Schnittmengen-Typen) und Zuweisungen in einem späteren
+  Schleifendurchlauf werden nicht berücksichtigt; dort ist ein explizites `as`
+  nötig
+- Arrays (`arrayOf`, `IntArray`), `Short`, Hex-/Binär-/`_`-Zahlliterale,
+  Bit-Operationen, `Triple`
+- `enum`-`values()` (`entries` funktioniert); `when` verlangt immer einen
+  `else`-Zweig
+- `override fun toString()`/`equals()` ohne expliziten Rückgabetyp
+- Top-Level-Properties bei Bedarf initialisieren: BlueK initialisiert sie
+  beim Laden in Dateireihenfolge. Liest ein Initialisierer eine später
+  stehende Property direkt (`val a = b + 1` vor `val b = 2`), ist das ein
+  Compilefehler; über eine Funktion oder Klasse (`val h = Hund()` vor
+  `val maximum = 3`, das `Hund` liest) ein Laufzeitfehler „… is used before
+  it is initialized“. Kotlin/JVM würde die spätere Datei vorher
+  initialisieren.
+- Aufrufe einer Funktion mit Ausdruckskörper ohne Rückgabetyp
+  (`fun b() = 1`), deren Typ Kotlite an dieser Stelle noch nicht kennt: weiter
+  oben in derselben Klasse (`fun a() = b()`) oder bei gegenseitiger
+  Rekursion (`fun a() = b()` mit `fun b(): Int = a()`); ein expliziter
+  Rückgabetyp (`fun b(): Int = 1`) behebt das
+
+**Standardbibliothek.** Grundlage ist `kotlite-stdlib` 1.1.0, ergänzt durch
+BlueK. Was zugesagt ist und welche Lücken bekannt sind (u. a.
+`String.format`, `withIndex`, `buildString`/`StringBuilder`,
+`kotlin.random.Random`, vollqualifizierte Aufrufe wie `kotlin.math.abs(x)`),
+steht in [docs/kotlin-surface.md](docs/kotlin-surface.md). Für fehlende Namen
+nennt BlueK eine verständliche Meldung statt Kotlites generischem Fehler.
+
+**Warten und Ausnahmen.**
+
+- `readln()` und `Thread.sleep()` können nicht innerhalb von `toString()`,
+  `equals()`, `hashCode()` oder `compareTo()` warten; BlueK meldet dann einen
+  Laufzeitfehler („cannot pause inside toString() …“), den auch ein
+  umgebendes `catch` nicht abfängt. In Lambdas von
+  Bibliotheksfunktionen (`forEach`, `map`, `filter`, `repeat`, `let` …)
+  funktionieren sie seit RT-37.
+- Ausnahmen aus Bibliotheksfunktionen lassen sich für
+  `NumberFormatException`, `IllegalArgumentException`,
+  `IllegalStateException`, `IndexOutOfBoundsException`,
+  `NoSuchElementException` und `ArithmeticException` (auch Ganzzahldivision
+  durch 0) mit ihrer Klasse oder mit `Exception` fangen (etwa `"x".toInt()`
+  mit `catch (e: NumberFormatException)`, RT-38). Andere, etwa
+  `UnsupportedOperationException`, fängt nur `catch (e: Throwable)`. Solche
+  Ausnahmen haben keinen Stacktrace; `printStackTrace()` zeigt nur Klasse und
+  Meldung.
+- `substring` prüft seine Grenzen wie Kotlin und wirft
+  `IndexOutOfBoundsException` (RT-39).
+- Rekursion ist auf 1000 verschachtelte Aufrufe begrenzt; danach wirft BlueK
+  einen `StackOverflowError`, der sich mit `catch (e: Throwable)` oder
+  `catch (e: Error)` fangen lässt (RT-42). In Lambdas von
+  Bibliotheksfunktionen und in `toString()` & Co. kann die Grenze früher
+  erreicht sein. Setter oder Getter, die ihre eigene Property statt `field`
+  benutzen und sich dadurch endlos selbst aufrufen, meldet Compile als
+  Warnung (RT-43).
+
+**Laufzeit.**
+
+- Nach einem Laufzeitfehler gibt es kein Rollback; Reset oder Compile ist
+  nötig. Analysefehler lassen die Sitzung dagegen unverändert benutzbar.
+- Jede Codepad-/Objektbank-Aktion analysiert den gesamten bisherigen
+  Sitzungsquelltext erneut. Sehr lange Sitzungen werden dadurch langsamer.
+- Nur Schleifen besitzen kooperative Checkpoints. Rechnet Code ohne Schleife
+  (z. B. eine häufig verzweigende Rekursion) lange, verarbeitet der Worker
+  Eingaben erst danach;
+  Stop funktioniert trotzdem immer. Dasselbe gilt für Schleifen in Lambdas
+  von Bibliotheksfunktionen (`forEach { for (…) }`) und in `toString()`,
+  `equals()`, `hashCode()` und `compareTo()`: Sie laufen korrekt, geben aber
+  erst am Ende an den Worker ab.
+- `Thread.sleep` wird unterstützt, andere Thread-APIs nicht.
+
+**BluePlay.** Die Browser-API ist in [docs/blueplay.md](docs/blueplay.md)
+aufgelistet. JVM-/AWT-Interna (`java.awt.Color`, Dateizugriffe) gehören nicht
+dazu. Eine Grafik, die weder im Projekt noch unter den Standardgrafiken
+existiert, ergibt einen Laufzeitfehler (`Image file not found: …`).
+
+## Dokumentation
+
+| Datei | Inhalt |
+| --- | --- |
+| [DEVELOPMENT.md](DEVELOPMENT.md) | Build-Pipeline, Befehle, Tests, Branches, Deployment-Überblick |
+| [AGENTS.md](AGENTS.md) | Verbindliche Regeln für KI-Agenten (Codex, Claude) |
+| [docs/architecture.md](docs/architecture.md) | Verbindliche Architektur: Zuständigkeiten, Laufzeit, Objekt- und Referenzmodell, Inspektor, Codepad, HTML-Export |
+| [docs/kotlite.md](docs/kotlite.md) | Kotlite in BlueK: Upstream, Fork, Einbindung, Interpreter-Pipeline, Sprachgrenzen |
+| [docs/blueplay.md](docs/blueplay.md) | BluePlay-Bibliothek, Scheduler, Rendering, Kollision, Performance, API |
+| [docs/kotlin-surface.md](docs/kotlin-surface.md) | Zugesagte Standardbibliothek und bekannte Lücken |
+| [docs/kotlite-generics.md](docs/kotlite-generics.md) | Generics, `reified`, Inline-Lambdas und Host-Funktionen |
+| [docs/regression-checklist.md](docs/regression-checklist.md) | Regressionsliste mit stabilen IDs und Prüfprotokoll |
+| [docs/deployment.md](docs/deployment.md) | GitHub Actions, Server, Caddy, Share-Dienst, Beta |
+| [docs/share-wordlist.md](docs/share-wordlist.md) | Herkunft der Wortliste für Kurz-Links |
+| [vendor/kotlite-interpreter/PATCH.md](vendor/kotlite-interpreter/PATCH.md) | Alle Änderungen des vendorten Interpreters gegenüber Upstream |
+
+## Lizenz und Herkunft
+
+Kotlite stammt von [sunny-chung/kotlite](https://github.com/sunny-chung/kotlite)
+(MIT, siehe `vendor/kotlite-interpreter/LICENSE`). Die Wortliste für Kurz-Links
+basiert auf der EFF Large Wordlist (siehe `docs/share-wordlist.md`).

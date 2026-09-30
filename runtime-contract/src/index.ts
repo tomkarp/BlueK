@@ -81,7 +81,8 @@ export type SimulationState = 'inactive' | 'paused' | 'running' | 'stopping' | '
 
 /** A session has exactly one phase, shared by every UI surface. */
 export type Phase = 'uncompiled' | 'compiling' | 'ready' | 'running' | 'waitingForInput' | 'faulted';
-export interface InspectedField { name: string; value: string; type?: TypeRef | null; setterPrivate?: boolean; reference?: boolean }
+/** `reference`: the value is an object; `summary`: the value text describes a collection and is no Kotlin expression. */
+export interface InspectedField { name: string; value: string; type?: TypeRef | null; setterPrivate?: boolean; reference?: boolean; summary?: boolean }
 export interface RuntimeValue {
   kind: 'unit' | 'null' | 'scalar' | 'object' | 'inspect' | 'error';
   display?: string;

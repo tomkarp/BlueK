@@ -1,424 +1,589 @@
 # Architektur von BlueK
 
-Die Svelte-Anwendung ist die einzige gepflegte BlueK-Oberfläche und die
-verbindliche Basis für weitere Arbeit.
-Archivierter Vergleichs-Commit: `ff1f5d7`.
+Dieses Dokument ist verbindlich für weitere Arbeit (siehe AGENTS.md). Die
+Svelte-Anwendung ist die einzige gepflegte Oberfläche.
+
+Grundsätze:
+
+- **Die Laufzeit ist autoritativ.** Objektzustand, Namensbindungen,
+  Klassenmetadaten und Laufphase leben im Worker. Die Oberfläche leitet ihre
+  Ansichten aus dem veröffentlichten `RuntimeSnapshot` ab und hält keine
+  zweite veränderliche Kopie.
+- **Schmale, typisierte Schnittstellen.** Module erhalten nur die Fähigkeiten,
+  die sie brauchen (z. B. `InspectorRuntime`, `CodepadClient`).
+- **Ein Weg zur Laufzeit.** `LocalRuntimeClient` ist der einzige Zugang;
+  kein allgemeiner Event-Bus, kein zweiter Laufzeit-Store, kein alternativer
+  Ausführungspfad, kein Backend-Fallback.
+- **Keine Kotlin-Grammatik in der Oberfläche.** Typen, Signaturen und
+  Diagnosen stammen aus Kotlite.
+
+Verwandte Dokumente: [kotlite.md](kotlite.md) (Interpreter und Fork),
+[blueplay.md](blueplay.md) (Spielbibliothek),
+[kotlite-generics.md](kotlite-generics.md),
+[kotlin-surface.md](kotlin-surface.md).
+
+## Überblick
+
+```text
+ Hauptthread (Browser-Tab)                          Web Worker – einer pro Generation
+┌────────────────────────────────────────┐         ┌──────────────────────────────────────────┐
+│ SvelteApp.svelte                       │         │ runtimeWorker.ts                         │
+│  Editor · Karten · Objektbank · Welt   │         │  wertet bluek-kotlite-browser.js aus     │
+│  Codepad · Terminal · Inspektorfenster │         │                                          │
+│      │ codepadFlow.ts   inspectorModel.ts         │ RuntimeHost (TypeScript)                 │
+│      ▼                                 │ Worker- │  Befehle → KotliteSessionBridge          │
+│ LocalRuntimeClient                     │ Command │  Phasen, Ereignisse, Snapshot,           │
+│  einziger Zugang, Generation/Epoch,    │────────▶│  BluePlay-Scheduler                      │
+│  beobachtbarer RuntimeSnapshot         │◀────────│                                          │
+│                                        │ Reply / │ KotliteSession (Kotlin/JS)               │
+└────────────────────────────────────────┘ Event   │  Sitzungsquelltext, Namensraum, Handles, │
+                                                   │  Ein-/Ausgabe, native BluePlay-Engine    │
+                                                   │                                          │
+                                                   │ Kotlite (vendor/kotlite-interpreter)     │
+                                                   │  Lexer → Parser → SemanticAnalyzer →     │
+                                                   │  Interpreter (AST-Interpretation)        │
+                                                   └──────────────────────────────────────────┘
+```
+
+Der Worker hält genau eine `KotliteSession` mit genau einem lebenden
+`Interpreter`. Compile ersetzt Worker, Session und Generation vollständig.
 
 ## Zuständigkeiten
 
-- `SvelteApp.svelte`: Darstellung und Benutzerinteraktion; Fensterpositionen,
-  Auswahl, Eingabeentwürfe und Dialogzustand. Die Komponente ist weiterhin groß;
-  weitere Extraktionen sollen sich an fachlichen Zuständigkeiten orientieren.
-- `inspectorModel.ts`: abgeleitete Inspektoransicht und ausdrücklich angeforderte
-  Getter-Auswertung. Keine DOM-, Svelte-, Worker- oder Projektdateiabhängigkeit.
-  Schnittstelle zur Laufzeit: nur `getSnapshot()` und `execute(get)`.
-- `LocalRuntimeClient`: einziger Worker-Zugang, laufende Befehle, Phasen,
-  Generationen und veröffentlichter Laufzeit-Snapshot.
-- Worker-Start: `runtimeWorker.ts` (`startRuntimeWorker`) wertet das
-  Kotlite-Bundle einmal aus und leitet jeden Befehl an einen `RuntimeHost`.
-  Nur die Quelle des Bundles unterscheidet sich: `localRuntimeWorker.ts` lädt
-  in der IDE das statische Asset per `fetch`; `playerRuntimeWorker.ts` nutzt
-  im HTML-Export das über `virtual:bluek-kotlite-gzip`
-  (`frontend/build/embeddedKotlite.mjs`) eingebettete gzip+base64-Bundle und
-  entpackt es mit `DecompressionStream` (`embeddedKotlite.ts`, ohne
-  `Blob.stream()`, das in WebKit unter `file://` scheitert).
-  `LocalRuntimeClient` erhält die Worker-Fabrik immer von außen; die IDE
-  übergibt `createLocalRuntimeWorker` (`localRuntimeWorkerFactory.ts`), damit
-  der Player-Build den IDE-Worker nicht mitbündelt.
-- `projectFormat.ts`: typisiertes Projektdateiformat. Validiert externe
-  `unknown`-Payloads und wandelt gespeicherte Dateien, Ressourcen und
-  Kartenpositionen in das interne `ProjectFile`-Modell um. Keine DOM-, Svelte-
-  oder Runtime-Abhängigkeit; IDs werden von der Oberfläche injiziert.
-- `programExport.ts`: typisiertes Format des HTML-Exports
-  (`{ format: "bluek-program", version: 1, mainFile, blueKUrl, project }`).
-  `project` ist unverändert das `.bluek.json`-Format aus `projectFormat.ts`
-  und wird mit dessen Validierung geprüft; `mainFile` muss eine Projektdatei
-  sein. Ob sie ein parameterloses `main()` hat, entscheiden Exporter und
-  Player anhand ihrer Runtime-Metadaten. Das Programm wird als JSON in genau
-  ein leeres `<script type="application/json" id="bluek-program">` der
-  Player-Vorlage eingesetzt; `<`, `>`, `&`, U+2028 und U+2029 werden dabei als
-  `\uXXXX` geschrieben, sodass Quelltexte das Element weder schließen noch
-  Skripte einschleusen können. `blueKUrl` ist die exportierende Instanz,
-  bei localhost/Offline-Paket `https://bluek.de/`. Keine DOM-, Svelte- oder
-  Runtime-Abhängigkeit.
-- `codepadFlow.ts`: schmale Ablaufsteuerung für Compile-on-demand und
-  Codepad-Evaluation. Nutzt nur die benötigten Client-Fähigkeiten, gibt
-  typisierte Compile-/Ausführungsergebnisse zurück und verwirft Antworten
-  nach einem Generationswechsel. Darstellung, History und Fokus bleiben in
-  `SvelteApp.svelte`.
-- `blueJImport.ts`: wandelt ein BlueJ-Projekt (ZIP oder gewählter/gezogener
-  Ordner) in das BlueK-Projektformat: Wurzel ist das flachste `package.bluej`,
-  Kotlin-Dateien werden Karten, `images/`/`sounds/` werden Ressourcen,
-  Kartenpositionen stammen aus `package.bluej`. Enthält das Projekt die
-  historischen BluePlay-Framework-Dateien, wird die eingebaute Library gesetzt
-  und die Dateien entfallen. Keine DOM-, Svelte- oder Runtime-Abhängigkeit.
-- `bluePlayStage.ts`: leitet aus dem veröffentlichten `BluePlayStage` und den
-  Projektressourcen ab, was der Canvas zeigt: Bildauflösung
-  (`decorateStage`), Zeichnen und pixelgenaue Klickziele (`StageRenderer`),
-  Tastennamen (`stageKeyName`) sowie Frame-Sounds und Beep (`StageAudio`).
-  Hält nur Bild-Cache und Alpha-Masken, keinen Welt- oder Laufzeitzustand.
-  Keine Svelte- oder Worker-Abhängigkeit; die IDE behält Zeichentakt, Fokus,
-  gedrückte Tasten und den Client-Zugriff. Grundlage für den HTML-Export.
-- `kotlinFormatterClient.ts`: asynchrone CodeMirror-Formatierung über den
-  lokalen ktfmt-WASM-Build im Hauptthread. Vite bündelt WASM und Laufzeit in
-  die Anwendung; es gibt keinen Server- oder CDN-Aufruf. Der Formatter
-  verändert keinen Runtime-Zustand.
-- `RuntimeHost` und Kotlin-Session: Ausführung und tatsächlicher Objektzustand.
-- `runtime-contract`: gemeinsame Transporttypen. Ansichtsdetails werden nicht
-  dem Worker-Protokoll hinzugefügt.
+**Oberfläche (Hauptthread)**
 
-## HTML-Export (Player)
+- `SvelteApp.svelte`: Darstellung und Benutzerinteraktion; Projektdokumente,
+  Fensterpositionen, Auswahl, Eingabeentwürfe, Dialogzustand,
+  Ausgabehistorie. Die Komponente ist groß; weitere Extraktionen richten sich
+  nach fachlichen Zuständigkeiten und dürfen keine neuen Objektzustandskopien
+  oder Interpreter-Zugänge schaffen. Dateidialoge, Downloads, Clipboard und
+  History-Darstellung bleiben dort.
+- `localRuntimeClient.ts`: einziger Worker-Zugang. Besitzt Worker, laufende
+  Anfragen, Epoche, Generation und den veröffentlichten Snapshot. Die
+  Worker-Fabrik wird injiziert: die IDE übergibt `createLocalRuntimeWorker`
+  (`localRuntimeWorkerFactory.ts`), der Player seine eigene.
+- `codepadFlow.ts`: Compile-on-demand und Codepad-Auswertung. Nutzt nur die
+  benötigten Client-Fähigkeiten, liefert typisierte Ergebnisse und verwirft
+  Antworten nach einem Generationswechsel. Darstellung, History und Fokus
+  bleiben in `SvelteApp.svelte`.
+- `inspectorModel.ts`: abgeleitete Inspektoransicht und ausdrücklich
+  angeforderte Getter-Auswertung. Keine DOM-, Svelte-, Worker- oder
+  Projektdateiabhängigkeit; Schnittstelle zur Laufzeit nur `getSnapshot()`
+  und `execute(get)`.
+- `runtimeMetadata.ts`: gruppiert das Kotlite-Manifest zu Klassenkarten und
+  ergänzt nur geerbte Mitglieder und Funktionskarten pro Datei.
+- `mainEntries.ts`: leitet parameterlose `main()`-Einstiegspunkte aus den
+  Metadaten ab, nie aus Quelltext.
+- `projectFormat.ts`: typisiertes `.bluek.json`-Format. Validiert externe
+  `unknown`-Payloads und wandelt Dateien, Ressourcen und Kartenpositionen in
+  das interne `ProjectFile`-Modell. Keine DOM-, Svelte- oder
+  Runtime-Abhängigkeit; IDs injiziert die Oberfläche.
+- `blueJImport.ts`: BlueJ-Projekt (ZIP oder Ordner) → BlueK-Projekt. Wurzel
+  ist das flachste `package.bluej`; Kotlin-Dateien werden Karten,
+  `images/`/`sounds/` Ressourcen, Positionen kommen aus `package.bluej`.
+  Enthält das Projekt die historischen BluePlay-Frameworkdateien, wird die
+  eingebaute Library gesetzt und die Dateien entfallen.
+- `programExport.ts`, `htmlExport.ts`, `playerMain.ts`, `PlayerApp.svelte`:
+  HTML-Export (siehe unten).
+- `bluePlayStage.ts`, `imageAlpha.ts`, `standardImages.ts`: Canvas-Ableitung,
+  Alpha-Masken und Standardgrafiken für BluePlay (siehe
+  [blueplay.md](blueplay.md)).
+- `kotlinFormatterClient.ts`: Formatierung über den lokal gebündelten
+  ktfmt-WASM-Build im Hauptthread; kein Server- oder CDN-Aufruf, kein
+  Einfluss auf den Runtime-Zustand.
+- `editorDiagnostics.ts`, `markdownEditor.ts`, `uiParity.ts`, `shareApi.ts`:
+  Editor-Markierungen, README-Editor, UI-Hilfsfunktionen (Projektlinks,
+  Terminal, Argumentlisten) und Kurzlink-API.
 
-Ein Export ist eine einzelne HTML-Datei ohne Server- oder Netzwerkzugriff.
-`scripts/build-player.mjs` baut die Vorlage
-`frontend/public/player/bluek-player.html`: Player-Code (`playerMain.ts`,
-`PlayerApp.svelte`), der Player-Worker als Text und darin das
-gzip+base64-Kotlite stehen inline; dazu ein leeres
-`<script type="application/json" id="bluek-program">`, das der Export mit
-`embedProgram` füllt. `<\/script` und `<!--` werden beim Einbetten des Codes
-maskiert. Die Vorlage ist generiert (nicht eingecheckt) und wird mit
-`npm run build` bzw. bei Bedarf von `predev` erzeugt; Offline-Paket und
-Online-Version liefern sie unter `player/` aus.
+**Worker**
 
-`playerMain.ts` startet den Worker aus einer Blob-URL (funktioniert auch unter
-`file://`) und übergibt `PlayerApp` das validierte Programm und die
-Worker-Fabrik. `PlayerApp` nutzt dieselben Bausteine wie die IDE:
-`LocalRuntimeClient`, `projectModelFromPayload`, `mainFiles`,
-`prepareRuntimeResources` mit Standardgrafiken und `bluePlayStage.ts`. Er
-kompiliert beim Laden und prüft, dass `mainFile` ein parameterloses `main()`
-hat. Konsolenprogramme starten sofort; „Restart“ kompiliert neu. BluePlay-
-Programme führen `reset(mainFile)` aus und zeigen die Welt pausiert mit Step,
-Run/Pause, Reset (nur im Pause-Zustand) und Speed; Tastatur und Klicks gehen
-wie in der IDE an die Laufzeit, eine gehaltene Taste wird immer freigegeben.
-„Download project (.bluek.json)“ speichert `program.project` unverändert,
-„Open in BlueK“ verlinkt `blueKUrl#bluek=…` in einem neuen Tab, solange der
-Link höchstens `MAX_PROJECT_LINK_LENGTH` (1 MB) lang ist.
+- `runtimeWorker.ts` (`startRuntimeWorker`): wertet das Kotlite-Bundle einmal
+  aus und leitet jeden Befehl an einen `RuntimeHost`. Nur die Quelle des
+  Bundles unterscheidet sich: `localRuntimeWorker.ts` lädt in der IDE das
+  statische Asset per `fetch`; `playerRuntimeWorker.ts` entpackt das
+  eingebettete gzip+base64-Bundle (`embeddedKotlite.ts`).
+- `runtimeHost.ts`: übersetzt Befehle in die explizite `KotliteSessionBridge`,
+  führt Phasen und Ausführungs-IDs, sammelt Ausgaben und passive
+  Inspektionen, veröffentlicht zusammenhängende Snapshots und besitzt den
+  einzigen BluePlay-Scheduler.
+- `kotlite-browser/…/KotliteSession.kt`: Sitzungsquelltext, Interpreter,
+  Namensraum und Objekt-Handles, Eingabepuffer und Fortsetzungen, Ausgabe,
+  Klassenmanifest, native BluePlay-Funktionen. Alle Ausführungswege benutzen
+  denselben Analyse-/Auswertungspfad.
+- `BlueKStdlibModule.kt`, `BlueKClass.kt`, `KotlinSurfaceHints.kt`,
+  `BluePlayLibrary.kt`, `RuntimeScheduler*.kt`: Stdlib-Ergänzungen,
+  `BlueK.beep()`, verständliche Meldungen für fehlende Namen, Kotlin-Quelltext
+  der BluePlay-Bibliothek, Checkpoint- und Sleep-Planung über `setTimeout`,
+  frischer Stack für tiefe Rekursion über eine Microtask.
+- `vendor/kotlite-interpreter`: Lexer, Parser, semantische Analyse,
+  Interpreter; BlueK-Änderungen in `PATCH.md`, Einordnung in
+  [kotlite.md](kotlite.md).
 
-In der IDE startet „Export as HTML“ im Save/Export-Dialog den Export. Wie
-Start main liest er die Einstiegspunkte mit `mainFiles` aus dem Snapshot der
-aktuellen Generation; ist das Projekt nicht kompiliert, kompiliert er vorher
-(Compilefehler erscheinen wie bei Compile). Ohne `main()` wird nicht
-exportiert, bei mehreren fragt der `mainDialog` (Aktion `export`). Vor dem
-Schreiben prüft die IDE, dass die Generation unverändert ist. `htmlExport.ts`
-lädt die Vorlage von `<BASE_URL>player/bluek-player.html` und setzt das
-Programm mit `blueKUrlForExport` ein; die Datei heißt `<Projektname>.html`.
+**Vertrag**
 
-## Projektdateien und Codepad
+- `runtime-contract/src/index.ts`: gemeinsame Befehle, Antworten, Snapshot,
+  Metadaten und Projekttypen. Es gibt keinen parallelen HTTP-Vertrag.
+  Ansichtsdetails werden nicht ins Worker-Protokoll aufgenommen.
 
-Wie in Kotlin darf jede Datei ein eigenes `main()` deklarieren. `Start main`
-und BluePlay-Reset ermitteln parameterlose Top-Level-Einstiegspunkte mit
-`mainEntries.ts` aus den kompilierten Runtime-Metadaten. Bei genau einem
-Einstiegspunkt starten sie ihn unabhängig vom Dateinamen. Bei mehreren zeigt
-Svelte bei jedem Aufruf eine Dateiauswahl; Abbrechen führt nichts aus. Der
-Dialog hält nur Aktion und Runtime-Generation, seine Optionen werden aus dem
-aktuellen Snapshot abgeleitet. Compile/Invalidierung schließt einen veralteten
-Dialog. Es gibt keine gespeicherte Auswahl oder Build-Einstellung.
+## Build
 
-Die Ausführung erhält die Datei ausdrücklich: `main.fileName` beziehungsweise
-`simulation.reset.fileName`. `RuntimeHost` validiert diese gegen die aktuellen
-Metadaten. Ein Reset ohne Dateiangabe ist nur mit genau einem Kandidaten
-zulässig; fehlende oder mehrdeutige Ziele sind nicht fatale Anforderungsfehler.
-Da die Session alle Dateien zu einem Skript verbindet, erhalten zusätzliche
-`main()`-Funktionen interne Namen (`mainFunctionName(datei)`); Manifest und
-Karten zeigen weiterhin `main`. Das Kontextmenü startet gezielt die Funktion
-seiner Datei. Die bisherige Bindung des unqualifizierten Codepad-Aufrufs
-`main()` bleibt separat erhalten: `Main.kt`, falls dort eine `main` existiert,
-sonst die erste Datei mit `main`. Die beiden Projektaktionen verwenden diese
-implizite Bindung nicht.
-Analyse- und Laufzeitfehler des Projekts werden in der Session auf Datei und
-Zeile abgebildet, auch hinter vorangestellten Library-Quellen.
+Kotlin-Schülercode wird zu keinem Zeitpunkt in JavaScript oder Bytecode
+übersetzt. Zur Build-Zeit entstehen nur der Interpreter (aus Kotlin) und die
+Oberfläche (aus Svelte/TypeScript).
 
-`RuntimeHost` lädt Projektdateien ausschließlich über `KotliteSession.startLoadProject`.
-Dieser Adapter prüft die ASTs aller Dateien auf erlaubte Top-Level-Deklarationen
-(Klassen/Interfaces, Funktionen und Properties), bevor die gemeinsame semantische
-Analyse und irgendeine Ausführung beginnen. Direkte Anweisungen werden mit
-Dateiname, Zeile und Spalte als typisierte Diagnose zurückgegeben. Die Oberfläche
-implementiert keine eigene Kotlin-Grammatik. Kotlites vorhandener Sprachumfang
-wird dadurch nicht erweitert.
+```text
+ vendor/kotlite-interpreter  ──┐ Gradle-Composite-Build ersetzt
+   (Kotlin, Fork-Quellstand)   │ io.github.sunny-chung:kotlite-interpreter
+ kotlite-stdlib 1.1.0 (klib) ──┤
+   von Maven Central           ├─▶ Kotlin/JS IR ─▶ webpack ─▶ frontend/public/kotlite/
+ kotlite-browser (Kotlin)    ──┘   (Kotlin 2.2.21,             bluek-kotlite-browser.js
+   KotliteSession, BluePlay, …      Gradle 8.14.1, Java 21)    (~950 KB, eingecheckt)
+                                                                   │
+                        ┌──────────────────────────────────────────┼──────────────────────┐
+                        ▼                                          ▼                      ▼
+ build-player.mjs: Vite-IIFE (Player + Worker,        vite build (Svelte 5, TS,     build-offline.mjs:
+  Bundle gzip+base64 inline)                           CodeMirror, ktfmt-WASM)       vite build mit
+  → public/player/bluek-player.html                    → frontend/dist/              VITE_BLUEK_OFFLINE=1
+                                                        (Modul-Worker lädt           → dist-offline/ + ZIP
+ build-standard-images.mjs (manuell):                   kotlite/… per fetch)         → public/downloads/
+  assets/standard-images → standardImages.generated.ts
+```
 
-Nach einem Analysefehler bleibt die Laufzeit `uncompiled`; Compile-on-demand
-darf die Prüfung nicht umgehen. Codepad verwendet weiterhin `startEvaluate`
-und erlaubt direkte Anweisungen. Gültige Property-Initialisierer werden beim
-Laden weiterhin einmal ausgeführt, auch mit Ausgabe oder Eingabe; eine Trennung
-von Compile und Initialisierung ist nicht Teil dieser Grenze.
+Reihenfolge in `npm run build`: `build:kotlite` → `build:player` →
+`build:offline` → `vite build`. Details und Befehle: DEVELOPMENT.md.
 
-`Thread.sleep(Int/Long)` ist eine Kotlite-Bibliotheksfunktion mit einem
-injizierten suspendierenden Host-Callback (`ExecutionEnvironment.sleepHandler`).
-BlueK setzt die Ausführung im Worker über einen Timer fort; weder Busy-Waiting
-noch zusätzliche Java-Threads sind erforderlich. Die normale asynchrone
-`start*`-API unterstützt das Warten, die alte synchrone `evaluate`-API lehnt es
-vor dem Anlegen eines Timers ab. Reset beendet wie bisher den Worker mitsamt
-wartenden Fortsetzungen. Andere Thread-APIs werden dadurch nicht bereitgestellt.
+## Laufzeit
 
-## BluePlay-Library und World-Scheduler
+### Generationen und Worker
 
-BluePlay ist eine versionierte Projekt-Library (`{ id: "blueplay", version: 1 }`)
-und kein Satz editierbarer Framework-Dateien. Beim Laden kombiniert die Kotlin-
-Session die eingebaute Deklaration von `World`, `Actor`, `Image` und den
-Top-Level-Funktionen mit den Schülerdateien. Alte BluePlay-Projekte dürfen die
-historischen Framework-Dateien noch enthalten; der Projektimport filtert sie
-bei ausgewiesener Library heraus. Fremde oder fehlende Library-Versionen werden
-im typisierten Projektformat abgewiesen.
+`LocalRuntimeClient.compile` beendet den alten Worker, verwirft alle offenen
+Anfragen, erzeugt eine neue `generationId` (UUID), startet einen neuen Worker
+und schickt `compile` mit Dateien, Library und Ressourcen. Der Worker wertet
+das Interpreter-Bundle aus, `RuntimeHost` legt eine neue `KotliteSession` an
+und lädt das Projekt.
 
-Die Session bleibt die einzige Quelle von World-, Actor-, Bild- und
-Kollisionszustand. `runtime-contract` transportiert einen typed
-`BluePlayStage`-Snapshot sowie den Simulationszustand; die Svelte-Oberfläche
-leitet daraus die Built-in-Karten, API-Doku und den Canvas-Frame ab. Medien
-bleiben projektbezogene, validierte Data-URL-Ressourcen und werden nicht in die
-Kotlin-Library kopiert.
+Jede Antwort und jedes Ereignis trägt die Generation. Der Client prüft
+zusätzlich eine Epoche, der Host eine Ausführungs-ID und bei Eingaben eine
+Input-Request-ID. Verspätete oder doppelte Antworten alter Worker werden
+verworfen; die UI schließt dazugehörige Dialoge und entwertet Objektverweise.
 
-`RuntimeHost` besitzt den einzigen Scheduler: `step`, `start`, `stop`, `reset`
-und `setSpeed` sind versionierte Runtime-Kommandos. Der Worker plant den
-nächsten Schritt mit `max(1, 100 - speed - elapsed)` Millisekunden, wobei
-`elapsed` die Rechen-/Publikationszeit des letzten Schritts ist. Überlange
-Schritte erzeugen keine Nachhol-Warteschlange; der Client hält keinen
-zweiten Simulationstimer. Während eines laufenden Schritts bleiben Tastatur-
-und Mausereignisse zulässig, normale Codepad-/Objektoperationen werden bis zum
-Pause-Zustand abgewiesen. Der Welt-Reset ist im Pause-Zustand verfügbar. Nach
-der gegebenenfalls nötigen Dateiauswahl stoppt der Host den Scheduler und ruft
-die gewählte parameterlose `main()` direkt in derselben Session auf. Dafür
-erhält `startBluePlayMain` den Dateinamen und löst ihn über die interne
-Namenszuordnung auf. Top-Level-Initialisierer laufen nicht erneut. Die
-Ausführung meldet ihre Laufzeitphase und kann interaktive Eingabe anfordern.
+- **Compile** ersetzt Worker und Generation.
+- **Reset** kompiliert den zuletzt an den Client übergebenen Projektstand neu;
+  in BluePlay-Projekten ruft es stattdessen die gewählte `main()` in derselben
+  Sitzung erneut auf (siehe [blueplay.md](blueplay.md)).
+- **Stop** beendet den Worker; danach ist die Laufzeit `uncompiled`.
+- Quelltextänderungen invalidieren die Sitzung.
 
-### BluePlay-Performance und Ausführungsgrenzen
+### Phasen
 
-Ein Tick führt `World.act()` und die weiterhin vorhandenen Actors aus, bevor
-ein gemeinsamer Frame veröffentlicht wird. Währenddessen unterdrückt die
-Session Zwischenbilder, auch bei externen Render-/Speed-Anfragen. Tastatur und
-Maus sind Zustandsänderungen, keine Code-Ausführungen: Ihre Bestätigungen setzen
-im Client weder die IDE-Phase auf `running` noch veröffentlichen sie erneut
-einen alten Frame. Gleichzeitige Tastendrücke und Loslassen dürfen parallel
-bestätigt werden. Automatische Ticks verzichten auf vollständige Inspektionen.
-Streaming-Terminalausgabe wird höchstens etwa alle 16 ms veröffentlicht,
-statt für jedes `println` einen Snapshot zu senden. Der erste Text erscheint
-sofort; ein nachlaufender Timer liefert auch Text vor einem längeren `sleep`.
-Eingabe- und Abschlussereignisse leeren den Restpuffer vollständig.
-Damit kann ein schneller Interpreter die Oberfläche nicht mit einer
-Einzelnachricht pro Schleifeniteration überfluten.
+| Phase | Bedeutung |
+| --- | --- |
+| `uncompiled` | Keine ausführbare Sitzung. |
+| `compiling` | Neuer Worker lädt und analysiert das Projekt. |
+| `ready` | Ein neuer Befehl ist möglich. |
+| `running` | Ein Befehl läuft; konkurrierende Benutzerbefehle werden abgewiesen. |
+| `waitingForInput` | Die laufende Ausführung ist an einer Eingabe suspendiert und wartet auf Zeile oder EOF. |
+| `faulted` | Laufzeit- oder Transportfehler: Reset oder Compile erforderlich. |
 
-Profiling des Space-Invaders-Beispiels zeigte nicht Canvas-Zeichnung, sondern
-Interpreter-Typauflösung und temporäre Symboltabellen als Hauptkosten. Deshalb
-nutzen synthetische Receiver-/Iterator-Bindungen ihre vorhandenen `DataType`s,
-statt sie in `TypeNode`s zurückzuverwandeln und erneut aufzulösen. Klassen ohne
-generische Vorfahren brauchen keine Generic-Substitutionstabellen; generische
-Hierarchien behalten den bisherigen Auflösungspfad. Selten benötigte
-Symboltabellen-Tabellen (auch lokale Properties) werden erst beim Schreiben
-angelegt; Lookups lesen die nullable Felder direkt. Kotlins `by lazy` ist dafür
-ungeeignet: Kotlin/JS erzeugt bei jedem delegierten Zugriff eine
-Property-Referenz, was im Profil die Aufrufkosten dominierte.
+Analysefehler führen zu keiner Ausführung und lassen eine gültige Sitzung
+benutzbar; beim Compile bleibt die Laufzeit `uncompiled`, und
+Compile-on-demand darf das nicht umgehen. Laufzeitfehler können bereits
+Seiteneffekte verursacht haben und sperren die Sitzung (`faulted`). Das ist
+**kein Rollback**: Beobachtbare Backing-Felder lassen sich noch passiv
+inspizieren, der fehlgeschlagene Aufruf wird weder wiederholt noch anhand
+seiner Ausgabe repariert.
 
-Es gibt keine prozessweite Typtabelle. `ClassDefinition` hält nur den
-`ObjectType` der eigenen nicht-generischen Hierarchie; er wird per Identität
-gegen Ober-Klassen revalidiert und ist auch für die prozessweit geteilten
-eingebauten Klassen unveränderlich. Typen mit konkreten Argumenten wie
-`List<Invader>` liegen in der Root-Symboltabelle des jeweiligen Interpreters,
-verglichen über Klassenidentität und Nullability; Reset und Compile beginnen
-daher mit leerem Cache, auch wenn `List` selbst ein Singleton ist. Typen mit
-Typparametern werden weiterhin pro Aufruf aufgelöst. Ein `ObjectType` mit
-konkreten Argumenten hält seinen `ClassMemberResolver`, der sich aufgelöste
-Member-Signaturen merkt. Pro Member-Aufruf werden `this`-Bindungen direkt
-initialisiert und Feldnamen ohne Scan aller Member aufgelöst.
+### Protokoll
 
-Die BluePlay-Library kopiert Objektlisten mit `toList()` statt mit
-interpretierten Identitäts-Lambdas und führt `isTouching(other)` direkt zur
-nativen Kollisionsprüfung. Setter und Weltmethoden rendern nicht mehr einzeln:
-Die Session erzeugt den Frame bei `takeStage()`/`renderBluePlay()`, und ein
-Schritt verwirft vorher gerenderte Frames. Der Scheduler überspringt `act()`
-mit leerem Rumpf, etwa die geerbte Default-Methode aller Invader; das ist ohne
-beobachtbaren Unterschied. Hit-IDs sind über die gemeinsame Wurzel der
-`parentInstance`-Kette indiziert und werden freigegeben, wenn ein Actor keine
-World mehr hat (PERF-02). Die Oberfläche zeichnet den Canvas höchstens einmal
-pro Bildschirm-Frame (`requestAnimationFrame`).
+`RuntimeCommand` umfasst `eval`, `main`, `create`, `invoke`, `get`, `set`,
+`inspect`, `inspectField`, `bind`, `remove`, `input`, `key`, `click` und
+`simulation`; `WorkerCommand` ergänzt `compile`. Der Worker antwortet mit
+`WorkerReply` (Ergebnis + Snapshot) und sendet während einer Ausführung
+`RuntimeEvent`s (`started`, `output`, `snapshot`, `inputRequested`).
 
-`node scripts/benchmark-blueplay.mjs` misst getrennt Tick und zusätzliche
-Frame-Publikation, mit 1-Pixel-Bewegung und mit/ohne Dauerschießen. Es prüft auch
-Bewegung, Laser-Erzeugung und gemeinsame Invader-Schritte. Der Chromium-Test
-PERF-01 misst vier Sekunden lang DOM-Frame-Ankünfte bei Speed 95. Diese Werte
-sind keine Garantie für 60 tatsächlich präsentierte Bilder/s auf jedem Gerät.
+Der `RuntimeSnapshot` enthält Generation, Revision, Phase, Klassenmetadaten,
+passive Inspektionen aller gültigen Handles, den Namensraum (`references`),
+`liveObjectIds`, Fehler, Simulationszustand und den letzten BluePlay-Frame.
+Nach jedem abgeschlossenen Befehl baut `RuntimeHost` ihn neu auf; automatische
+BluePlay-Ticks verzichten auf die vollständigen Inspektionen.
 
-Weitere mögliche Umbauten sind vorbereitete Aufruf-/Typsignaturen pro
-kompilierter Generation, native BluePlay-Methoden statt interpretierter
-Framework-Wrapper und ein getrennter Frame-Transport ohne IDE-Metadaten. Sie
-sind noch nicht umgesetzt: Signaturcaches benötigen saubere Grenzen für lokale
-Typen/Generics; native Methoden dürfen Overrides und Objektidentität nicht
-umgehen. Ein anderer Renderer oder ein zweiter Scheduler behebt den gemessenen
-Interpreter-Engpass nicht. Alpha-Kollisionen und studentischer Code bleiben
-unverändert maßgeblich; es werden keine Kollisionsprüfungen übersprungen.
+Streaming-Ausgabe wird höchstens etwa alle 16 ms veröffentlicht statt einmal
+pro `println`. Der erste Text erscheint sofort, ein nachlaufender Timer liefert
+Text vor einem längeren `sleep`, Eingabe- und Abschlussereignisse leeren den
+Rest.
 
-Die sichtbare World ist ein einzelnes BlueJ-artiges Fenster aus Titelleiste,
-Canvas und eingebetteter Steuerleiste. Die Titelleiste verschiebt den gesamten
-Container; `Run`, `Pause` und der per Drag bedienbare Speed-Regler verwenden
-weiterhin ausschließlich den Worker-Scheduler. Ein normales `World.show()`
-setzt kein Stop-Signal; nur die fachliche `stop()`-Aktion beendet den nächsten
-Lauf. Pointerkoordinaten werden aus den tatsächlichen Canvas-Grenzen und
-`cellSize` berechnet. Der Browser prüft Actor in umgekehrter Zeichenreihenfolge,
-transformiert den Weltpunkt unter Berücksichtigung der Rotation in das lokale
-Bild und übergibt die stabile Treffer-ID nur bei einem sichtbaren Pixel.
-Bilder und Zeichenoperationen werden erst im UI aus dem typed Frame und
-Projektressourcen gerendert. Nicht geladene Bilder erhalten einen
-deterministischen, vollständig treffbaren Platzhalter.
+### Ausführungsmodell: inkrementelle Analyse
 
-Die mitgelieferten Standardgrafiken sind gewöhnliche Ressourcen, die nicht zum
-Projekt gehören: `withStandardImages` stellt sie den Projektressourcen voran,
-eine gleichnamige Projektressource gewinnt. Sie stehen samt Pixelmaske im
-Bundle (`frontend/src/standardImages.generated.ts`), damit Rendern, Compile und
-Kollisionsprüfung ohne Netzwerkzugriff und ohne Dekodierung auskommen.
-Gespeichert, exportiert oder im Dateidialog gelistet wird weiterhin nur
-`resources`. Der Runtime werden alle bekannten Ressourcenpfade gemeldet — auch
-solche ohne vorbereitete Maske —, damit sie einen Tippfehler von einer
-vorhandenen Datei unterscheiden und eine fehlende Grafik melden kann.
+Kotlite hat keine öffentliche REPL-Schnittstelle. `KotliteSession` hält deshalb
+einen lebenden `Interpreter` und den gesamten bisher erfolgreich ausgeführten
+Quelltext der Sitzung (`analysisSource`). Jede Aktion der Oberfläche wird zu
+einem kurzen Kotlin-Quelltext:
 
-Die Canvas-CSS-Größe entspricht dabei immer `width * cellSize` und
-`height * cellSize`; das World-Fenster skaliert kleine oder große Welten nicht
-automatisch. Der umgebende Body ist scrollbar und erhält bei einer Welt, die
-kleiner als die Steuerleiste ist, einen grauen Surround. Seine Breite wächst
-dynamisch mit Welt und Steuerleiste bis knapp an die Browsergrenzen, sodass
-große Welten den verfügbaren Platz möglichst vollständig nutzen, bevor der
-Body scrollen muss. Der Maximieren-Modus setzt das Fenster auf den vollständigen
-Browser-Viewport (`100vw`/`100vh`); auch dort bleibt die Canvas unskaliert und
-der verfügbare Body kann bei kleinen Welten grau sichtbar bleiben.
-Der World-Body zentriert die unvergrößerte Canvas horizontal und vertikal; bei
-ausreichender Breite wird kein pauschaler zusätzlicher Seitenrand reserviert.
+| Aktion | erzeugter Quelltext (Beispiel) |
+| --- | --- |
+| Codepad | die Eingabe selbst |
+| Konstruktor-Dialog | `val hund1 = Hund("Bello")` |
+| Methodenaufruf | `__bluek_expression_3.bellen(2)` |
+| Getter / Feld setzen | `__bluek_expression_3.alter` / `__bluek_expression_3.alter = 4` |
+| Get auf die Objektbank | `val bello = __bluek_expression_3` |
+| Start main | `main()` bzw. der interne Name der gewählten Datei |
 
-Die vier BluePlay-Bibliothekselemente erscheinen im Kartenbereich als normale
-Karten, sind aber keine Schülerdateien und werden nicht kompiliert. Ihre
-virtuellen Karten nehmen an Dragging, Vererbungsdarstellung und der
-Positionierung neuer Schülerklassen teil. Doppelklick und Kontextmenü öffnen
-jeweils nur die API-Dokumentation der gewählten Bibliotheksdatei.
+Ablauf pro Aktion:
 
-Bildressourcen werden vor dem Compile einmal im Browser dekodiert. Nur Breite,
-Höhe und die Alpha-Maske gelangen als flüchtige Runtime-Metadaten in den
-Worker; Export und Autosave enthalten weiterhin ausschließlich Pfad und
-Data-URL. `intersects`/`isTouching` verwenden nach einem gedrehten AABB-
-Schnelltest dieselbe Weltpixel-Geometrie, inverse Rotation, Skalierung und den
-effektiven Alpha-Schwellwert `> 16`. Transparente PNG-Bereiche lösen daher
-weder Klicks noch Kollisionen aus. Die stabile Actor-ID und die kanonische
-Identität über Kotlites Vererbungsteile erlauben außerdem, dass ein Actor in
-seinem eigenen `act()` sicher `world.removeObject(this)` ausführt.
+1. `ReplAnalyzer` parst **bisherigen Quelltext + neuen Ausschnitt** frisch und
+   analysiert ihn vollständig mit dem `SemanticAnalyzer`.
+2. Nur AST-Knoten, deren Quellposition hinter der alten Grenze liegt, werden
+   im bestehenden `Interpreter` ausgewertet, in der Reihenfolge, die
+   `ReplAnalyzer` liefert: Klassen zuerst, dann Top-Level-Funktionen, dann
+   der übrige Quelltext in Quelltextreihenfolge.
+   Frühere Konstruktoren, Initialisierer und Seiteneffekte laufen nicht
+   erneut.
+3. Erst bei Erfolg wird der Ausschnitt an die Historie angehängt. Neue
+   Property-Deklarationen werden Namensbindungen; jedes Ergebnis außer `Unit`
+   erhält ein Handle (siehe unten).
 
-Die API-Matrix des eingebauten Vertrags sieht derzeit so aus:
+Analysefehler übernehmen weder Quelltext noch Bindungen. Die vollständige
+Historie wird erst bei Reset/Compile verworfen; lange Sitzungen verursachen
+entsprechend zunehmenden Analyseaufwand.
 
-| Einheit | Öffentliche Oberfläche | Status/Nachweis |
-| --- | --- | --- |
-| `World` | `World(width, height, cellSize = 1)`, `background: Image`, `show`, `act`, `addObject`, `removeObject`, `allObjects`, `getObjects<T>`, `getObjectsAt`, `numberOfObjects`, `isClicked`, `setBackground`, `showText` | Native Bibliothek, studentische Unterklassen, World-Callback, Objektlebensdauer, Text/Bild-Frames in `smoke-blueplay-browser.mjs` |
-| `Actor` | `x`, `y`, `rotation`, `image: Image?`, `world`, `act`, `setImage`, `getImage`, `move`, `turn`, `turnTowards`, `distanceTo`, `intersects`, `isTouching`, `getIntersecting<T>`, `getOneIntersecting<T>`, `removeTouching<T>`, `isAtEdge`, `isClicked` | Native Unterklasse, direkter dynamischer `act`-Aufruf, Reified-Suche, Input und Identität im Browser-Smoke |
-| `Image` | `Image(width, height)`, `Image(fileName)`, `Image(other)`, `width`, `height`, `path`, `transparency`, `setColor`, `fill`, `fillRect`, `drawRect`, `fillOval`, `drawOval`, `drawLine`, `drawString`, `drawImage`, `clear`, `scale`, `setTransparency` | Copy-/Shared-Instanz, Zeichenoperationen, Skalierung, Transparenz und Canvas-Frame geprüft |
-| Funktionen | `currentWorld`, `activeWorld`, `showWorld`, `show`, `isKeyDown`, `start`, `stop`, `step`, `getSpeed`, `setSpeed`, `playSound` | Native Bridge, Input-/Sound-Effekt, Scheduler- und Reset-Smokes |
+### Projekt laden
 
-Die Matrix beschreibt die vorhandene Oberfläche, nicht eine Zusage für JVM-
-Interna. Für geladene Rasterressourcen sind Alpha, Rotation und Skalierung
-pixelgenau abgedeckt; die einfachen `Image`-Zeichenoperationen verwenden eine
-äquivalente geometrische Maske. Eine 60-Sekunden-/100-Actor-Performance-
-Messung steht noch aus.
+`RuntimeHost` lädt Projektdateien ausschließlich über
+`KotliteSession.startLoadProject`. Vor jeder Analyse prüft der Adapter die ASTs
+aller Dateien:
+
+- Top-Level nur Klassen/Interfaces, Funktionen und Properties; direkte
+  Anweisungen ergeben eine typisierte Diagnose mit Datei, Zeile und Spalte.
+  Codepad-Eingaben dürfen dagegen Anweisungen enthalten.
+- Eine Datei enthält entweder genau eine Klasse oder Funktionen/Properties.
+- Imports nur aus `kotlin.*`.
+- Bei aktiver BluePlay-Library sind Dateien namens `World.kt`, `Actor.kt`,
+  `Image.kt`, `BluePlayFunctions.kt` unzulässig.
+
+Danach werden alle Dateien zu **einem** Skript `<BlueK project>` verbunden
+(je mit Kopfzeile `// BlueK file: Name.kt`), bei BluePlay mit vorangestelltem
+Bibliotheksquelltext. Weil alle Dateien ein Skript bilden, erhalten
+zusätzliche `main()`-Funktionen interne Namen (`main__Datei`); Manifest und
+Karten zeigen weiterhin `main`. Analyse- und Laufzeitfehler werden auf Datei
+und Zeile zurückgerechnet, auch hinter dem Bibliotheksquelltext.
+
+Ein erfolgreicher Compile kann Warnungen tragen (`Diagnostic.severity:
+"warning"`, bisher nur für Accessoren, die ihre eigene Property statt `field`
+benutzen, RT-43). Nur Diagnosen mit `severity: "error"` lassen den Compile
+scheitern (`isCompileError`); Warnungen markiert der Editor gelb, und der
+Compile öffnet ihre Datei wie bei einem Fehler, aber ohne Fehlerdialog.
+
+Gültige Top-Level-Property-Initialisierer werden beim Laden einmal in
+Dateireihenfolge ausgeführt, auch mit Ausgabe oder Eingabe. Eine Trennung von
+Compile und Initialisierung ist nicht vorgesehen. Klassen dürfen einander in
+beliebiger Datei- und Deklarationsreihenfolge verwenden, auch gegenseitig: Der
+`SemanticAnalyzer` deklariert alle Klassen vor der Analyse, und ausgewertet
+werden die Klassen vor den übrigen Deklarationen (siehe
+[kotlite.md](kotlite.md#klassen-in-beliebiger-reihenfolge)). Ebenso dürfen
+Funktionen, Klassen und Initialisierer Top-Level-Funktionen und -Properties
+einer später stehenden Datei verwenden (RT-45); der `SemanticAnalyzer`
+analysiert sie bei Bedarf früher, und Funktionen werden direkt nach den
+Klassen deklariert. Ein Initialisierer darf eine später initialisierte
+Property nicht direkt lesen (Compilefehler); geschieht das über eine Funktion
+oder Klasse, meldet die Laufzeit „… is used before it is initialized“ (siehe
+[kotlite.md](kotlite.md#top-level-deklarationen-in-beliebiger-reihenfolge)).
+
+### Suspension, Eingabe und Checkpoints
+
+Der Interpreter des Forks wertet AST-Knoten über `suspend`-Funktionen aus.
+Dadurch kann eine laufende Ausführung mitten im Schülercode anhalten, ohne
+dass der Worker blockiert:
+
+- **Eingabe:** `readln`, `readLine` und `readlnOrNull` sind Host-Funktionen
+  mit suspendierender Implementierung. Ist der Eingabepuffer leer, merkt sich
+  die Session die Continuation und meldet `inputRequested`. Die Antwort (Zeile,
+  leerer String oder EOF) setzt genau diese Continuation fort. EOF ergibt bei
+  `readlnOrNull`/`readLine` `null`, bei `readln` einen Fehler.
+- **Checkpoints:** `while`, `do-while` und `for` rufen pro Iteration einen
+  Checkpoint auf; nach 128 Checkpoints gibt die Session über `setTimeout(0)`
+  an die Event-Schleife des Workers ab. So verarbeitet der Worker Eingaben und
+  Tastaturereignisse auch während langer Schleifen. Code ohne Schleife (etwa
+  tiefe Rekursion) gibt nicht ab; Stop funktioniert trotzdem immer, weil der
+  Client den Worker von außen beendet.
+- **Rekursion:** Jeder Aufruf geht durch `Interpreter.enterCall`. Alle 32
+  verschachtelten Aufrufe setzt der Interpreter über den `stackResetHook` auf
+  leerem JavaScript-Stack fort (Microtask); nach 1000 Aufrufen wirft er einen
+  Kotlin-`StackOverflowError`. Einzelheiten:
+  [kotlite.md](kotlite.md#rekursionstiefe-und-stack-überlauf).
+- **`Thread.sleep(Int/Long)`** ist eine Kotlite-Bibliotheksfunktion mit
+  injiziertem suspendierendem Host-Callback
+  (`ExecutionEnvironment.sleepHandler`); BlueK setzt die Ausführung über einen
+  Timer fort, ohne Busy-Waiting. Die alte synchrone `evaluate`-API lehnt
+  `sleep` ab. Andere Thread-APIs gibt es nicht.
+- **Lambdas der binären Stdlib** (`forEach`, `map`, `filter`, `let`,
+  `repeat` …) werden synchron aufgerufen. Suspendiert eines, verlässt der
+  Interpreter den nativen Stdlib-Aufruf und wiederholt ihn, sobald das Lambda
+  fertig ist, mit den gemerkten Callback-Ergebnissen; Schülercode läuft genau
+  einmal. Schleifen in synchronen Callbacks geben nicht ab. In `toString()`,
+  `equals()`, `hashCode()`, `compareTo()` und anderen nicht wiederholbaren
+  Callbacks lehnt die Session Eingabe und `sleep` mit einer Meldung ab
+  (`Interpreter.canSuspend`). Einzelheiten:
+  [kotlite.md](kotlite.md#suspendierende-lambdas-in-der-stdlib).
+- Reset und Stop beenden wartende Fortsetzungen mit dem Worker bzw. der
+  Session.
+
+## Klassenkarten-Metadaten
+
+Nach erfolgreichem Laden erzeugt `KotliteSession.manifest()` aus demselben AST,
+den Kotlite analysiert hat, ein `SymbolManifest`: Klassen mit Konstruktoren,
+Properties (Sichtbarkeit, Getter/Setter), Methoden, Supertypen und
+Typparametern sowie Top-Level-Funktionen mit Quelldatei. `runtimeMetadata.ts`
+ergänzt nur geerbte Mitglieder und Funktionskarten pro Datei. Private
+Methoden erscheinen nicht im Objektmenü. BluePlay-Bibliotheksklassen sind als
+`builtin` markiert.
 
 ## Objekt- und Referenzmodell
 
 Es gibt drei getrennte Dinge: **Namensbindung**, **Objektidentität** und
-**UI-Handle**. `KotliteSession` hält für jeden Namen nur das stabile Kotlite-
-Symbol, seine Herkunft (`interactive` oder `persistent`) und `onBench`.
-Der aktuelle Wert wird immer aus dem Interpreter gelesen, nicht in einer
-zweiten Alias-Tabelle gespeichert. Deshalb folgt eine Objektbank-Ansicht auch
-einer späteren `var`-Zuweisung. Codepad- und Projekt-Properties sind persistent.
+**UI-Handle**.
 
-Interaktives Erzeugen deklariert den eingegebenen Namen direkt. `bind` auf
-denselben Namen und dieselbe Instanz ist idempotent und ändert die Herkunft
-nicht; ein freier Name legt einen interaktiven Alias an, ein anderer Wert ist
-ein Konflikt. `remove` entfernt interaktive Bindungen aus dem Interpreter;
-bei persistenten Bindungen setzt es nur `onBench = false`. Ein veralteter
-Remove-Auftrag mit falscher Objektidentität wird abgewiesen.
+- **Objektidentität:** Objekte bleiben echte Kotlite-Instanzen
+  (`ClassInstance`). Konstruktor, Methodenrückgabe, Codepad und Alias zeigen
+  auf dieselbe Instanz. Identität heißt `===`, niemals Schüler-`equals`.
+- **Namensbindung:** `KotliteSession` hält für jeden Namen nur das stabile
+  Kotlite-Symbol, die Herkunft (`interactive` oder `persistent`) und
+  `onBench`. Der aktuelle Wert wird immer aus dem Interpreter gelesen, nie in
+  einer zweiten Alias-Tabelle gespeichert. Deshalb folgt eine
+  Objektbank-Ansicht auch einer späteren `var`-Zuweisung.
+- **Handle:** eine `objectId` wie `object-4`, intern gebunden an eine
+  synthetische Deklaration `val __bluek_expression_N: Typ` ohne Initialisierer,
+  deren Wert direkt in die Symboltabelle geschrieben wird. Darüber adressieren
+  Methodenaufrufe, Getter und Setter das Objekt, ohne es neu zu erzeugen.
+
+Codepad-Variablen und Projekt-Properties sind `persistent`; Namen aus dem
+Konstruktor-Dialog oder aus „Get“ unter neuem Namen sind `interactive`.
+Codepad und Objektbank teilen sich einen Namensraum:
+
+- Interaktives Erzeugen deklariert den eingegebenen Namen direkt.
+- `bind` auf denselben Namen und dieselbe Instanz ist idempotent und blendet
+  nur die Objektbank-Ansicht ein. Ein freier Name legt einen interaktiven
+  Alias an. Ein vorhandener Name für einen anderen Wert ist ein Konflikt.
+- `remove` entfernt interaktive Bindungen aus dem Interpreter und gibt den
+  Namen frei; bei persistenten Bindungen setzt es nur `onBench = false`.
+  Ein veralteter Remove-Auftrag mit falscher Identität wird abgewiesen.
 
 `referenceSnapshot()` liefert den gemeinsamen Namensraum und die gültigen
-Handles. `RuntimeHost` veröffentlicht daraus `RuntimeSnapshot.references`,
-`liveObjectIds` und passive Inspektionen. Svelte leitet die Objektbank daraus
-ab. Es gibt keine zweite Liste löschbarer Namen oder Host-eigene Handle-Liste.
-Alte Ergebnis-Schaltflächen werden deaktiviert und verwaiste Inspektoren
-geschlossen. Nach Namenswechsel wird der Inspektortitel aus den noch gültigen
-Referenzen abgeleitet, nicht als alte Namensbindung weiterverwendet.
+Handles. `RuntimeHost` veröffentlicht daraus `references`, `liveObjectIds` und
+die passiven Inspektionen; Svelte leitet die Objektbank daraus ab
+(`references` mit `onBench`). Es gibt keine zweite Liste löschbarer Namen.
+Nach einem Namenswechsel wird der Inspektortitel aus den noch gültigen
+Referenzen abgeleitet.
+
+Beispiel: Nach interaktivem Erzeugen von `timer1` und `val t3 = timer1` kann
+`timer1` entfernt werden. `t3` funktioniert weiter, ebenso eine unabhängige
+Eingabe wie `val a = 5`. Ein später neu erzeugtes `timer1` ist eine neue
+Referenz und verändert `t3` nicht.
 
 ### Analyse-Historie und Namensfreigabe
 
 Erfolgreich ausgeführter Quelltext bleibt **unveränderlich** in der Historie,
-auch Anweisungen und Blöcke mit lokalen Variablen. Das erhält Kotlites laufende
-Symbolnummern. Nur der neue Quelltextbereich wird ausgeführt; alte Initialisierer
-und Seiteneffekte werden nicht wiederholt. Das Löschen alter Quelltextblöcke
-oder erneutes Ausführen von Alias-Initialisierern ist ausdrücklich falsch.
+auch Anweisungen und Blöcke mit lokalen Variablen. Das erhält Kotlites
+laufende Symbolnummern. Das Löschen alter Quelltextblöcke oder erneutes
+Ausführen von Alias-Initialisierern ist ausdrücklich falsch.
 
-Eine Namensfreigabe wird zusätzlich als Analyse-Ereignis an der aktuellen
+Eine Namensfreigabe wird als Analyse-Ereignis an der aktuellen
 Quelltextgrenze gespeichert. `ReplAnalyzer`/`SemanticAnalyzer` analysieren alte
-Verwendungen noch unter ihrer damaligen Bindung und entfernen anschließend
-den Namen samt Symbolabbildung aus dem Analyseskopus. Eine spätere Deklaration
-desselben Namens bekommt eine neue Symbolnummer. `val t3 = timer1` bleibt damit
-historisch analysierbar, während neue direkte Zugriffe auf das gelöschte
-`timer1` abgewiesen werden. Analysefehler übernehmen weder Quelltext noch neue
-Bindings. Die vollständige Historie wird erst bei Reset/Compile verworfen;
-lange Sitzungen verursachen entsprechend zunehmenden Analyseaufwand.
+Verwendungen noch unter ihrer damaligen Bindung und entfernen anschließend den
+Namen samt Symbolabbildung aus dem Analyseskopus. Eine spätere Deklaration
+desselben Namens bekommt eine neue Symbolnummer. `val t3 = timer1` bleibt
+damit historisch analysierbar, während neue direkte Zugriffe auf das gelöschte
+`timer1` abgewiesen werden.
+
+Aus demselben Grund merkt sich die Session den Beginn jeder angehängten
+Quelle (Projekt, BluePlay-Bibliothek, Codepad-Eingabe, Objektbank-Bindung)
+als Einheitsgrenze und übergibt sie `ReplAnalyzer`. Eine Top-Level-Deklaration
+ist vor ihrer Stelle nur innerhalb ihrer Einheit sichtbar: Eine spätere
+Codepad-Eingabe, etwa eine neue Überladung, ändert weder Auflösung noch
+Symbolnummern früherer Einheiten, und die Bibliothek sieht keine
+Projektfunktionen.
 
 ### Erreichbarkeit
 
-Handles werden anhand echter Identität (`===`, niemals Schüler-`equals`)
-kanonisiert. Namenslose Ergebnisse sind zunächst übernehmbar. Sobald ein Wert
-über den Namensraum erreichbar war, ist sein Handle nur noch eine Ansicht und
-kein zusätzlicher Eigentümer. Nach abgeschlossenen Ausführungen und Remove
-wird die Erreichbarkeit aus den aktuellen Namensbindungen neu bestimmt.
-Ein frisches Ergebnis wie `items.removeAt(0)` darf einen gerade abgetrennten
-Wert erneut anbieten. Dafür wird ein neues vorläufiges Handle vergeben;
-frühere Ergebnis-Handles bleiben ungültig.
+Namenslose Ergebnisse sind zunächst übernehmbar. Sobald ein Wert über den
+Namensraum erreichbar war, ist sein Handle nur noch eine Ansicht und kein
+zusätzlicher Eigentümer. Nach abgeschlossenen Ausführungen und nach Remove
+wird die Erreichbarkeit aus den aktuellen Namensbindungen neu bestimmt; nicht
+mehr erreichbare Handles werden ungültig, Inspektoren schließen sich, alte
+Ergebnis-Schaltflächen werden deaktiviert. Ein frisches Ergebnis wie
+`items.removeAt(0)` darf einen gerade abgetrennten Wert erneut anbieten; dafür
+wird ein neues vorläufiges Handle vergeben, frühere bleiben ungültig.
 
-`RuntimeReachability` verfolgt Backing-Felder einschließlich Vererbung,
-Lambda-Captures, native Collections/Maps/Arrays/Paare und explizite Referenzen
-von Host-Wrappern. Identitätsbasierte Zyklenerkennung verhindert Endlosschleifen;
-Getter, Schüler-`equals` und lazy Iteratoren werden dabei nicht ausgeführt.
-Globale Lambda-Captures halten wie lokale Captures ihren Property-Holder,
-auch wenn der ursprüngliche interaktive Name entfernt oder neu vergeben wird.
-Der Iterator-Wrapper hält seine Quell-Collection über `retainedRuntimeValues`.
-Weitere opake Host-/Bibliothekswrapper (etwa lazy Sequenzen) müssen ihre
-internen Referenzen ebenfalls explizit über diesen Vertrag offenlegen;
-beliebige native Closures lassen sich nicht automatisch passiv traversieren.
+`reachableRuntimeValues` (Fork) verfolgt Backing-Felder einschließlich
+Vererbung, Lambda-Captures, native Collections/Maps/Paare und explizite
+Referenzen von Host-Wrappern. Identitätsbasierte Zyklenerkennung verhindert
+Endlosschleifen; Getter, Schüler-`equals` und lazy Iteratoren werden dabei
+nicht ausgeführt. Globale Lambda-Captures halten ihren Property-Holder, auch
+wenn der ursprüngliche interaktive Name entfernt oder neu vergeben wird. Der
+Iterator-Wrapper hält seine Quell-Collection über `retainedRuntimeValues`.
+Weitere opake Host-Wrapper müssen ihre internen Referenzen ebenfalls über
+diesen Vertrag offenlegen; beliebige native Closures lassen sich nicht
+passiv traversieren. Das Modell entwertet UI-Handles; es ersetzt nicht den
+Garbage Collector von JavaScript.
 
-Regressionen: `test:references` (echtes Kotlin/JS-Bundle in Node),
-`test:runtime-state` (Client/Host/Session-Integration) und
-`tests/gui/references.spec.ts` (echter Browser).
+Regressionen: `test:references`, `test:runtime-state`,
+`tests/gui/references.spec.ts`.
 
-## Inspektor: Datenfluss und Lebensdauer
+## Inspektor
 
-Die Laufzeit ist die Quelle gespeicherter Feldwerte. Fenster enthalten nur ID
-und Position; der aktive Inspektor wird über seine ID ausgewählt. Ansichten
-werden abgeleitet und nicht als weitere Kopien von Objektdaten gepflegt.
-Die gemeinsame Fensteraktivierung ordnet Inspektor, Editor und Terminal im
-Z-Stapel; innerhalb der Inspektoren bestimmt die aktive ID die Reihenfolge.
+Die Laufzeit ist die Quelle gespeicherter Feldwerte. Inspektorfenster
+enthalten nur Objekt-ID und Position; der aktive Inspektor wird über seine ID
+ausgewählt. Die gemeinsame Fensteraktivierung ordnet Inspektor, Editor und
+Terminal im Z-Stapel.
 
-Das Inspektormodell hält ausschließlich Ergebnisse expliziter Getter-Aufrufe.
-Rendern oder das Empfangen eines Snapshots löst keine Getter aus: Kotlin-Getter
-können Seiteneffekte haben. Nach Benutzeroperationen werden offene Inspektoren
-gezielt aktualisiert. Parallele Refreshes desselben Objekts werden übersprungen.
+**Passiv (bei jedem Snapshot):** `KotliteSession.inspect` liest für jede
+Property der Klasse (einschließlich geerbter, aus dem AST gesammelt) das
+Backing-Feld über `ClassInstance.readBackingPropertyByDeclaredName`, eine
+Erweiterung des Forks. Dabei läuft kein Schülercode: kein Getter, kein
+`toString()` (Anzeige über `convertToString(isCallCustomFunction = false)`);
+Collections zeigen Größe und die ersten fünf Elemente. Properties mit
+eigenem Getter erscheinen als `<computed>`. Eine Property nur mit eigenem
+Setter liest weiterhin ihr Backing-Feld. Objektwertige Felder sind als
+Referenz markiert; `inspectField` folgt ihnen, ohne Getter auszuführen, und
+vergibt dafür ein Handle.
 
-Getter-Ergebnisse gelten nur für ihre Runtime-Generation. Reset/Compile sowie
-Schließen eines Fensters entwerten ausstehende Ergebnisse. Transportfehler
-bleiben in der Laufzeit, fachliche Getter-Fehler sind Teil der Ansicht.
+**Explizit:** `InspectorModel` hält ausschließlich Ergebnisse ausdrücklich
+ausgewerteter Getter. Rendern oder das Empfangen eines Snapshots löst keine
+Getter aus, denn Kotlin-Getter können Seiteneffekte haben. Nach
+Benutzeroperationen fragt die Oberfläche offene Inspektoren gezielt ab (ein
+`get`-Befehl pro `<computed>`-Feld); parallele Refreshes desselben Objekts
+werden übersprungen. Getter-Ergebnisse gelten nur für ihre Generation;
+Reset/Compile und Schließen eines Fensters entwerten ausstehende Ergebnisse.
+Transportfehler bleiben in der Laufzeit, fachliche Getter-Fehler sind Teil der
+Ansicht.
 
-## Nächste sinnvolle Grenzen
+Feldänderungen laufen als normaler `set`-Befehl auf das Handle des
+Fensters. Typinformationen stammen aus Kotlite, nicht aus dem Format des
+angezeigten Werts. `inspect` markiert Objektfelder (`reference`) und
+Collections (`summary`): Ihr Anzeigetext ist kein Kotlin-Ausdruck – `Hund()`
+würde bestätigt ein neues Objekt erzeugen –, daher beginnt ihre Bearbeitung
+mit einem leeren Feld, und Enter auf einem leeren Feld bricht ohne `set` ab.
+Solange ein Feld bearbeitet wird, fügt ein Klick auf ein Objekt der
+Objektbank dessen Namen an der Cursorposition ein (wie in BlueJs
+Aufrufdialogen); die Oberfläche verwendet dafür nur den Namen aus dem
+Snapshot. Während eines laufenden BluePlay-Ticks liefert `inspect`
+den Stand des letzten abgeschlossenen Schritts.
 
-Projektdateiformat und der Compile-/Codepad-Ablauf liegen hinter konkreten,
-kleinen Schnittstellen. Dateidialoge, Downloads, Clipboard, Dialoge und
-History-Darstellung bleiben in `SvelteApp.svelte`; Methodenaufrufe, BluePlay
-und weitere Abläufe sind davon bewusst nicht erfasst. Kein allgemeiner
-Event-Bus und kein zweiter Laufzeit-Store.
+## Codepad
 
-Absicherung: `docs/regression-checklist.md`; Modelltests für Lebensdauer und
-Nebenläufigkeit, echte Browsertests für sichtbare Aktualisierung und Bedienung.
+`executeCodepad` kompiliert bei Bedarf, sendet `eval` und verwirft das
+Ergebnis, falls sich die Generation inzwischen geändert hat. Im Worker ist das
+ein gewöhnlicher Aufruf von `startEvaluate("<Codepad>", code)` mit dem oben
+beschriebenen inkrementellen Ablauf. Jeder Wert außer `Unit` erhält ein
+Handle – auch `Int` und `String` –, damit die Oberfläche ihn als roten
+Ergebniskasten anbieten kann. „Get“ ruft `bind` auf. Variablen bleiben bis
+Compile/Reset bestehen; Übernahme unter einem vorhandenen Namen für dasselbe
+Objekt blendet nur die Objektbank-Ansicht ein, Entfernen blendet sie wieder
+aus, ohne die Variable zu löschen.
+
+## Projektdateien und main
+
+Wie in Kotlin darf jede Datei ein eigenes `main()` deklarieren. `Start main`,
+BluePlay-Reset und HTML-Export ermitteln parameterlose Top-Level-Einstiegspunkte
+mit `mainEntries.ts` aus den Metadaten der aktuellen Generation. Bei genau
+einem starten sie ihn unabhängig vom Dateinamen; bei mehreren zeigt Svelte bei
+jedem Aufruf eine Dateiauswahl, Abbrechen führt nichts aus. Der Dialog hält nur
+Aktion und Generation; Compile/Invalidierung schließt ihn. Es gibt keine
+gespeicherte Auswahl.
+
+Die Ausführung erhält die Datei ausdrücklich (`main.fileName`,
+`simulation.reset.fileName`); `RuntimeHost` validiert sie gegen die
+Metadaten. Ein Reset ohne Dateiangabe ist nur mit genau einem Kandidaten
+zulässig; fehlende oder mehrdeutige Ziele sind nicht fatale
+Anforderungsfehler. Der unqualifizierte Codepad-Aufruf `main()` bleibt an
+`Main.kt` gebunden, falls dort eine `main` existiert, sonst an die erste Datei
+mit `main`; die Projektaktionen verwenden diese implizite Bindung nicht.
+
+## HTML-Export (Player)
+
+Ein Export ist eine einzelne HTML-Datei ohne Server- oder Netzwerkzugriff.
+
+- `scripts/build-player.mjs` baut die Vorlage
+  `frontend/public/player/bluek-player.html`: Player-Code (`playerMain.ts`,
+  `PlayerApp.svelte`), der Player-Worker als Text und darin das
+  gzip+base64-Kotlite (`virtual:bluek-kotlite-gzip` aus
+  `frontend/build/embeddedKotlite.mjs`) stehen inline, dazu ein leeres
+  `<script type="application/json" id="bluek-program">`. `<\/script` und
+  `<!--` werden beim Einbetten des Codes maskiert. Das Entpacken nutzt
+  `DecompressionStream` ohne `Blob.stream()`, das in WebKit unter `file://`
+  scheitert.
+- `programExport.ts` definiert das Format
+  `{ format: "bluek-program", version: 1, mainFile, blueKUrl, project }`.
+  `project` ist unverändert das `.bluek.json`-Format und wird mit dessen
+  Validierung geprüft; `mainFile` muss eine Projektdatei sein. Beim Einsetzen
+  werden `<`, `>`, `&`, U+2028 und U+2029 als `\uXXXX` geschrieben, sodass
+  Quelltexte das Element weder schließen noch Skripte einschleusen können.
+  `blueKUrl` ist die exportierende Instanz, bei localhost/Offline-Paket
+  `https://bluek.de/`.
+- `playerMain.ts` startet den Worker aus einer Blob-URL (funktioniert auch
+  unter `file://`). `PlayerApp` nutzt dieselben Bausteine wie die IDE:
+  `LocalRuntimeClient`, `projectModelFromPayload`, `mainFiles`,
+  `prepareRuntimeResources` mit Standardgrafiken und `bluePlayStage.ts`. Er
+  kompiliert beim Laden und prüft `mainFile`. Konsolenprogramme starten
+  sofort, „Restart“ kompiliert neu. BluePlay-Programme führen `reset(mainFile)`
+  aus und zeigen die Welt pausiert mit Step, Run/Pause, Reset und Speed.
+  „Download project“ speichert `program.project`, „Open in BlueK“ verlinkt
+  `blueKUrl#bluek=…`, solange der Link höchstens 1 MB lang ist.
+- In der IDE startet „Export as HTML (Beta)“ im Save/Export-Dialog den Export. Er
+  kompiliert bei Bedarf, fragt bei mehreren `main()` nach, prüft vor dem
+  Schreiben, dass die Generation unverändert ist, lädt die Vorlage von
+  `<BASE_URL>player/bluek-player.html` und speichert `<Projektname>.html`.
+
+## BluePlay
+
+BluePlay ist eine versionierte Projekt-Library (`{ id: "blueplay", version: 1 }`),
+kein Satz editierbarer Framework-Dateien. `World`, `Actor` und `Image` sind
+Kotlin-Quelltext, der zusammen mit dem Projekt interpretiert wird;
+rechenintensive Teile (Weltregister, Kollision, Rendering, Eingabezustand)
+sind native Host-Funktionen der Session. Die Session ist die einzige Quelle
+von Welt-, Actor-, Bild- und Kollisionszustand; `RuntimeHost` besitzt den
+einzigen Scheduler; die Oberfläche leitet Canvas, Bibliothekskarten und
+API-Dokumentation aus dem typisierten `BluePlayStage` ab. Einzelheiten:
+[blueplay.md](blueplay.md).
 
 ## Generische Funktionen und Inline-Kontrollfluss
 
 Typauflösung, lexikalische Captures und Inline-Parameterregeln gehören zum
-vendorten Kotlite-Interpreter. Svelte und Worker-Protokoll erhalten dafür keine
-zusätzlichen Typkopien oder Quelltext-Ersetzungen. Die konkrete Host-Schnittstelle
-ist in `docs/kotlite-generics.md` beschrieben.
+vendorten Interpreter. Svelte und Worker-Protokoll erhalten dafür keine
+Typkopien oder Quelltext-Ersetzungen. Der Analyzer ordnet Returns
+lexikalischen Callables zu; zur Ausführung erhält jeder Aufruf ein eigenes
+Rücksprung-Token, Lambdas erfassen benötigte Tokens zusammen mit Variablen und
+Typaliasen. Dadurch bleiben Rekursion und Suspendierung korrekt, und
+Kotlin-`catch` fängt keinen internen Return ab; `finally` läuft trotzdem.
+Details und Host-Schnittstelle: [kotlite-generics.md](kotlite-generics.md).
 
-Der Analyzer ordnet Returns lexikalischen Callables zu. Zur Ausführung erhält
-jeder Aufruf ein eigenes Rücksprung-Token; Lambdas erfassen benötigte Tokens
-zusammen mit ihren Variablen und Typaliasen. Nur der passende Aufruf fängt den
-Kontrollfluss ab. Dadurch bleiben Rekursion und Suspendierung korrekt, und
-Kotlin-`catch` fängt keinen internen Return ab; `finally` wird trotzdem ausgeführt.
-`GenericCollectionsModule` und `StdlibInlineMetadata` kapseln allgemeine
-Bibliotheksfunktionen bzw. die fehlenden Inline-Metadaten der alten Binärbibliothek.
+## Bekannte technische Schulden und nächste Grenzen
+
+- **Vollständige Neuanalyse:** Jede Aktion analysiert den gesamten
+  Sitzungsquelltext. Eine echte inkrementelle Symboltabelle gehört in
+  Kotlite.
+- **Vorwärtsverweise:** Zwischen Klassen gelöst (RT-40): Kotlite deklariert
+  alle Klassen vor der Analyse und analysiert eine Klasse bei Bedarf früher;
+  Umordnen und wiederholte Analyse nach Fehlermeldungen entfallen.
+  Top-Level-Funktionen und -Properties analysiert Kotlite bei Bedarf früher,
+  innerhalb ihrer Quelltexteinheit (RT-45). Offen: Von einer Klasse, deren
+  Analyse gerade läuft, sind nur die bis dahin analysierten Member bekannt
+  (Rückgabetypen von Funktionen mit Ausdruckskörper erst nach deren Analyse),
+  und Property-Initialisierer laufen strikt in Dateireihenfolge, während
+  Kotlin/JVM eine Datei erst bei Bedarf initialisiert. Einzelheiten:
+  [kotlite.md](kotlite.md#klassen-in-beliebiger-reihenfolge) und
+  [kotlite.md](kotlite.md#top-level-deklarationen-in-beliebiger-reihenfolge).
+- **Rekursionstiefe:** Die Namenssuche läuft durch die Scopes aller
+  Aufrufer; deshalb ist die Tiefe auf 1000 begrenzt
+  ([kotlite.md](kotlite.md#technische-schulden)).
+- **Metadaten:** Generische Oberklassentypen und ihre Spezialisierung sind
+  noch nicht umfassend geprüft; einige ältere UI- und BluePlay-Datenstrukturen
+  sind dynamisch typisiert. Der Runtime-Befehlsweg ist typisiert.
+- **UI-Struktur:** `SvelteApp.svelte` ist groß. Weitere Aufteilung ist
+  erwünscht, solange keine Objektzustandskopien oder zusätzlichen
+  Laufzeitzugänge entstehen.
+- Projektformat und Compile-/Codepad-Ablauf liegen bereits hinter kleinen
+  Schnittstellen; Methodenaufrufe und BluePlay-Abläufe noch nicht.
+
+Absicherung: [regression-checklist.md](regression-checklist.md);
+Modelltests für Lebensdauer und Nebenläufigkeit, echte Browsertests für
+sichtbare Aktualisierung und Bedienung.

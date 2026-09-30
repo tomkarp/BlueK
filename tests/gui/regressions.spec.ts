@@ -401,12 +401,14 @@ test('GUI-30 clicking editor or terminal brings that window to the front', async
 
 test('GUI-83 terminal output brings the terminal above an open editor', async ({ page }) => {
   await project(page, 'class Hund {}');
-  await page.locator('.classcard').dblclick();
+  // Terminal and editor open at the same centered default place, so an editor
+  // opened after the terminal covers it completely (see GUI-30 for clicks).
   await page.getByRole('button', { name: 'Show terminal', exact: true }).click();
-  await page.locator('.editor-header').click();
+  await page.locator('.classcard').dblclick();
   const editorModal = page.locator('.editor-modal');
   const terminalModal = page.locator('.terminal-modal');
   await expect(editorModal).toHaveClass(/window-active/);
+  await expect(terminalModal).not.toHaveClass(/window-active/);
   await evaluate(page, 'println("Terminal output")');
   await expect(terminalModal.locator('.terminal-output pre')).toContainText('Terminal output');
   await expect(terminalModal).toHaveClass(/window-active/);
@@ -628,6 +630,82 @@ test('GUI-03 GUI-04 computed values update after every inspector edit', async ({
   }
   await evaluate(page, 'hund1.alter = 9');
   await expect(computed).toHaveText('90');
+});
+
+test('GUI-90 editing an object or list field starts empty and a bench click inserts an object name', async ({ page }) => {
+  await project(page, 'class Hund { var freund: Hund? = null; var tricks = mutableListOf("Sitz"); var alter: Int = 3 }');
+  const object = (name: string) => page.locator('.bench .object').filter({ hasText: new RegExp(`^${name}:`) });
+  for (const name of ['hund1', 'hund2', 'hund3']) {
+    const entry = await evaluate(page, 'Hund()');
+    await entry.getByRole('button').click();
+    await page.getByLabel('Name of instance').fill(name);
+    await page.getByRole('button', { name: 'OK', exact: true }).click();
+    await expect(object(name)).toBeVisible();
+  }
+  const check = async (code: string) =>
+    expect((await evaluate(page, code)).locator('.codepad-result-value')).toHaveText('true');
+  await evaluate(page, 'hund1.freund = hund2');
+  await object('hund1').dblclick();
+  const inspector = page.getByRole('dialog', { name: 'Object inspector' });
+  const input = inspector.getByLabel('Value of freund');
+  // The field used to contain `Hund()`, so Enter created a new object.
+  await inspector.getByLabel('Edit freund', { exact: true }).click();
+  await expect(input).toHaveValue('');
+  await expect(input).toHaveAttribute('placeholder', 'expression');
+  await input.press('Enter');
+  await expect(input).toHaveCount(0);
+  await check('hund1.freund === hund2');
+  // A collection summary is no expression either; plain values stay prefilled.
+  await inspector.getByLabel('Edit tricks', { exact: true }).click();
+  await expect(inspector.getByLabel('Value of tricks')).toHaveValue('');
+  await inspector.getByLabel('Value of tricks').press('Escape');
+  await inspector.getByLabel('Edit alter', { exact: true }).click();
+  await expect(inspector.getByLabel('Value of alter')).toHaveValue('3');
+  await inspector.getByLabel('Value of alter').press('Escape');
+  // While editing, a bench click inserts the name instead of selecting.
+  await inspector.getByLabel('Edit freund', { exact: true }).click();
+  await object('hund3').click();
+  await expect(input).toHaveValue('hund3');
+  await expect(input).toBeFocused();
+  await expect(object('hund3')).not.toHaveClass(/selected/);
+  // A double click inserts once and opens no inspector.
+  await input.fill('');
+  await object('hund3').dblclick();
+  await expect(input).toHaveValue('hund3');
+  await expect(inspector).toHaveCount(1);
+  await input.press('Enter');
+  await expect(input).toHaveCount(0);
+  await check('hund1.freund === hund3');
+  await object('hund3').click();
+  await expect(object('hund3')).toHaveClass(/selected/);
+});
+
+test('RT-42 RT-43 a setter that calls itself is a compile warning and a StackOverflowError instead of a crash', async ({ page }) => {
+  const files = [
+    { fileName: 'Hund.kt', kind: 'class', source: 'class Hund {\n    var herrchen: Mensch? = null\n        set(value) {\n            if (value != null) {\n                herrchen = value\n                alle.add(value)\n            }\n        }\n    var alle: MutableList<Mensch> = mutableListOf<Mensch>()\n}' },
+    { fileName: 'Mensch.kt', kind: 'class', source: 'class Mensch {\n    var aua = 0\n}' },
+  ];
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify({ format: 'bluek-project', version: 1, files })).toString('base64url'));
+  await expect(page.getByLabel('Codepad input')).toBeEnabled();
+  await page.getByRole('button', { name: 'Compile', exact: true }).click();
+  await expect(page.getByLabel('Ready', { exact: true })).toBeVisible();
+  // Compiled nevertheless; the editor opens with the warning, but no error dialog.
+  const warning = page.getByRole('alert', { name: 'Compiler warnings' });
+  await expect(warning).toContainText('Line 5 (warning): The setter of `herrchen` assigns `herrchen` and so calls itself endlessly. Write `field = value` to store the value.');
+  await expect(page.locator('.cm-bluek-warning-span')).toHaveText('herrchen');
+  await expect(page.locator('.compiler-dialog')).toHaveCount(0);
+  await warning.getByRole('button', { name: 'Close compiler warnings' }).click();
+  await page.locator('.editor-modal').getByRole('button', { name: /Close/ }).first().click();
+  await page.getByRole('button', { name: 'Hund', exact: true }).click({ button: 'right' });
+  await page.locator('.constructor-menu-item').first().click();
+  await page.locator('.create-object-dialog').getByRole('button', { name: /Create|OK/ }).first().click();
+  await page.locator('.bench .object').dblclick();
+  const inspector = page.getByRole('dialog', { name: 'Object inspector' });
+  await inspector.getByLabel('Edit herrchen', { exact: true }).click();
+  await inspector.getByLabel('Value of herrchen').fill('Mensch()');
+  await inspector.getByLabel('Value of herrchen').press('Enter');
+  // It used to be "NullPointerException: Kotlite evaluation failed."
+  await expect(inspector.locator('.inspect-error')).toHaveText('StackOverflowError: More than 1000 nested calls. Does a function or property accessor call itself endlessly?');
 });
 
 test('GUI-48 private fields are readable and private setters stay visible but cannot be edited', async ({ page }) => {
@@ -1226,6 +1304,35 @@ test('GUI-64 a compiler error is marked in the source and reported below the edi
   await expect(editor.locator('.cm-bluek-error-line')).toHaveCount(0);
 });
 
+test('RT-40 classes that reference each other compile and link their objects', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, files: [
+    { fileName: 'Hund.kt', kind: 'class', source: 'class Hund {\n    var herrchen: Mensch? = null\n    val alle = mutableListOf<Mensch>()\n}' },
+    { fileName: 'Mensch.kt', kind: 'class', source: 'class Mensch(var hund: Hund? = null) {\n    fun kaufen(): Hund {\n        val h = Hund()\n        h.herrchen = this\n        hund = h\n        return h\n    }\n}' },
+  ] };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  await page.getByRole('button', { name: 'Compile', exact: true }).click();
+  await expect(page.getByLabel('Ready', { exact: true })).toBeVisible();
+  await expect(page.locator('.classcard.uncompiled')).toHaveCount(0);
+  await expect(page.locator('.editor-diagnostics')).toHaveCount(0);
+  const result = await evaluate(page, 'val m = Mensch(); val h = m.kaufen(); h.alle.add(m); h.herrchen === m && m.hund === h && h.alle.size == 1');
+  await expect(result).toContainText('true');
+});
+
+test('RT-45 top-level functions and properties of a later file can be used', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, files: [
+    { fileName: 'Main.kt', kind: 'functions', source: 'fun main() {\n    println(hilfe() + Hund().f())\n}' },
+    { fileName: 'Hund.kt', kind: 'class', source: 'class Hund {\n    fun f() = maximum + 1\n}' },
+    { fileName: 'Util.kt', kind: 'functions', source: 'fun hilfe(): Int = 1\nval maximum = 3' },
+  ] };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  await page.getByRole('button', { name: 'Compile', exact: true }).click();
+  await expect(page.getByLabel('Ready', { exact: true })).toBeVisible();
+  await expect(page.locator('.classcard.uncompiled')).toHaveCount(0);
+  await expect(page.locator('.editor-diagnostics')).toHaveCount(0);
+  await evaluate(page, 'main()');
+  await expect(page.locator('.terminal-output pre')).toHaveText('5\n');
+});
+
 test('GUI-65 a syntax error reads compactly and the formatter marks its line too', async ({ page }) => {
   await project(page, 'class Tier {\n    var energie = 5\n\n    fn langweilen() {\n        energie = energie - 1\n    }\n}');
   await page.getByRole('button', { name: 'Compile', exact: true }).click();
@@ -1333,7 +1440,7 @@ test('GUI-67 a link can open the README, and the export dialog attaches that to 
   const save = page.getByRole('dialog', { name: 'Save / Export' });
   // The links come first, then the file exports.
   await expect(save.locator('.project-choice-list button strong')).toHaveText([
-    'Copy Full Project Link', 'Copy Short Link', 'Export Project JSON', 'Export as HTML', 'Export BlueJ Project (.zip)',
+    'Copy Full Project Link', 'Copy Short Link', 'Export Project JSON', 'Export as HTML (Beta)', 'Export BlueJ Project (.zip)',
   ]);
   // Each link box carries the option at its right edge; both mean the same.
   await expect(save.getByLabel(/Open README.md with the link/)).toHaveCount(2);

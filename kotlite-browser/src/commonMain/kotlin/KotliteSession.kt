@@ -3,11 +3,14 @@ import com.sunnychung.lib.multiplatform.kotlite.KotliteInterpreter
 import com.sunnychung.lib.multiplatform.kotlite.Parser
 import com.sunnychung.lib.multiplatform.kotlite.ReplAnalyzer
 import com.sunnychung.lib.multiplatform.kotlite.extension.fullClassName
+import com.sunnychung.lib.multiplatform.kotlite.extension.isHostStackOverflow
 import com.sunnychung.lib.multiplatform.kotlite.lexer.Lexer
 import com.sunnychung.lib.multiplatform.kotlite.model.ASTNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.error.EvaluateRuntimeException
+import com.sunnychung.lib.multiplatform.kotlite.error.InterpreterStateException
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassInstance
+import com.sunnychung.lib.multiplatform.kotlite.model.StandardExceptionValue
 import com.sunnychung.lib.multiplatform.kotlite.model.FunctionCallNode
 import com.sunnychung.lib.multiplatform.kotlite.model.BooleanValue
 import com.sunnychung.lib.multiplatform.kotlite.model.CustomFunctionDefinition
@@ -78,6 +81,10 @@ class KotliteSession {
     private val privateSetterNames = linkedMapOf<String, MutableSet<String>>()
     private var nextHandle = 1
     private var analysisSource = ""
+    // Start offsets of the sources appended to `analysisSource` (project,
+    // BluePlay library, Codepad inputs, bindings). Top-level declarations are
+    // visible before their position only within their own source.
+    private val sourceUnitStarts = mutableListOf<Int>()
     private var analyzedScript: ScriptNode? = null
     private var stageSnapshot = ""
     private val pendingSounds = mutableListOf<String>()
@@ -151,10 +158,27 @@ class KotliteSession {
         }
     }
 
+    /**
+     * Pausing here would leave a continuation behind that is never resumed: in a
+     * legacy synchronous call, or in a callback that has to return first
+     * (Interpreter.canSuspend). This is a limit of BlueK, not an exception of the
+     * program, so no catch block of the program may hide it.
+     */
+    private fun checkCanPause(currentInterpreter: Interpreter, operation: String) {
+        if (executionCompleted == null) {
+            throw InterpreterStateException("$operation requires asynchronous execution (startEvaluate).")
+        }
+        if (!currentInterpreter.canSuspend) {
+            throw InterpreterStateException(
+                "$operation cannot pause inside toString(), equals(), hashCode(), compareTo() or a library callback " +
+                    "that must return immediately. Call it outside and pass the result in."
+            )
+        }
+    }
+
     private fun resetInterpreter() {
         environment = ExecutionEnvironment(sleepHandler = { millis ->
-            // Do not leave a suspended continuation behind in legacy sync calls.
-            check(executionCompleted != null) { "Thread.sleep requires asynchronous execution (startEvaluate)." }
+            checkCanPause(interpreter, "Thread.sleep()")
             awaitRuntimeSleep(millis)
         })
         environment.registerClass(BlueKClass.definition())
@@ -179,7 +203,7 @@ class KotliteSession {
             executable = { _, receiver, _, _ ->
                 val error = receiver as ThrowableValue
                 appendOutput(buildString {
-                    append(error.externalExceptionClassName ?: error.fullClassName)
+                    append(error.externalExceptionClassName ?: error.type().name)
                     error.message?.let { append(": "); append(it) }
                     append('\n')
                     error.stacktrace.forEach { append("    at "); append(it); append('\n') }
@@ -188,9 +212,11 @@ class KotliteSession {
             },
         ))
         // The published Kotlite stdlib 1.1.0 exposes collection callbacks through
-        // synchronous Kotlin function types. Keep the standard library surface,
-        // but provide its suspendable generated equivalent for the callback that
-        // must be able to cross a readln suspension.
+        // synchronous Kotlin function types. The interpreter replays those calls
+        // when a callback suspends (StdlibReplayMetadata). Keep the standard
+        // library surface, but provide suspendable equivalents for `count`,
+        // whose loops then yield as well, and for the in-place filters, which
+        // cannot be replayed.
         environment.patchFunction(
             receiverType = "Iterable<T>",
             functionName = "count",
@@ -204,8 +230,47 @@ class KotliteSession {
             }
             IntValue(count, currentInterpreter.symbolTable())
         }
-        suspend fun readBufferedLine(currentInterpreter: Interpreter, nullable: Boolean): RuntimeValue {
+        fun patchInPlaceFilter(functionName: String, removeMatching: Boolean) {
+            environment.patchFunction(
+                receiverType = "MutableList<T>",
+                functionName = functionName,
+                parameterTypes = listOf("(T) -> Boolean"),
+            ) { currentInterpreter, receiver, args, _ ->
+                val list = (receiver as DelegatedValue<*>).value as MutableList<RuntimeValue>
+                val predicate = args[0] as LambdaValue
+                // Evaluate every predicate before changing the list.
+                val kept = list.toList().filter { element ->
+                    (predicate.executeSuspended(arrayOf(element)) as BooleanValue).value != removeMatching
+                }
+                val changed = kept.size != list.size
+                if (changed) {
+                    list.clear()
+                    list.addAll(kept)
+                }
+                BooleanValue(changed, currentInterpreter.symbolTable())
+            }
+        }
+        patchInPlaceFilter("removeAll", removeMatching = true)
+        patchInPlaceFilter("retainAll", removeMatching = false)
+        // The stdlib calls Kotlin/JS's String.substring, which follows JavaScript:
+        // it clamps and swaps out-of-range indices instead of throwing, so
+        // "abc".substring(5) would yield "". Check the bounds as Kotlin does.
+        environment.patchFunction(
+            receiverType = "String",
+            functionName = "substring",
+            parameterTypes = listOf("Int", "Int"),
+        ) { currentInterpreter, receiver, args, _ ->
+            val text = (receiver as StringValue).value
+            val startIndex = (args[0] as IntValue).value
+            val endIndex = (args[1] as IntValue).value
+            if (startIndex < 0 || startIndex > endIndex || endIndex > text.length) {
+                throw IndexOutOfBoundsException("begin $startIndex, end $endIndex, length ${text.length}")
+            }
+            StringValue(text.substring(startIndex, endIndex), currentInterpreter.symbolTable())
+        }
+        suspend fun readBufferedLine(currentInterpreter: Interpreter, name: String, nullable: Boolean): RuntimeValue {
             if (inputLines.isEmpty()) {
+                checkCanPause(currentInterpreter, "$name()")
                 return suspendCoroutine { continuation ->
                     inputNullable = nullable
                     inputContinuation = continuation
@@ -225,7 +290,7 @@ class KotliteSession {
                 parameterTypes = emptyList(),
                 executable = { _, _, _, _ -> throw IllegalStateException("$name requires asynchronous evaluation") }
             )
-            definition.suspendExecutable = { currentInterpreter, _, _, _ -> readBufferedLine(currentInterpreter, nullable) }
+            definition.suspendExecutable = { currentInterpreter, _, _, _ -> readBufferedLine(currentInterpreter, name, nullable) }
             environment.registerFunction(definition)
         }
         registerRead("readln", false)
@@ -360,6 +425,7 @@ class KotliteSession {
         if (bluePlayEnabled) registerBluePlayNativeFunctions()
         interpreter = KotliteInterpreter("<BlueK>", "", environment)
         interpreter.checkpointHook = { awaitRuntimeCheckpoint() }
+        interpreter.stackResetHook = { awaitRuntimeStackReset() }
     }
 
     private fun registerBluePlayNativeFunctions() {
@@ -917,7 +983,33 @@ class KotliteSession {
             lineCursor = last + 2
         }
         val source = if (bluePlayEnabled) BluePlayLibrary.source + "\n\n" + projectSource else projectSource
-        return startEvaluate("<BlueK project>", source, onInput) { result -> onComplete(withProjectDiagnostic(result)) }
+        // The library must not see top-level declarations of the project.
+        val projectOffsets = if (bluePlayEnabled) listOf(BluePlayLibrary.source.length + 2) else emptyList()
+        return startEvaluateInternal("<BlueK project>", source, onInput, { result -> onComplete(withAccessorWarnings(withProjectDiagnostic(result))) }, emptySet(), projectOffsets)
+    }
+
+    /**
+     * Kotlin compiles an accessor that uses its own property instead of
+     * `field`, but it calls itself until the stack overflows. IntelliJ warns
+     * about it; BlueK reports it as a warning of a successful compile.
+     */
+    private fun withAccessorWarnings(result: String): String {
+        if (result.startsWith("{\"kind\":\"error\"")) return result
+        val warnings = analyzedScript?.nodes.orEmpty()
+            .filterIsInstance<ClassDeclarationNode>()
+            .flatMap { it.declarations.filterIsInstance<PropertyDeclarationNode>() }
+            .flatMap { property ->
+                listOfNotNull(
+                    property.selfCallingSetter?.let { it to "The setter of `${property.name}` assigns `${property.name}` and so calls itself endlessly. Write `field = value` to store the value." },
+                    property.selfCallingGetter?.let { it to "The getter of `${property.name}` reads `${property.name}` and so calls itself endlessly. Use `field` for the stored value." },
+                )
+            }
+            .mapNotNull { (position, message) ->
+                val range = projectFunctionRanges.firstOrNull { position.lineNum in it.second..it.third } ?: return@mapNotNull null
+                "{\"fileName\":\"${escape(range.first)}\",\"line\":${position.lineNum - range.second + 1},\"column\":${position.col},\"severity\":\"warning\",\"message\":\"${escape(message)}\"}"
+            }
+        if (warnings.isEmpty()) return result
+        return result.removeSuffix("}") + ",\"diagnostics\":${warnings.joinToString(",", "[", "]")}}"
     }
 
     /**
@@ -1028,13 +1120,15 @@ class KotliteSession {
         }
     }
 
-    private suspend fun evaluateSuspended(filename: String, source: String, interactiveNames: Set<String> = emptySet()): String {
+    /** [unitOffsets]: further source units inside [source], as offsets into it. */
+    private suspend fun evaluateSuspended(filename: String, source: String, interactiveNames: Set<String> = emptySet(), unitOffsets: List<Int> = emptyList()): String {
         if (faulted) return errorMessage("Runtime failed. Reset or compile before running more code.", "runtime", true)
         val boundary = analysisSource.length + 1
         val candidate = analysisSource + "\n" + source
         analysisCandidate = candidate
+        val units = listOf(boundary) + unitOffsets.map { boundary + it }
         val analyzed = try {
-            ReplAnalyzer.analyze("<BlueK project>", candidate, environment, retiredProperties)
+            ReplAnalyzer.analyze("<BlueK project>", candidate, environment, retiredProperties, sourceUnitStarts + units)
         } catch (error: Throwable) {
             return error(error, "analysis")
         }
@@ -1045,6 +1139,7 @@ class KotliteSession {
             }
             val newNodes = analyzed.nodes.filter { it.position.index >= boundary }
             analysisSource += "\n" + source
+            sourceUnitStarts += units
             newNodes.filterIsInstance<PropertyDeclarationNode>().forEach { declaration ->
                 if (!declaration.name.startsWith("__bluek_")) {
                     val interactive = declaration.name in interactiveNames
@@ -1074,11 +1169,11 @@ class KotliteSession {
         return startEvaluateInternal(filename, source, onInput, onComplete, emptySet())
     }
 
-    private fun startEvaluateInternal(filename: String, source: String, onInput: (Int) -> Unit, onComplete: (String) -> Unit, interactiveNames: Set<String>): String {
+    private fun startEvaluateInternal(filename: String, source: String, onInput: (Int) -> Unit, onComplete: (String) -> Unit, interactiveNames: Set<String>, unitOffsets: List<Int> = emptyList()): String {
         if (executionCompleted != null) return errorMessage("Another runtime command is running.")
         inputRequested = onInput
         executionCompleted = onComplete
-        (suspend { evaluateSuspended(filename, source, interactiveNames) }).startCoroutine(object : Continuation<String> {
+        (suspend { evaluateSuspended(filename, source, interactiveNames, unitOffsets) }).startCoroutine(object : Continuation<String> {
             override val context = kotlin.coroutines.EmptyCoroutineContext
             override fun resumeWith(result: Result<String>) {
                 inputContinuation = null
@@ -1099,7 +1194,8 @@ class KotliteSession {
         // without an initializer; the already evaluated object is assigned
         // directly above.
         val syntheticSource = "val $binding: ${value.type().toTypeNode().descriptiveName()}"
-        val script = ReplAnalyzer.analyze("<BlueK project>", analysisSource + "\n" + syntheticSource, environment, retiredProperties)
+        val bindingStart = analysisSource.length + 1
+        val script = ReplAnalyzer.analyze("<BlueK project>", analysisSource + "\n" + syntheticSource, environment, retiredProperties, sourceUnitStarts + bindingStart)
         val declaration = script.nodes.filterIsInstance<PropertyDeclarationNode>()
             .last { it.name == binding }
         val transformedBinding = declaration.transformedRefName
@@ -1111,6 +1207,7 @@ class KotliteSession {
         handles[id] = value
         bindingNames[id] = binding
         analysisSource += "\n" + syntheticSource
+        sourceUnitStarts += bindingStart
         return id
     }
 
@@ -1282,7 +1379,9 @@ class KotliteSession {
                 val member = value.readBackingPropertyByDeclaredName(name)
                 val display = member?.let(::inspectorDisplay) ?: "<uninitialized>"
                 val reference = member is ClassInstance && member !is DelegatedValue<*>
-                "{\"name\":\"${escape(name)}\",\"value\":\"${escape(display)}\",\"type\":${member?.let { jsonType(it.type().toTypeNode()) } ?: "null"},\"setterPrivate\":$setterPrivate,\"reference\":$reference}"
+                // Collections are shown as a summary that is no Kotlin expression.
+                val summary = (member as? DelegatedValue<*>)?.value.let { it is Collection<*> || it is Map<*, *> }
+                "{\"name\":\"${escape(name)}\",\"value\":\"${escape(display)}\",\"type\":${member?.let { jsonType(it.type().toTypeNode()) } ?: "null"},\"setterPrivate\":$setterPrivate,\"reference\":$reference,\"summary\":$summary}"
             }
         }
         return "{\"kind\":\"inspect\",\"objectId\":\"${escape(objectId)}\",\"className\":\"${escape(value.type().toTypeNode().descriptiveName())}\",\"fields\":$fields}"
@@ -1341,6 +1440,7 @@ class KotliteSession {
         managedHandles.clear()
         retiredProperties.clear()
         analysisSource = ""
+        sourceUnitStarts.clear()
         analyzedScript = null
         propertyNames.clear()
         computedPropertyNames.clear()
@@ -1437,6 +1537,9 @@ class KotliteSession {
         // A Kotlin exception thrown by student code is reported by its own class
         // name, e.g. `IllegalArgumentException: Unbekannte Farbe: Blau`.
         val thrown = (error as? EvaluateRuntimeException)?.error
+        // Deep recursion inside a synchronous callback (e.g. `toString`) can still exhaust the host stack.
+        if (thrown == null && error.isHostStackOverflow)
+            return errorMessage("StackOverflowError: ${StandardExceptionValue.stackOverflowMessage(null)}", phase, fatal)
         val name = thrown?.let { it.externalExceptionClassName ?: it.type().name } ?: error.fullClassName
         val message = thrown?.message ?: error.message ?: "Kotlite evaluation failed."
         // A missing name is reported by Kotlite as an ordinary analysis error.

@@ -170,6 +170,13 @@ data class PropertyDeclarationNode(
         get() = declaredType ?: inferredType ?: throw SemanticException(position, "Could not infer type for property `$name`")
     val modifiers: Set<PropertyModifier>
         get() = declaredModifiers + inferredModifiers
+
+    /**
+     * Where an accessor uses this property itself instead of `field`, e.g.
+     * `set(value) { name = value }`. It compiles, but calls itself endlessly.
+     */
+    @ModifyByAnalyzer var selfCallingSetter: SourcePosition? = null
+    @ModifyByAnalyzer var selfCallingGetter: SourcePosition? = null
     override fun toMermaid(): String {
         val self = "${generateId()}[\"Property Node `$name`\"]"
         return "$self\n" +
@@ -206,6 +213,9 @@ data class AssignmentNode(val subject: ASTNode, val operator: String, val value:
 }
 
 open class VariableReferenceNode(override val position: SourcePosition, val variableName: String, @ModifyByAnalyzer var transformedRefName: String? = null, @ModifyByAnalyzer var ownerRef: PropertyOwnerInfo? = null, @ModifyByAnalyzer var type: TypeNode? = null) : ASTNode {
+    // A top-level property is initialized in source order and may not be yet when this runs.
+    @ModifyByAnalyzer var isTopLevelProperty: Boolean = false
+
     override fun toMermaid(): String = "${generateId()}[\"Variable Reference Node `$variableName`\"]"
 }
 
