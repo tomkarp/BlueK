@@ -278,6 +278,32 @@ test('GUI-57 maximize fills the browser viewport without scaling the world', asy
   await expect(stage.locator('.stage-window-body')).toHaveCSS('background-color', 'rgb(210, 210, 210)');
 });
 
+test('GUI-94 BluePlay Reset preserves maximized and restored window sizes', async ({ page }) => {
+  const stage = await loadBluePlay(page);
+  const canvas = stage.locator('.game-stage');
+  const originalWorldWidth = await canvas.getAttribute('width');
+  const input = page.getByLabel('Codepad input');
+  await input.fill('val resetProbeWorld = World(100, 100, 1); resetProbeWorld.show()');
+  await input.press('Enter');
+  await expect(canvas).toHaveAttribute('width', '100');
+  await stage.getByRole('button', { name: 'Maximize BluePlay world', exact: true }).click();
+  const maximizedBounds = (await stage.boundingBox())!;
+
+  await stage.getByRole('button', { name: 'Reset BluePlay world', exact: true }).click();
+  await expect(stage).toHaveAttribute('data-phase', 'ready');
+  await expect(canvas).toHaveAttribute('width', originalWorldWidth!);
+  await expect(stage.getByRole('button', { name: 'Restore BluePlay world', exact: true })).toBeVisible();
+  expect(await stage.boundingBox()).toEqual(maximizedBounds);
+
+  await stage.getByRole('button', { name: 'Restore BluePlay world', exact: true }).click();
+  const restoredBounds = (await stage.boundingBox())!;
+  await stage.getByRole('button', { name: 'Act once', exact: true }).click();
+  await stage.getByRole('button', { name: 'Reset BluePlay world', exact: true }).click();
+  await expect(stage).toHaveAttribute('data-phase', 'ready');
+  await expect(stage.getByRole('button', { name: 'Maximize BluePlay world', exact: true })).toBeVisible();
+  expect(await stage.boundingBox()).toEqual(restoredBounds);
+});
+
 test('RT-11 Run stays active, Pause stops it, and speed can be dragged during Run', async ({ page }) => {
   const stage = await loadBluePlay(page);
   const run = stage.getByRole('button', { name: 'Run BluePlay world' });

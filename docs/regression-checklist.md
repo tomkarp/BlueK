@@ -192,6 +192,7 @@ bei Verweisen die Beschreibung mitnennen.
 | RT-50 | Eine nullable Sammlung als `for`-Subjekt ergibt „Non-nullable value required to call 'iterator()' method in a for-loop.“; die Position zeigt auf den Ausdruck nach `in`, bei Safe Calls auf den Empfänger. Elvis, `!!`, Smart Casts und Iterator-Erweiterungen auf nullable Empfängern bleiben gültig. Fehler im Subjekt und gewöhnliche unsafe Calls behalten ihre Meldung | RT-50 in `smoke-kotlite-browser.mjs`: echte Bundle-Analyse, Datei/Zeile/Spalte, List/Range/String/Safe Call und gültige Gegenfälle; Chromium RT-50 prüft `world?.getObjects<Ente>()`, Markierung von `world` und Korrektur mit Elvis | Echte Bundle-Tests und drei Chromium-Tests grün; Ergebnisse im RT-50-Prüfprotokoll |
 
 | GUI-93 | Objekt-Kontextmenüs und geerbte Methoden-Untermenüs liegen über offenen Inspektoren und bleiben anklickbar; Parameterdialoge liegen weiterhin darüber | Chromium GUI-93 erzeugt tatsächliche Überlappungen mit einem verschobenen Inspektor, prüft den vordersten DOM-Treffer, öffnet den Parameterdialog und ruft eine geerbte Methode auf. Vor der Korrektur rot, nachher grün; GUI-49/82/85/87 ebenfalls grün | Automatisch im echten Browser abgesichert; keine separate visuelle Benutzerabnahme |
+| GUI-94 | Reset erhält den maximierten bzw. wiederhergestellten Zustand des BluePlay-Weltfensters | Chromium GUI-94 wechselt die angezeigte Welt, maximiert und setzt zurück; prüft die erneut erzeugte ursprüngliche Welt und unveränderte Fenstergrenzen, danach Reset bei normaler Fenstergröße | Vor der Korrektur rot, danach grün; GUI-57 und beide RT-25-BluePlay-Reset-Tests ebenfalls grün; keine gesonderte visuelle Benutzerabnahme |
 
 ## Prüfprotokoll
 
@@ -1952,3 +1953,21 @@ auf Ebene 100. Keine Änderung an Runtime oder Fensteraktivierung.
   und suspendierter Inline-Return.
 - `git diff --check` ohne Befund. Die oben protokollierten gezielten
   Chromium-Läufe gelten weiterhin; kein neuer vollständiger GUI-Gesamtlauf.
+
+### GUI-94: Maximierter Zustand nach BluePlay-Reset (01.10.2026)
+
+`performReset` setzt die Fenster-Maximierung nicht mehr zurück. Die neu
+erzeugte Welt erscheint mit dem bisherigen maximierten oder normalen
+Fensterzustand; Position und bewusste Größenumschaltung bleiben UI-Zustand.
+
+- Erster Teststart durch Sandbox-Portbindung (`EPERM`, 5194) verhindert;
+  mit erlaubtem lokalem Testserver konnte Chromium den Fehler reproduzieren.
+- Neuer GUI-94-Test vor der Korrektur tatsächlich rot: Nach Reset fehlt
+  die Schaltfläche „Restore BluePlay world“.
+- Nach Korrektur GUI-94, GUI-57 und beide RT-25-BluePlay-Reset-Tests
+  tatsächlich 4/4 grün (9,5 s). GUI-94 bestätigt anhand der Canvas-Breite
+  den tatsächlichen Weltwechsel und prüft die Fenstergrenzen nach Reset
+  sowohl maximiert als auch nach Wiederherstellen der normalen Größe.
+- Typecheck 0 Fehler / 0 Svelte-Warnungen, Svelte-Architektur-Smoke und
+  `git diff --check` grün. Kein vollständiger GUI-Gesamtlauf und keine
+  gesonderte visuelle Benutzerabnahme.

@@ -2405,7 +2405,7 @@
     stage = null;
     stageWindowOpen = false;
     stageWindowDismissed = false;
-    stageMaximized = false;
+    // Reset replaces the world, while the window keeps its presentation state.
     activeInspectorId = "";
     inspectorWindows = [];
     history = [];
