@@ -52,20 +52,68 @@ Der Worker hält genau eine `KotliteSession` mit genau einem lebenden
 
 **Oberfläche (Hauptthread)**
 
-- `SvelteApp.svelte`: Darstellung und Benutzerinteraktion; Projektdokumente,
-  Fensterpositionen, Auswahl, Eingabeentwürfe, Dialogzustand,
-  Ausgabehistorie. Die Komponente ist groß; weitere Extraktionen richten sich
-  nach fachlichen Zuständigkeiten und dürfen keine neuen Objektzustandskopien
-  oder Interpreter-Zugänge schaffen. Dateidialoge, Downloads, Clipboard und
-  History-Darstellung bleiben dort.
+- `SvelteApp.svelte`: setzt die Oberfläche zusammen, verbindet die
+  UI-Bereiche und koordiniert globale Tastenkürzel sowie die Escape-Reihenfolge.
+  Sie erzeugt pro Anwendung eine Instanz jedes Controllers unter `workspace/`.
+  Die Darstellung liegt in `components/`; diese Komponenten erhalten weiterhin
+  typisierte Daten und Rückruffunktionen. Svelte-Bindings reichen Änderungen
+  zum jeweiligen Besitzer zurück.
+- `workspace/ProjectWorkspace.svelte.ts`: besitzt Projektdateien, Library,
+  Ressourcen, README, Projektname, Kartengeometrie und Projekt-/Transferdialoge.
+  Verantwortet Laden, Vorlagen, Autosave, Quelltextänderungen und Export.
+  `EditorWorkspace.svelte.ts`: besitzt Editorfenster, Tabs, Diagnosemarkierungen
+  und CodeMirror-Registrierungen. `ObjectWorkspace.svelte.ts`: besitzt
+  Aufrufdialoge, Menüs und Inspektorfenster; Objektbank und Inspektorwerte
+  sind ausschließlich abgeleitete Ansichten.
+- `workspace/ExecutionWorkspace.svelte.ts`: besitzt den einzigen
+  `LocalRuntimeClient`, übernimmt dessen veröffentlichten Snapshot und
+  koordiniert Compile, main-Auswahl, Reset und Codepad. Keine andere UI-Stelle
+  erzeugt einen Client oder Worker. `BluePlayWorkspace.svelte.ts` besitzt
+  Weltfenster, Canvas-Renderer und Eingabe-/Sounddarstellung;
+  `TerminalWorkspace.svelte.ts` besitzt Terminalausgabe und Fensterzustand.
+  `WorkspaceUi.svelte.ts` hält bereichsübergreifenden Fokus, Statusmeldungen,
+  Einstellungen und Pane-Größen.
+- Die Controller verwenden Sveltes `$state` und `$derived` mit genau einer
+  Zustandsinstanz pro Bereich. Host-Schnittstellen bestehen aus schmalen
+  `Pick`-Fähigkeiten; fremde Bereichsdaten sind `Readonly`. Fenster schließen,
+  Diagnosemarkierungen löschen oder Quellen invalidieren geschieht über
+  benannte Aktionen des jeweiligen Besitzers, nicht durch Schreiben in dessen
+  Listen. Gemeinsamer Fokus und Status gehören ausdrücklich `WorkspaceUi`.
+  Der Runtime-Snapshot bleibt unverändert als `$state.raw` erhalten; auch
+  Projektdateien und Library werden ohne Svelte-Proxies weitergegeben.
+  Editierbare Argumententwürfe sind reaktiv, werden vor einem Runtime-Aufruf
+  aber als gewöhnliche Arrays übernommen, die der Worker klonen kann.
+  Lifecycle-Effekte und Abonnements sind an die App-Instanz gebunden und werden
+  beim Unmount aufgeräumt; die globale Verbindungsinitialisierung liest
+  UI-Zustand mittels `untrack`, damit Änderungen keine Verbindung neu aufbauen.
+- `components/BluePlayWindow.svelte`, `EditorWindows.svelte`,
+  `TerminalWindow.svelte`, `InspectorWindows.svelte`: Fensterdarstellung,
+  Controls, DOM-Bindings und lokale Bedienung. Aufrufe von Schülercode laufen
+  ausschließlich über Rückruffunktionen der UI-Controller.
+- `components/ClassDiagram.svelte`, `ObjectBenchCodepad.svelte`,
+  `AppToolbar.svelte`, `AppSidebar.svelte`: Diagramm, Objektleiste,
+  Codepad-Historie und Hauptbedienelemente. Fachlich getrennte Komponenten
+  übernehmen API-Hilfe, README, Methoden-/Konstruktordialoge, Projekttransfer,
+  Projektvorlagen und Einstellungen. Keine Komponente erzeugt einen Worker,
+  Runtime-Client oder eine eigene Laufzeitablage.
+- `uiTypes.ts`: gemeinsame reine Darstellungstypen, keine Zustandsinstanz.
+  `editorActions.ts`: CodeMirror-/Markdown-Lebenszyklus, Formatierung,
+  Kommentar- und Vim-Tasten; erhält nur Editor-Registrierungen und die
+  Fehler-Rückruffunktion. `windowInteraction.ts`: gemeinsame Pointer-
+  Bedienung und Geometrie für Drag/Resize. `uiActions.ts`: Fokus,
+  Klickgrenzen und Popup-Platzierung. `classDiagramInteraction.ts`:
+  Karten-Drag und DOM-Messung der Pfeile mit expliziten UI-Fähigkeiten.
+  `objectMenuMethods.ts`: reine Ableitung der sichtbaren Methoden aus
+  Klassenmetadaten. `projectBrowserIO.ts`: Datei-/Verzeichnislesen,
+  Downloads und Link-/Clipboard-Aktionen; besitzt weder Projekt noch Runtime.
 - `localRuntimeClient.ts`: einziger Worker-Zugang. Besitzt Worker, laufende
   Anfragen, Epoche, Generation und den veröffentlichten Snapshot. Die
   Worker-Fabrik wird injiziert: die IDE übergibt `createLocalRuntimeWorker`
   (`localRuntimeWorkerFactory.ts`), der Player seine eigene.
 - `codepadFlow.ts`: Compile-on-demand und Codepad-Auswertung. Nutzt nur die
   benötigten Client-Fähigkeiten, liefert typisierte Ergebnisse und verwirft
-  Antworten nach einem Generationswechsel. Darstellung, History und Fokus
-  bleiben in `SvelteApp.svelte`.
+  Antworten nach einem Generationswechsel. History gehört `ExecutionWorkspace`,
+  gemeinsamer Fokus `WorkspaceUi`; `ObjectBenchCodepad` stellt die History dar.
 - `inspectorModel.ts`: abgeleitete Inspektoransicht und automatische
   Property-Auswertung beim Öffnen/Aktualisieren eines Fensters. Keine DOM-, Svelte-, Worker- oder
   Projektdateiabhängigkeit; Schnittstelle zur Laufzeit nur `getSnapshot()`
@@ -603,11 +651,14 @@ Details und Host-Schnittstelle: [kotlite-generics.md](kotlite-generics.md).
 - **Metadaten:** Generische Oberklassentypen und ihre Spezialisierung sind
   noch nicht umfassend geprüft; einige ältere UI- und BluePlay-Datenstrukturen
   sind dynamisch typisiert. Der Runtime-Befehlsweg ist typisiert.
-- **UI-Struktur:** `SvelteApp.svelte` ist groß. Weitere Aufteilung ist
-  erwünscht, solange keine Objektzustandskopien oder zusätzlichen
-  Laufzeitzugänge entstehen.
-- Projektformat und Compile-/Codepad-Ablauf liegen bereits hinter kleinen
-  Schnittstellen; Methodenaufrufe und BluePlay-Abläufe noch nicht.
+- **UI-Koordination:** `SvelteApp.svelte` verbindet die getrennten
+  Darstellungskomponenten mit den Besitzern ihres UI-Zustands in `workspace/`.
+  Neue Fenster und Dialoge werden in `components/` ergänzt; Fachabläufe
+  bekommen gezielte Fähigkeiten im zuständigen Controller. Fokus und globale
+  Escape-/Tastenkürzel-Reihenfolge bleiben eine gemeinsame Koordinationsaufgabe.
+- Projekt-, Editor-, Aufruf-, Inspektor- und BluePlay-Abläufe sind getrennt.
+  Weitere Aufteilung innerhalb eines Bereichs erfolgt nach Zuständigkeit,
+  ohne zusätzliche Runtime-Clients, globale Stores oder App-Kontextobjekte.
 
 Absicherung: [regression-checklist.md](regression-checklist.md);
 Modelltests für Lebensdauer und Nebenläufigkeit, echte Browsertests für

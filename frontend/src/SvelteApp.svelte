@@ -1,1204 +1,273 @@
 <script lang="ts">
-  import { afterUpdate, onMount, tick } from "svelte";
-  import {
-    encodeBlueKLink as encodeProjectLink,
-    decodeBlueKLink as decodeProjectLink,
-    runtimeClassName,
-    specializeCallable,
-    sourceSuperclass,
-    addSuperclass,
-    cardCenter,
-    cardBorderPoint,
-    defaultObjectName,
-    sourceDeclarationName,
-    appendTerminal, terminalParts, codepadResult, codepadError, kotlinCallArguments, missingRequired, missingTypeArgument, codepadIsDisabled,
-  } from "./uiParity";
-  import { LocalRuntimeClient } from "./localRuntimeClient";
-  import { createLocalRuntimeWorker } from "./localRuntimeWorkerFactory";
-  import { mainFiles } from "./mainEntries";
-  import { bluePlayApiDocs } from "./bluePlayApi";
-  import { StageAudio, StageRenderer, decorateStage, measureImageSizes, stageKeyName, stageStyle } from "./bluePlayStage";
-  import { KotlinFormatterClient } from "./kotlinFormatterClient";
-  import { InspectorModel, inspectorFieldText, type InspectionView, type InspectorField } from "./inspectorModel";
-  import { createProjectPayload, projectModelFromPayload } from "./projectFormat";
-  import { exportFileName } from "./programExport";
-  import { htmlExport } from "./htmlExport";
-  import { blueJProjectFromEntries, entriesFromZip, type ImportEntry } from "./blueJImport";
-  import { prepareRuntimeResources } from "./imageAlpha";
-  import { standardImages, withStandardImages } from "./standardImages";
-  import { loadProjectFromServer, saveProjectToServer } from "./shareApi";
-  import { compileProject, executeCodepad } from "./codepadFlow";
-  import { applyDiagnostics, editorDiagnostics } from "./editorDiagnostics";
-  import { isCompileError } from "./compileDiagnostics";
-  import { markdownPreview } from "./markdownEditor";
-  import { vim } from "@replit/codemirror-vim";
-  import { minimalSetup } from "codemirror";
-  import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
-  import { Compartment, EditorState, StateEffect } from "@codemirror/state";
-  import {
-    EditorView,
-    drawSelection,
-    highlightActiveLine,
-    keymap,
-    lineNumbers,
-    placeholder as editorPlaceholder,
-  } from "@codemirror/view";
-  import {
-    defaultKeymap,
-    history as historyExtension,
-    historyKeymap,
-    indentWithTab,
-    toggleComment as toggleEditorComment,
-  } from "@codemirror/commands";
-  import {
-    bracketMatching,
-    defaultHighlightStyle,
-    HighlightStyle,
-    indentUnit,
-    StreamLanguage,
-    syntaxHighlighting,
-  } from "@codemirror/language";
-  import { tags } from "@lezer/highlight";
-  import { searchKeymap } from "@codemirror/search";
-  import { kotlin } from "@codemirror/legacy-modes/mode/clike";
-  import type {
-    Diagnostic,
-    InspectedField,
-    ProjectFile,
-    RuntimeSnapshot,
-    RuntimeCommand,
-    RuntimeValue,
-    ProjectLibrary,
-    ProjectResource,
-  } from "../../runtime-contract/src/index";
-  type Resource = ProjectResource;
-  type BenchObject = { objectId: string; className: string; name: string };
-  type HistoryEntry = {
-    code: string;
-    result?: string;
-    error?: string;
-    objectResult?: boolean;
-    objectId?: string;
-    className?: string;
-  };
-  type CardPosition = { x: number; y: number };
-  const bluePlayFrameworkNames = [
-    "BluePlayFunctions.kt",
-    "World.kt",
-    "Actor.kt",
-    "Image.kt",
-  ];
-  const bluePlayFrameworkFiles: ProjectFile[] = [
-    {
-      id: "blueplay-framework-BluePlayFunctions.kt",
-      fileName: "BluePlayFunctions.kt",
-      kind: "functions",
-      source: "",
-      revision: 1,
-    },
-    {
-      id: "blueplay-framework-World.kt",
-      fileName: "World.kt",
-      kind: "class",
-      source: "open class World(val width: Int, val height: Int, val cellSize: Int)",
-      revision: 1,
-    },
-    {
-      id: "blueplay-framework-Actor.kt",
-      fileName: "Actor.kt",
-      kind: "class",
-      source: "open class Actor",
-      revision: 1,
-    },
-    {
-      id: "blueplay-framework-Image.kt",
-      fileName: "Image.kt",
-      kind: "class",
-      source: "class Image",
-      revision: 1,
-    },
-  ];
-  type EditorWindowState = {
-    id: string;
-    fileId: string;
-    maximized: boolean;
-    position: { left: number; top: number } | null;
-    size: { width: number; height: number };
-  };
-  let client: LocalRuntimeClient;
-  let dialogError = "";
-  function focusOnMount(node: HTMLElement, enabled = true) {
-    const previous = document.activeElement as HTMLElement | null;
-    if (enabled) tick().then(() => node.isConnected && node.focus());
-    return { destroy() { if (document.activeElement === node) previous?.focus(); } };
-  }
-  function containClicks(node: HTMLElement) {
-    const stop = (event: MouseEvent) => event.stopPropagation();
-    node.addEventListener('click', stop);
-    return { destroy() { node.removeEventListener('click', stop); } };
-  }
-  let selectedObjectId = "",
-    viewportWidth = 1280;
-  $: stageHeight = stage
-    ? ((stageMaximized
-        ? viewportWidth * 0.9
-        : Math.min(viewportWidth * 0.4, 420)) *
-        stage.height) /
-      Math.max(stage.width, 1)
-    : 0;
-  $: stageWindowWidth = stage
-    ? Math.min(
-        Math.max(320, viewportWidth - 24),
-        Math.max(600, (stage.width || 1) * (stage.cellSize || 1) + 4),
-      )
-    : 760;
-  // Draw at most once per display frame. Fast simulations publish more
-  // frames than the screen shows, and afterUpdate also fires for unrelated UI.
-  let stageDrawPending = false;
-  function scheduleStageDraw() {
-    if (stageDrawPending) return;
-    stageDrawPending = true;
-    requestAnimationFrame(() => {
-      stageDrawPending = false;
-      drawStageCanvas();
-    });
-  }
-  afterUpdate(scheduleStageDraw);
-  let runtime: RuntimeSnapshot = {
-    generationId: "",
-    revision: 0,
-    phase: "uncompiled",
-    classes: [],
-    inspections: {},
-    references: [],
-    liveObjectIds: [],
-    error: null,
-    simulation: "inactive",
-  };
-  let files: ProjectFile[] = [],
-    library: ProjectLibrary | undefined,
-    resources: Resource[] = [],
-    resourceSizes: Record<string, { width: number; height: number }> = {},
-    selected = 0,
-    cardPositions: Record<string, CardPosition> = {};
-  let codepad = "",
-    history: HistoryEntry[] = [],
-    codepadHistoryIndex = -1,
-    terminal = "",
-    terminalOpen = false,
-    terminalMaximized = false,
-    terminalSplit = false,
-    terminalSplitWidth = 430,
-    terminalPosition: { left: number; top: number } | null = null,
-    terminalSize = { width: 780, height: 520 };
-  let activeWindow: "terminal" | "editor" | "inspector" | null = null;
-  const stageAudio = new StageAudio();
-  let editorWindows: EditorWindowState[] = [],
-    activeEditorId = "",
-    editorTabbed = false,
-    editorGroup: EditorWindowState | null = null,
-    status = "Ready",
-    error = "",
-    compilerDialog = false,
-    compilerDiagnostics: Diagnostic[] = [],
-    diagnosticsRun = 0;
-  // Keyed by file, so every editor reports the errors of its own source below
-  // the code. A plain function would not tell Svelte to update that report.
-  $: diagnosticsByFile = compilerDiagnostics.reduce<Record<string, Diagnostic[]>>(
-    (map, item) => ({ ...map, [item.fileName || ""]: [...(map[item.fileName || ""] || []), item] }),
-    {},
-  );
-  let activeInspectorId = "";
-  let inspected: InspectionView | null = null;
-  let inspectorWindows: Array<{
-    id: string;
-    referenceName: string;
-    preserveReferenceName?: boolean;
-    position: { left: number; top: number };
-  }> = [];
-  let inspectorModel: InspectorModel;
-  let inspectorRevision = 0;
-  let inspectorError: { property: string; message: string } | null = null;
-  let inspectorViews: Array<{ id: string; referenceName: string; position: { left: number; top: number }; data: InspectionView }> = [];
-  $: {
-    // Every displayed property comes from the authoritative runtime snapshot.
-    void runtime;
-    void inspectorRevision;
-    inspectorViews = inspectorWindows.map(item => ({
-    ...item,
-    referenceName: item.preserveReferenceName ? item.referenceName :
-      runtime.references.find(reference => reference.name === item.referenceName && reference.objectId === item.id)?.name
-      || runtime.references.find(reference => reference.objectId === item.id)?.name || item.referenceName || "<object>",
-    data: inspectorModel?.view(item.id),
-    })).filter((item): item is typeof item & { data: InspectionView } => Boolean(item.data));
-  }
-  $: inspected = inspectorViews.find(item => item.id === activeInspectorId)?.data || null;
-  let menu: {
-    x: number;
-    y: number;
-    file?: ProjectFile;
-    object?: BenchObject;
-  } | null = null;
-  let bench: BenchObject[] = [],
-    newProjectOpen = false,
-    projectInfo: "template" | "example" | null = null,
-    newClassOpen = false,
-    newClassName = "",
-    newClassType: "class" | "interface" | "open" | "abstract" | "data" | "functions" =
-      "class",
-    stage: any = null,
-    stageCanvas: HTMLCanvasElement | null = null,
-    speed = 50,
-    inheritanceMode = false,
-    inheritanceSelection = "",
-    showInheritance = true,
-    settingsNotice = false,
-    bluePlayApiFile: ProjectFile | null = null,
-    // The project description, as BlueJ keeps it in README.TXT. It belongs to
-    // the project, not to a class, so it lives beside `files` and never compiles.
-    readme = "",
-    projectName = "",
-    readmeOpen = false,
-    readmeHelp = false,
-    editorFontSize = 16,
-    // Off unless someone asks for it: Vim gives every key a new meaning, which
-    // is a surprise for anyone who did not switch it on.
-    vimMode = false,
-    darkMode = false,
-    imageLibraryOpen = false,
-    mediaNotice = "",
-    shareNotice = "",
-    shareLinkDialog: { url: string; code: string; copied: boolean } | null = null,
-    stageWindowOpen = false,
-    stageWindowDismissed = false,
-    stageMaximized = false,
-    stagePosition: { left: number; top: number } | null = null,
-    codepadOpen = true,
-    paneSplit = 66,
-    benchWidth: number | null = null,
-    codepadMenu: { x: number; y: number; text?: string } | null = null;
-  const editorFormatters = new Map<string, () => boolean>();
-  const editorCommenters = new Map<string, () => boolean>();
-  let formatShortcutLabel = "Ctrl+I";
-  let commentShortcutLabel = "Ctrl+/";
-  let vimShortcutLabel = "Ctrl+Shift+V";
-  let compileShortcutLabel = "Ctrl+K";
-  let saveShortcutLabel = "Ctrl+S";
-  let terminalShortcutLabel = "Ctrl+#";
-  let runShortcutLabel = "Ctrl+Enter";
-  let editorNextShortcutLabel = "Ctrl+E";
-  let editorPrevShortcutLabel = "Ctrl+Shift+E";
-  let shortcutsHelpOpen = false;
-  let toolbarDialog: "open" | "save" | null = null;
-  // Offline builds (npm run build:offline) run without the share server, so features
-  // that need it are hidden instead of failing when a student clicks them.
-  const offlineBuild = import.meta.env.VITE_BLUEK_OFFLINE === "1";
-  const serverFeatures = !offlineBuild;
-  // Built by `npm run build` and `npm run dev` (predev), so the link always resolves.
-  const OFFLINE_DOWNLOAD = `${import.meta.env.BASE_URL}downloads/BlueK-offline.zip`;
-  let shareCodeInput = "",
-    shareCodeError = "",
-    shareWithReadme = false;
-  // An empty description is nothing to open, so the option goes with it.
-  $: if (!readme.trim()) shareWithReadme = false;
-  const AUTOSAVE_KEY = "bluek.current-project.v1";
-  let autosaveReady = false;
-  let inheritanceEdges: Array<{
-    id: string;
-    x1: number;
-    y1: number;
-    x2: number;
-    y2: number;
-    zIndex: number;
-  }> = [];
-  let createDialog: {
-      className: string;
-      constructors: any[];
-      constructorIndex: number;
-      typeParameters: string[];
-      parameters: any[];
-    } | null = null,
-    createName = "",
-    createArgs: string[] = [],
-    createTypeArgs: string[] = [];
-  let invokeDialog: {
-      object?: BenchObject;
-      receiver?: string;
-      method: any;
-    } | null = null,
-    invokeArgs: string[] = [],
-    invokeTypeArgs: string[] = [],
-    resultDialog: {
-      method: string;
-      value: string;
-      objectId?: string;
-      className?: string;
-    } | null = null,
-    objectNamePrompt: RuntimeValue | null = null,
-    objectName = "",
-    objectNameError = "",
-    editingField = "",
-    fieldDraft = "",
-    fieldError = "";
-  // Set while a field value is being edited; bench clicks then insert names.
-  let fieldInput: HTMLInputElement | null = null;
-  $: stageRunning = library?.id === "blueplay"
-    ? runtime.simulation === "running" || runtime.simulation === "stopping" || runtime.simulation === "waiting"
-    : Boolean(stage?.running);
-  let inputElement: HTMLInputElement;
-  const stageKeysDown = new Set<string>();
-  let cardDrag: { id: string; dx: number; dy: number } | null = null;
-  let cardLayers: Record<string, number> = {};
-  let nextCardLayer = 100;
-  const cardGridSize = 20;
-  const defaultCardPosition = (index: number): CardPosition => ({
-    x: 80 + (index % 4) * 280,
-    y: 40 + Math.floor(index / 4) * 160,
+  import BluePlayWindow from "./components/BluePlayWindow.svelte";
+  import TerminalWindow from "./components/TerminalWindow.svelte";
+  import EditorWindows from "./components/EditorWindows.svelte";
+  import CompilerDialog from "./components/CompilerDialog.svelte";
+  import InspectorWindows from "./components/InspectorWindows.svelte";
+  import CallDialogs from "./components/CallDialogs.svelte";
+  import MainSelectionDialog from "./components/MainSelectionDialog.svelte";
+  import NewProjectDialog from "./components/NewProjectDialog.svelte";
+  import ReadmeDialog from "./components/ReadmeDialog.svelte";
+  import BluePlayApiDialog from "./components/BluePlayApiDialog.svelte";
+  import NewClassDialog from "./components/NewClassDialog.svelte";
+  import ObjectContextMenu from "./components/ObjectContextMenu.svelte";
+  import ProjectTransferDialogs from "./components/ProjectTransferDialogs.svelte";
+  import MediaDialogs from "./components/MediaDialogs.svelte";
+  import SettingsDialogs from "./components/SettingsDialogs.svelte";
+  import ObjectNameDialog from "./components/ObjectNameDialog.svelte";
+  import AppToolbar from "./components/AppToolbar.svelte";
+  import AppSidebar from "./components/AppSidebar.svelte";
+  import ClassDiagram from "./components/ClassDiagram.svelte";
+  import ObjectBenchCodepad from "./components/ObjectBenchCodepad.svelte";
+  import AppStatusBar from "./components/AppStatusBar.svelte";
+  import CodepadContextMenu from "./components/CodepadContextMenu.svelte";
+  import { WorkspaceUi } from "./workspace/WorkspaceUi.svelte";
+  import { ProjectWorkspace } from "./workspace/ProjectWorkspace.svelte";
+  import { EditorWorkspace } from "./workspace/EditorWorkspace.svelte";
+  import { ExecutionWorkspace } from "./workspace/ExecutionWorkspace.svelte";
+  import { ObjectWorkspace } from "./workspace/ObjectWorkspace.svelte";
+  import { BluePlayWorkspace } from "./workspace/BluePlayWorkspace.svelte";
+  import { TerminalWorkspace } from "./workspace/TerminalWorkspace.svelte";
+  import { onMount, untrack } from "svelte";
+  const ui: WorkspaceUi = new WorkspaceUi();
+  const project: ProjectWorkspace = new ProjectWorkspace({
+    objects: () => objects,
+    session: () => session,
+    ui: () => ui,
+    editor: () => editor,
   });
-  function orderedBluePlayFiles(projectFiles: ProjectFile[]) {
-    const rank = (file: ProjectFile) => {
-      if (file.fileName === "Main.kt") return 0;
-      const parent = sourceSuperclass(file.source);
-      if (parent === "World") return 1;
-      if (parent === "Actor") return 2;
-      return 3;
-    };
-    return [...projectFiles].sort((a, b) => rank(a) - rank(b));
-  }
-  let displayFiles: ProjectFile[] = files;
-  let displayCardPositions: CardPosition[] = [];
-  $: displayFiles = library?.id === "blueplay"
-    ? [...bluePlayFrameworkFiles, ...orderedBluePlayFiles(files)]
-    : files;
-  $: {
-    cardPositions;
-    displayCardPositions = displayFiles.map((file, index) => cardPosition(file, index));
-  }
-  function isBluePlayFrameworkFile(file: ProjectFile) {
-    return library?.id === "blueplay" && bluePlayFrameworkNames.includes(file.fileName);
-  }
-  function cardPosition(file: ProjectFile, index: number) {
-    return cardPositions[file.id] || defaultCardPosition(index);
-  }
-  function cardLayer(file: ProjectFile, index: number) {
-    return cardLayers[file.id] ?? index + 1;
-  }
-  function bringCardToFront(file: ProjectFile) {
-    nextCardLayer = Math.max(nextCardLayer + 1, displayFiles.length + 1);
-    cardLayers = { ...cardLayers, [file.id]: nextCardLayer };
-  }
-  function openBluePlayApi(file: ProjectFile) {
-    bluePlayApiFile = file;
-    menu = null;
-  }
+  const editor: EditorWorkspace = new EditorWorkspace({
+    project: () => project,
+    ui: () => ui,
+    objects: () => objects,
+    terminal: () => terminal,
+  });
+  const session: ExecutionWorkspace = new ExecutionWorkspace({
+    play: () => play,
+    objects: () => objects,
+    ui: () => ui,
+    editor: () => editor,
+    project: () => project,
+    terminal: () => terminal,
+  });
+  const objects: ObjectWorkspace = new ObjectWorkspace({
+    ui: () => ui,
+    session: () => session,
+    play: () => play,
+    editor: () => editor,
+    terminal: () => terminal,
+  });
+  const play: BluePlayWorkspace = new BluePlayWorkspace({
+    session: () => session,
+    project: () => project,
+    ui: () => ui,
+  });
+  const terminal: TerminalWorkspace = new TerminalWorkspace({
+    ui: () => ui,
+    session: () => session,
+  });
+  const offlineBuild = import.meta.env.VITE_BLUEK_OFFLINE === "1";
+  const OFFLINE_DOWNLOAD = `${import.meta.env.BASE_URL}downloads/BlueK-offline.zip`;
 
-  function projectPayload() {
-    return createProjectPayload(
-      files,
-      resources,
-      cardPositions,
-      library,
-      library?.id === "blueplay" ? bluePlayFrameworkFiles : [],
-      readme,
-      projectName,
-    );
-  }
-  function commitProjectName(event: KeyboardEvent) {
-    if (event.key !== "Enter" || event.isComposing) return;
-    event.preventDefault();
-    projectName = projectName.trim();
-    (event.currentTarget as HTMLInputElement).blur();
-  }
-  // BlueJ shows a README note in the corner of every project; BlueK does the
-  // same and opens on the rendered text rather than on the markup.
-  function openReadme() {
-    readmeOpen = true;
-    readmeHelp = false;
-    menu = null;
-  }
-  function closeReadme() {
-    readmeOpen = false;
-    readmeHelp = false;
-  }
-  function saveAutosave() {
-    if (!autosaveReady) return;
-    try {
-      window.localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(projectPayload()));
-    } catch {
-      // Storage can be unavailable or full; the editor remains usable.
-    }
-  }
-  $: if (autosaveReady) {
-    files;
-    library;
-    resources;
-    cardPositions;
-    readme;
-    projectName;
-    saveAutosave();
-  }
-  function beginCardDrag(event: MouseEvent | PointerEvent, file: ProjectFile) {
-    if (event.button !== 0 || ("pointerType" in event && event.pointerType === "touch")) return;
-    const canvas = (event.currentTarget as HTMLElement).closest(".canvas");
-    if (!canvas) return;
-    const bounds = canvas.getBoundingClientRect();
-    const position = cardPosition(file, displayFiles.indexOf(file));
-    bringCardToFront(file);
-    cardDrag = {
-      id: file.id,
-      dx: event.clientX - bounds.left - position.x,
-      dy: event.clientY - bounds.top - position.y,
-    };
-    const move = (next: MouseEvent | PointerEvent) => moveCard(next, file);
-    const stop = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("pointerup", stop);
-      window.removeEventListener("pointercancel", stop);
-      endCardDrag();
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("mousemove", move);
-    window.addEventListener("pointerup", stop);
-    window.addEventListener("pointercancel", stop);
-  }
-  function moveCard(event: MouseEvent | PointerEvent, file: ProjectFile) {
-    if (!cardDrag || cardDrag.id !== file.id) return;
-    const canvas = document.querySelector<HTMLElement>(".canvas");
-    if (!canvas) return;
-    const bounds = canvas.getBoundingClientRect();
-    const maxX = Math.max(0, Math.floor((bounds.width - 250) / cardGridSize) * cardGridSize);
-    const maxY = Math.max(0, Math.floor((bounds.height - 145) / cardGridSize) * cardGridSize);
-    const targetX = event.clientX - bounds.left - cardDrag.dx;
-    const targetY = event.clientY - bounds.top - cardDrag.dy;
-    cardPositions = {
-      ...cardPositions,
-      [file.id]: {
-        x: Math.max(0, Math.min(maxX, Math.round(targetX / cardGridSize) * cardGridSize)),
-        y: Math.max(0, Math.min(maxY, Math.round(targetY / cardGridSize) * cardGridSize)),
-      },
-    };
-  }
-  function endCardDrag() {
-    cardDrag = null;
-  }
-  function stageKey(event: KeyboardEvent, pressed: boolean) {
-    const key = stageKeyName(event.key);
-    event.preventDefault();
-    if (stageKeysDown.has(key) === pressed) return;
-    if (pressed) stageKeysDown.add(key);
-    else stageKeysDown.delete(key);
-    client?.sendKey(key, pressed).catch(() => undefined);
-  }
-  function releaseStageKeys() {
-    for (const key of stageKeysDown) client?.sendKey(key, false).catch(() => undefined);
-    stageKeysDown.clear();
-  }
-  function stageClick(event: MouseEvent) {
-    const target = event.currentTarget as HTMLElement;
-    target.focus();
-    if (!stage) return;
-    event.preventDefault();
-    const { x, y, actorId } = stageRenderer.pointer(stage, target.getBoundingClientRect(), event.clientX, event.clientY);
-    client?.sendClick(x, y, actorId).catch(() => undefined);
-  }
-
-  function bluePlayAction(action: "step" | "start" | "stop" | "setSpeed") {
-    if (!client || library?.id !== "blueplay" || !stage || runtime.phase === "faulted") return;
-    if (action === "step" && (stageRunning || !canExecute)) return;
-    if (action === "start" && stageRunning) return;
-    if (action === "stop" && !stageRunning) return;
-    if (action === "setSpeed" && runtime.phase !== "ready" && runtime.phase !== "waitingForInput") return;
-    if (action === "start") stageCanvas?.focus();
-    if (library?.id === "blueplay") {
-      client.simulation(action, action === "setSpeed" ? Number(speed) : undefined)
-        .then((result) => {
-          if (result.kind === "error") {
-            error = result.display || "BluePlay action failed.";
-            status = "BluePlay error";
-          } else if (action === "start") status = "Running…";
-          else if (action === "stop") status = "Paused";
-          else if (action === "step") status = "Ready";
-        })
-        .catch((reason) => {
-          error = reason instanceof Error ? reason.message : String(reason);
-          status = "BluePlay error";
-        });
-      return;
-    }
-  }
-  async function resetGame() {
-    if (!canExecute) return;
-    await resetRuntime();
-    if (library?.id !== "blueplay" && canExecute) await runMain();
-  }
-  function beginStageDrag(event: PointerEvent) {
-    if (
-      stageMaximized ||
-      event.button !== 0 ||
-      (event.target as HTMLElement).closest("button")
-    )
-      return;
-    const stageElement = (event.currentTarget as HTMLElement).closest(".stage-window");
-    if (!stageElement) return;
-    const bounds = stageElement.getBoundingClientRect();
-    const startX = event.clientX,
-      startY = event.clientY;
-    const move = (next: PointerEvent) => {
-      stagePosition = {
-        left: Math.max(8, bounds.left + next.clientX - startX),
-        top: Math.max(8, bounds.top + next.clientY - startY),
+  // Each controller owns its UI state; runtime data has one client and one snapshot.
+  $effect(() =>
+    untrack(() => {
+      const disconnect = session.connect();
+      play.connect();
+      terminal.connect();
+      const disconnectProject = project.connect();
+      return () => {
+        disconnectProject();
+        disconnect();
       };
-    };
-    const stop = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", stop);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", stop);
-    event.preventDefault();
-  }
-  function beginPaneResize(event: PointerEvent) {
-    const start = event.clientY,
-      initial = paneSplit;
-    const move = (next: PointerEvent) => {
-      paneSplit = Math.max(
-        20,
-        Math.min(
-          82,
-          initial +
-            ((next.clientY - start) / Math.max(window.innerHeight, 1)) * 100,
-        ),
-      );
-    };
-    const stop = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", stop);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", stop);
-    event.preventDefault();
-  }
-  function beginBenchResize(event: PointerEvent) {
-    const benchElement = document.querySelector<HTMLElement>(".lower .bench"),
-      measuredWidth = benchElement?.getBoundingClientRect().width;
-    const start = event.clientX,
-      initial = benchWidth ?? measuredWidth ?? 260;
-    const move = (next: PointerEvent) => {
-      benchWidth = Math.max(
-        120,
-        Math.min(window.innerWidth * 0.65, initial + next.clientX - start),
-      );
-    };
-    const stop = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", stop);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", stop);
-    event.preventDefault();
-  }
-  function refreshInheritanceEdges() {
-    const canvas = document.querySelector<HTMLElement>(".canvas");
-    const elements = Array.from(
-      document.querySelectorAll<HTMLElement>(".classcard"),
-    );
-    if (!canvas || !showInheritance) {
-      if (inheritanceEdges.length) inheritanceEdges = [];
-      return;
-    }
-    const bounds = canvas.getBoundingClientRect();
-    const next: typeof inheritanceEdges = [];
-    displayFiles.forEach((child, index) => {
-      const parent = sourceSuperclass(child.source);
-      const parentIndex = displayFiles.findIndex(
-        (file) => file.fileName.replace(/\.kt$/, "") === parent,
-      );
-      if (parentIndex < 0 || !elements[index] || !elements[parentIndex]) return;
-      const local = (element: HTMLElement) => {
-        const rect = element.getBoundingClientRect();
-        return {
-          left: rect.left - bounds.left + canvas.scrollLeft,
-          top: rect.top - bounds.top + canvas.scrollTop,
-          width: rect.width,
-          height: rect.height,
-        };
-      };
-      const a = local(elements[index]),
-        b = local(elements[parentIndex]),
-        ac = cardCenter(a),
-        bc = cardCenter(b);
-      if (ac.x === bc.x && ac.y === bc.y) return;
-      const start = cardBorderPoint(a, ac, bc),
-        end = cardBorderPoint(b, bc, ac);
-      next.push({
-        id: child.id,
-        x1: start.x,
-        y1: start.y,
-        x2: end.x,
-        y2: end.y,
-        zIndex: Math.max(
-          cardLayer(child, index),
-          cardLayer(displayFiles[parentIndex], parentIndex),
-        ),
-      });
-    });
-    if (JSON.stringify(next) !== JSON.stringify(inheritanceEdges))
-      inheritanceEdges = next;
-  }
-  function toggleInheritance() {
-    showInheritance = !showInheritance;
-    if (showInheritance) window.setTimeout(refreshInheritanceEdges, 50);
-  }
-  function copyCodepadText(value: string) {
-    navigator.clipboard?.writeText(value).catch(() => undefined);
-    codepadMenu = null;
-  }
-
-  function codepadResultValue(value: string) {
-    const separator = value.lastIndexOf(" : ");
-    return separator < 0 ? value : value.slice(0, separator);
-  }
-  function codepadResultType(value: string) {
-    const separator = value.lastIndexOf(" : ");
-    return separator < 0 ? "" : value.slice(separator);
-  }
-  function selectAllCodepadHistory() {
-    document.querySelectorAll(".codepad-entry").forEach((entry, index) => {
-      const range = document.createRange();
-      range.selectNodeContents(entry);
-      const selection = window.getSelection();
-      if (index === 0) selection?.removeAllRanges();
-      selection?.addRange(range);
-    });
-    codepadMenu = null;
-  }
-  // defaultHighlightStyle picks colors for a light background; a dark
-  // background needs its own palette or keywords/strings turn unreadable.
-  const darkHighlightStyle = HighlightStyle.define([
-    { tag: tags.keyword, color: "#c586c0" },
-    { tag: [tags.name, tags.deleted, tags.character, tags.macroName], color: "#9cdcfe" },
-    { tag: [tags.function(tags.variableName), tags.labelName], color: "#dcdcaa" },
-    { tag: [tags.color, tags.constant(tags.name), tags.standard(tags.name)], color: "#4fc1ff" },
-    { tag: [tags.definition(tags.name), tags.separator], color: "#9cdcfe" },
-    { tag: [tags.typeName, tags.className, tags.number, tags.changed, tags.annotation, tags.modifier, tags.self, tags.namespace], color: "#4ec9b0" },
-    { tag: [tags.operator, tags.operatorKeyword, tags.url, tags.escape, tags.regexp, tags.link, tags.special(tags.string)], color: "#d4d4d4" },
-    { tag: [tags.meta, tags.comment], color: "#6a9955" },
-    { tag: tags.strong, fontWeight: "bold" },
-    { tag: tags.emphasis, fontStyle: "italic" },
-    { tag: tags.strikethrough, textDecoration: "line-through" },
-    { tag: tags.link, color: "#6a9955", textDecoration: "underline" },
-    { tag: tags.heading, fontWeight: "bold", color: "#9cdcfe" },
-    { tag: [tags.atom, tags.bool, tags.special(tags.variableName)], color: "#4fc1ff" },
-    { tag: [tags.processingInstruction, tags.string, tags.inserted], color: "#ce9178" },
-    { tag: tags.invalid, color: "#f44747" },
-  ]);
-  const darkEditorTheme = EditorView.theme({
-    "&": { backgroundColor: "#1e1e1e", color: "#d4d4d4" },
-    ".cm-content": { caretColor: "#d4d4d4" },
-    ".cm-cursor, .cm-dropCursor": { borderLeftColor: "#d4d4d4" },
-    "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": { backgroundColor: "#264f78" },
-    ".cm-gutters": { backgroundColor: "#1e1e1e", color: "#6e7681", border: "none" },
-    ".cm-activeLine": { backgroundColor: "#2a2d2e" },
-    ".cm-activeLineGutter": { backgroundColor: "#2a2d2e" },
-  }, { dark: true });
-  type EditorOptions = {
-    id: string;
-    value: string;
-    fontSize: number;
-    onChange: (value: string) => void;
-    diagnostics: Diagnostic[];
-    // Each compile run bumps this, so the same error can be marked again after
-    // the student edited the line and compiled once more.
-    diagnosticsRun: number;
-    vim: boolean;
-    dark: boolean;
-  };
-  function codeMirror(node: HTMLElement, options: EditorOptions) {
-    let current = options;
-    let shownRun = -1;
-    const formatter = new KotlinFormatterClient();
-    let view: EditorView;
-    let formatRequest = 0;
-    const formatDocument = () => {
-      dialogError = "";
-      const request = ++formatRequest;
-      const source = view.state.doc.toString();
-      void formatter.format(source).then((formatted) => {
-        if (request !== formatRequest || formatted === view.state.doc.toString()) return;
-        view.dispatch({
-          changes: { from: 0, to: view.state.doc.length, insert: formatted },
-          userEvent: "input.format",
-        });
-      }).catch((error: unknown) => {
-        if (request === formatRequest) {
-          const message = error instanceof Error ? error.message : String(error);
-          dialogError = message.replaceAll("com.facebook.ktfmt.format.", "");
-          // A parse error names line and column, so the editor marks that place
-          // and scrolls to it, exactly as it does for a compiler error.
-          const location = dialogError.match(/(\d+):(\d+)/);
-          if (location)
-            applyDiagnostics(view, [{
-              line: Number(location[1]),
-              column: Number(location[2]),
-              severity: "error",
-              message: dialogError,
-            }]);
-        }
-      });
-      return true;
-    };
-    editorFormatters.set(current.id, formatDocument);
-    const toggleComments = () => toggleEditorComment(view);
-    editorCommenters.set(current.id, toggleComments);
-    // Vim rebinds nearly every key, so it has to sit in front of the other
-    // keymaps — a compartment keeps that place while it is switched on and off.
-    const vimKeys = new Compartment();
-    const editorTheme = new Compartment();
-    const editorHighlight = new Compartment();
-    view = new EditorView({
-      state: EditorState.create({
-        doc: current.value,
-        extensions: [
-          vimKeys.of(current.vim ? vim({ status: true }) : []),
-          editorTheme.of(current.dark ? darkEditorTheme : []),
-          editorHighlight.of(syntaxHighlighting(current.dark ? darkHighlightStyle : defaultHighlightStyle, { fallback: true })),
-          minimalSetup,
-          lineNumbers(),
-          indentUnit.of("    "),
-          historyExtension(),
-          closeBrackets(),
-          bracketMatching(),
-          drawSelection(),
-          highlightActiveLine(),
-          StreamLanguage.define(kotlin),
-          editorDiagnostics(),
-          keymap.of([
-            ...defaultKeymap,
-            ...closeBracketsKeymap,
-            ...historyKeymap,
-            ...searchKeymap,
-            { key: "Mod-Shift-i", run: formatDocument },
-            indentWithTab,
-          ]),
-          EditorView.theme({
-            "&": {
-              height: "100%",
-              fontSize: "var(--editor-font-size, 16px)",
-            },
-            ".cm-content, .cm-line, .cm-gutters, .cm-gutterElement": {
-              fontSize: "var(--editor-font-size, 16px)",
-            },
-            ".cm-scroller": {
-              overflow: "auto",
-              fontFamily: "Menlo, Monaco, Consolas, monospace",
-            },
-          }),
-        ],
-      }),
-      parent: node,
-    });
-    const listener = EditorView.updateListener.of((update) => {
-      if (update.docChanged) current.onChange(update.state.doc.toString());
-    });
-    view.dispatch({ effects: StateEffect.appendConfig.of(listener) });
-    shownRun = current.diagnosticsRun;
-    if (current.diagnostics.length) applyDiagnostics(view, current.diagnostics);
-    const formatShortcut = (event: KeyboardEvent) => {
-      if ((event.key.toLowerCase() !== "i" && event.code !== "KeyI") ||
-          event.shiftKey || event.altKey || (!event.metaKey && !event.ctrlKey)) return;
-      if (!node.contains(document.activeElement)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      formatDocument();
-    };
-    const germanCommentShortcut = (event: KeyboardEvent) => {
-      if ((!event.metaKey && !event.ctrlKey) || !event.shiftKey || event.code !== "Digit7") return;
-      if (!node.contains(document.activeElement)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      toggleComments();
-    };
-    window.addEventListener("keydown", formatShortcut, true);
-    window.addEventListener("keydown", germanCommentShortcut, true);
-    view.focus();
-    return {
-      update(next: EditorOptions) {
-        const previousId = current.id;
-        const vimChanged = next.vim !== current.vim;
-        const darkChanged = next.dark !== current.dark;
-        current = next;
-        if (vimChanged) {
-          view.dispatch({ effects: vimKeys.reconfigure(next.vim ? vim({ status: true }) : []) });
-          view.focus();
-        }
-        if (darkChanged)
-          view.dispatch({
-            effects: [
-              editorTheme.reconfigure(next.dark ? darkEditorTheme : []),
-              editorHighlight.reconfigure(syntaxHighlighting(next.dark ? darkHighlightStyle : defaultHighlightStyle, { fallback: true })),
-            ],
-          });
-        if (previousId !== next.id) {
-          editorFormatters.delete(previousId);
-          editorFormatters.set(next.id, formatDocument);
-          editorCommenters.delete(previousId);
-          editorCommenters.set(next.id, toggleComments);
-        }
-        if (next.value !== view.state.doc.toString())
-          view.dispatch({
-            changes: { from: 0, to: view.state.doc.length, insert: next.value },
-          });
-        // After the document, so a doc change does not wipe the fresh marks.
-        if (next.diagnosticsRun !== shownRun) {
-          shownRun = next.diagnosticsRun;
-          applyDiagnostics(view, next.diagnostics);
-        }
-        const fontSize = `${next.fontSize}px`;
-        view.dom.style.fontSize = fontSize;
-        view.dom.querySelector<HTMLElement>(".cm-gutters")?.style.setProperty("font-size", fontSize);
-        view.dom.querySelectorAll<HTMLElement>(".cm-gutterElement").forEach((gutter) => {
-          gutter.style.fontSize = fontSize;
-        });
-        const measure = () => view.requestMeasure();
-        measure();
-        requestAnimationFrame(() => {
-          measure();
-          requestAnimationFrame(() => {
-            const gutters = view.dom.querySelector<HTMLElement>(".cm-gutters");
-            if (!gutters) return;
-            const lines = [...view.dom.querySelectorAll<HTMLElement>(".cm-line")];
-            const numbers = [...gutters.querySelectorAll<HTMLElement>(".cm-lineNumbers .cm-gutterElement")];
-            lines.forEach((line, index) => {
-              const number = numbers.find((item) => item.textContent?.trim() === String(index + 1));
-              if (number) number.style.height = `${line.getBoundingClientRect().height}px`;
-            });
-          });
-        });
-      },
-      destroy() {
-        ++formatRequest;
-        editorFormatters.delete(current.id);
-        editorCommenters.delete(current.id);
-        window.removeEventListener("keydown", formatShortcut, true);
-        window.removeEventListener("keydown", germanCommentShortcut, true);
-        formatter.dispose();
-        view.destroy();
-      },
-    };
-  }
-  function formatEditor(id: string) {
-    editorFormatters.get(id)?.();
-  }
-  function toggleEditorComments(id: string) {
-    editorCommenters.get(id)?.();
-  }
-  // Which mode the editor is in decides what every key does, so switching says
-  // so — the mode line of Vim itself only appears in an open editor.
-  function setVimMode(enabled: boolean) {
-    if (enabled === vimMode) return;
-    vimMode = enabled;
-    status = enabled ? "Vim mode on" : "Vim mode off";
-  }
-  // The README is typed as Markdown and formatted while it is typed. Plaintext
-  // only switches that formatting off; the text in the document is the same one.
-  function markdownEditor(node: HTMLElement, options: { value: string; onChange: (value: string) => void }) {
-    let current = options;
-    const view = new EditorView({
-      parent: node,
-      state: EditorState.create({
-        doc: options.value,
-        extensions: [
-          historyExtension(),
-          keymap.of([...defaultKeymap, ...historyKeymap]),
-          drawSelection(),
-          EditorView.lineWrapping,
-          editorPlaceholder("Describe the project here. Markdown works: # Heading, **bold**, - list"),
-          markdownPreview(),
-          EditorView.updateListener.of((update) => {
-            if (update.docChanged) current.onChange(update.state.doc.toString());
-          }),
-        ],
-      }),
-    });
-    // No focus on opening: the description is meant to be read first, and a
-    // cursor in the first line would show that line's markers straight away.
-    return {
-      update(next: typeof options) {
-        current = next;
-        if (next.value !== view.state.doc.toString())
-          view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: next.value } });
-      },
-      destroy() {
-        view.destroy();
-      },
-    };
-  }
-  $: currentFile = files[selected];
-  $: classes = runtime.classes || [];
-  $: canExecute = runtime.phase === "ready" && (runtime.simulation === "inactive" || runtime.simulation === "paused");
-  $: inputReady = runtime.phase === "waitingForInput";
-  $: programActive = runtime.phase === "running" || runtime.phase === "compiling" || inputReady;
-  $: if (terminalOpen && inputReady)
-    window.setTimeout(() => inputElement?.focus(), 0);
-  type MainAction = "start" | "reset" | "export";
-  let mainDialog: { action: MainAction; generationId: string } | null = null;
-  $: mainEntries = mainFiles(classes);
-  // Exporting reads the compiled entry points only, so a running program does not close its choice.
-  $: if (mainDialog && (mainDialog.generationId !== runtime.generationId || (mainDialog.action !== "export" && !canExecute))) mainDialog = null;
-  $: htmlExportBlocked = runtime.phase !== "uncompiled" && runtime.phase !== "compiling" && !mainEntries.length;
-  let htmlExporting = false;
-  $: if (files.length || Object.keys(cardPositions).length || showInheritance)
-    window.setTimeout(refreshInheritanceEdges, 0);
-  // The graphics BlueK ships with are usable everywhere a project resource is,
-  // but they are not project content: they stay out of `resources` so they are
-  // never saved, listed as project files or overwritten by an import.
-  $: runtimeResources = withStandardImages(resources, standardImages);
-  $: if (runtimeResources.length) refreshResourceSizes(runtimeResources);
-  $: if (!runtimeResources.length && Object.keys(resourceSizes).length)
-    resourceSizes = {};
-  $: if (stage && Object.keys(resourceSizes).length) {
-    const refreshed = decorateStage(stage, runtimeResources, resourceSizes);
-    if (JSON.stringify(refreshed.objects) !== JSON.stringify(stage.objects))
-      stage = refreshed;
-  }
-
+    }),
+  );
   onMount(() => {
-    const mac = /Mac/i.test(navigator.platform);
-    formatShortcutLabel = mac ? "Cmd+I" : "Ctrl+I";
-    commentShortcutLabel = mac ? "Cmd+/" : "Ctrl+/";
-    vimShortcutLabel = mac ? "Cmd+Shift+V" : "Ctrl+Shift+V";
-    compileShortcutLabel = mac ? "Cmd+K" : "Ctrl+K";
-    saveShortcutLabel = mac ? "Cmd+S" : "Ctrl+S";
-    terminalShortcutLabel = mac ? "Cmd+#" : "Ctrl+#";
-    runShortcutLabel = mac ? "Cmd+Enter" : "Ctrl+Enter";
-    editorNextShortcutLabel = mac ? "Cmd+E" : "Ctrl+E";
-    editorPrevShortcutLabel = mac ? "Cmd+Shift+E" : "Ctrl+Shift+E";
-    client = new LocalRuntimeClient(createLocalRuntimeWorker);
-    inspectorModel = new InspectorModel(client, () => { inspectorRevision += 1; });
-    const unsubscribe = client.subscribe(() => {
-      runtime = client.getSnapshot();
-      if (runtime.phase === "ready") {
-        inspectorWindows.filter((item) => !runtime.liveObjectIds.includes(item.id)).forEach((item) => closeInspector(item.id));
-      }
-      if (runtime.phase === "waitingForInput" || runtime.phase === "faulted")
-        focusTerminalWindow();
-    });
-    const unsubscribeOutput = client.onResponse((value) => {
-      if (value.output) {
-        focusTerminalWindow();
-        terminal = appendTerminal(terminal, value.output);
-        window.setTimeout(renderTerminal, 0);
-      }
-      value.effects?.forEach((effect) => {
-        if (effect.type === "sound" && effect.name === "beep") stageAudio.beep();
-      });
-    });
-    const unsubscribeStage = client.stageStream((value) => {
-      stage = decorateStage(value, runtimeResources, resourceSizes);
-      // Runtime snapshots repeat the current BluePlay frame after every codepad
-      // command. A dismissed window stays closed until the user starts a world
-      // again or explicitly invokes its show() method.
-      if (!stageWindowDismissed) stageWindowOpen = true;
-      speed = Number(value.speed) || speed;
-      stageAudio.playFrameSounds(value, runtimeResources);
-    });
-    // A link can say that the project introduces itself: `readme=1`, in the hash
-    // of a full project link or in the query of a short one.
-    const linkOpensReadme =
-      (new URLSearchParams(window.location.hash.slice(1)).get("readme") ??
-        new URLSearchParams(window.location.search).get("readme")) === "1";
-    const loadExample = async () => {
-      const serverMatch = window.location.pathname.match(/^\/load\/((?:[a-z]{4,6}-){2,3}[a-z]{4,6})\/?$/);
-      if (serverMatch) {
-        try {
-          await loadProject(
-            await loadProjectFromServer(serverMatch[1]),
-            "Shared BlueK project loaded. Compile the project.",
-          );
-          window.history.replaceState(window.history.state, "", "/");
-          if (linkOpensReadme) openReadme();
-        } catch (reason) {
-          status = "Project error";
-          error = reason instanceof Error ? reason.message : "Could not load the shared BlueK project.";
-        }
-        return;
-      }
-      const shared = new URLSearchParams(window.location.hash.slice(1)).get(
-        "bluek",
-      );
-      if (shared) {
-        try {
-          await loadProject(
-            await decodeProjectLink(shared),
-            "Shared BlueK project loaded. Compile the project.",
-          );
-          window.history.replaceState(window.history.state, "", "/");
-          if (linkOpensReadme) openReadme();
-        } catch (reason) {
-          status = "Project error";
-          error =
-            reason instanceof Error
-              ? reason.message
-              : "Could not load the BlueK project link.";
-        }
-        return;
-      }
+    ui.initializeShortcuts();
+    void project.initialize();
+    const vimShortcut = (event: KeyboardEvent) => {
       if (
-        new URLSearchParams(window.location.search).get("example") !==
-        "blueplay"
+        (event.key.toLowerCase() !== "v" && event.code !== "KeyV") ||
+        !event.shiftKey ||
+        (!event.metaKey && !event.ctrlKey)
       )
         return;
-      try {
-        await loadProject(
-          await (
-            await fetch("./examples/blueplay.bluek.json", { cache: "no-store" })
-          ).json(),
-          "BluePlay example loaded.",
-        );
-      } catch {
-        status = "Project error";
-        error = "Could not load the BluePlay example.";
-      }
-    };
-    const initializeProject = async () => {
-      const hasExplicitProject = Boolean(
-        window.location.pathname.match(/^\/load\//) ||
-        new URLSearchParams(window.location.hash.slice(1)).get("bluek") ||
-        new URLSearchParams(window.location.search).get("example") === "blueplay",
-      );
-      if (!hasExplicitProject) {
-        try {
-          const saved = window.localStorage.getItem(AUTOSAVE_KEY);
-          if (saved) {
-            await loadProject(JSON.parse(saved), "Local project restored.");
-            autosaveReady = true;
-            return;
-          }
-        } catch {
-          // Ignore an invalid or unavailable autosave and start normally.
-        }
-      }
-      await loadExample();
-      autosaveReady = true;
-    };
-    initializeProject();
-    // Before the editor sees the key: in Vim mode the editor answers to almost
-    // everything, and the way out has to keep working.
-    const vimShortcut = (event: KeyboardEvent) => {
-      if ((event.key.toLowerCase() !== "v" && event.code !== "KeyV") ||
-          !event.shiftKey || (!event.metaKey && !event.ctrlKey)) return;
       event.preventDefault();
       event.stopPropagation();
-      setVimMode(!vimMode);
+      ui.setVimMode(!ui.vimMode);
     };
-    window.addEventListener("keydown", vimShortcut, true);
-    // Same reasoning as vimShortcut above: Mod-Enter is CodeMirror's own
-    // "insert blank line" and Mod-E is Vim's scroll-down command, so these
-    // have to win the race before the editor (or Vim) sees the key.
     const captureShortcut = (event: KeyboardEvent) => {
       const mod = (event.metaKey || event.ctrlKey) && !event.altKey;
       if (mod && !event.shiftKey && event.key === "Enter") {
         event.preventDefault();
         event.stopPropagation();
-        if (canExecute && mainEntries.length) void runMain();
-      } else if (mod && (event.key.toLowerCase() === "e" || event.code === "KeyE")) {
+        if (session.canExecute && session.mainEntries.length)
+          void session.runMain();
+      } else if (
+        mod &&
+        (event.key.toLowerCase() === "e" || event.code === "KeyE")
+      ) {
         event.preventDefault();
         event.stopPropagation();
-        cycleEditor(event.shiftKey ? -1 : 1);
+        editor.cycleEditor(event.shiftKey ? -1 : 1);
       }
     };
+    window.addEventListener("keydown", vimShortcut, true);
     window.addEventListener("keydown", captureShortcut, true);
-    const edgeTimer = window.setInterval(refreshInheritanceEdges, 250);
-    refreshInheritanceEdges();
     return () => {
       window.removeEventListener("keydown", vimShortcut, true);
       window.removeEventListener("keydown", captureShortcut, true);
-      window.clearInterval(edgeTimer);
-      unsubscribe();
-      unsubscribeOutput();
-      unsubscribeStage();
-      client.invalidate();
     };
   });
-
-
-  function renderTerminal() {
-    tick().then(() => {
-      const output = document.querySelector(".terminal-output pre");
-      if (output) output.scrollTop = output.scrollHeight;
-    });
+  function escapeWindowAction(): (() => void) | null {
+    if (objects.inspectorError)
+      return () => {
+        objects.inspectorError = null;
+      };
+    if (session.mainDialog)
+      return () => {
+        session.mainDialog = null;
+      };
+    if (project.projectInfo)
+      return () => {
+        project.projectInfo = null;
+      };
+    if (project.readmeOpen)
+      return () => {
+        const content = document.querySelector<HTMLElement>(
+          ".readme-editor .cm-content",
+        );
+        if (project.readmeHelp) project.readmeHelp = false;
+        else if (content && document.activeElement === content) content.blur();
+        else project.closeReadme();
+      };
+    if (project.bluePlayApiFile)
+      return () => {
+        project.bluePlayApiFile = null;
+      };
+    if (session.compilerDialog)
+      return () => {
+        session.compilerDialog = false;
+      };
+    if (objects.createDialog)
+      return () => {
+        objects.createDialog = null;
+        ui.dialogError = "";
+      };
+    if (objects.invokeDialog)
+      return () => {
+        objects.invokeDialog = null;
+        ui.dialogError = "";
+      };
+    if (objects.objectNamePrompt)
+      return () => {
+        objects.objectNamePrompt = null;
+      };
+    if (objects.resultDialog)
+      return () => {
+        objects.resultDialog = null;
+      };
+    if (
+      ui.activeWindow === "inspector" &&
+      objects.activeInspectorId &&
+      objects.inspectorWindows.some(
+        (item) => item.id === objects.activeInspectorId,
+      )
+    )
+      return () => objects.closeInspector(objects.activeInspectorId);
+    if (project.newClassOpen)
+      return () => {
+        project.newClassOpen = false;
+      };
+    if (ui.shortcutsHelpOpen)
+      return () => {
+        ui.shortcutsHelpOpen = false;
+      };
+    if (ui.settingsNotice)
+      return () => {
+        ui.settingsNotice = false;
+      };
+    if (project.mediaNotice)
+      return () => {
+        project.mediaNotice = "";
+      };
+    if (project.imageLibraryOpen)
+      return () => {
+        project.imageLibraryOpen = false;
+      };
+    if (project.shareLinkDialog)
+      return () => {
+        project.shareLinkDialog = null;
+      };
+    if (project.toolbarDialog)
+      return () => {
+        project.toolbarDialog = null;
+      };
+    if (project.newProjectOpen)
+      return () => {
+        project.newProjectOpen = false;
+      };
+    if (ui.activeWindow === "editor" && editor.editorWindows.length)
+      return editor.closeEditor;
+    if (terminal.terminalOpen)
+      return () => {
+        terminal.terminalOpen = false;
+        terminal.terminalSplit = false;
+      };
+    if (editor.editorWindows.length) return editor.closeEditor;
+    if (play.stageWindowOpen)
+      return () => {
+        play.stageWindowOpen = false;
+        play.stageMaximized = false;
+      };
+    if (objects.menu)
+      return () => {
+        objects.menu = null;
+      };
+    if (session.codepadMenu)
+      return () => {
+        session.codepadMenu = null;
+      };
+    return null;
   }
-
-  function focusTerminalWindow() {
-    terminalOpen = true;
-    activeWindow = "terminal";
-  }
-
-
-  async function refreshResourceSizes(list: Resource[]) {
-    const next = await measureImageSizes(list);
-    if (JSON.stringify(next) !== JSON.stringify(resourceSizes))
-      resourceSizes = next;
-  }
-  const stageRenderer = new StageRenderer(() => scheduleStageDraw());
-  function drawStageCanvas() {
-    if (!stageCanvas || !stage) return;
-    stageRenderer.draw(stageCanvas, stage, runtimeResources, window.devicePixelRatio);
-  }
-  function markUncompiled() {
-    client?.invalidate();
-    stage = null;
-    stageWindowOpen = false;
-    stageWindowDismissed = false;
-    resultDialog = null;
-    invokeDialog = null;
-    createDialog = null;
-    activeInspectorId = "";
-    inspectorWindows = [];
-    history = [];
-    status = "Uncompiled";
-    error = "";
-  }
-  // Global (non-editor-scoped) keyboard shortcuts live here, in one place.
-  // Two exceptions stay as their own capture-phase window listeners (see
-  // the comments above onMount's vimShortcut/captureShortcut): the format
-  // shortcut (tied to a specific CodeMirror view instance), and the Vim
-  // on/off + Run/editor-navigation shortcuts, all of which need to reach
-  // the key before CodeMirror's own keymap (or Vim's) swallows it — Mod-Enter
-  // is CodeMirror's "insert blank line", and Mod-E is Vim's scroll-down
-  // command.
   function handleWindowKeydown(event: KeyboardEvent) {
-    const mod = (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey;
+    const mod =
+      (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey;
     if (mod && (event.key.toLowerCase() === "k" || event.code === "KeyK")) {
       event.preventDefault();
       event.stopPropagation();
-      if (files.length &&
-          runtime.phase !== "compiling" &&
-          runtime.phase !== "running" &&
-          !inputReady)
-        compile();
+      if (
+        project.files.length &&
+        session.runtime.phase !== "compiling" &&
+        session.runtime.phase !== "running" &&
+        !session.inputReady
+      )
+        session.compile();
       return;
     }
     if (mod && (event.key.toLowerCase() === "s" || event.code === "KeyS")) {
       event.preventDefault();
       event.stopPropagation();
-      if (files.length) toolbarDialog = "save";
+      if (project.files.length) project.toolbarDialog = "save";
       return;
     }
-    if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key === "#") {
+    if (
+      (event.metaKey || event.ctrlKey) &&
+      !event.altKey &&
+      event.key === "#"
+    ) {
       event.preventDefault();
       event.stopPropagation();
       // Cycles through the terminal's three states: closed -> window -> split -> closed.
-      if (!terminalOpen) {
-        terminalOpen = true;
-        terminalSplit = false;
-        activeWindow = "terminal";
-      } else if (!terminalSplit) {
-        toggleTerminalSplit();
+      if (!terminal.terminalOpen) {
+        terminal.terminalOpen = true;
+        terminal.terminalSplit = false;
+        ui.activeWindow = "terminal";
+      } else if (!terminal.terminalSplit) {
+        terminal.toggleTerminalSplit();
       } else {
-        terminalOpen = false;
-        terminalSplit = false;
+        terminal.terminalOpen = false;
+        terminal.terminalSplit = false;
       }
       return;
     }
@@ -1209,3171 +278,374 @@
       // mode, so closing the editor window that way needs Shift held too —
       // a plain Escape is left alone here for Vim's own keymap to handle.
       // Everything else Escape closes stays instant, Shift or not.
-      if (vimMode && action === closeEditor && !event.shiftKey) return;
+      if (ui.vimMode && action === editor.closeEditor && !event.shiftKey)
+        return;
       action();
       event.preventDefault();
       event.stopPropagation();
       return;
     }
-    if (document.activeElement?.classList.contains("game-stage") || stageRunning)
-      stageKey(event, true);
-  }
-  function newFile(kind: "class" | "functions", name: string) {
-    const source =
-      kind === "functions"
-        ? "// Add top-level Kotlin functions here\n"
-        : `class ${name} {\n}\n`;
-    const file: ProjectFile = {
-      id: `svelte-${Date.now()}-${files.length}`,
-      fileName: `${name}.kt`,
-      kind,
-      source,
-      revision: 1,
-    };
-    files = [...files, file];
-    selected = files.length - 1;
-    markUncompiled();
-  }
-  function confirmNewClass() {
-    const name = newClassName.trim();
     if (
-      !/^[A-Za-z_]\w*$/.test(name) ||
-      files.some((file) => file.fileName === `${name}.kt`)
-    ) {
-      error = "Bitte einen eindeutigen gültigen Kotlin-Namen angeben.";
-      return;
-    }
-    if (newClassType === "functions") {
-      newFile("functions", name);
-      newClassOpen = false;
-      error = "";
-      return;
-    }
-    const sources = {
-      class: `class ${name} {\n}\n`,
-      interface: `interface ${name} {\n}\n`,
-      open: `open class ${name} {\n}\n`,
-      abstract: `abstract class ${name} {\n}\n`,
-      data: `data class ${name}(val value: Any?)\n`,
-    };
-    const source = sources[newClassType];
-    const file: ProjectFile = {
-      id: `svelte-${Date.now()}-${files.length}`,
-      fileName: `${name}.kt`,
-      kind: "class",
-      source,
-      revision: 1,
-    };
-    files = [...files, file];
-    selected = files.length - 1;
-    newClassOpen = false;
-    error = "";
-    markUncompiled();
-  }
-  function addFile(kind: "class" | "functions" = "class") {
-    const base = kind === "functions" ? "Functions" : "NewClass";
-    let number = files.length + 1,
-      name = `${base}${number}`;
-    while (files.some((file) => file.fileName === `${name}.kt`))
-      name = `${base}${++number}`;
-    newFile(kind, name);
-  }
-  function openEditor(file = currentFile) {
-    if (!file) return;
-    selected = files.findIndex((item) => item.id === file.id);
-    const existing = editorWindows.find((item) => item.fileId === file.id);
-    if (!existing) {
-      const currentFrame = editorTabbed && editorGroup
-        ? editorGroup
-        : editorWindows.find((item) => item.id === activeEditorId);
-      const next = {
-        id: `editor-${file.id}`,
-        fileId: file.id,
-        maximized: currentFrame?.maximized || false,
-        position: currentFrame?.position ? { ...currentFrame.position } : null,
-        size: currentFrame ? { ...currentFrame.size } : { width: 780, height: 520 },
-      };
-      editorWindows = [...editorWindows, {
-        ...next,
-      }];
-      activeEditorId = next.id;
-      if (editorWindows.length > 1 && !editorTabbed) {
-        editorGroup = { ...next, ...(currentFrame ? {
-          maximized: currentFrame.maximized,
-          position: currentFrame.position ? { ...currentFrame.position } : null,
-          size: { ...currentFrame.size },
-        } : {}), id: "editor-group" };
-        editorTabbed = true;
-      }
-    } else {
-      activeEditorId = existing.id;
-    }
-    activeWindow = "editor";
-    menu = null;
-  }
-  function collectEditors() {
-    if (editorWindows.length < 2 || editorTabbed) return;
-    const active = editorWindows.find((item) => item.id === activeEditorId) || editorWindows[0];
-    editorGroup = { ...active, id: "editor-group" };
-    editorTabbed = true;
-    activeEditorId = active.id;
-    activeWindow = "editor";
-  }
-  function ungroupEditors() {
-    if (!editorTabbed || !editorGroup) return;
-    const baseLeft = editorGroup.position?.left ?? Math.max(8, (window.innerWidth - editorGroup.size.width) / 2);
-    const baseTop = editorGroup.position?.top ?? Math.max(8, (window.innerHeight - editorGroup.size.height) / 2);
-    editorWindows = editorWindows.map((item, index) => ({
-      ...item,
-      maximized: false,
-      size: { ...editorGroup!.size },
-      position: item.position || {
-        left: Math.max(8, Math.min(window.innerWidth - 220, baseLeft + index * 32)),
-        top: Math.max(8, Math.min(window.innerHeight - 120, baseTop + index * 32)),
-      },
-    }));
-    editorGroup = null;
-    editorTabbed = false;
-  }
-  function selectEditorTab(id: string) {
-    if (!editorWindows.some((item) => item.id === id)) return;
-    activeEditorId = id;
-    activeWindow = "editor";
-  }
-  function cycleEditor(direction: 1 | -1) {
-    if (editorWindows.length < 2) return;
-    const index = editorWindows.findIndex((item) => item.id === activeEditorId);
-    const next = ((index < 0 ? 0 : index) + direction + editorWindows.length) % editorWindows.length;
-    selectEditorTab(editorWindows[next].id);
-  }
-  // What Escape would close right now — shared by handleWindowKeydown so
-  // the Vim-and-editor special case there stays in sync with everything else.
-  function escapeWindowAction(): (() => void) | null {
-    if (inspectorError) return () => { inspectorError = null; };
-    if (mainDialog) return () => { mainDialog = null; };
-    if (projectInfo) return () => { projectInfo = null; };
-    if (readmeOpen) return () => {
-      const content = document.querySelector<HTMLElement>(".readme-editor .cm-content");
-      if (readmeHelp) readmeHelp = false;
-      else if (content && document.activeElement === content) content.blur();
-      else closeReadme();
-    };
-    if (bluePlayApiFile) return () => { bluePlayApiFile = null; };
-    if (compilerDialog) return () => { compilerDialog = false; };
-    if (createDialog) return () => { createDialog = null; dialogError = ""; };
-    if (invokeDialog) return () => { invokeDialog = null; dialogError = ""; };
-    if (objectNamePrompt) return () => { objectNamePrompt = null; };
-    if (resultDialog) return () => { resultDialog = null; };
-    if (activeWindow === "inspector" && activeInspectorId && inspectorWindows.some((item) => item.id === activeInspectorId))
-      return () => closeInspector(activeInspectorId);
-    if (newClassOpen) return () => { newClassOpen = false; };
-    if (shortcutsHelpOpen) return () => { shortcutsHelpOpen = false; };
-    if (settingsNotice) return () => { settingsNotice = false; };
-    if (mediaNotice) return () => { mediaNotice = ""; };
-    if (imageLibraryOpen) return () => { imageLibraryOpen = false; };
-    if (shareLinkDialog) return () => { shareLinkDialog = null; };
-    if (toolbarDialog) return () => { toolbarDialog = null; };
-    if (newProjectOpen) return () => { newProjectOpen = false; };
-    if (activeWindow === "editor" && editorWindows.length) return closeEditor;
-    if (terminalOpen) return () => { terminalOpen = false; terminalSplit = false; };
-    if (editorWindows.length) return closeEditor;
-    if (stageWindowOpen) return () => { stageWindowOpen = false; stageMaximized = false; };
-    if (menu) return () => { menu = null; };
-    if (codepadMenu) return () => { codepadMenu = null; };
-    return null;
-  }
-  function toggleEditorMaximized(id: string) {
-    const frame = editorFrame(id);
-    if (frame) updateEditorFrame(id, { maximized: !frame.maximized });
-    activeEditorId = id;
-    activeWindow = "editor";
-  }
-  function closeEditor(id = activeEditorId) {
-    editorWindows = editorWindows.filter((item) => item.id !== id);
-    if (activeEditorId === id) activeEditorId = editorWindows.at(-1)?.id || "";
-    if (editorTabbed && editorWindows.length === 1) {
-      editorWindows = editorWindows.map((item) => ({
-        ...item,
-        maximized: editorGroup?.maximized || false,
-        position: editorGroup?.position || item.position,
-        size: editorGroup?.size || item.size,
-      }));
-      editorGroup = null;
-      editorTabbed = false;
-    }
-    if (!editorWindows.length) {
-      editorGroup = null;
-      editorTabbed = false;
-      if (activeWindow === "editor") activeWindow = terminalOpen ? "terminal" : null;
-    }
-  }
-  function closeAllEditors() {
-    editorWindows = [];
-    editorGroup = null;
-    editorTabbed = false;
-    activeEditorId = "";
-    if (activeWindow === "editor") activeWindow = terminalOpen ? "terminal" : null;
-  }
-  function editorFrame(id: string): EditorWindowState | null {
-    return editorTabbed ? editorGroup : editorWindows.find((item) => item.id === id) || null;
-  }
-  function updateEditorFrame(id: string, update: Partial<EditorWindowState>) {
-    if (editorTabbed && editorGroup) editorGroup = { ...editorGroup, ...update };
-    else editorWindows = editorWindows.map((item) => item.id === id ? { ...item, ...update } : item);
-  }
-  function beginEditorDrag(event: PointerEvent, id: string) {
-    const editorWindow = editorFrame(id);
-    if (!editorWindow || editorWindow.maximized || event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
-    const element = (event.currentTarget as HTMLElement).closest(".editor-dialog");
-    if (!element) return;
-    const bounds = element.getBoundingClientRect();
-    const offsetX = event.clientX - bounds.left;
-    const offsetY = event.clientY - bounds.top;
-    const move = (next: PointerEvent) => {
-      const position = {
-        left: Math.max(8, Math.min(window.innerWidth - 220, next.clientX - offsetX)),
-        top: Math.max(8, Math.min(window.innerHeight - 120, next.clientY - offsetY)),
-      };
-      updateEditorFrame(id, { position });
-    };
-    const stop = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", stop);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", stop);
-    event.preventDefault();
-  }
-  function beginEditorResize(event: PointerEvent, id: string, direction: string) {
-    const editorWindow = editorFrame(id);
-    if (!editorWindow || editorWindow.maximized || event.button !== 0) return;
-    const element = (event.currentTarget as HTMLElement).closest(".editor-dialog");
-    if (!element) return;
-    (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
-    const bounds = element.getBoundingClientRect();
-    const start = { x: event.clientX, y: event.clientY, left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height };
-    const move = (next: PointerEvent) => {
-      const dx = next.clientX - start.x, dy = next.clientY - start.y;
-      const minWidth = 420, minHeight = 260;
-      let left = start.left, top = start.top, width = start.width, height = start.height;
-      if (direction.includes("e")) width = Math.max(minWidth, start.width + dx);
-      if (direction.includes("s")) height = Math.max(minHeight, start.height + dy);
-      if (direction.includes("w")) {
-        width = Math.max(minWidth, start.width - dx);
-        left = start.left + start.width - width;
-      }
-      if (direction.includes("n")) {
-        height = Math.max(minHeight, start.height - dy);
-        top = start.top + start.height - height;
-      }
-      const position = { left: Math.max(8, left), top: Math.max(8, top) };
-      updateEditorFrame(id, { position, size: { width, height } });
-    };
-    const stop = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", stop);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", stop);
-    event.preventDefault();
-  }
-  function updateSource(fileId: string, value: string) {
-    if (!currentFile) return;
-    const file = files.find((item) => item.id === fileId);
-    if (!file) return;
-    const oldName = sourceDeclarationName(file.source);
-    const newName = sourceDeclarationName(value);
-    const fileStem = file.fileName.replace(/\.kt$/, "");
-    const renamedFileName =
-      file.kind === "class" &&
-      newName &&
-      newName !== oldName &&
-      (oldName === fileStem || !oldName) &&
-      !files.some(
-        (item) => item.id !== file.id && item.fileName === `${newName}.kt`,
-      )
-        ? `${newName}.kt`
-        : file.fileName;
-    files = files.map((file) =>
-        file.id === fileId
-        ? {
-            ...file,
-            fileName: renamedFileName,
-            source: value,
-            revision: file.revision + 1,
-          }
-        : file,
-    );
-    client?.invalidate();
-    // One edit invalidates the whole project, so the marks in the other files
-    // would be stale as well.
-    if (compilerDiagnostics.length) markDiagnostics([]);
-    activeInspectorId = "";
-    inspectorWindows = [];
-    history = [];
-    status = "Uncompiled";
-    error = "";
-  }
-  function deleteFile(file: ProjectFile) {
-    files = files.filter((item) => item.id !== file.id);
-    selected = Math.max(0, Math.min(selected, files.length - 1));
-    menu = null;
-    editorWindows = editorWindows.filter((item) => item.fileId !== file.id);
-    if (activeEditorId && !editorWindows.some((item) => item.id === activeEditorId))
-      activeEditorId = editorWindows.at(-1)?.id || "";
-    if (!editorWindows.length) {
-      editorGroup = null;
-      editorTabbed = false;
-    }
-    markUncompiled();
-  }
-  function duplicateFile(file: ProjectFile) {
-    const stem = file.fileName.replace(/\.kt$/, "");
-    let number = 2,
-      name = `${stem}${number}`;
-    while (files.some((item) => item.fileName === `${name}.kt`))
-      name = `${stem}${++number}`;
-    const duplicate = {
-      ...file,
-      id: `svelte-${Date.now()}`,
-      fileName: `${name}.kt`,
-      revision: 1,
-    };
-    files = [...files, duplicate];
-    selected = files.length - 1;
-    openEditor(duplicate);
-    markUncompiled();
-  }
-  // A compiler error is shown where it happens: the editor of the file marks
-  // the line. Only errors that belong to no source file — a failed method call,
-  // for instance — still need the dialog, which is what the result reports.
-  function markDiagnostics(diagnostics: Diagnostic[], reveal = false): boolean {
-    compilerDiagnostics = diagnostics;
-    diagnosticsRun += 1;
-    const located = diagnostics.find((item) =>
-      files.some((file) => file.fileName === item.fileName),
-    );
-    if (located && reveal)
-      openEditor(files.find((file) => file.fileName === located.fileName));
-    return Boolean(located);
-  }
-  // Closing the message also drops the mark a parse error left in the editor:
-  // a new run makes every editor apply its own compiler errors again.
-  function closeFormatError() {
-    dialogError = "";
-    diagnosticsRun += 1;
-  }
-  async function compile(): Promise<boolean> {
-    if (!client || runtime.phase === "compiling") return false;
-    status = "Compiling…";
-    error = "";
-    compilerDialog = false;
-    markDiagnostics([]);
-    history = [];
-    activeInspectorId = "";
-    inspectorWindows = [];
-    const result = await compileProject(client, files, Date.now(), library, await prepareRuntimeResources(runtimeResources));
-    if (!result.ok) {
-        status = "Compile error";
-        error = result.diagnostics
-          .map(
-            (item) =>
-              `${item.fileName || ""}:${item.line}:${item.column}: ${item.message}`,
-          )
-          .join("\n") || result.error || "Compilation failed.";
-        compilerDialog = !markDiagnostics(result.diagnostics, true);
-        return false;
-    }
-    // A warning (an accessor calling itself) opens its editor like an error would.
-    markDiagnostics(result.diagnostics, true);
-    status = "Compiled";
-    return true;
-  }
-  const onlyWarnings = (diagnostics: Diagnostic[] = []) =>
-    diagnostics.length > 0 && !diagnostics.some(isCompileError);
-
-  async function runMain() {
-    await requestMain("start");
-  }
-  async function requestMain(action: MainAction) {
-    if (!canExecute || !mainEntries.length) return;
-    if (mainDialog) return;
-    if (mainEntries.length > 1) {
-      mainDialog = { action, generationId: runtime.generationId };
-      return;
-    }
-    await executeMain(mainEntries[0], action, runtime.generationId);
-  }
-  async function chooseMain(fileName: string) {
-    const request = mainDialog;
-    mainDialog = null;
-    if (request?.action === "export") await writeHtmlExport(fileName, request.generationId);
-    else if (request) await executeMain(fileName, request.action, request.generationId);
-  }
-  async function executeMain(fileName: string, action: MainAction, generationId: string) {
-    if (!canExecute || generationId !== runtime.generationId || !mainEntries.includes(fileName)) return;
-    if (action === "reset") {
-      await performReset(fileName);
-      return;
-    }
-    stageWindowDismissed = false;
-    status = "Running…";
-    try {
-      const result = await client.execute({
-        op: "main",
-        fileName,
-        generationId,
-      });
-      if (result.kind === "error")
-        error = result.display || "Execution failed.";
-      else status = "Ready";
-      await refreshComputedInspectors();
-    } catch (reason) {
-      if (runtime.phase !== "uncompiled") {
-        status = "Ready";
-        error = reason instanceof Error ? reason.message : String(reason);
-      }
-    }
-  }
-  async function executeCode(code = codepad.trim()) {
-    if (!client || !code) return;
-    codepad = "";
-    codepadHistoryIndex = -1;
-    const result = await executeCodepad(client, files, Date.now(), code, library, await prepareRuntimeResources(runtimeResources));
-    if (result.kind === "compile-error") {
-      status = "Compile error";
-      error = result.compile.diagnostics
-        .map((item) => `${item.fileName || ""}:${item.line}:${item.column}: ${item.message}`)
-        .join("\n") || result.compile.error || "Compilation failed.";
-      compilerDialog = !markDiagnostics(result.compile.diagnostics, true);
-      return;
-    }
-    if (result.kind === "stale") return;
-    if (result.kind === "error") {
-      history = [...history, { code, error: result.error }];
-    } else {
-      const response = result.response;
-      history = [
-        ...history,
-        response.kind === "error"
-          ? { code, error: codepadError(response) }
-          : response.kind === "object" || Boolean(response.objectId)
-            ? {
-                code,
-                objectResult: true,
-                result: response.kind === "object" ? undefined : codepadResult(response),
-                objectId: response.objectId,
-                className:
-                  response.className || response.type?.displayName || "Object",
-              }
-            : { code, result: codepadResult(response) },
-      ];
-    }
-    await refreshComputedInspectors();
-    await tick();
-    const historyElement = document.querySelector(".codepad-history");
-    if (historyElement) historyElement.scrollTop = historyElement.scrollHeight;
-    if (codepadOpen && !inputReady)
-      document.querySelector<HTMLTextAreaElement>(".codepad textarea")?.focus();
-  }
-  function submitCodepad(event: KeyboardEvent) {
-    if (event.key === "ArrowUp" && history.length) {
-      event.preventDefault();
-      codepadHistoryIndex =
-        codepadHistoryIndex < 0
-          ? history.length - 1
-          : Math.max(0, codepadHistoryIndex - 1);
-      codepad = history[codepadHistoryIndex].code;
-      return;
-    }
-    if (event.key === "ArrowDown" && history.length) {
-      event.preventDefault();
-      codepadHistoryIndex =
-        codepadHistoryIndex < 0
-          ? -1
-          : Math.min(history.length, codepadHistoryIndex + 1);
-      codepad =
-        codepadHistoryIndex >= 0 && codepadHistoryIndex < history.length
-          ? history[codepadHistoryIndex].code
-          : "";
-      return;
-    }
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      executeCode();
-    }
-  }
-  async function sendInput(event: KeyboardEvent) {
-    if (event.key !== "Enter" || !inputReady) return;
-    const value = inputElement.value;
-    inputElement.value = "";
-    terminal += `\u0001${value}\u0002\n`;
-    await client.sendInput(value);
-  }
-  async function sendEof() {
-    if (!inputReady) return;
-    await client.sendEof();
-  }
-  $: bench = runtime.references.flatMap((reference) => reference.onBench && reference.objectId
-    ? [{ objectId: reference.objectId, name: reference.name, className: reference.className }] : []);
-
-
-
-  function chooseConstructor(index: number) {
-    if (!createDialog) return;
-    createDialog = {
-      ...createDialog,
-      constructorIndex: index,
-      parameters: createDialog.constructors[index]?.parameters || [],
-    };
-    createArgs = createDialog.parameters.map(() => "");
-    dialogError = "";
-  }
-  function createObject(className: string, index = 0) {
-    const meta = classes.find((item) => item.name === className),
-      constructors = meta?.constructors || [];
-    if (!canExecute || !constructors.length) return;
-    const parameters = constructors[index]?.parameters || [],
-      typeParameters = meta?.typeParameters || [];
-    const name = defaultObjectName(className, runtime.references.map((reference) => reference.name));
-    menu = null;
-    createDialog = {
-      className,
-      constructors,
-      constructorIndex: index,
-      typeParameters,
-      parameters,
-    };
-    createName = name;
-    createArgs = (constructors[index]?.parameters || []).map(() => "");
-    createTypeArgs = (meta?.typeParameters || []).map(() => "");
-    dialogError = "";
-    menu = null;
-  }
-  async function confirmCreate() {
-    if (!canExecute) return;
-    if (!createDialog || !/^[A-Za-z_]\w*$/.test(createName.trim())) {
-      dialogError = "Bitte einen gültigen Instanznamen angeben.";
-      return;
-    }
-    if (runtime.references.some((reference) => reference.name === createName.trim())) {
-      dialogError = "Dieser Instanzname ist bereits vergeben.";
-      return;
-    }
-    if (
-      missingTypeArgument(createTypeArgs) ||
-      missingRequired(createDialog.parameters, createArgs)
-    ) {
-      dialogError =
-        "Bitte alle erforderlichen Kotlin-Argumente und Typargumente ausfüllen.";
-      return;
-    }
-    const dialog = createDialog;
-    const name = createName.trim();
-    const args = kotlinCallArguments(dialog.parameters, createArgs);
-    const typeArguments = [...createTypeArgs];
-    createDialog = null;
-    await executeCreate(dialog.className, name, args, typeArguments);
-  }
-  async function executeCreate(className: string, name: string, args: string[], typeArguments: string[]) {
-    const generation = client.getSnapshot().generationId;
-    try {
-      const result = await client.execute({
-        op: "create",
-        className, name, typeArguments, args,
-      });
-      if (client.getSnapshot().generationId !== generation) return;
-      if (result.kind === "error")
-        showCallError(result.display || "Objekt konnte nicht erstellt werden.");
-    } catch (reason) {
-      if (client.getSnapshot().generationId === generation) showCallError(reason);
-    }
-  }
-  function invokeObject(object: BenchObject, original: any) {
-    const method = specializeCallable(original, object, classes);
-    if (method.name === "show") {
-      stageWindowDismissed = false;
-      stageWindowOpen = true;
-    }
-    prepareInvoke({ object, method });
-  }
-  function methodLabel(method: any) {
-    const returnType =
-      method.returnType?.displayName && method.returnType.displayName !== "Unit"
-        ? `${method.returnType.displayName} `
-        : "";
-    const typeParameters = method.typeParameters?.length
-      ? `<${method.typeParameters.join(", ")}>`
-      : "";
-    const parameters = (method.parameters || [])
-      .map(
-        (parameter: any) =>
-          `${parameter.name}: ${parameter.type?.displayName || "Any?"}${parameter.hasDefault ? " = …" : ""}`,
-      )
-      .join(", ");
-    const inherited = method.inheritedFrom
-      ? `  [inherited from ${method.inheritedFrom}]`
-      : "";
-    const generated = method.autoGenerated ? "  [auto-generated]" : "";
-    return `${returnType}${method.name}${typeParameters}(${parameters})${inherited}${generated}`;
-  }
-  function popupObjectMethods(object: BenchObject) {
-    return (
-      classes.find((item) => item.name === runtimeClassName(object))?.methods ||
-      []
+      document.activeElement?.classList.contains("game-stage") ||
+      play.stageRunning
     )
-      // Like BlueJ, private methods are implementation details of the class.
-      .filter((method) => !method.autoGenerated && method.visibility !== "private")
-      .map((method) => specializeCallable(method, object, classes));
-  }
-  function directPopupMethods(object: BenchObject) {
-    const methods = popupObjectMethods(object),
-      inheritedNames = new Set(
-        methods
-          .filter((method) => method.inheritedFrom)
-          .map(
-            (method) => `${method.name}(${(method.parameters || []).length})`,
-          ),
-      ),
-      className = object.className.replace(/\s*<.*>$/, "");
-    return methods
-      .filter((method) => !method.inheritedFrom)
-      .map((method) => ({
-        ...method,
-        overrides: inheritedNames.has(
-          `${method.name}(${(method.parameters || []).length})`,
-        )
-          ? className
-          : undefined,
-      }));
-  }
-  function inheritedPopupGroups(object: BenchObject) {
-    const groups = new Map<string, any[]>();
-    popupObjectMethods(object)
-      .filter((method) => method.inheritedFrom)
-      .forEach((method) => {
-        const owner = method.inheritedFrom as string;
-        groups.set(owner, [...(groups.get(owner) || []), method]);
-      });
-    const order: string[] = [];
-    const visit = (name: string) => {
-      const owner = classes.find((item) => item.name === name);
-      (owner?.supertypes || [])
-        .map((value: any) =>
-          (typeof value === "string"
-            ? value
-            : value?.classifier || value?.displayName || ""
-          ).replace(/\s*<.*>$/, ""),
-        )
-        .filter(Boolean)
-        .forEach((parent: string) => {
-          if (!order.includes(parent)) {
-            order.push(parent);
-            visit(parent);
-          }
-        });
-    };
-    visit(object.className.replace(/\s*<.*>$/, ""));
-    order.reverse();
-    return [...groups.entries()].sort(
-      ([left], [right]) =>
-        (order.indexOf(left) < 0
-          ? Number.MAX_SAFE_INTEGER
-          : order.indexOf(left)) -
-        (order.indexOf(right) < 0
-          ? Number.MAX_SAFE_INTEGER
-          : order.indexOf(right)),
-    );
-  }
-  function popupObjectMethodLabel(method: any) {
-    const label = methodLabel({
-      ...method,
-      inheritedFrom: undefined,
-      autoGenerated: false,
-    });
-    return method.overrides
-      ? `${label}  [redefined in ${method.overrides}]`
-      : label;
-  }
-  function invokeClassMethod(className: string, method: any) {
-    const owner = classes.find((item) => item.name === className);
-    if (!owner) return;
-    if (
-      method.name === "main" &&
-      owner.kind === "functions" &&
-      !method.parameters?.length
-    ) {
-      menu = null;
-      client
-        .execute({ op: "main", fileName: `${owner.name}.kt` })
-        .then(showResult)
-        .catch((reason) => (error = String(reason)));
-      return;
-    }
-    prepareInvoke({
-      receiver:
-        owner.kind === "object" || method.isCompanion ? `${owner.name}.` : "",
-      method,
-    });
-  }
-  function prepareInvoke(call: NonNullable<typeof invokeDialog>) {
-    if (!canExecute) return;
-    menu = null;
-    if (!call.method.parameters?.length && !call.method.typeParameters?.length) {
-      void executeInvoke(call, [], []);
-      return;
-    }
-    invokeArgs = (call.method.parameters || []).map(() => "");
-    invokeTypeArgs = (call.method.typeParameters || []).map(() => "");
-    dialogError = "";
-    invokeDialog = call;
-  }
-  function showCallError(reason: unknown) {
-    error = reason instanceof Error ? reason.message : String(reason);
-    markDiagnostics([]);
-    compilerDialog = true;
-  }
-  function showResult(result: RuntimeValue, method = "") {
-    if (result.kind === "error") {
-      error = result.display || "Execution failed.";
-      return;
-    }
-    if (result.kind !== "unit")
-      resultDialog = {
-        method,
-        value:
-          codepadResult(result) ||
-          result.display ||
-          result.className ||
-          result.kind,
-        objectId: result.objectId,
-        className: result.className,
-      };
-  }
-  function fileMethods(file: ProjectFile) {
-    const owner = classes.find(
-      (item) => item.name === file.fileName.replace(/\.kt$/, ""),
-    );
-    return owner?.kind === "functions" || owner?.kind === "object"
-      ? (owner.methods || []).filter((method) => method.visibility !== "private")
-      : (owner?.companionMethods || []).map((method) => ({
-          ...method,
-          isCompanion: true,
-        }));
-  }
-  async function confirmInvoke() {
-    if (!canExecute || !invokeDialog) return;
-    const dialog = invokeDialog,
-      method = dialog.method,
-      parameters = method.parameters || [];
-    if (
-      missingTypeArgument(invokeTypeArgs) ||
-      missingRequired(parameters, invokeArgs)
-    ) {
-      dialogError =
-        "Bitte alle erforderlichen Kotlin-Argumente und Typargumente ausfüllen.";
-      return;
-    }
-    const args = kotlinCallArguments(parameters, invokeArgs);
-    const typeArguments = [...invokeTypeArgs];
-    invokeDialog = null;
-    await executeInvoke(dialog, args, typeArguments);
-  }
-  async function executeInvoke(dialog: NonNullable<typeof invokeDialog>, args: string[], typeArguments: string[]) {
-    const generation = client.getSnapshot().generationId;
-    const method = dialog.method;
-    try {
-      const suffix = typeArguments.length ? `<${typeArguments.join(", ")}>` : "";
-      const propertyName = method.propertyName;
-      const request: RuntimeCommand = dialog.object
-        ? method.autoGenerated && propertyName
-          ? method.name.startsWith("set")
-            ? {
-                op: "set",
-                objectId: dialog.object.objectId,
-                property: propertyName,
-                value: args[0],
-              }
-            : {
-                op: "get",
-                objectId: dialog.object.objectId,
-                property: propertyName,
-              }
-          : {
-              op: "invoke",
-              objectId: dialog.object.objectId,
-              name: method.name,
-              typeArguments,
-              args,
-            }
-        : {
-          op: "eval",
-          code: `${dialog.receiver || ""}${method.name}${suffix}(${args.join(", ")})`,
-        };
-      const result = await client.execute(request);
-      if (client.getSnapshot().generationId !== generation) return;
-      if (result.kind === "error")
-        showCallError(result.display || "Aufruf fehlgeschlagen.");
-      else {
-        showResult(
-          result,
-          `${dialog.object ? dialog.object.name + "." : dialog.receiver || ""}${method.name}${suffix}()`,
-        );
-        await refreshComputedInspectors();
-      }
-    } catch (reason) {
-      if (client.getSnapshot().generationId === generation) showCallError(reason);
-    }
-  }
-  function requestObjectOnBench(value: RuntimeValue) {
-    if (!value.objectId) return;
-    objectNamePrompt = value;
-    objectNameError = "";
-    objectName =
-      value.name ||
-      (value.className || "object")
-        .replace(/<.*>/, "")
-        .replace(/^./, (letter) => letter.toLowerCase());
-  }
-  function getLastCodepadObject() {
-    const entry = [...history].reverse().find((item) => item.objectId && runtime.liveObjectIds.includes(item.objectId));
-    if (entry?.objectId)
-      requestObjectOnBench({
-        kind: "object",
-        objectId: entry.objectId,
-        className: entry.className || "Object",
-        name: entry.className || "Object",
-      });
-  }
-  async function confirmObjectOnBench() {
-    if (
-      !objectNamePrompt?.objectId ||
-      !/^[A-Za-z_]\w*$/.test(objectName.trim())
-    )
-      return;
-    const result = await client.execute({
-      op: "bind",
-      objectId: objectNamePrompt.objectId,
-      name: objectName.trim(),
-    });
-    if (result.kind !== "error") {
-      objectNamePrompt = null;
-    } else objectNameError = result.display || "The reference could not be added.";
-  }
-  function waitForInspectorReady(allowFaulted = false) {
-    const generation = client.getSnapshot().generationId;
-    if (client.getSnapshot().phase !== "running")
-      return Promise.resolve(client.getSnapshot().phase === "ready" || (allowFaulted && client.getSnapshot().phase === "faulted"));
-    return new Promise<boolean>((resolve) => {
-      const unsubscribe = client.subscribe(() => {
-        const snapshot = client.getSnapshot();
-        if (snapshot.generationId !== generation || snapshot.phase !== "running") {
-          unsubscribe();
-          resolve(snapshot.generationId === generation && (snapshot.phase === "ready" || (allowFaulted && snapshot.phase === "faulted")));
-        }
-      });
-    });
-  }
-  async function executeInspectorCommand(command: Extract<RuntimeCommand, { op: "inspect" | "inspectField" }>, allowFaulted = false) {
-    const generation = client.getSnapshot().generationId;
-    while (client.getSnapshot().generationId === generation) {
-      if (!(await waitForInspectorReady(allowFaulted))) return null;
-      const phase = client.getSnapshot().phase;
-      if (phase !== "ready" && !(allowFaulted && phase === "faulted" && command.op === "inspect")) continue;
-      try {
-        return await client.execute(command);
-      } catch (reason) {
-        if (client.getSnapshot().generationId !== generation || client.getSnapshot().phase !== "running") throw reason;
-      }
-    }
-    return null;
-  }
-  async function showInspection(object: BenchObject, preserveReferenceName = false) {
-    const existing = inspectorWindows.find((item) => item.id === object.objectId);
-    const position = existing?.position || {
-      left: Math.max(12, Math.min(window.innerWidth - 552, 80 + inspectorWindows.length * 28)),
-      top: 90 + inspectorWindows.length * 28,
-    };
-    inspectorWindows = [
-      ...inspectorWindows.filter((item) => item.id !== object.objectId),
-      { id: object.objectId, referenceName: object.name, preserveReferenceName, position },
-    ];
-    bringInspectorToFront(object.objectId);
-    await inspectorModel.refresh(object.objectId);
-  }
-  async function inspectObject(object: BenchObject, preserveReferenceName = false) {
-    menu = null;
-    const result = await executeInspectorCommand({
-      op: "inspect",
-      objectId: object.objectId,
-    }, true);
-    // Primitive values answer with their scalar value; they are inspectable too.
-    if (result && result.kind !== "error") await showInspection(object, preserveReferenceName);
-  }
-  async function inspectFieldReference(ownerId: string, field: InspectorField) {
-    if (field.computed && field.objectId) {
-      await inspectObject({ objectId: field.objectId, className: field.type?.displayName || "Object", name: field.name }, true);
-      return;
-    }
-    const result = await executeInspectorCommand({ op: "inspectField", objectId: ownerId, property: field.name });
-    if (result?.kind === "inspect" && result.objectId)
-      await showInspection({ objectId: result.objectId, className: result.className || "Object", name: field.name }, true);
-  }
-  function bringInspectorToFront(id: string) {
-    const inspector = inspectorWindows.find((item) => item.id === id);
-    if (!inspector) return;
-    activeInspectorId = id;
-    activeWindow = "inspector";
-    if (inspectorWindows.at(-1)?.id === id) return;
-    inspectorWindows = [
-      ...inspectorWindows.filter((item) => item.id !== id),
-      inspector,
-    ];
-  }
-  function closeInspector(id: string) {
-    inspectorWindows = inspectorWindows.filter((item) => item.id !== id);
-    inspectorModel.forget(id);
-    if (activeInspectorId === id) {
-      const next = inspectorWindows.at(-1);
-      activeInspectorId = next?.id || "";
-      if (!next && activeWindow === "inspector")
-        activeWindow = editorWindows.length ? "editor" : terminalOpen ? "terminal" : null;
-    }
-  }
-  function beginInspectorDrag(event: PointerEvent, objectId: string) {
-    if (
-      event.button !== 0 ||
-      (event.target as HTMLElement).closest("button,input")
-    )
-      return;
-    const element = (event.currentTarget as HTMLElement).closest(
-      ".inspect-window",
-    );
-    if (!element) return;
-    const bounds = element.getBoundingClientRect(),
-      offsetX = event.clientX - bounds.left,
-      offsetY = event.clientY - bounds.top;
-    const move = (next: PointerEvent) => {
-      const position = {
-        left: Math.max(
-          8,
-          Math.min(
-            window.innerWidth - bounds.width - 8,
-            next.clientX - offsetX,
-          ),
-        ),
-        top: Math.max(
-          8,
-          Math.min(
-            window.innerHeight - bounds.height - 8,
-            next.clientY - offsetY,
-          ),
-        ),
-      };
-      inspectorWindows = inspectorWindows.map((item) =>
-        item.id === objectId ? { ...item, position } : item,
-      );
-    };
-    const stop = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", stop);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", stop);
-    event.preventDefault();
-  }
-  async function removeObject(object: BenchObject) {
-    const result = await client.execute({
-      op: "remove",
-      objectId: object.objectId,
-      name: object.name,
-    });
-    if (result.kind === "error") {
-      showCallError(result.display || "The object reference could not be removed.");
-    }
-    menu = null;
-  }
-  function fieldProperty(data: RuntimeValue, field: InspectedField) {
-    return classes
-      .find(
-        (item) =>
-          item.name ===
-          (
-            data.className ||
-            bench.find((object) => object.objectId === data.objectId)
-              ?.className ||
-            ""
-          ).replace(/\s*<.*>$/, ""),
-      )
-      ?.properties?.find((item) => item.name === field.name);
-  }
-  function fieldValue(data: RuntimeValue, field: InspectorField) {
-    return inspectorFieldText(field, field.type || fieldProperty(data, field)?.type);
-  }
-  function inspectorType(data: InspectionView) {
-    return data.className || data.type?.displayName || data.type?.classifier || "Object";
-  }
-  async function refreshComputedInspectors() {
-    for (const inspector of inspectorWindows) {
-      await inspectorModel.refresh(inspector.id);
-    }
-  }
-  function canEditField(field: InspectorField, data = inspected) {
-    const property = data && fieldProperty(data, field);
-    return (
-      canExecute &&
-      field.setterPrivate !== true &&
-      property?.mutable === true &&
-      property?.visibility === "public"
-    );
-  }
-  function fitPopup(node: HTMLElement) {
-    const fit = () => {
-      const rect = node.getBoundingClientRect();
-      const left = Math.max(8, Math.min(menu?.x || 8, window.innerWidth - rect.width - 8));
-      node.style.top = `${Math.max(8, Math.min(menu?.y || 8, window.innerHeight - rect.height - 8))}px`;
-      node.style.left = `${left}px`;
-      const submenuWidth = 260;
-      node.classList.toggle(
-        "popup-submenus-left",
-        Boolean(node.querySelector(".popup-submenu-panel")) &&
-          left + rect.width + submenuWidth > window.innerWidth - 8 &&
-          left >= submenuWidth + 8,
-      );
-    };
-    const observer = new ResizeObserver(fit);
-    observer.observe(node);
-    window.addEventListener("resize", fit);
-    fit();
-    return {
-      destroy() {
-        observer.disconnect();
-        window.removeEventListener("resize", fit);
-      },
-    };
-  }
-  function fitPopupSubmenu(node: HTMLElement) {
-    const panel = node.querySelector<HTMLElement>(".popup-submenu-panel");
-    if (!panel) return;
-    const trigger = node.getBoundingClientRect();
-    const availableBelow = Math.max(0, window.innerHeight - trigger.top - 8);
-    const availableAbove = Math.max(0, trigger.bottom - 8);
-    const contentHeight = panel.scrollHeight;
-    const openUp = contentHeight > availableBelow && availableAbove > availableBelow;
-    const available = openUp ? availableAbove : availableBelow;
-    panel.style.maxHeight = `${Math.max(0, Math.min(contentHeight, window.innerHeight * 0.7, available))}px`;
-    panel.style.top = openUp ? "auto" : "-1px";
-    panel.style.bottom = openUp ? "-1px" : "auto";
-  }
-  function openMenu(
-    event: MouseEvent,
-    file?: ProjectFile,
-    object?: BenchObject,
-  ) {
-    event.preventDefault();
-    event.stopPropagation();
-    menu = { x: event.clientX, y: event.clientY, file, object };
-  }
-  function clearTerminal() {
-    terminal = "";
-    renderTerminal();
-  }
-  function toggleTerminalMaximized() {
-    if (terminalSplit) {
-      terminalSplit = false;
-      terminalMaximized = true;
-    } else terminalMaximized = !terminalMaximized;
-  }
-  function toggleTerminalSplit() {
-    terminalSplit = !terminalSplit;
-    terminalMaximized = false;
-    terminalPosition = null;
-  }
-  function beginTerminalDrag(event: PointerEvent) {
-    if (
-      terminalMaximized ||
-      terminalSplit ||
-      event.button !== 0 ||
-      (event.target as HTMLElement).closest("button")
-    )
-      return;
-    const element = (event.currentTarget as HTMLElement).closest(
-      ".terminal-window",
-    );
-    if (!element) return;
-    const bounds = element.getBoundingClientRect();
-    const offsetX = event.clientX - bounds.left,
-      offsetY = event.clientY - bounds.top;
-    const move = (next: PointerEvent) => {
-      terminalPosition = {
-        left: Math.max(
-          8,
-          Math.min(window.innerWidth - 220, next.clientX - offsetX),
-        ),
-        top: Math.max(
-          8,
-          Math.min(window.innerHeight - 120, next.clientY - offsetY),
-        ),
-      };
-    };
-    const stop = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", stop);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", stop);
-    event.preventDefault();
-  }
-  function beginTerminalResize(event: PointerEvent, direction: string) {
-    if (terminalMaximized || terminalSplit || event.button !== 0) return;
-    const element = (event.currentTarget as HTMLElement).closest(
-      ".terminal-window",
-    );
-    if (!element) return;
-    (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
-    const bounds = element.getBoundingClientRect();
-    const start = {
-      x: event.clientX,
-      y: event.clientY,
-      left: bounds.left,
-      top: bounds.top,
-      width: bounds.width,
-      height: bounds.height,
-    };
-    const move = (next: PointerEvent) => {
-      const dx = next.clientX - start.x,
-        dy = next.clientY - start.y;
-      const minWidth = 420,
-        minHeight = 260;
-      let left = start.left,
-        top = start.top,
-        width = start.width,
-        height = start.height;
-      if (direction.includes("e")) width = Math.max(minWidth, start.width + dx);
-      if (direction.includes("s"))
-        height = Math.max(minHeight, start.height + dy);
-      if (direction.includes("w")) {
-        width = Math.max(minWidth, start.width - dx);
-        left = start.left + start.width - width;
-      }
-      if (direction.includes("n")) {
-        height = Math.max(minHeight, start.height - dy);
-        top = start.top + start.height - height;
-      }
-      terminalPosition = { left: Math.max(8, left), top: Math.max(8, top) };
-      terminalSize = { width, height };
-    };
-    const stop = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", stop);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", stop);
-    event.preventDefault();
-  }
-  function beginTerminalSplitResize(event: PointerEvent) {
-    if (!terminalSplit || event.button !== 0) return;
-    const startX = event.clientX,
-      startWidth = terminalSplitWidth;
-    const move = (next: PointerEvent) => {
-      terminalSplitWidth = Math.max(
-        320,
-        Math.min(
-          Math.max(320, window.innerWidth - 520),
-          startWidth - (next.clientX - startX),
-        ),
-      );
-    };
-    const stop = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", stop);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", stop);
-    event.preventDefault();
-  }
-  async function resetRuntime() {
-    if (library?.id === "blueplay") {
-      await requestMain("reset");
-      return;
-    }
-    await performReset();
-  }
-  async function performReset(fileName?: string) {
-    if (!client || runtime.phase === "compiling") return;
-    terminal = "";
-    stage = null;
-    stageWindowOpen = false;
-    stageWindowDismissed = false;
-    // Reset replaces the world, while the window keeps its presentation state.
-    activeInspectorId = "";
-    inspectorWindows = [];
-    history = [];
-    error = "";
-    status = "Resetting…";
-    try {
-      const result = await client.reset(fileName);
-      if ("kind" in result && result.kind === "error") {
-        status = "Reset failed";
-        error = result.display || "Reset failed.";
-        return;
-      }
-      const diagnostics = result.diagnostics || [];
-      if (diagnostics.some(isCompileError)) {
-        status = "Compile error";
-        error = diagnostics
-          .map(
-            (item) =>
-              `${item.fileName || ""}:${item.line}:${item.column}: ${item.message}`,
-          )
-          .join("\n");
-        compilerDialog = !markDiagnostics(diagnostics, true);
-      } else {
-        markDiagnostics(diagnostics);
-        status = "Compiled";
-      }
-    } catch (reason) {
-      status = "Reset failed";
-      error = reason instanceof Error ? reason.message : String(reason);
-    }
-  }
-  function beginFieldEdit(field: InspectorField, data = inspected) {
-    if (!data) return;
-    bringInspectorToFront(data.objectId || "");
-    editingField = field.name;
-    // Object and collection texts are no Kotlin expressions; `Hund()` would
-    // silently create a new object when confirmed unchanged.
-    fieldDraft = field.reference || field.summary ? "" : fieldValue(data, field);
-    fieldError = "";
-  }
-  function insertBenchName(name: string) {
-    const input = fieldInput;
-    if (!input) return;
-    const start = input.selectionStart ?? fieldDraft.length,
-      end = input.selectionEnd ?? start;
-    fieldDraft = fieldDraft.slice(0, start) + name + fieldDraft.slice(end);
-    tick().then(() => {
-      input.focus();
-      input.setSelectionRange(start + name.length, start + name.length);
-    });
-  }
-  async function saveField(field: InspectorField) {
-    if (!inspected?.objectId) return;
-    if (!fieldDraft.trim()) {
-      editingField = "";
-      fieldError = "";
-      return;
-    }
-    try {
-      const objectId = inspected.objectId,
-        result = await client.execute({
-          op: "set",
-          objectId,
-          property: field.name,
-          value: fieldDraft,
-        });
-      if (result.kind === "error")
-        fieldError = result.display || "Could not set property.";
-      else {
-        await inspectorModel.refresh(objectId);
-        editingField = "";
-        fieldError = "";
-      }
-    } catch (reason) {
-      fieldError = reason instanceof Error ? reason.message : String(reason);
-    }
-  }
-  function selectCard(file: ProjectFile, index: number) {
-    if (!inheritanceMode) {
-      if (!isBluePlayFrameworkFile(file)) selected = files.findIndex((item) => item.id === file.id);
-      return;
-    }
-    if (file.kind !== "class") return;
-    if (!inheritanceSelection) {
-      if (isBluePlayFrameworkFile(file)) return;
-      inheritanceSelection = file.id;
-      status = "Select superclass";
-      return;
-    }
-    const child = files.find((item) => item.id === inheritanceSelection);
-    if (child && child.id !== file.id) {
-      if (sourceSuperclass(child.source))
-        status = "The selected class already has a superclass.";
-      else {
-        const source = addSuperclass(
-          child.source,
-          file.fileName.replace(/\.kt$/, ""),
-        );
-        files = files.map((item) =>
-          item.id === child.id
-            ? { ...item, source, revision: item.revision + 1 }
-            : item,
-        );
-        markUncompiled();
-      }
-    }
-    inheritanceMode = false;
-    inheritanceSelection = "";
-  }
-  // A file needs a name; asking once also names the project. Cancel aborts.
-  function ensureProjectName() {
-    if (projectName.trim()) return true;
-    const entered = window.prompt("What should your project be called?", "");
-    if (entered === null) return false;
-    projectName = entered.trim();
-    return true;
-  }
-  function downloadFile(content: string, type: string, fileName: string) {
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(new Blob([content], { type }));
-    link.download = fileName;
-    link.click();
-    URL.revokeObjectURL(link.href);
-  }
-  function exportProject() {
-    if (!ensureProjectName()) return;
-    downloadFile(JSON.stringify(projectPayload(), null, 2), "application/json", exportFileName(projectName, ".bluek.json"));
-    status = "Project exported";
-  }
-  // The exported file starts one parameterless main(). Which ones exist is only
-  // known after compiling the current sources; with several, the user chooses.
-  async function exportHtml() {
-    if (!client || !files.length || htmlExporting || mainDialog) return;
-    if (!ensureProjectName()) return;
-    if (runtime.phase === "uncompiled" || runtime.phase === "compiling") {
-      if (!(await compile())) return;
-    }
-    const snapshot = client.getSnapshot();
-    const entries = mainFiles(snapshot.classes);
-    if (!entries.length) {
-      status = "Export failed";
-      showExportNotice("Export as HTML needs a file with a parameterless main().");
-      return;
-    }
-    if (entries.length > 1) {
-      mainDialog = { action: "export", generationId: snapshot.generationId };
-      return;
-    }
-    await writeHtmlExport(entries[0], snapshot.generationId);
-  }
-  function showExportNotice(text: string) {
-    shareNotice = text;
-    window.setTimeout(() => { if (shareNotice === text) shareNotice = ""; }, 5000);
-  }
-  async function writeHtmlExport(mainFile: string, generationId: string) {
-    // Sources edited since the compile would not match the chosen entry point.
-    if (!client || generationId !== client.getSnapshot().generationId) return;
-    htmlExporting = true;
-    status = "Exporting HTML…";
-    try {
-      const html = await htmlExport(projectPayload(), mainFile, import.meta.env.BASE_URL, window.location.href);
-      downloadFile(html, "text/html", exportFileName(projectName, ".html"));
-      status = "HTML exported";
-    } catch (reason) {
-      status = "Export failed";
-      showExportNotice(reason instanceof Error ? reason.message : String(reason));
-    } finally {
-      htmlExporting = false;
-    }
-  }
-  async function shareProject() {
-    const url = new URL(window.location.href);
-    url.search = "";
-    url.hash = `bluek=${await encodeProjectLink(projectPayload())}${shareWithReadme ? "&readme=1" : ""}`;
-    try {
-      await navigator.clipboard.writeText(url.href);
-      status = "Project link copied";
-      shareNotice = "Project link copied to clipboard.";
-      window.setTimeout(() => (shareNotice = ""), 3000);
-    } catch {
-      window.prompt("Copy this project link:", url.href);
-      shareNotice = "Project link ready to copy.";
-      window.setTimeout(() => (shareNotice = ""), 4000);
-    }
-  }
-  async function saveShortProject() {
-    try {
-      const { code } = await saveProjectToServer(projectPayload());
-      const url = new URL(`/load/${code}${shareWithReadme ? "?readme=1" : ""}`, window.location.origin);
-      try {
-        await navigator.clipboard.writeText(url.href);
-        status = "Short project link copied";
-        shareLinkDialog = { url: url.href, code, copied: true };
-      } catch {
-        window.prompt("Copy this project link:", url.href);
-        shareLinkDialog = { url: url.href, code, copied: false };
-      }
-    } catch (reason) {
-      shareNotice = reason instanceof Error ? reason.message : "Project could not be saved on the server.";
-      window.setTimeout(() => (shareNotice = ""), 5000);
-    }
-  }
-  async function loadSharedProjectFromCode() {
-    const words = shareCodeInput.trim().toLowerCase().split(/[-\s]+/).filter(Boolean);
-    if (words.length !== 3 || words.some((word) => !/^[a-z]{4,6}$/.test(word))) {
-      shareCodeError = "Enter exactly three words, each 4–6 letters long.";
-      return;
-    }
-    try {
-      await loadProject(
-        await loadProjectFromServer(words.join("-")),
-        "Shared BlueK project loaded. Compile the project.",
-      );
-      window.history.replaceState(window.history.state, "", "/");
-      shareCodeInput = "";
-      shareCodeError = "";
-      toolbarDialog = null;
-    } catch (reason) {
-      shareCodeError = reason instanceof Error ? reason.message : "Project could not be loaded.";
-    }
-  }
-  async function copySharedLink() {
-    if (!shareLinkDialog) return;
-    try {
-      await navigator.clipboard.writeText(shareLinkDialog.url);
-      shareLinkDialog = { ...shareLinkDialog, copied: true };
-    } catch {
-      window.prompt("Copy this project link:", shareLinkDialog.url);
-    }
-  }
-  async function loadProject(payload: any, message = "Project loaded.") {
-    const imported = projectModelFromPayload(payload, (index) => `project-${Date.now()}-${index}`);
-    const frameworkFiles = new Set(["World.kt", "Actor.kt", "Image.kt", "BluePlayFunctions.kt", "BluePlayHelpers.kt"]);
-    files = imported.library?.id === "blueplay"
-      ? imported.files.filter((file) => !frameworkFiles.has(file.fileName))
-      : imported.files;
-    library = imported.library;
-    resources = imported.resources;
-    cardPositions = imported.cardPositions;
-    readme = imported.readme;
-    projectName = imported.projectName ?? "";
-    closeReadme();
-    selected = 0;
-    editorWindows = [];
-    activeEditorId = "";
-    editorGroup = null;
-    editorTabbed = false;
-    markUncompiled();
-    status = message;
-  }
-  async function importProject(event: Event) {
-    const input = event.currentTarget as HTMLInputElement;
-    const file = input.files?.[0];
-    input.value = "";
-    if (!file) return;
-    await openProjectFile(file);
-  }
-  async function openProjectFile(file: File) {
-    try {
-      if (/\.zip$/i.test(file.name)) {
-        const entries = entriesFromZip(new Uint8Array(await file.arrayBuffer()));
-        await loadProject(blueJProjectFromEntries(entries), `Loaded ${file.name}`);
-        return;
-      }
-      if (!/\.json$/i.test(file.name)) {
-        status = "Choose a BlueK .json file, a BlueJ .zip file or a project directory.";
-        return;
-      }
-      await loadProject(JSON.parse(await file.text()), `Loaded ${file.name}`);
-    } catch (reason) {
-      status = "Project error";
-      error = reason instanceof Error ? reason.message : String(reason);
-    }
-  }
-  async function openProjectEntries(entries: ImportEntry[], name: string) {
-    try {
-      await loadProject(blueJProjectFromEntries(entries), `Loaded ${name}`);
-    } catch (reason) {
-      status = "Project error";
-      error = reason instanceof Error ? reason.message : String(reason);
-    }
-  }
-  // Reads a dropped directory recursively through the File System Entries API.
-  async function droppedDirectoryEntries(directory: FileSystemDirectoryEntry): Promise<ImportEntry[]> {
-    const children: FileSystemEntry[] = [];
-    const reader = directory.createReader();
-    for (;;) {
-      const batch = await new Promise<FileSystemEntry[]>((resolve, reject) => reader.readEntries(resolve, reject));
-      if (!batch.length) break;
-      children.push(...batch);
-    }
-    const nested = await Promise.all(children.map(async (child) => {
-      if (child.isDirectory) return droppedDirectoryEntries(child as FileSystemDirectoryEntry);
-      const file = await new Promise<File>((resolve, reject) => (child as FileSystemFileEntry).file(resolve, reject));
-      return [{ path: child.fullPath, bytes: new Uint8Array(await file.arrayBuffer()) }];
-    }));
-    return nested.flat();
-  }
-  async function openProjectDrop(event: DragEvent) {
-    event.preventDefault();
-    const entry = event.dataTransfer?.items?.[0]?.webkitGetAsEntry?.();
-    if (entry?.isDirectory) {
-      await openProjectEntries(await droppedDirectoryEntries(entry as FileSystemDirectoryEntry), entry.name);
-      toolbarDialog = null;
-      return;
-    }
-    const file = event.dataTransfer?.files?.[0];
-    if (file) await openProjectFile(file);
-    toolbarDialog = null;
-  }
-  async function importKotlin(event: Event) {
-    const input = event.currentTarget as HTMLInputElement;
-    const imported = await Promise.all(
-      Array.from(input.files || [])
-        .filter((file) => /\.kt$/i.test(file.name))
-        .map(async (file) => {
-          const source = await file.text();
-          return {
-            id: `import-${Date.now()}-${file.name}`,
-            fileName: file.name,
-            kind: /\bclass\s+\w+|\binterface\s+\w+|\bobject\s+\w+/.test(source)
-              ? "class"
-              : "functions",
-            source,
-            revision: 1,
-          } as ProjectFile;
-        }),
-    );
-    input.value = "";
-    if (imported.length) {
-      files = [
-        ...files.filter(
-          (file) => !imported.some((item) => item.fileName === file.fileName),
-        ),
-        ...imported,
-      ];
-      selected = files.length - imported.length;
-      markUncompiled();
-    }
-  }
-  async function importMedia(event: Event) {
-    const input = event.currentTarget as HTMLInputElement;
-    const imported = await Promise.all(
-      Array.from(input.files || []).map(
-        (file) =>
-          new Promise<Resource>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () =>
-              resolve({
-                path: `${file.type.startsWith("audio/") ? "sounds" : "images"}/${file.name}`,
-                data: String(reader.result),
-              });
-            reader.onerror = () => reject(reader.error);
-            reader.readAsDataURL(file);
-          }),
-      ),
-    );
-    input.value = "";
-    resources = [
-      ...resources.filter(
-        (item) => !imported.some((value) => value.path === item.path),
-      ),
-      ...imported,
-    ];
-    markUncompiled();
-  }
-  async function chooseTemplate(choice: string) {
-    if (
-      (files.length || resources.length) &&
-      !window.confirm(
-        "Das aktuelle Projekt enthält Daten. Möchtest du es wirklich ersetzen?",
-      )
-    )
-      return;
-    newProjectOpen = false;
-    if (client && runtime.phase !== "uncompiled") await client.stop();
-    stage = null;
-    if (choice === "empty") {
-      files = [];
-      library = undefined;
-      resources = [];
-      cardPositions = {};
-      readme = "";
-      projectName = "";
-      closeReadme();
-      selected = 0;
-      editorWindows = [];
-      activeEditorId = "";
-      editorGroup = null;
-      editorTabbed = false;
-      markUncompiled();
-      status = "New project";
-      return;
-    }
-    const paths: Record<string, string> = {
-      "empty-blueplay": "./examples/blueplay-empty.bluek.json",
-      blueplay: "./examples/blueplay.bluek.json",
-      "bluek-demo": "./examples/kotlin-example.bluek.json",
-      "space-invaders": "./examples/space-invaders.bluek.json",
-    };
-    const path = paths[choice];
-    if (!path) {
-      status = "Project template could not be found.";
-      return;
-    }
-    try {
-      const payload = await (await fetch(path)).json();
-      if (choice === "empty-blueplay")
-        payload.files = payload.files.filter((file: ProjectFile) => file.fileName !== "Main.kt");
-      await loadProject(payload, "Project template loaded.");
-    } catch {
-      status = "Project error";
-      error = "Could not load project template.";
-    }
+      play.stageKey(event, true);
   }
 </script>
 
 <svelte:window
-  bind:innerWidth={viewportWidth}
+  bind:innerWidth={ui.viewportWidth}
   on:click={() => {
-    menu = null;
-    codepadMenu = null;
+    objects.menu = null;
+    session.codepadMenu = null;
   }}
   on:pointerdown|capture={(event) => {
     // The dialog keeps its own clicks to itself, so the help has to listen
     // before them: a click anywhere else puts it away again.
-    if (readmeHelp && !(event.target as HTMLElement).closest(".readme-help, .readme-help-button"))
-      readmeHelp = false;
+    if (
+      project.readmeHelp &&
+      !(event.target as HTMLElement).closest(
+        ".readme-help, .readme-help-button",
+      )
+    )
+      project.readmeHelp = false;
   }}
   on:keydown={handleWindowKeydown}
   on:keyup={(event) =>
-    (document.activeElement?.classList.contains("game-stage") || stageRunning) &&
-    stageKey(event, false)}
-  on:blur={releaseStageKeys}
+    (document.activeElement?.classList.contains("game-stage") ||
+      play.stageRunning) &&
+    play.stageKey(event, false)}
+  on:blur={play.releaseStageKeys}
 />
 
 <div
-  class:terminal-split={terminalOpen && terminalSplit}
-  class:bluek-stage-closed={!stageWindowOpen}
-  class:dark={darkMode}
+  class:terminal-split={terminal.terminalOpen && terminal.terminalSplit}
+  class:bluek-stage-closed={!play.stageWindowOpen}
+  class:dark={ui.darkMode}
   class="bluek svelte-preview"
-  style={`--editor-font-size:${editorFontSize}px;--terminal-split-width:${terminalSplitWidth}px;--bluek-stage-height:${stageHeight}px;--bluek-stage-window-width:${stageWindowWidth}px;${stagePosition ? `--bluek-stage-left:${stagePosition.left}px;--bluek-stage-top:${stagePosition.top}px;` : ""}`}
+  style={`--editor-font-size:${ui.editorFontSize}px;--terminal-split-width:${terminal.terminalSplitWidth}px;--bluek-stage-height:${play.stageHeight}px;--bluek-stage-window-width:${play.stageWindowWidth}px;${play.stagePosition ? `--bluek-stage-left:${play.stagePosition.left}px;--bluek-stage-top:${play.stagePosition.top}px;` : ""}`}
 >
-  {#if stage && stageWindowOpen}
-    <div
-      class:maximized={stageMaximized}
-      class:stage-compact={(stage.width || 1) * (stage.cellSize || 1) < 560}
-      class="stage-window"
-      role="dialog"
-      aria-label="BluePlay – World"
-      data-library={library?.id || ""}
-      data-phase={runtime.phase}
-      data-simulation={runtime.simulation}
-      data-frame-version={stage.frameVersion}
-    >
-      <div
-        class="stage-window-chrome"
-        role="toolbar"
-        tabindex="0"
-        on:pointerdown={beginStageDrag}
-      >
-        <span>BluePlay – World</span>
-        <div>
-          <button
-            on:click|stopPropagation={() => (stageMaximized = !stageMaximized)}
-            aria-label={stageMaximized ? "Restore BluePlay world" : "Maximize BluePlay world"}
-            >{stageMaximized ? "❐" : "□"}</button
-          >
-          <button
-            on:click|stopPropagation={() => {
-              stageWindowOpen = false;
-              stageWindowDismissed = true;
-              stageMaximized = false;
-            }}
-            aria-label="Close BluePlay world"
-            >×</button
-          >
-        </div>
-      </div>
-      <div class="stage-window-body">
-        <canvas
-          bind:this={stageCanvas}
-          class="game-stage"
-          class:game-canvas={true}
-          role="button"
-          aria-label="BluePlay world"
-          tabindex="0"
-          style={stageStyle(stage)}
-          on:click={stageClick}
-        ></canvas>
-      </div>
-      <div class="game-controls" aria-label="BluePlay controls">
-        {#if mainEntries.length}<button
-            on:click={resetGame}
-            disabled={!canExecute}
-            aria-label="Reset BluePlay world">Reset</button
-          >{/if}
-        <button
-          on:click={() => bluePlayAction("step")}
-          disabled={!canExecute || stageRunning}
-          aria-label="Act once">Act</button
-        >
-        <button
-          on:click={() => bluePlayAction("start")}
-          disabled={!canExecute || stageRunning}
-          aria-label="Run BluePlay world">Run</button
-        >
-        <button
-          on:click={() => bluePlayAction("stop")}
-          disabled={!stageRunning}
-          aria-label="Pause BluePlay world">Pause</button
-        >
-        <label
-          >Speed <input
-            aria-label="Speed"
-            type="range"
-            min="1"
-            max="100"
-            bind:value={speed}
-            disabled={runtime.phase !== "ready" && runtime.phase !== "waitingForInput"}
-            on:input={() => bluePlayAction("setSpeed")}
-          /></label
-        >
-      </div>
-    </div>
-  {/if}
-  <div class="toolbar">
-    <button class="toolbar-main-action" on:click={() => (newProjectOpen = true)} aria-label="New Project" title="New Project">
-      <span class="toolbar-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 2.5h10l4 4V21.5H5z"/><path d="M15 2.5v4h4"/></svg></span><span>New Project</span>
-    </button>
-    <button class="toolbar-main-action" on:click={() => (toolbarDialog = "open")} aria-label="Open / Import" title="Open / Import">
-        <span class="toolbar-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 19h12M12 16V5M9 8l3-3 3 3"/></svg></span><span>Open / Import</span>
-      </button>
-    <button class="toolbar-main-action" on:click={() => (toolbarDialog = "save")} disabled={!files.length} aria-label="Save / Export" title="Save / Export">
-        <span class="toolbar-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 5h12M12 8v11M9 16l3 3 3-3"/></svg></span><span>Save / Export</span>
-      </button>
-    {#if library?.id === "blueplay"}
-      <button class="toolbar-icon-button media-tool-button" on:click={() => (imageLibraryOpen = true)} aria-label="Images" title="Images">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
-      </button>
-      <button class="toolbar-icon-button media-tool-button" on:click={() => (mediaNotice = "Audio support is not implemented yet.")} aria-label="Audio" title="Audio">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10v4h4l5 4V6l-5 4H3Z"/><path d="M16 9a5 5 0 0 1 0 6M18.5 6.5a9 9 0 0 1 0 11"/></svg>
-      </button>
-    {/if}
-    <input class="project-title" aria-label="Project name" placeholder="Untitled project" bind:value={projectName} on:keydown={commitProjectName} />
-    <div class="toolbar-options">
-      <button
-        class:active={terminalOpen}
-        class="toolbar-icon-button"
-        on:click={() => {
-          terminalOpen = !terminalOpen;
-          if (terminalOpen) activeWindow = "terminal";
-          if (!terminalOpen) terminalSplit = false;
-        }}
-        aria-label={terminalOpen ? "Hide terminal" : "Show terminal"}
-        title={terminalOpen ? "Hide terminal" : "Show terminal"}
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true"
-          ><rect x="2.5" y="3" width="19" height="18" rx="2" /><path
-            d="M6 9l3 3-3 3M11 15h5"
-          /></svg
-        >
-      </button>
-      <button
-        class:active={showInheritance}
-        class="toolbar-icon-button"
-        on:click={toggleInheritance}
-        aria-label={showInheritance
-          ? "Hide inheritance arrows"
-          : "Show inheritance arrows"}
-        title={showInheritance
-          ? "Hide inheritance arrows"
-          : "Show inheritance arrows"}
-      >
-        <svg viewBox="0 0 32 24" aria-hidden="true"
-          ><rect x="2" y="2" width="11" height="6" rx="1" /><rect
-            x="19"
-            y="16"
-            width="11"
-            height="6"
-            rx="1"
-          /><path d="M24.5 16L8 8" /><path
-            class="toolbar-arrowhead"
-            d="M5.5 7.5L10 5.5 9 10z"
-          /></svg
-        >
-      </button>
-      <button
-        class="toolbar-icon-button settings-button"
-        on:click={() => (settingsNotice = true)}
-        aria-label="Settings"
-        title="Settings"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true"
-          ><path
-            d="M9.7 3.8l.6-1.3h3.4l.6 1.3 1.3.6 1.4-.3 2.4 2.4-.3 1.4.6 1.3 1.3.6v3.4l-1.3.6-.6 1.3.3 1.4-2.4 2.4-1.4-.3-1.3.6-.6 1.3h-3.4l-.6-1.3-1.3-.6-1.4.3-2.4-2.4.3-1.4-.6-1.3-1.3-.6V9.8l1.3-.6.6-1.3-.3-1.4 2.4-2.4 1.4.3zM12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z"
-          /></svg
-        >
-      </button>
-    </div>
-  </div>
+  <BluePlayWindow
+    stage={play.stage}
+    bind:stageWindowOpen={play.stageWindowOpen}
+    bind:stageWindowDismissed={play.stageWindowDismissed}
+    bind:stageMaximized={play.stageMaximized}
+    bind:stageCanvas={play.stageCanvas}
+    bind:speed={play.speed}
+    canExecute={session.canExecute}
+    stageRunning={play.stageRunning}
+    mainEntries={session.mainEntries}
+    phase={session.runtime.phase}
+    simulation={session.runtime.simulation}
+    libraryId={project.library?.id || ""}
+    beginStageDrag={play.beginStageDrag}
+    stageClick={play.stageClick}
+    resetGame={play.resetGame}
+    bluePlayAction={play.bluePlayAction}
+  />
+  <AppToolbar
+    bind:newProjectOpen={project.newProjectOpen}
+    bind:toolbarDialog={project.toolbarDialog}
+    files={project.files}
+    libraryId={project.library?.id || ""}
+    bind:imageLibraryOpen={project.imageLibraryOpen}
+    bind:mediaNotice={project.mediaNotice}
+    bind:projectName={project.projectName}
+    bind:terminalOpen={terminal.terminalOpen}
+    bind:terminalSplit={terminal.terminalSplit}
+    bind:activeWindow={ui.activeWindow}
+    showInheritance={project.showInheritance}
+    bind:settingsNotice={ui.settingsNotice}
+    toggleInheritance={project.toggleInheritance}
+    commitProjectName={project.commitProjectName}
+  />
   <div class="body">
-    <nav class="sidebar">
-      <button
-        on:click={() => {
-          newClassOpen = true;
-          newClassName = "";
-          newClassType = "class";
-        }}>New File</button
-      >
-      <button class="sidebar-legacy-save" on:click={exportProject}
-        >Save Project</button
-      >
-      <button
-        class:active-tool={inheritanceMode}
-        disabled={displayFiles.filter((file) => file.kind === "class").length < 2}
-        on:click={() => {
-          inheritanceMode = !inheritanceMode;
-          inheritanceSelection = "";
-          status = inheritanceMode
-            ? "Select subclass, then superclass"
-            : "Ready";
-        }}
-      >
-        Inheritance<span class="inheritance-icon" aria-hidden="true"
-          ><svg viewBox="0 0 72 32"
-            ><line x1="2" y1="16" x2="40" y2="16" /><path
-              d="M40 2 L70 16 L40 30 Z"
-            /></svg
-          ></span
-        >
-      </button>
-      <button
-        on:click={compile}
-        title={`Compile (${compileShortcutLabel})`}
-        disabled={!files.length ||
-          runtime.phase === "compiling" ||
-          runtime.phase === "running" ||
-          inputReady}>Compile</button
-      >
-      <button
-        on:click={() => void runMain()}
-        title={`Start main (${runShortcutLabel})`}
-        aria-label="Start main"
-        disabled={!canExecute || !mainEntries.length}>Start main</button
-      >
-      <div class="side-spacer"></div>
-      {#if !offlineBuild}
-        <a
-          class="offline-download"
-          href={OFFLINE_DOWNLOAD}
-          download="BlueK-offline.zip"
-          title="Download BlueK as a ZIP and run it without internet access"
-          >Offline Version<span>ZIP, no installation</span></a
-        >
-      {/if}
-      <button on:click={() => (shortcutsHelpOpen = true)} aria-label="Help" title="Help">Help</button>
-    </nav>
+    <AppSidebar
+      bind:newClassOpen={project.newClassOpen}
+      bind:newClassName={project.newClassName}
+      bind:newClassType={project.newClassType}
+      bind:inheritanceMode={project.inheritanceMode}
+      bind:inheritanceSelection={project.inheritanceSelection}
+      bind:status={ui.status}
+      displayFiles={project.displayFiles}
+      files={project.files}
+      phase={session.runtime.phase}
+      inputReady={session.inputReady}
+      canExecute={session.canExecute}
+      mainEntries={session.mainEntries}
+      {offlineBuild}
+      {OFFLINE_DOWNLOAD}
+      bind:shortcutsHelpOpen={ui.shortcutsHelpOpen}
+      compileShortcutLabel={ui.compileShortcutLabel}
+      runShortcutLabel={ui.runShortcutLabel}
+      exportProject={project.exportProject}
+      compile={session.compile}
+      runMain={session.runMain}
+    />
     <section
       class="workspace"
-      style={`--pane-split:${paneSplit}%;--upper-pane:${paneSplit}%;${benchWidth ? `--bench-width:${benchWidth}px;` : ""}`}
+      style={`--pane-split:${ui.paneSplit}%;--upper-pane:${ui.paneSplit}%;${ui.benchWidth ? `--bench-width:${ui.benchWidth}px;` : ""}`}
     >
       <div class="panels">
-        <div class="canvas">
-          {#if inheritanceMode}<div class="inheritance-mode-hint" role="status" aria-live="polite">
-              {inheritanceSelection
-                ? "Now select its superclass."
-                : "Select a subclass, then its superclass."}
-            </div>{/if}
-          {#if showInheritance}
-            {#each inheritanceEdges as edge, index}
-              <svg
-                class="inheritance-edge"
-                aria-hidden="true"
-                style={`z-index:${edge.zIndex}`}
-              ><defs
-                  ><marker
-                    id={`svelte-inheritance-arrow-${index}`}
-                    viewBox="0 0 14 14"
-                    refX="12"
-                    refY="7"
-                    markerWidth="14"
-                    markerHeight="14"
-                    markerUnits="userSpaceOnUse"
-                    orient="auto"><path d="M 0 0 L 12 7 L 0 14 Z" /></marker
-                  ></defs
-                ><line
-                    x1={edge.x1}
-                    y1={edge.y1}
-                    x2={edge.x2}
-                    y2={edge.y2}
-                    marker-end={`url(#svelte-inheritance-arrow-${index})`}
-                  /></svg
-              >
-            {/each}
-          {/if}
-          <div class="cards">
-            <!-- Like BlueJ's README note, but quieter: show it when the project
-                 has files, resources or a written description. -->
-            {#if files.length || resources.length || readme.trim()}<div
-              role="button"
-              tabindex="0"
-              class:written={Boolean(readme.trim())}
-              class="readme-card"
-              aria-label="README.md"
-              title="README.md — describe this project"
-              on:click={openReadme}
-              on:keydown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  openReadme();
-                }
-              }}
-            ><svg viewBox="0 0 24 30" aria-hidden="true"
-              ><path class="readme-sheet" d="M1.5 1.5h13l8 8v19h-21z" /><path
-                  class="readme-fold"
-                  d="M14.5 1.5l8 8h-8z"
-                /><path class="readme-text" d="M5.5 13h13M5.5 16.5h13M5.5 20h13M5.5 23.5h8" /></svg
-              ></div>{/if}
-            {#each displayFiles as file, index (file.id)}
-              {@const position = displayCardPositions[index]}
-              <div
-                role="button"
-                tabindex="0"
-                aria-label={file.fileName.replace(".kt", "")}
-                class:uncompiled={runtime.phase === "uncompiled"}
-                class:inheritance-selected={inheritanceSelection === file.id}
-                class="classcard"
-                style={`left:${position.x}px;top:${position.y}px;z-index:${cardLayer(file, index)};--card-left:${position.x}px;--card-top:${position.y}px`}
-                on:mousedown={(event) => {
-                  if (!inheritanceMode) beginCardDrag(event, file);
-                }}
-                on:pointermove={(event) => moveCard(event, file)}
-                on:pointerup={endCardDrag}
-                on:pointercancel={endCardDrag}
-                on:click={() => selectCard(file, index)}
-                on:dblclick={() => {
-                  if (inheritanceMode) return;
-                  if (isBluePlayFrameworkFile(file)) openBluePlayApi(file);
-                  else openEditor(file);
-                }}
-                on:contextmenu={(event) => openMenu(event, file)}
-                on:keydown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    selectCard(file, index);
-                  }
-                }}
-              >
-                <div class="card-header">
-                  {#if file.kind === "functions"}<small>«functions»</small
-                    >{/if}<strong>{file.fileName.replace(".kt", "")}</strong>
-                </div>
-                <div class="card-body"></div>
-              </div>
-            {/each}
-          </div>
-        </div>
+        <ClassDiagram
+          inheritanceMode={project.inheritanceMode}
+          inheritanceSelection={project.inheritanceSelection}
+          showInheritance={project.showInheritance}
+          inheritanceEdges={project.inheritanceEdges}
+          hasReadme={Boolean(
+            project.files.length ||
+            project.resources.length ||
+            project.readme.trim(),
+          )}
+          readme={project.readme}
+          displayFiles={project.displayFiles}
+          displayCardPositions={project.displayCardPositions}
+          uncompiled={session.runtime.phase === "uncompiled"}
+          cardLayer={project.cardLayer}
+          selectCard={project.selectCard}
+          beginCardDrag={project.beginCardDrag}
+          moveCard={project.moveCard}
+          endCardDrag={project.endCardDrag}
+          openEditor={editor.openEditor}
+          openMenu={objects.openMenu}
+          isBluePlayFrameworkFile={project.isBluePlayFrameworkFile}
+          openBluePlayApi={project.openBluePlayApi}
+          openReadme={project.openReadme}
+        />
       </div>
       <div
         class="pane-splitter"
         role="separator"
         aria-label="Resize upper and lower panes"
-        on:pointerdown={beginPaneResize}
+        onpointerdown={ui.beginPaneResize}
       ></div>
-      <div class:codepad-collapsed={!codepadOpen} class="lower">
-        <section class="bench" class:bench-picking={Boolean(fieldInput)}>
-          <div class="bench-items">
-            {#each bench as object (object.name)}
-              <div
-                role="button"
-                tabindex="0"
-                class:selected={selectedObjectId === object.objectId}
-                class="object"
-                title={fieldInput ? `Insert ${object.name}` : undefined}
-                on:mousedown={(event) => fieldInput && event.preventDefault()}
-                on:click={(event) => {
-                  // Like BlueJ's call dialogs: while a field is edited, a
-                  // click inserts the object's name instead of selecting it.
-                  if (!fieldInput) selectedObjectId = object.objectId;
-                  else if (event.detail <= 1) insertBenchName(object.name);
-                }}
-                on:dblclick={() => !fieldInput && inspectObject(object)}
-                on:keydown={(event) =>
-                  event.key === "Enter" && inspectObject(object)}
-                on:contextmenu={(event) => {
-                  selectedObjectId = object.objectId;
-                  openMenu(event, undefined, object);
-                }}
-              >
-                {object.name}:<br /><span>{object.className}</span>
-              </div>
-            {/each}
-          </div>
-        </section>
-        <div
-          class="bench-codepad-splitter"
-          role="separator"
-          aria-label="Resize object bench and codepad"
-          on:pointerdown={beginBenchResize}
-        ></div>
-        <button
-          class="codepad-toggle"
-          aria-label={codepadOpen ? "Collapse Codepad" : "Expand Codepad"}
-          on:click={() => (codepadOpen = !codepadOpen)}
-          >{codepadOpen ? "›" : "‹"}</button
-        >
-        {#if codepadOpen}
-          <section class="codepad">
-            <div
-              class="codepad-history"
-              role="log"
-              aria-label="Codepad history"
-              on:contextmenu|preventDefault|stopPropagation={(event) =>
-                (codepadMenu = { x: event.clientX, y: event.clientY })}
-            >
-              {#each history as entry}
-                <div
-                  class="codepad-entry"
-                  role="group"
-                  on:contextmenu|preventDefault|stopPropagation={(event) =>
-                    (codepadMenu = {
-                      x: event.clientX,
-                      y: event.clientY,
-                      text: entry.code,
-                    })}
-                >
-                  <div>{entry.code}</div>
-                  {#if entry.objectResult || entry.objectId}
-                    <button
-                      class="codepad-object-result svelte-codepad-object-result"
-                      disabled={!entry.objectId || !runtime.liveObjectIds.includes(entry.objectId)}
-                      on:click={() =>
-                        entry.objectId &&
-                        requestObjectOnBench({
-                          kind: "object",
-                          objectId: entry.objectId,
-                          className: entry.className || "Object",
-                        })}
-                      aria-label={`Get ${entry.className || "object"} on object bench`}
-                    >
-                      <span class="codepad-object-icon" aria-hidden="true"
-                      ></span><span class="codepad-object-label"
-                        >{#if entry.result}<span class="codepad-result-value" title={entry.result}
-                          >{codepadResultValue(entry.result)}</span
-                        ><span class="codepad-result-type">{codepadResultType(entry.result)}</span
-                        >{:else}<span class="codepad-object-placeholder"
-                          >&lt;object&gt;</span
-                        ><span> : {entry.className}</span>{/if}</span
-                      >
-                    </button>
-                  {:else if entry.error}<div class="codepad-error">
-                      {entry.error}
-                    </div>
-                  {:else if entry.result}<div class="codepad-result">
-                      <span class="codepad-value-icon" aria-hidden="true"></span><span class="codepad-result-value" title={entry.result}
-                        >{codepadResultValue(entry.result)}</span
-                      ><span class="codepad-result-type">{codepadResultType(entry.result)}</span>
-                    </div>{/if}
-                </div>
-              {/each}
-            </div>
-            <textarea
-              aria-label="Codepad input"
-              rows="1"
-              bind:value={codepad}
-              on:keydown={submitCodepad}
-              disabled={codepadIsDisabled(runtime.phase, inputReady)}
-            ></textarea>
-          </section>
-        {/if}
-      </div>
-      <footer class="status-bar">
-        <span class="current-element"
-          >{selectedObjectId &&
-          bench.find((object) => object.objectId === selectedObjectId)
-            ? `${bench.find((object) => object.objectId === selectedObjectId)?.name} : ${bench.find((object) => object.objectId === selectedObjectId)?.className}`
-            : "No object selected"}</span
-        >
-        {#if !terminalOpen && (terminal || inputReady)}<button
-            class="terminal-reopen"
-            on:click={() => {
-              terminalOpen = true;
-              activeWindow = "terminal";
-            }}>Terminal</button
-          >{/if}
-        <span
-          class:active={programActive}
-          class="activity-bar"
-          role="progressbar"
-          aria-busy={programActive}
-          title={programActive ? "BlueK is running" : "Ready"}
-          aria-label={runtime.phase === "compiling"
-            ? "Compiling"
-            : runtime.phase === "running" || inputReady
-              ? "Program active"
-              : "Ready"}
-        >{#if programActive}<span class="activity-indicator" aria-hidden="true"></span>{/if}</span>
-        <button
-          class="reset-runtime"
-          aria-label="Reset runtime"
-          title="Reset"
-          on:click={resetRuntime}
-          disabled={runtime.phase === "compiling"}>↶</button
-        >
-      </footer>
+      <ObjectBenchCodepad
+        bind:codepadOpen={session.codepadOpen}
+        bench={objects.bench}
+        fieldInput={objects.fieldInput}
+        bind:selectedObjectId={ui.selectedObjectId}
+        history={session.history}
+        bind:codepadMenu={session.codepadMenu}
+        bind:codepad={session.codepad}
+        liveObjectIds={session.runtime.liveObjectIds}
+        phase={session.runtime.phase}
+        inputReady={session.inputReady}
+        insertBenchName={objects.insertBenchName}
+        inspectObject={objects.inspectObject}
+        openMenu={objects.openMenu}
+        beginBenchResize={ui.beginBenchResize}
+        requestObjectOnBench={objects.requestObjectOnBench}
+        submitCodepad={session.submitCodepad}
+      />
+      <AppStatusBar
+        selectedObjectId={ui.selectedObjectId}
+        bench={objects.bench}
+        bind:terminalOpen={terminal.terminalOpen}
+        terminal={terminal.terminal}
+        inputReady={session.inputReady}
+        bind:activeWindow={ui.activeWindow}
+        programActive={session.programActive}
+        phase={session.runtime.phase}
+        resetRuntime={session.resetRuntime}
+      />
     </section>
   </div>
-  {#if shareNotice}<div class="share-notice" role="status" aria-live="polite">{shareNotice}</div>{/if}
-  {#if terminalOpen}<div
-      class:terminal-modal-split={terminalSplit}
-      class:window-active={activeWindow === "terminal"}
-      class="terminal-modal"
-      role="presentation"
-      on:pointerdown={() => (activeWindow = "terminal")}
+  {#if project.shareNotice}<div
+      class="share-notice"
+      role="status"
+      aria-live="polite"
     >
-      <div
-        class:split={terminalSplit}
-        class:maximized={terminalMaximized}
-        class:floating={Boolean(terminalPosition) &&
-          !terminalSplit &&
-          !terminalMaximized}
-        class="terminal-window"
-        style={`${terminalSplit ? `width:${terminalSplitWidth}px;height:100vh;position:fixed;right:0;top:0;margin:0;` : terminalMaximized ? "" : `width:${terminalSize.width}px;height:${terminalSize.height}px;`} ${terminalPosition && !terminalSplit && !terminalMaximized ? `left:${terminalPosition.left}px;top:${terminalPosition.top}px;` : ""}`}
-      >
-        <div
-          role="toolbar"
-          tabindex="0"
-          class="terminal-header window-header"
-          on:pointerdown={(event) => {
-            activeWindow = "terminal";
-            beginTerminalDrag(event);
-          }}
-        >
-          <span>BlueK Terminal</span>
-          <div>
-            <button
-              on:click|stopPropagation={toggleTerminalMaximized}
-              aria-label={terminalMaximized
-                ? "Restore terminal window"
-                : "Maximize terminal window"}
-              ><svg class="window-control-icon" viewBox="0 0 24 24" aria-hidden="true">{#if terminalMaximized}<path d="M8 7.5V5.5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2.5" /><rect x="3.5" y="7.5" width="13" height="13" rx="2.5" />{:else}<rect x="3.5" y="3.5" width="17" height="17" rx="2.5" />{/if}</svg></button
-            ><button
-              class="terminal-split-toggle"
-              on:click|stopPropagation={toggleTerminalSplit}
-              aria-label={terminalSplit
-                ? "Restore terminal window"
-                : "Split terminal to the right"}><svg
-                  class="window-control-icon terminal-split-icon"
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                ><rect x="3.5" y="3.5" width="17" height="17" rx="2.5" /><path d="M12 4.5v15" /></svg></button
-            ><button
-              on:click|stopPropagation={() => {
-                terminalOpen = false;
-                terminalMaximized = false;
-                terminalSplit = false;
-                terminalPosition = null;
-              }}>×</button
-            >
-          </div>
-        </div>
-        <div class="terminal-output">
-          {#key terminal}<pre>{#each terminalParts(terminal) as part}<span
-                  class:terminal-input-echo={part.input}>{part.text}</span
-                >{/each}</pre>{/key}
-          <button
-            class="terminal-clear"
-            on:click|stopPropagation={clearTerminal}
-            aria-label="Clear terminal">⌫</button
-          >
-        </div>
-        {#if runtime.phase === "faulted"}<div
-            class="terminal-notice"
-            role="alert"
-          >
-            Execution stopped. Reset the runtime before running more code.<button
-              on:click={resetRuntime}>Reset runtime</button
-            >
-          </div>{/if}<input
-          bind:this={inputElement}
-          placeholder={inputReady ? "Enter a line; press Return" : ""}
-          disabled={!inputReady}
-          on:keydown={sendInput}
-        />{#each ["n", "ne", "e", "se", "s", "sw", "w", "nw"] as direction}<div
-            role="separator"
-            class={`terminal-resize-handle terminal-resize-${direction}`}
-            on:pointerdown={(event) => beginTerminalResize(event, direction)}
-          ></div>{/each}
-      </div>
+      {project.shareNotice}
     </div>{/if}
-  {#if editorWindows.length}<div class:window-active={activeWindow === "editor"} class="modal editor-modal">
-      {#if editorTabbed && editorGroup}
-        {@const editorFile = files.find((file) => file.id === activeEditorId.replace(/^editor-/, "")) || files.find((file) => file.id === editorGroup?.fileId)}
-        {#if editorFile}<div
-          class:maximized={editorGroup.maximized}
-          class:floating={Boolean(editorGroup.position) && !editorGroup.maximized}
-          class="dialog editor-dialog editor-tabbed-dialog"
-          role="dialog"
-          aria-label={`Editor: ${editorFile.fileName}`}
-          tabindex="-1"
-          style={`${editorGroup.maximized ? "" : `width:${editorGroup.size.width}px;height:${editorGroup.size.height}px;`} ${editorGroup.position && !editorGroup.maximized ? `left:${editorGroup.position.left}px;top:${editorGroup.position.top}px;` : ""}`}
-          on:pointerdown={() => { activeWindow = "editor"; }}
-        >
-          <div
-            class="editor-header window-header"
-            role="toolbar"
-            tabindex="0"
-            on:pointerdown={(event) => {
-              activeWindow = "editor";
-              beginEditorDrag(event, activeEditorId);
-            }}
-          >
-            <div class="editor-tabs" role="tablist" aria-label="Open editor files">
-              {#each editorWindows as tabWindow (tabWindow.id)}
-                {@const tabFile = files.find((file) => file.id === tabWindow.fileId)}
-                {#if tabFile}<button
-                  class:active={tabWindow.id === activeEditorId}
-                  role="tab"
-                  aria-selected={tabWindow.id === activeEditorId}
-                  on:click={() => selectEditorTab(tabWindow.id)}
-                ><span>{tabFile.fileName}</span><span
-                    class="editor-tab-close"
-                    role="button"
-                    tabindex="0"
-                    aria-label={`Close ${tabFile.fileName}`}
-                    on:click|stopPropagation={() => closeEditor(tabWindow.id)}
-                    on:keydown|stopPropagation={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        closeEditor(tabWindow.id);
-                      }
-                    }}>×</span></button>{/if}
-              {/each}
-            </div>
-            <div class="editor-window-controls">
-              <button
-                on:click={() => toggleEditorMaximized(activeEditorId)}
-                aria-label={editorGroup.maximized ? "Restore editor window" : "Maximize editor window"}
-                title={editorGroup.maximized ? "Restore editor window" : "Maximize editor window"}
-              ><svg class="window-control-icon" viewBox="0 0 24 24" aria-hidden="true">{#if editorGroup.maximized}<path d="M8 7.5V5.5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2.5" /><rect x="3.5" y="7.5" width="13" height="13" rx="2.5" />{:else}<rect x="3.5" y="3.5" width="17" height="17" rx="2.5" />{/if}</svg></button>
-              <button
-                on:click={ungroupEditors}
-                aria-label="Ungroup editor tabs"
-                title="Ungroup editor tabs"
-              ><svg class="window-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 10L3 3M3 9V3h6M14 10l7-7M15 3h6v6M10 14l-7 7M3 15v6h6M14 14l7 7M21 15v6h-6"/></svg></button>
-              <button on:click={closeAllEditors} aria-label="Close all editors" title="Close all editors">×</button>
-            </div>
-          </div>
-          <div
-            class="svelte-editor-host"
-            role="group"
-            aria-label="Code editor content"
-            on:pointerdown={() => { activeWindow = "editor"; }}
-            use:codeMirror={{ id: activeEditorId, value: editorFile.source, fontSize: editorFontSize, onChange: (value: string) => updateSource(editorFile.id, value), diagnostics: diagnosticsByFile[editorFile.fileName] || [], diagnosticsRun, vim: vimMode, dark: darkMode }}
-          ><div class="editor-actions" role="toolbar" aria-label="Editor actions"><button
-              class="editor-action editor-comment"
-              on:click={() => toggleEditorComments(activeEditorId)}
-              aria-label="Toggle line comments"
-              title={`Comment / uncomment lines (${commentShortcutLabel})`}
-            >//</button><button
-              class="editor-action editor-format"
-              on:click={() => formatEditor(activeEditorId)}
-              aria-label="Format Kotlin file"
-              title={`Format Kotlin file (${formatShortcutLabel})`}
-            >≡</button></div></div>
-          {#if (diagnosticsByFile[editorFile.fileName] || []).length}<div            class="dialog-error editor-dialog-error editor-diagnostics"            class:editor-warnings={onlyWarnings(diagnosticsByFile[editorFile.fileName])}            role="alert"            aria-label={onlyWarnings(diagnosticsByFile[editorFile.fileName]) ? "Compiler warnings" : "Compiler errors"}          ><span>{#each diagnosticsByFile[editorFile.fileName] as diagnostic}<span              class="editor-diagnostic"            ><strong>Line {diagnostic.line}{isCompileError(diagnostic) ? "" : " (warning)"}:</strong> {diagnostic.message}</span>{/each}</span><button              type="button"              class="dialog-error-close"              aria-label={onlyWarnings(diagnosticsByFile[editorFile.fileName]) ? "Close compiler warnings" : "Close compiler errors"}              title={onlyWarnings(diagnosticsByFile[editorFile.fileName]) ? "Close compiler warnings" : "Close compiler errors"}
-              on:click={() => markDiagnostics([])}
-            >×</button></div>{/if}
-          {#if dialogError}<div class="dialog-error editor-dialog-error" role="alert"><span>{dialogError}</span><button
-              type="button"
-              class="dialog-error-close"
-              aria-label="Close format error"
-              title="Close format error"
-              on:click={closeFormatError}
-            >×</button></div>{/if}
-          {#each ["n", "ne", "e", "se", "s", "sw", "w", "nw"] as direction}<div
-            role="separator"
-            aria-label={`Resize editor ${direction}`}
-            class={`editor-resize-handle editor-resize-${direction}`}
-            on:pointerdown={(event) => {
-              activeWindow = "editor";
-              beginEditorResize(event, activeEditorId, direction);
-            }}
-          ></div>{/each}
-        </div>{/if}
-      {:else}{#each editorWindows as editorWindow (editorWindow.id)}
-          {@const editorFile = files.find((file) => file.id === editorWindow.fileId)}
-          {#if editorFile}<div
-            class:maximized={editorWindow.maximized}
-            class:floating={Boolean(editorWindow.position) && !editorWindow.maximized}
-            class:editor-window-active={activeEditorId === editorWindow.id}
-            class="dialog editor-dialog"
-            role="dialog"
-            aria-label={`Editor: ${editorFile.fileName}`}
-            tabindex="-1"
-            style={`${editorWindow.maximized ? "" : `width:${editorWindow.size.width}px;height:${editorWindow.size.height}px;`} ${editorWindow.position && !editorWindow.maximized ? `left:${editorWindow.position.left}px;top:${editorWindow.position.top}px;` : ""} z-index:${activeEditorId === editorWindow.id ? 2 : 1};`}
-            on:pointerdown={() => { activeWindow = "editor"; activeEditorId = editorWindow.id; }}
-          >
-            <div
-              class="editor-header window-header"
-              role="toolbar"
-              tabindex="0"
-              on:pointerdown={(event) => {
-                activeWindow = "editor";
-                activeEditorId = editorWindow.id;
-                beginEditorDrag(event, editorWindow.id);
-              }}
-            >
-              <h3>{editorFile.fileName}</h3>
-              <div class="editor-window-controls">
-                <button
-                  on:click={() => toggleEditorMaximized(editorWindow.id)}
-                  aria-label={editorWindow.maximized ? "Restore editor window" : "Maximize editor window"}
-                  title={editorWindow.maximized ? "Restore editor window" : "Maximize editor window"}
-                ><svg class="window-control-icon" viewBox="0 0 24 24" aria-hidden="true">{#if editorWindow.maximized}<path d="M8 7.5V5.5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2.5" /><rect x="3.5" y="7.5" width="13" height="13" rx="2.5" />{:else}<rect x="3.5" y="3.5" width="17" height="17" rx="2.5" />{/if}</svg></button>
-                <button
-                  disabled={editorWindows.length < 2}
-                  on:click={collectEditors}
-                  aria-label="Collect editor windows into tabs"
-                  title="Collect editor windows into tabs"
-                ><svg class="window-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l7 7M10 4v6H4M21 3l-7 7M14 4v6h6M3 21l7-7M4 14h6v6M21 21l-7-7M14 20v-6h6"/></svg></button>
-                <button on:click={() => closeEditor(editorWindow.id)} aria-label="Close editor" title="Close editor">×</button>
-              </div>
-            </div>
-            <div
-              class="svelte-editor-host"
-              role="group"
-              aria-label="Code editor content"
-              on:pointerdown={() => { activeWindow = "editor"; activeEditorId = editorWindow.id; }}
-              use:codeMirror={{ id: editorWindow.id, value: editorFile.source, fontSize: editorFontSize, onChange: (value: string) => updateSource(editorFile.id, value), diagnostics: diagnosticsByFile[editorFile.fileName] || [], diagnosticsRun, vim: vimMode, dark: darkMode }}
-            ><div class="editor-actions" role="toolbar" aria-label="Editor actions"><button
-                class="editor-action editor-comment"
-                on:click={() => toggleEditorComments(editorWindow.id)}
-                aria-label="Toggle line comments"
-                title={`Comment / uncomment lines (${commentShortcutLabel})`}
-              >//</button><button
-                class="editor-action editor-format"
-                on:click={() => formatEditor(editorWindow.id)}
-                aria-label="Format Kotlin file"
-                title={`Format Kotlin file (${formatShortcutLabel})`}
-              >≡</button></div></div>
-            {#if (diagnosticsByFile[editorFile.fileName] || []).length}<div              class="dialog-error editor-dialog-error editor-diagnostics"              class:editor-warnings={onlyWarnings(diagnosticsByFile[editorFile.fileName])}              role="alert"              aria-label={onlyWarnings(diagnosticsByFile[editorFile.fileName]) ? "Compiler warnings" : "Compiler errors"}            ><span>{#each diagnosticsByFile[editorFile.fileName] as diagnostic}<span                class="editor-diagnostic"              ><strong>Line {diagnostic.line}{isCompileError(diagnostic) ? "" : " (warning)"}:</strong> {diagnostic.message}</span>{/each}</span><button                type="button"                class="dialog-error-close"                aria-label={onlyWarnings(diagnosticsByFile[editorFile.fileName]) ? "Close compiler warnings" : "Close compiler errors"}                title={onlyWarnings(diagnosticsByFile[editorFile.fileName]) ? "Close compiler warnings" : "Close compiler errors"}
-                on:click={() => markDiagnostics([])}
-              >×</button></div>{/if}
-            {#if dialogError}<div class="dialog-error editor-dialog-error" role="alert"><span>{dialogError}</span><button
-                type="button"
-                class="dialog-error-close"
-                aria-label="Close format error"
-                title="Close format error"
-                on:click={closeFormatError}
-              >×</button></div>{/if}
-            {#each ["n", "ne", "e", "se", "s", "sw", "w", "nw"] as direction}<div
-              role="separator"
-              aria-label={`Resize editor ${direction}`}
-              class={`editor-resize-handle editor-resize-${direction}`}
-              on:pointerdown={(event) => {
-                activeWindow = "editor";
-                activeEditorId = editorWindow.id;
-                beginEditorResize(event, editorWindow.id, direction);
-              }}
-            ></div>{/each}
-          </div>{/if}
-        {/each}{/if}
-    </div>{/if}
-  {#if compilerDialog}<div class="modal" role="presentation">
-      <div
-        class="dialog compiler-dialog"
-        role="dialog"
-        aria-modal="true"
-        tabindex="-1"
-        aria-labelledby="compiler-error-title"
-      >
-        <h3 id="compiler-error-title">Compiler errors</h3>
-        <p>The project could not be compiled.</p>
-        <!-- Errors inside a project file are marked in its editor; only errors
-             without a source location, such as a failed call, land here. -->
-        {#each compilerDiagnostics as diagnostic}<div
-            class="compiler-error-location"
-          >
-            <strong>{diagnostic.fileName || "Kotlin source"}</strong> · line {diagnostic.line},
-            column {diagnostic.column}
-          </div>
-          <pre
-            class="compiler-error-message">{diagnostic.message}</pre>{/each}{#if !compilerDiagnostics.length}<pre
-            class="compiler-error-text">{error}</pre>{/if}<div class="dialog-actions"><button
-          use:focusOnMount
-          on:click={() => (compilerDialog = false)}>Close</button></div>
-      </div>
-    </div>{/if}
-
-  {#each inspectorViews as inspector, index (inspector.id)}
-    <div class="inspector" class:window-active={activeWindow === "inspector" && inspector.id === activeInspectorId}>
-      <div
-        class="inspect-window"
-        role="dialog"
-        aria-label="Object inspector"
-        tabindex="-1"
-        style={`position:fixed;left:${inspector.position.left}px;top:${inspector.position.top}px;margin:0;z-index:${inspector.id === activeInspectorId ? 100 : 10 + index}`}
-        on:pointerdown={(event) => {
-          if (
-            !(event.target as HTMLElement).closest("button,input,.inspect-row")
-          ) {
-            bringInspectorToFront(inspector.id);
-            beginInspectorDrag(event, inspector.id);
-          }
-        }}
-        on:click={() => bringInspectorToFront(inspector.id)}
-        on:keydown={(event) => {
-          if (event.key === "Escape" && (!editingField || inspected?.objectId !== inspector.id)) {
-            event.preventDefault();
-            event.stopPropagation();
-            closeInspector(inspector.id);
-          }
-        }}
-      >
-        <h2>
-          {`${inspector.referenceName} : ${inspectorType(inspector.data)}`}
-        </h2>
-        <div
-          class="inspect-fields"
-          class:inspect-no-fields={!inspector.data.fields?.length}
-        >
-          {#each inspector.data.fields || [] as field}
-            {@const property = fieldProperty(inspector.data, field)}
-            {@const editable = canEditField(field, inspector.data)}
-            {@const privateField = property?.visibility === "private"}
-            {@const editing =
-              editingField === field.name &&
-              inspected?.objectId === inspector.id}
-            <div
-              class:editable
-              class:private-field={privateField}
-              class:private-setter={field.setterPrivate === true}
-              class="inspect-row"
-              role="group"
-            >
-              <span
-                >{field.name} : {fieldProperty(inspector.data, field)?.type
-                  ?.displayName ||
-                  field.type?.displayName ||
-                  "Any?"}</span
-              >
-              <div class="inspect-value">
-                {#if editing}
-                  <input
-                    use:focusOnMount
-                    bind:this={fieldInput}
-                    aria-label={`Value of ${field.name}`}
-                    aria-invalid={Boolean(fieldError)}
-                    placeholder="expression"
-                    bind:value={fieldDraft}
-                    on:keydown={(event) => {
-                      if (event.key === "Escape") {
-                        event.stopPropagation();
-                        editingField = "";
-                      }
-                      if (event.key === "Enter") saveField(field);
-                    }}
-                  />
-                {:else}
-                  {#if field.reference}<button
-                      class="inspect-reference"
-                      aria-label={`Open referenced object ${field.name}`}
-                      title={`Open ${field.name}`}
-                      on:click={() => inspectFieldReference(inspector.id, field)}
-                      ><svg viewBox="0 0 48 24" aria-hidden="true"><path d="M3 12h32"/><path d="m29 5 8 7-8 7"/></svg></button
-                    >{:else if field.error}<button
-                      class="inspect-error-value"
-                      aria-label={`Show error for ${field.name}`}
-                      title={field.error}
-                      on:click={() => { inspectorError = { property: field.name, message: field.error! }; }}
-                      >{fieldValue(inspector.data, field)}</button
-                    >{:else}<output title={fieldValue(inspector.data, field)}
-                      >{fieldValue(inspector.data, field)}</output
-                    >{/if}
-                  {#if editable || field.setterPrivate}<button
-                      class="inspect-edit"
-                      class:inspect-edit-disabled={!editable}
-                      disabled={!editable}
-                      aria-label={`Edit ${field.name}`}
-                      title={field.setterPrivate ? "The setter is private" : "Edit"}
-                      on:click={() => beginFieldEdit(field, inspector.data)}
-                      >✎</button
-                    >{/if}
-                {/if}
-              </div>
-              {#if editing && fieldError}<small class="inspect-error">{fieldError}</small
-                >{/if}
-            </div>
-          {:else}No fields{/each}
-        </div>
-        <div class="dialog-actions"><button on:click={() => closeInspector(inspector.id)}>Close</button></div>
-      </div>
-    </div>
-  {/each}
-  {#if inspectorError}<div class="modal topmost-modal" role="presentation">
-      <div class="dialog inspector-error-dialog" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="inspector-error-title" use:containClicks>
-        <h3 id="inspector-error-title">Property error: {inspectorError.property}</h3>
-        <p>{inspectorError.message}</p>
-        <div class="dialog-actions"><button use:focusOnMount on:click={() => (inspectorError = null)}>Close</button></div>
-      </div>
-    </div>{/if}
-  {#if createDialog}<div class="modal topmost-modal" role="presentation">
-      <div
-        class="dialog create-object-dialog"
-        role="dialog"
-        aria-modal="true"
-        tabindex="-1"
-        aria-labelledby="create-object-title"
-        use:containClicks
-      >
-        <h3 id="create-object-title">
-          Create {createDialog.className}{createDialog.typeParameters.length
-            ? `<${createTypeArgs.map((value) => value || "…").join(", ")}>`
-            : ""}
-        </h3>
-        <label
-          >Name of instance<input
-            bind:value={createName}
-            use:focusOnMount={!createDialog.parameters.length &&
-              !createDialog.typeParameters.length}
-            on:keydown={(event) => {
-              if (event.key === "Escape") createDialog = null;
-              if (event.key === "Enter") confirmCreate();
-            }}
-          /></label
-        >{#if createDialog.constructors.length > 1}<label
-            >Constructor<select
-              bind:value={createDialog.constructorIndex}
-              on:change={(event) =>
-                chooseConstructor(
-                  Number((event.currentTarget as HTMLSelectElement).value),
-                )}
-              >{#each createDialog.constructors as constructor, index}<option
-                  value={index}
-                  >{createDialog.className}({constructor.parameters
-                    ?.map(
-                      (parameter: any) =>
-                        `${parameter.name}: ${parameter.type?.displayName || "Any?"}`,
-                    )
-                    .join(", ")})</option
-                >{/each}</select
-            ></label
-          >{/if}{#each createDialog.typeParameters as typeParameter, index}<label
-            >Type argument {typeParameter}<input
-              bind:value={createTypeArgs[index]}
-              use:focusOnMount={index === 0}
-              on:keydown={(event) => event.key === "Enter" && confirmCreate()}
-            /></label
-          >{/each}{#each createDialog.parameters as parameter, index}<label
-            >{parameter.name}: {parameter.type?.displayName ||
-              "Any?"}{parameter.hasDefault ? " (optional)" : ""}<input
-              bind:value={createArgs[index]}
-              use:focusOnMount={index === 0}
-              on:keydown={(event) => event.key === "Enter" && confirmCreate()}
-            /></label
-          >{/each}{#if dialogError}<div class="dialog-error" role="alert">
-            {dialogError}
-          </div>{/if}<div class="dialog-actions"><button on:click={() => (createDialog = null)}
-          >Cancel</button
-        ><button
-          on:click={confirmCreate}
-          disabled={!canExecute ||
-            missingTypeArgument(createTypeArgs) ||
-            missingRequired(createDialog.parameters, createArgs)}>Create</button></div>
-      </div>
-    </div>{/if}
-  {#if invokeDialog}<div class="modal topmost-modal" role="presentation">
-      <div
-        class="dialog method-dialog"
-        role="dialog"
-        aria-modal="true"
-        tabindex="-1"
-        aria-labelledby="invoke-method-title"
-        use:containClicks
-      >
-        <h3 id="invoke-method-title">
-          {invokeDialog.object?.name ||
-            invokeDialog.receiver ||
-            ""}.{invokeDialog.method.name}()
-        </h3>
-        {#each invokeDialog.method.typeParameters || [] as typeParameter, index}<label
-            >Type argument {typeParameter}<input
-              bind:value={invokeTypeArgs[index]}
-              use:focusOnMount={index === 0}
-              on:keydown={(event) => event.key === "Enter" && confirmInvoke()}
-            /></label
-          >{/each}{#each invokeDialog.method.parameters || [] as parameter, index}<label
-            >{parameter.name}: {parameter.type?.displayName ||
-              "Any?"}{parameter.hasDefault ? " (optional)" : ""}<input
-              bind:value={invokeArgs[index]}
-              use:focusOnMount={index === 0}
-              on:keydown={(event) => event.key === "Enter" && confirmInvoke()}
-            /></label
-          >{/each}{#if dialogError}<div class="dialog-error" role="alert">
-            {dialogError}
-          </div>{/if}<div class="dialog-actions"><button on:click={() => (invokeDialog = null)}
-          >Cancel</button
-        ><button
-          on:click={confirmInvoke}
-          disabled={!canExecute ||
-            missingTypeArgument(invokeTypeArgs) ||
-            missingRequired(invokeDialog.method.parameters || [], invokeArgs)}
-          >Invoke</button></div>
-      </div>
-    </div>{/if}
-  {#if resultDialog}<div class="modal">
-      <div
-        class="dialog result-dialog"
-        role="dialog"
-        aria-modal="true"
-        tabindex="-1"
-      >
-        <h3>Method result</h3>
-        <div class="result-method">{resultDialog.method}</div>
-        <output class="result-value">{resultDialog.value}</output>
-        <div class="result-actions">
-          {#if resultDialog.objectId}<button
-              on:click={() => {
-                const object = {
-                  objectId: resultDialog!.objectId!,
-                  className: resultDialog!.className || "Object",
-                  name: resultDialog!.className || "Object",
-                };
-                inspectObject(object);
-                resultDialog = null;
-              }}>Inspect</button
-            ><button
-              on:click={() => {
-                requestObjectOnBench({
-                  objectId: resultDialog!.objectId!,
-                  className: resultDialog!.className || "Object",
-                  name: resultDialog!.className || "Object",
-                  kind: "object",
-                });
-                resultDialog = null;
-              }}>Get</button
-            >{/if}<button on:click={() => (resultDialog = null)}>Close</button>
-        </div>
-      </div>
-    </div>{/if}
-  {#if mainDialog}<div class="modal topmost-modal" role="presentation">
-      <div class="dialog main-selection-dialog" role="dialog" aria-modal="true" aria-labelledby="main-selection-title" tabindex="-1" use:containClicks>
-        <h2 id="main-selection-title">Choose main</h2>
-        <p>{mainDialog.action === "export" ? "Which main() should the exported HTML file start?" : `Which main() should ${mainDialog.action === "reset" ? "Reset" : "Start main"} run?`}</p>
-        <div class="toolbar-dialog-options main-selection-options">
-          {#each mainEntries as fileName, index}
-            <button class="toolbar-dialog-option" on:click={() => void chooseMain(fileName)} use:focusOnMount={index === 0}>{fileName} — main()</button>
-          {/each}
-        </div>
-        <div class="dialog-actions"><button on:click={() => (mainDialog = null)}>Cancel</button></div>
-      </div>
-    </div>{/if}
-  {#if newProjectOpen}<div class="modal topmost-modal">
-      <div
-        class="dialog new-project-dialog"
-        role="dialog"
-        aria-modal="true"
-        tabindex="-1"
-        aria-labelledby="new-project-title"
-      >
-        <h3 id="new-project-title">Create New Project</h3>
-        <p>Choose a starting point:</p>
-        <div class="project-choice-list">
-          <div class="project-choice-row">
-            <button on:click={() => chooseTemplate("empty")}><strong>Empty Project</strong><span>Start with a blank BlueK project.</span></button>
-          </div>
-          <div class="project-choice-with-info">
-            <button on:click={() => chooseTemplate("empty-blueplay")}><strong>BluePlay Template</strong><span>Start with the built-in World, Actor and Image library.</span></button
-            ><button
-            class="project-info-button"
-            on:click|stopPropagation={() => (projectInfo = "template")}
-            aria-label="What is BluePlay?">?</button
-            >
-          </div>
-          <div class="project-choice-with-info">
-            <button on:click={() => chooseTemplate("blueplay")}><strong>BluePlay Example</strong><span>Open a small runnable World and Actor project.</span></button
-            ><button
-            class="project-info-button"
-            on:click|stopPropagation={() => (projectInfo = "example")}
-            aria-label="What is BluePlay?">?</button
-            >
-          </div>
-          <div class="project-choice-secondary">
-            <p class="project-choice-note">
-              The following examples currently exist to test and demonstrate
-              BlueK. They will be removed in the long run.
-            </p>
-            <div class="project-choice-row">
-              <button on:click={() => chooseTemplate("bluek-demo")}><strong>BlueK Demo Project</strong><span>Explore classes, inheritance and object interaction with Person and Student.</span></button>
-            </div>
-            <div class="project-choice-row">
-              <button on:click={() => chooseTemplate("space-invaders")}><strong>Space Invaders Demo</strong><span>Play a simplified BluePlay game with a movable defender and invaders.</span></button>
-            </div>
-          </div>
-        </div>
-        <div class="dialog-actions"><button
-          on:click={() => {
-            newProjectOpen = false;
-            projectInfo = null;
-          }}>Cancel</button></div
-        >{#if projectInfo}<div
-            class="project-info-panel"
-            role="dialog"
-            aria-modal="true"
-            tabindex="-1"
-          >
-            <button
-              class="project-info-close"
-              on:click={() => (projectInfo = null)}
-              aria-label="Close BluePlay information">×</button
-            >
-            <h4>What is BluePlay?</h4>
-            <p>
-              BluePlay is a lightweight Kotlin framework for creating graphical
-              games and simulations with worlds, actors and images.
-            </p>
-            <p>
-              {projectInfo === "template"
-                ? "The template provides an empty starting point."
-                : "The example demonstrates a small World and Actor project."}
-            </p>
-            <a
-              href="https://github.com/tomkarp/BluePlay"
-              target="_blank"
-              rel="noreferrer">View BluePlay on GitHub</a
-            >
-          </div>{/if}
-      </div>
-    </div>{/if}
-  {#if readmeOpen}<div class="modal topmost-modal" role="presentation">
-      <div
-        class="dialog readme-dialog"
-        role="dialog"
-        aria-modal="true"
-        tabindex="-1"
-        aria-labelledby="readme-title"
-        use:containClicks
-      >
-        <div class="readme-header">
-          <h3 id="readme-title">README.md</h3>
-          <button
-            class="readme-help-button"
-            aria-expanded={readmeHelp}
-            aria-label="Markdown help"
-            title="Markdown help"
-            on:click={() => (readmeHelp = !readmeHelp)}>?</button
-          >
-        </div>
-        {#if readmeHelp}<div class="readme-help" aria-label="Markdown syntax">
-          <table>
-            <tbody>
-              <tr><td><code># Heading</code></td><td><span class="help-h1">Heading</span></td></tr>
-              <tr><td><code>## Sub heading</code></td><td><span class="help-h2">Sub heading</span></td></tr>
-              <tr><td><code>**bold**</code></td><td><strong>bold</strong></td></tr>
-              <tr><td><code>*italic*</code></td><td><em>italic</em></td></tr>
-              <tr><td><code>`code`</code></td><td><code class="help-code">code</code></td></tr>
-              <tr><td><code>```</code> … <code>```</code></td><td><code class="help-code">code block</code></td></tr>
-              <tr><td><code>- item</code></td><td>• item</td></tr>
-              <tr><td><code>1. item</code></td><td>1. item</td></tr>
-              <tr><td><code>&gt; quote</code></td><td><span class="help-quote">quote</span></td></tr>
-              <tr><td><code>[BlueK](https://…)</code></td><td><span class="help-link">BlueK</span></td></tr>
-              <tr><td><code>---</code></td><td><span class="help-rule"></span></td></tr>
-            </tbody>
-          </table>
-        </div>{/if}
-        <div
-          class="readme-editor"
-          use:markdownEditor={{ value: readme, onChange: (value: string) => (readme = value) }}
-        ></div>
-        <div class="dialog-actions"><button on:click={closeReadme}>Close</button></div>
-      </div>
-    </div>{/if}
-  {#if bluePlayApiFile}{@const api = bluePlayApiDocs[bluePlayApiFile.fileName]}<div class="modal topmost-modal">
-      <div
-        class="dialog blueplay-api-dialog"
-        role="dialog"
-        aria-modal="true"
-        tabindex="-1"
-        aria-labelledby="blueplay-api-title"
-      >
-        <div class="blueplay-api-header">
-          <h3 id="blueplay-api-title">{api.title}</h3>
-          <p>{api.summary}</p>
-        </div>
-        <div class="blueplay-api-content">
-          {#each api.sections as section}
-            <section class="blueplay-api-section" aria-label={section.title}>
-              <h4>{section.title}</h4>
-              <dl class="blueplay-api-members">
-                {#each section.members as member}
-                  <div class="blueplay-api-member"><dt><code>{member.signature}</code></dt><dd>{member.description}</dd></div>
-                {/each}
-              </dl>
-            </section>
-          {/each}
-        </div>
-        <div class="dialog-actions"><button on:click={() => (bluePlayApiFile = null)}>Close</button></div>
-      </div>
-    </div>{/if}
-  {#if newClassOpen}<div class="modal topmost-modal" role="presentation">
-      <div
-        class="dialog new-class-dialog"
-        role="dialog"
-        aria-modal="true"
-        tabindex="-1"
-        aria-labelledby="new-class-title"
-        use:containClicks
-      >
-        <h3 id="new-class-title">Create New Kotlin File</h3>
-        <label
-          >Name<input
-            bind:value={newClassName}
-            use:focusOnMount
-            placeholder="e.g. Animal"
-            on:keydown={(event) => event.key === "Enter" && confirmNewClass()}
-          /></label
-        >
-        <fieldset>
-          <legend>Type</legend
-          >{#each [["class", "Class"], ["interface", "Interface"], ["open", "Open Class"], ["abstract", "Abstract Class"], ["data", "Data Class"], ["functions", "Kotlin Functions"]] as option}<label
-              class="new-class-option"
-              ><input
-                type="radio"
-                name="svelte-new-class-type"
-                value={option[0]}
-                bind:group={newClassType}
-              /><span>{option[1]}</span></label
-            >{/each}
-        </fieldset>
-        {#if error}<div class="dialog-error" role="alert">
-            {error}
-          </div>{/if}<div class="dialog-actions"><button on:click={() => (newClassOpen = false)}
-          >Cancel</button
-        ><button on:click={confirmNewClass}>Create</button></div>
-      </div>
-    </div>{/if}
-
-  {#if menu}
-    <div
-      class="popup"
-      style={`left:${menu.x}px;top:${menu.y}px`}
-      use:fitPopup
-      use:containClicks
-    >
-      <div class="popup-title">
-        {menu.object?.className || menu.file?.fileName.replace(".kt", "")}
-      </div>
-      {#if menu.file && isBluePlayFrameworkFile(menu.file)}
-        <button on:click={() => openBluePlayApi(menu!.file!)}>Show API documentation</button>
-      {:else if menu.file}
-        {#each classes.find((item) => item.name === menu!.file!.fileName.replace(".kt", ""))?.constructors || [] as constructor, index}
-          <button
-            class="constructor-menu-item"
-            disabled={!canExecute}
-            on:click={() =>
-              createObject(menu!.file!.fileName.replace(".kt", ""), index)}
-          >
-            {menu.file.fileName.replace(".kt", "")}({constructor.parameters
-              ?.map(
-                (parameter: any) =>
-                  `${parameter.name}: ${parameter.type?.displayName || "Any?"}`,
-              )
-              .join(", ")})
-          </button>
-        {/each}
-        {#each fileMethods(menu.file) as method}
-          <button
-            disabled={!canExecute}
-            on:click={() =>
-              invokeClassMethod(
-                menu!.file!.fileName.replace(".kt", ""),
-                method,
-              )}>{methodLabel(method)}</button
-          >
-        {/each}
-        <hr />
-        <button on:click={() => openEditor(menu?.file)}>Open Editor</button>
-        <button
-          disabled={!canExecute && runtime.phase !== "uncompiled"}
-          on:click={() => {
-            menu = null;
-            compile();
-          }}>Compile</button
-        >
-        <button on:click={() => deleteFile(menu!.file!)}>Delete</button>
-        <button on:click={() => duplicateFile(menu!.file!)}>Duplicate…</button>
-      {:else if menu.object}
-        {#each inheritedPopupGroups(menu.object) as group}
-          <div role="group" class="popup-submenu" on:pointerenter={(event) => fitPopupSubmenu(event.currentTarget as HTMLElement)}>
-            <button class="popup-submenu-trigger" use:containClicks
-              >inherited from {group[0]}<span>›</span></button
-            >
-            <div class="popup-submenu-panel">
-              {#each group[1] as method}<button
-                  class="method-menu-item"
-                  disabled={!canExecute}
-                  on:click={() => invokeObject(menu!.object!, method)}
-                  >{methodLabel({
-                    ...method,
-                    inheritedFrom: undefined,
-                  })}</button
-                >{/each}
-            </div>
-          </div>
-        {/each}
-        {#if inheritedPopupGroups(menu.object).length}<hr />{/if}
-        {#each directPopupMethods(menu.object) as method}
-          <button
-            class="method-menu-item"
-            disabled={!canExecute}
-            on:click={() => invokeObject(menu!.object!, method)}
-            >{popupObjectMethodLabel(method)}</button
-          >
-        {:else}<div class="popup-no-methods">
-            (No accessible methods)
-          </div>{/each}
-        <hr />
-        <button
-          disabled={!canExecute}
-          on:click={() => inspectObject(menu!.object!)}>Inspect</button
-        >
-        <button
-          disabled={!canExecute}
-          on:click={() => removeObject(menu!.object!)}>Remove</button
-        >
-      {/if}
-    </div>
-  {/if}
-  {#if toolbarDialog === "open"}<div class="modal topmost-modal" role="presentation">
-      <div class="dialog toolbar-dialog" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="open-import-title" use:containClicks>
-        <h3 id="open-import-title">Open / Import</h3>
-        <p>Drop a project file here, or click to choose one.</p>
-        <label
-          class="project-dropzone"
-          on:dragover|preventDefault
-          on:drop={openProjectDrop}
-        >
-          <strong>JSON</strong>
-          <span>Accepted: .json</span>
-          <input type="file" aria-label="Choose project file" accept=".json,.bluek.json,application/json" on:change={(event) => { importProject(event); toolbarDialog = null; }} />
-        </label>
-        {#if serverFeatures}<div class="shared-project-loader">
-          <strong>Load shared project</strong>
-          <label>
-            <span>Three words</span>
-            <input
-              aria-label="Three-word project code"
-              bind:value={shareCodeInput}
-              placeholder="green-lamp-river"
-              on:keydown={(event) => event.key === "Enter" && loadSharedProjectFromCode()}
-            />
-          </label>
-          <button
-            class="shared-project-load"
-            disabled={!shareCodeInput.trim()}
-            on:click={loadSharedProjectFromCode}>Load project</button
-          >
-          {#if shareCodeError}<div class="dialog-error" role="alert">{shareCodeError}</div>{/if}
-        </div>{/if}
-        <div class="dialog-actions"><button on:click={() => (toolbarDialog = null)}>Cancel</button></div>
-      </div>
-    </div>{/if}
-  {#if toolbarDialog === "save"}<div class="modal topmost-modal" role="presentation">
-      <div class="dialog toolbar-dialog" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="save-export-title" use:containClicks>
-        <h3 id="save-export-title">Save / Export</h3>
-        <p>Choose how to save or share this project:</p>
-        <div class="project-choice-list toolbar-project-choice-list">
-          <!-- Only a link carries it: a file is opened, a link is followed, and
-               what it opens with is what the sender ticked here — in the box of
-               the link it belongs to. -->
-          <div class="project-choice-row">
-            <button on:click={() => { shareProject(); toolbarDialog = null; }} disabled={!files.length}><strong>Copy Full Project Link</strong><span>Share the complete project encoded in the URL.</span></button>
-            <label
-              class="share-readme-option"
-              class:disabled={!readme.trim()}
-              title={readme.trim()
-                ? "Show README.md right away when this link is opened"
-                : "The README is still empty — there is nothing to show"}
-            ><input
-                type="checkbox"
-                aria-label="Open README.md with the link"
-                bind:checked={shareWithReadme}
-                disabled={!readme.trim()}
-              /><span>Open README</span></label
-            >
-          </div>
-          {#if serverFeatures}<div class="project-choice-row">
-            <button on:click={() => { void saveShortProject(); toolbarDialog = null; }} disabled={!files.length}><strong>Copy Short Link</strong><span>Save the project for 30 days and copy a short link.</span></button>
-            <label
-              class="share-readme-option"
-              class:disabled={!readme.trim()}
-              title={readme.trim()
-                ? "Show README.md right away when this link is opened"
-                : "The README is still empty — there is nothing to show"}
-            ><input
-                type="checkbox"
-                aria-label="Open README.md with the link"
-                bind:checked={shareWithReadme}
-                disabled={!readme.trim()}
-              /><span>Open README</span></label
-            >
-          </div>{/if}
-          <button on:click={() => { exportProject(); toolbarDialog = null; }} disabled={!files.length}><strong>Export Project JSON</strong><span>Export the complete BlueK project as JSON.</span></button>
-          <button on:click={() => { toolbarDialog = null; void exportHtml(); }} disabled={!files.length || htmlExportBlocked || htmlExporting}><strong>Export as HTML (Beta)</strong><span>{htmlExportBlocked ? "Needs a file with a parameterless main()." : "A single web page that runs the program, without BlueK."}</span></button>
-          <button disabled><strong>Export BlueJ Project (.zip)</strong><span>Export for BlueJ (not implemented yet).</span></button>
-        </div>
-        <div class="dialog-actions"><button on:click={() => (toolbarDialog = null)}>Cancel</button></div>
-      </div>
-    </div>{/if}
-  {#if shareLinkDialog}<div class="modal" role="presentation">
-      <div class="dialog share-link-dialog" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="share-link-title" use:containClicks>
-        <h3 id="share-link-title">Short project link</h3>
-        <p>{shareLinkDialog.copied ? "The link was copied to the clipboard. Write down these three words:" : "Write down these three words:"}</p>
-        <button class="share-link-code" aria-label="Three-word project code" title="Copy project link" on:click={() => { void copySharedLink(); }}>{shareLinkDialog.code}</button>
-        <p class="share-link-full-label">Complete link:</p>
-        <button class="share-link-value" aria-label="Complete project link" title="Copy project link" on:click={() => { void copySharedLink(); }}>{shareLinkDialog.url}</button>
-        <p class="share-link-expiry">This project will be deleted after 30 days.</p>
-        <div class="dialog-actions"><button on:click={() => (shareLinkDialog = null)}>Close</button></div>
-      </div>
-    </div>{/if}
-  {#if imageLibraryOpen && library?.id === "blueplay"}<div class="modal topmost-modal" role="presentation">
-      <div class="dialog image-library-dialog" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="images-title" use:containClicks>
-        <h3 id="images-title">Images</h3>
-        <div class="standard-image-grid">
-          <button class="standard-image-tile standard-image-add" on:click={() => (mediaNotice = "Adding images is not implemented yet.")} aria-label="Add image" title="Add image"><span aria-hidden="true">+</span></button>
-          {#each standardImages as resource (resource.path)}
-            <div class="standard-image-tile" aria-label={resource.path.split("/").at(-1)}>
-              <div class="standard-image-preview"><img src={resource.data} alt={resource.path.split("/").at(-1)} /></div>
-              <span>{resource.path.split("/").at(-1)}</span>
-            </div>
-          {/each}
-        </div>
-        <div class="dialog-actions"><button on:click={() => (imageLibraryOpen = false)}>Close</button></div>
-      </div>
-    </div>{/if}
-  {#if mediaNotice}<div class="modal topmost-modal" role="presentation">
-      <div class="dialog settings-dialog media-notice-dialog" role="alertdialog" aria-modal="true" tabindex="-1" aria-labelledby="media-notice-title" use:containClicks>
-        <h3 id="media-notice-title">Not implemented</h3>
-        <p>{mediaNotice}</p>
-        <div class="dialog-actions"><button on:click={() => (mediaNotice = "")}>OK</button></div>
-      </div>
-    </div>{/if}
-  {#if settingsNotice}<div class="modal topmost-modal" role="presentation">
-      <div
-        class="dialog settings-dialog"
-        role="dialog"
-        aria-modal="true"
-        tabindex="-1"
-        aria-labelledby="svelte-settings-title"
-        use:containClicks
-      >
-        <h3 id="svelte-settings-title">Settings</h3>
-        <section class="settings-section" aria-labelledby="settings-general-title">
-          <h4 id="settings-general-title">General</h4>
-          <label class="settings-field">
-            <span>Language</span>
-            <select aria-label="Language" value="en">
-              <option value="en">English (only for now)</option>
-            </select>
-          </label>
-          <label class="settings-field settings-toggle">
-            <span>Dark mode</span>
-            <input
-              type="checkbox"
-              aria-label="Dark mode"
-              bind:checked={darkMode}
-            />
-          </label>
-        </section>
-        <section class="settings-section" aria-labelledby="settings-editor-title">
-          <h4 id="settings-editor-title">Editor</h4>
-          <label class="settings-field">
-            <span>Font size</span>
-            <select aria-label="Font size" bind:value={editorFontSize}>
-              {#each Array.from({ length: 21 }, (_, index) => index + 10) as size}
-                <option value={size}>{size}px</option>
-              {/each}
-            </select>
-          </label>
-          <label class="settings-field settings-toggle">
-            <span>Vim mode <span class="settings-inline-hint">({vimShortcutLabel})</span></span>
-            <input
-              type="checkbox"
-              aria-label="Vim mode"
-              checked={vimMode}
-              on:change={(event) => setVimMode(event.currentTarget.checked)}
-            />
-          </label>
-        </section>
-        <div class="dialog-actions"><button on:click={() => (settingsNotice = false)}>Close</button></div>
-      </div>
-    </div>{/if}
-  {#if shortcutsHelpOpen}<div class="modal topmost-modal" role="presentation">
-      <div
-        class="dialog shortcuts-help-dialog"
-        role="dialog"
-        aria-modal="true"
-        tabindex="-1"
-        aria-labelledby="shortcuts-help-title"
-        use:containClicks
-      >
-        <h3 id="shortcuts-help-title">Keyboard Shortcuts</h3>
-        <ul class="shortcuts-help-list">
-          <li><strong>{compileShortcutLabel}</strong><span>Compile the project</span></li>
-          <li><strong>{runShortcutLabel}</strong><span>Run main</span></li>
-          <li><strong>{saveShortcutLabel}</strong><span>Save / Export</span></li>
-          <li><strong>{terminalShortcutLabel}</strong><span>Cycle the terminal: closed / window / split</span></li>
-          <li><strong>{formatShortcutLabel}</strong><span>Format the current Kotlin file</span></li>
-          <li><strong>{commentShortcutLabel}</strong><span>Comment / uncomment selected lines</span></li>
-          <li><strong>{vimShortcutLabel}</strong><span>Switch Vim mode on / off</span></li>
-          <li><strong>{editorNextShortcutLabel}</strong><span>Next editor window</span></li>
-          <li><strong>{editorPrevShortcutLabel}</strong><span>Previous editor window</span></li>
-          <li><strong>Escape</strong><span>Close the topmost dialog or window (in Vim mode: Shift+Escape)</span></li>
-        </ul>
-        <div class="dialog-actions"><button on:click={() => (shortcutsHelpOpen = false)}>Close</button></div>
-      </div>
-    </div>{/if}
-  {#if objectNamePrompt}<div class="modal topmost-modal" role="presentation">
-      <div
-        class="dialog create-object-dialog"
-        role="dialog"
-        aria-modal="true"
-        tabindex="-1"
-        use:containClicks
-      >
-        <h3>New Object Name</h3>
-        <p>Enter the name for the new object on the object bench.</p>
-        <label
-          >Name of instance<input
-            bind:value={objectName}
-            use:focusOnMount
-            on:keydown={(event) => {
-              if (event.key === "Escape") objectNamePrompt = null;
-              if (event.key === "Enter") confirmObjectOnBench();
-            }}
-          /></label
-        >
-        {#if objectNameError}<p role="alert">{objectNameError}</p>{/if}
-        <div class="dialog-actions"><button on:click={() => (objectNamePrompt = null)}>Cancel</button
-        ><button
-          on:click={confirmObjectOnBench}
-          disabled={!/^[A-Za-z_]\w*$/.test(objectName.trim())}>OK</button></div>
-      </div>
-    </div>{/if}
-  {#if codepadMenu}<div
-      class="codepad-context-menu"
-      style={`left:${codepadMenu.x}px;top:${codepadMenu.y}px`}
-      use:containClicks
-    >
-      <button
-        on:click={() =>
-          copyCodepadText(
-            codepadMenu?.text || history.map((entry) => entry.code).join("\n"),
-          )}>Copy</button
-      ><button
-        on:click={() => {
-          history = [];
-          codepadMenu = null;
-        }}>Clear history</button
-      ><button on:click={selectAllCodepadHistory}>Select all history</button>
-    </div>{/if}
-
-  {#if terminalSplit}<div
+  <TerminalWindow
+    bind:terminalOpen={terminal.terminalOpen}
+    bind:terminalSplit={terminal.terminalSplit}
+    bind:terminalMaximized={terminal.terminalMaximized}
+    bind:terminalPosition={terminal.terminalPosition}
+    terminalSize={terminal.terminalSize}
+    terminalSplitWidth={terminal.terminalSplitWidth}
+    bind:activeWindow={ui.activeWindow}
+    terminal={terminal.terminal}
+    inputReady={session.inputReady}
+    bind:inputElement={terminal.inputElement}
+    phase={session.runtime.phase}
+    beginTerminalDrag={terminal.beginTerminalDrag}
+    beginTerminalResize={terminal.beginTerminalResize}
+    toggleTerminalMaximized={terminal.toggleTerminalMaximized}
+    toggleTerminalSplit={terminal.toggleTerminalSplit}
+    clearTerminal={terminal.clearTerminal}
+    resetRuntime={session.resetRuntime}
+    sendInput={terminal.sendInput}
+  />
+  <EditorWindows
+    editorWindows={editor.editorWindows}
+    editorTabbed={editor.editorTabbed}
+    editorGroup={editor.editorGroup}
+    files={project.files}
+    bind:activeWindow={ui.activeWindow}
+    bind:activeEditorId={editor.activeEditorId}
+    diagnosticsByFile={editor.diagnosticsByFile}
+    diagnosticsRun={editor.diagnosticsRun}
+    dialogError={ui.dialogError}
+    editorFontSize={ui.editorFontSize}
+    vimMode={ui.vimMode}
+    darkMode={ui.darkMode}
+    commentShortcutLabel={ui.commentShortcutLabel}
+    formatShortcutLabel={ui.formatShortcutLabel}
+    codeMirror={editor.codeMirror}
+    closeEditor={editor.closeEditor}
+    closeAllEditors={editor.closeAllEditors}
+    selectEditorTab={editor.selectEditorTab}
+    toggleEditorMaximized={editor.toggleEditorMaximized}
+    ungroupEditors={editor.ungroupEditors}
+    collectEditors={editor.collectEditors}
+    beginEditorDrag={editor.beginEditorDrag}
+    beginEditorResize={editor.beginEditorResize}
+    updateSource={project.updateSource}
+    toggleEditorComments={editor.toggleEditorComments}
+    formatEditor={editor.formatEditor}
+    markDiagnostics={editor.markDiagnostics}
+    closeFormatError={editor.closeFormatError}
+  />
+  <CompilerDialog
+    bind:compilerDialog={session.compilerDialog}
+    compilerDiagnostics={editor.compilerDiagnostics}
+    error={ui.error}
+  />
+  <InspectorWindows
+    inspectorViews={objects.inspectorViews}
+    activeWindow={ui.activeWindow}
+    activeInspectorId={objects.activeInspectorId}
+    inspected={objects.inspected}
+    bind:editingField={objects.editingField}
+    bind:fieldInput={objects.fieldInput}
+    bind:fieldDraft={objects.fieldDraft}
+    fieldError={objects.fieldError}
+    bind:inspectorError={objects.inspectorError}
+    fieldProperty={objects.fieldProperty}
+    canEditField={objects.canEditField}
+    fieldValue={objects.fieldValue}
+    inspectorType={objects.inspectorType}
+    bringInspectorToFront={objects.bringInspectorToFront}
+    beginInspectorDrag={objects.beginInspectorDrag}
+    closeInspector={objects.closeInspector}
+    saveField={objects.saveField}
+    inspectFieldReference={objects.inspectFieldReference}
+    beginFieldEdit={objects.beginFieldEdit}
+  />
+  <CallDialogs
+    bind:createDialog={objects.createDialog}
+    bind:invokeDialog={objects.invokeDialog}
+    bind:resultDialog={objects.resultDialog}
+    bind:createName={objects.createName}
+    bind:createArgs={objects.createArgs}
+    bind:createTypeArgs={objects.createTypeArgs}
+    bind:invokeArgs={objects.invokeArgs}
+    bind:invokeTypeArgs={objects.invokeTypeArgs}
+    dialogError={ui.dialogError}
+    canExecute={session.canExecute}
+    chooseConstructor={objects.chooseConstructor}
+    confirmCreate={objects.confirmCreate}
+    confirmInvoke={objects.confirmInvoke}
+    inspectObject={objects.inspectObject}
+    requestObjectOnBench={objects.requestObjectOnBench}
+  />
+  <MainSelectionDialog
+    bind:mainDialog={session.mainDialog}
+    mainEntries={session.mainEntries}
+    chooseMain={session.chooseMain}
+  />
+  <NewProjectDialog
+    bind:newProjectOpen={project.newProjectOpen}
+    bind:projectInfo={project.projectInfo}
+    chooseTemplate={project.chooseTemplate}
+  />
+  <ReadmeDialog
+    readmeOpen={project.readmeOpen}
+    bind:readmeHelp={project.readmeHelp}
+    bind:readme={project.readme}
+    closeReadme={project.closeReadme}
+  />
+  <BluePlayApiDialog bind:bluePlayApiFile={project.bluePlayApiFile} />
+  <NewClassDialog
+    bind:newClassOpen={project.newClassOpen}
+    bind:newClassName={project.newClassName}
+    bind:newClassType={project.newClassType}
+    error={ui.error}
+    confirmNewClass={project.confirmNewClass}
+  />
+  <ObjectContextMenu
+    bind:menu={objects.menu}
+    classes={session.classes}
+    canExecute={session.canExecute}
+    phase={session.runtime.phase}
+    isBluePlayFrameworkFile={project.isBluePlayFrameworkFile}
+    openBluePlayApi={project.openBluePlayApi}
+    createObject={objects.createObject}
+    invokeClassMethod={objects.invokeClassMethod}
+    openEditor={editor.openEditor}
+    compile={session.compile}
+    deleteFile={project.deleteFile}
+    duplicateFile={project.duplicateFile}
+    invokeObject={objects.invokeObject}
+    inspectObject={objects.inspectObject}
+    removeObject={objects.removeObject}
+  />
+  <ProjectTransferDialogs
+    bind:toolbarDialog={project.toolbarDialog}
+    bind:shareLinkDialog={project.shareLinkDialog}
+    bind:shareCodeInput={project.shareCodeInput}
+    shareCodeError={project.shareCodeError}
+    bind:shareWithReadme={project.shareWithReadme}
+    readme={project.readme}
+    files={project.files}
+    htmlExportBlocked={session.htmlExportBlocked}
+    htmlExporting={project.htmlExporting}
+    openProjectDrop={project.openProjectDrop}
+    importProject={project.importProject}
+    loadSharedProjectFromCode={project.loadSharedProjectFromCode}
+    shareProject={project.shareProject}
+    saveShortProject={project.saveShortProject}
+    exportProject={project.exportProject}
+    exportHtml={project.exportHtml}
+    copySharedLink={project.copySharedLink}
+  />
+  <MediaDialogs
+    bind:imageLibraryOpen={project.imageLibraryOpen}
+    libraryId={project.library?.id || ""}
+    bind:mediaNotice={project.mediaNotice}
+  />
+  <SettingsDialogs
+    bind:settingsNotice={ui.settingsNotice}
+    bind:shortcutsHelpOpen={ui.shortcutsHelpOpen}
+    bind:darkMode={ui.darkMode}
+    bind:editorFontSize={ui.editorFontSize}
+    vimMode={ui.vimMode}
+    setVimMode={ui.setVimMode}
+    vimShortcutLabel={ui.vimShortcutLabel}
+    compileShortcutLabel={ui.compileShortcutLabel}
+    runShortcutLabel={ui.runShortcutLabel}
+    saveShortcutLabel={ui.saveShortcutLabel}
+    terminalShortcutLabel={ui.terminalShortcutLabel}
+    formatShortcutLabel={ui.formatShortcutLabel}
+    commentShortcutLabel={ui.commentShortcutLabel}
+    editorNextShortcutLabel={ui.editorNextShortcutLabel}
+    editorPrevShortcutLabel={ui.editorPrevShortcutLabel}
+  />
+  <ObjectNameDialog
+    bind:objectNamePrompt={objects.objectNamePrompt}
+    bind:objectName={objects.objectName}
+    objectNameError={objects.objectNameError}
+    confirmObjectOnBench={objects.confirmObjectOnBench}
+  />
+  <CodepadContextMenu
+    bind:codepadMenu={session.codepadMenu}
+    bind:history={session.history}
+  />
+  {#if terminal.terminalSplit}<div
       class="terminal-split-divider"
       role="separator"
       aria-label="Resize BlueK and terminal"
-      on:pointerdown={beginTerminalSplitResize}
+      onpointerdown={terminal.beginTerminalSplitResize}
     ></div>{/if}
 </div>

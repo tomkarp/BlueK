@@ -99,6 +99,8 @@ bei Verweisen die Beschreibung mitnennen.
 | ARCH-04 | Projektdateien werden typisiert validiert und ohne Verlust von Dateien, Ressourcen oder Kartenpositionen importiert/exportiert | `test:project-format` grün; GUI 16/16 grün | Weitere historische Dateiformate nicht eingeführt |
 | ARCH-05 | Codepad kompiliert bei Bedarf, führt nur nach erfolgreichem Compile aus und verwirft alte Generationen | `test:codepad-flow` grün; GUI 16/16 grün | Methodenaufrufe und BluePlay bewusst nicht Teil dieses Schritts |
 | ARCH-06 | Library-Version, Ressourcen und Kartenpositionen bleiben im Projektmodell erhalten; der Worker bleibt Scheduler-Eigentümer und liefert typisierte Canvas-Frames | Projektformat-, Typecheck-, Runtime-State- und Browser-Smoke-Prüfungen; Architektur-Dokumentation aktualisiert | Browser-/Canvas-Sichtprüfung und Kartenpositions-Editor offen |
+| ARCH-07 | Svelte-Fenster, Dialoge, Diagramm und Objektleiste/Codepad sind getrennte Komponenten mit typisierten Daten/Callbacks; Darstellung erzeugt keine Runtime-Zugänge. Editor-Lebenszyklus, Drag/Resize, Menüs und Browser-Dateiaktionen liegen in fachlichen Modulen | Architektur-Smoke prüft angeschlossene Komponenten; `test:window-interaction` prüft Geometrie/Pointer-Abbruch; vorhandene GUI-Tests prüfen das tatsächliche Verhalten über Komponentengrenzen | Erster Umbau: Regression-Sammellauf einschließlich 135/135 GUI-Tests grün; Agent-Sichtprüfung erfolgt, keine Benutzerabnahme. Zustandsbesitz inzwischen weiter aufgeteilt: ARCH-08 |
+| ARCH-08 | Reaktive UI-Controller besitzen Projekt-, Editor-, Ausführungs-, Objekt-, BluePlay- und Terminalzustand; fremde Bereiche werden über schmale Aktionen angesprochen. Ein Runtime-Client in ExecutionWorkspace; Objektwerte bleiben abgeleitet, Aufrufentwürfe verlassen die UI als klonbare Arrays | `test:workspace` prüft echte Svelte-Module, Worker-Klonbarkeit, unabhängige App-Instanzen und Generationswechsel; Architektur-Smoke prüft einzigen Client und verbietet fremde Zustandsschreibzugriffe | Abschließender Regression-Sammellauf einschließlich 135/135 GUI-Tests grün; Typecheck 0 Fehler/0 Warnungen, Agent-Sichtprüfung erfolgt, keine Benutzerabnahme |
 | GUI-51 | Eingebaute BluePlay-Karten sind von editierbaren Schülerdateien getrennt; API-Hilfe ist separat; die Welt wird als Canvas-2D-Frame mit Zellkoordinaten gerendert | `build:svelte`, typisierte Stage-Frames und native Smoke-Tests grün | Tatsächliche Chromium-Interaktion und visuelle Abnahme offen |
 | GUI-52 | BluePlay-Welt ist ein gemeinsames Fenster mit zusammengehöriger Titelleiste, Canvas und Steuerleiste; Schließen entfernt das gesamte Fenster; Titelzeile lässt sich verschieben | Built-in-Browser: gemeinsamer Rahmen, Close, Drag und Maximize visuell geprüft | Chromium-Automatisierung ergänzt |
 | GUI-53 | BluePlay-Canvas nimmt Welt- und Actor-Klicks an; bei Actors zählen unter Skalierung und Rotation nur sichtbare Pixel, nicht der transparente Bildhintergrund | Built-in-Browser: transparenter Pixel ergibt `false`, sichtbarer Pixel abseits der Mitte ergibt `true`; Chromium wiederholt beide echten Canvas-Klicks | Abgesichert |
@@ -1971,3 +1973,105 @@ Fensterzustand; Position und bewusste Größenumschaltung bleiben UI-Zustand.
 - Typecheck 0 Fehler / 0 Svelte-Warnungen, Svelte-Architektur-Smoke und
   `git diff --check` grün. Kein vollständiger GUI-Gesamtlauf und keine
   gesonderte visuelle Benutzerabnahme.
+
+### ARCH-07: Aufteilung der Svelte-Oberfläche (01.10.2026)
+
+Der vorangehende Reset-Fix ist vor dem Umbau als `94e778f` committed.
+`SvelteApp.svelte` ist von 4379 auf 2360 Zeilen reduziert; 22 Komponenten
+übernehmen Fenster, Dialoge und Hauptbedienelemente. Editor-Actions,
+Fenster-/Diagramm-Geometrie, Menüableitung und Browser-Datei-/Linkaktionen
+sind fachliche TypeScript-Module. Gemeinsamer UI-Zustand und der einzige
+Runtime-Client bleiben beim Koordinator; Komponenten haben typisierte
+Props/Callbacks und erhalten keine eigene Laufzeitablage.
+
+- Erster gezielter Chromium-Lauf nach Fenster-/Dialogextraktion tatsächlich
+  13/13 grün: GUI-57/94/91/92/80/83/93/33/90/87/66.
+- Erster `test:regression`-Lauf erreichte den Offline-Test, der zu Recht
+  eine noch enthaltene Share-Aktion im Offline-JavaScript fand. Die
+  Build-Bedingung steht jetzt direkt in `ProjectTransferDialogs`; der
+  wiederholte Offline-Build/-Server-Smoke tatsächlich grün.
+- Erster GUI-Gesamtlauf tatsächlich 135/135 grün (3,4 min). Der nächste
+  Sammellauf war 134/135 grün: GUI-94 las vor dem ersten Animation Frame
+  ein noch nicht gesetztes Canvas-Attribut (`null`); Playwright meldete
+  deshalb einen TypeError, während das Weltfenster maximiert blieb.
+  GUI-94 wartet jetzt auf die gezeichnete Ausgangswelt; gezielte dreifache
+  Wiederholung tatsächlich 3/3 grün (9,8 s), keine pauschalen Sleeps/Retry-Regeln.
+- Abschließender `npm run test:regression` am endgültigen Stand vollständig
+  grün: Typecheck, UI-/Fenster-Helfer, Runtime-State, Referenzen,
+  Kotlin-Surface, Inspektor, BluePlay-API/Stage, Projektformat, Programmexport,
+  Player-Worker (Chromium und WebKit über `file://`), Codepad, Offline-Build
+  und sämtliche 135/135 GUI-Tests (3,5 min). GUI-94 auch im Gesamtlauf grün.
+- `browser-smoke`, `test:generics` (49 Grenzfälle und suspendierter
+  Inline-Return), `test:blueplay-demos`, `check-interactive-core` und
+  `test:share-server` tatsächlich grün. Beide Architektur-Smokes am
+  endgültigen Stand erneut grün; Typecheck 0 Fehler / 0 Svelte-Warnungen.
+- Player- und Svelte-Produktionsbuild erfolgreich; bestehende Vite-Warnungen
+  zu Bundlegröße, statischer Worker-URL und Formatter-Externalisierung.
+- Visuell durch Agent anhand Screenshots geprüft: maximierter Welt-Reset,
+  Editor/Inspektor/Methodenmenü und API-Hilfe im Dark Mode. Erste freie
+  Browser-Proben starteten vor dem Vorlagenladen bzw. verwendeten noch nicht
+  adoptierte Objekte oder verdeckte Karten; die Bedienfolge wurde korrigiert.
+  Keine separate Benutzerabnahme und keine neue visuelle Gestaltung.
+
+### ARCH-08: Zustandsbesitz und Fachabläufe der Svelte-Oberfläche (01.10.2026)
+
+`SvelteApp.svelte` ist von 2360 auf 651 Zeilen reduziert. Sie verbindet die
+Darstellung mit sieben reaktiven UI-Controllern und koordiniert globale
+Tastenkürzel/Escape. Projekt, Editor, Ausführung, Objekte, BluePlay und Terminal
+besitzen jeweils ihre Zustände; Fokus, Einstellungen und Meldungen gehören
+`WorkspaceUi`. Der einzige Runtime-Client lebt in `ExecutionWorkspace`.
+Metadaten, Objektbank und Inspektorwerte bleiben von der Laufzeit abgeleitet.
+Fremde Zustände werden über Aktionen wie `resetInspectors`, `clearWorld`,
+`removeFile` oder `sourceEdited` angesprochen. Props/Callbacks und CSS der
+Darstellung bleiben erhalten.
+
+- Erster gezielter Chromium-Lauf: 23/25 grün. Beide RT-07-Fälle mit
+  Konstruktor-Dialog waren tatsächlich rot: `kotlinCallArguments` gab ein
+  reaktives Entwurfsarray zurück, das `Worker.postMessage` nicht klonen konnte.
+  Konstruktor- und Methodenaufrufe übernehmen jetzt gewöhnliche Array-Kopien.
+  Nach Korrektur Referenz-/Inspektor-, main-Auswahl- und HTML-Export-Tests
+  tatsächlich 17/17 grün (41,6 s).
+- Neuer `test:workspace` führt die echten, für den Client kompilierten
+  Svelte-Rune-Module aus: leere und gefüllte Konstruktorargumente,
+  Methodenargumente werden mittels `structuredClone` geprüft;
+  unabhängige App-Instanzen und veraltete Aufrufergebnisse sind abgesichert.
+  Erster Testaufbau scheiterte am TypeScript-Parser des Modulcompilers;
+  TypeScript wird jetzt wie im Frontend vor der Rune-Kompilierung entfernt.
+  Tatsächlicher Controller-Test danach grün.
+- Typecheck tatsächlich 0 Fehler / 0 Svelte-Warnungen. Architektur-Smokes
+  grün; `browser-smoke`, `test:generics` einschließlich 49 Grenzfällen und
+  suspendiertem Inline-Return sowie `test:blueplay-demos` tatsächlich grün.
+- Svelte-Produktionsbuild erfolgreich mit bestehenden Vite-Warnungen zu
+  Bundlegröße, statischer Worker-URL und Formatter-Externalisierung.
+- Erster vollständiger Sammellauf am Controller-Stand: Laufzeit-/Helfer-,
+  Player- und Offline-Tests grün, GUI 133/135. GUI-78 fand ein tatsächlich
+  fehlendes „+“ in der Kommentar-Tastenkombinations-Beschriftung; korrigiert.
+  GUI-89 verpasste die nur 250 ms laufenden Getter zwischen Browser-Prüfungen.
+  Seine Test-Getter bleiben nun 1200 ms ausgesetzt, damit Aktivitätsanzeige
+  und Pfeilklick innerhalb einer tatsächlich laufenden Auswertung prüfbar sind;
+  keine pauschalen Test-Sleeps oder Retry-Einstellungen.
+- Erste fünffache Wiederholung GUI-89/78: 9/10 grün. Die erste Inspektion
+  wurde durch Svelte-HMR ersetzt; eine veraltete Inspektor-Anfrage meldete
+  eine unhandled rejection. `executeInspectorCommand` verwirft jetzt einen
+  Generationswechsel als Abbruch (`null`), lässt echte Fehler der aktuellen
+  Generation aber weiterhin durch. Beide Fälle sind im Controller-Test
+  tatsächlich grün. Danach GUI-89/78 fünffach: 10/10 grün (21,7 s).
+- Agent-Sichtprüfung am lokalen Server: Dark-Mode-Editor, Inspektor mit
+  gekürzter Getter-Exception und direktes/geerbtes Methodenmenü im Screenshot
+  geprüft; Menü liegt über den Fenstern. Die erste freie Probe suchte das
+  Fehlerfeld fälschlich als `output`, die zweite positionierte den Inspektor
+  über dem anzuklickenden Objekt. Korrigierte Bedienfolge tatsächlich grün,
+  ohne Page-Errors. Keine Benutzerabnahme und keine neue visuelle Gestaltung.
+- Abschließender `npm run test:regression` vollständig grün: Typecheck,
+  UI-/Fenster-/Controller-Helfer, Runtime-State, Referenzen, Kotlin-Surface,
+  Inspektor, BluePlay-API/Stage, Projekt-/Exportformat, Player-Worker
+  (Chromium/WebKit über `file://`), Codepad, Offline-Paket und 135/135 echte
+  GUI-Tests (3,5 min). GUI-89 und GUI-78 auch im Gesamtlauf grün.
+- Abschließend ausschließlich Runtime-Fähigkeitstypen weiter eingeschränkt:
+  Objekte erhalten `getSnapshot`/`execute`/`subscribe`, BluePlay
+  `sendKey`/`sendClick`/`simulation`, Terminal `sendInput`/`sendEof`.
+  Typecheck, Controller- und Architektur-Smoke erneut grün; Produktionsbuild
+  erneut erfolgreich. SHA-256-Vergleich aller Produktionsassets mit dem zuvor
+  getesteten Build byte-identisch, daher kein weiterer GUI-Gesamtlauf nötig.
+- `git diff --check` ohne Befund. Der vor dem Umbau angeforderte
+  Sicherungscommit ist `94e778f`.

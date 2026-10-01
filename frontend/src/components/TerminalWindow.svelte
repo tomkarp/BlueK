@@ -1,0 +1,130 @@
+<script lang="ts">
+  import type { RuntimeSnapshot } from "../../../runtime-contract/src/index";
+
+  import type { ActiveWindow } from "../uiTypes";
+  import { terminalParts } from "../uiParity";
+  export let terminalOpen: boolean;
+  export let terminalSplit: boolean;
+  export let terminalMaximized: boolean;
+  export let terminalPosition: { left: number; top: number } | null;
+  export let terminalSize: { width: number; height: number };
+  export let terminalSplitWidth: number;
+  export let activeWindow: ActiveWindow;
+  export let terminal: string;
+  export let inputReady: boolean;
+  export let inputElement: HTMLInputElement | null;
+  export let phase: RuntimeSnapshot["phase"];
+  export let beginTerminalDrag: (event: PointerEvent) => void;
+  export let beginTerminalResize: (
+    event: PointerEvent,
+    direction: string,
+  ) => void;
+  export let toggleTerminalMaximized: () => void;
+  export let toggleTerminalSplit: () => void;
+  export let clearTerminal: () => void;
+  export let resetRuntime: () => Promise<void>;
+  export let sendInput: (event: KeyboardEvent) => Promise<void>;
+</script>
+
+{#if terminalOpen}<div
+    class:terminal-modal-split={terminalSplit}
+    class:window-active={activeWindow === "terminal"}
+    class="terminal-modal"
+    role="presentation"
+    on:pointerdown={() => (activeWindow = "terminal")}
+  >
+    <div
+      class:split={terminalSplit}
+      class:maximized={terminalMaximized}
+      class:floating={Boolean(terminalPosition) &&
+        !terminalSplit &&
+        !terminalMaximized}
+      class="terminal-window"
+      style={`${terminalSplit ? `width:${terminalSplitWidth}px;height:100vh;position:fixed;right:0;top:0;margin:0;` : terminalMaximized ? "" : `width:${terminalSize.width}px;height:${terminalSize.height}px;`} ${terminalPosition && !terminalSplit && !terminalMaximized ? `left:${terminalPosition.left}px;top:${terminalPosition.top}px;` : ""}`}
+    >
+      <div
+        role="toolbar"
+        tabindex="0"
+        class="terminal-header window-header"
+        on:pointerdown={(event) => {
+          activeWindow = "terminal";
+          beginTerminalDrag(event);
+        }}
+      >
+        <span>BlueK Terminal</span>
+        <div>
+          <button
+            on:click|stopPropagation={toggleTerminalMaximized}
+            aria-label={terminalMaximized
+              ? "Restore terminal window"
+              : "Maximize terminal window"}
+            ><svg
+              class="window-control-icon"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              >{#if terminalMaximized}<path
+                  d="M8 7.5V5.5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2.5"
+                /><rect
+                  x="3.5"
+                  y="7.5"
+                  width="13"
+                  height="13"
+                  rx="2.5"
+                />{:else}<rect
+                  x="3.5"
+                  y="3.5"
+                  width="17"
+                  height="17"
+                  rx="2.5"
+                />{/if}</svg
+            ></button
+          ><button
+            class="terminal-split-toggle"
+            on:click|stopPropagation={toggleTerminalSplit}
+            aria-label={terminalSplit
+              ? "Restore terminal window"
+              : "Split terminal to the right"}
+            ><svg
+              class="window-control-icon terminal-split-icon"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              ><rect x="3.5" y="3.5" width="17" height="17" rx="2.5" /><path
+                d="M12 4.5v15"
+              /></svg
+            ></button
+          ><button
+            on:click|stopPropagation={() => {
+              terminalOpen = false;
+              terminalMaximized = false;
+              terminalSplit = false;
+              terminalPosition = null;
+            }}>×</button
+          >
+        </div>
+      </div>
+      <div class="terminal-output">
+        {#key terminal}<pre>{#each terminalParts(terminal) as part}<span
+                class:terminal-input-echo={part.input}>{part.text}</span
+              >{/each}</pre>{/key}
+        <button
+          class="terminal-clear"
+          on:click|stopPropagation={clearTerminal}
+          aria-label="Clear terminal">⌫</button
+        >
+      </div>
+      {#if phase === "faulted"}<div class="terminal-notice" role="alert">
+          Execution stopped. Reset the runtime before running more code.<button
+            on:click={resetRuntime}>Reset runtime</button
+          >
+        </div>{/if}<input
+        bind:this={inputElement}
+        placeholder={inputReady ? "Enter a line; press Return" : ""}
+        disabled={!inputReady}
+        on:keydown={sendInput}
+      />{#each ["n", "ne", "e", "se", "s", "sw", "w", "nw"] as direction}<div
+          role="separator"
+          class={`terminal-resize-handle terminal-resize-${direction}`}
+          on:pointerdown={(event) => beginTerminalResize(event, direction)}
+        ></div>{/each}
+    </div>
+  </div>{/if}

@@ -15,6 +15,8 @@ Architektur und Zuständigkeiten stehen verbindlich in
 | Pfad | Inhalt |
 | --- | --- |
 | `frontend/src/` | Svelte-Oberfläche, Runtime-Client, Worker, Runtime-Host, Projektformat, HTML-Export, Player |
+| `frontend/src/components/` | Darstellung von Fenstern, Dialogen, Diagramm und Hauptbedienelementen; typisierte Props und Rückruffunktionen |
+| `frontend/src/workspace/` | reaktive Svelte-Controller mit eigenem UI-Zustand für Projekt, Editor, Ausführung, Objekte, BluePlay und Terminal; Verdrahtung in `SvelteApp.svelte` |
 | `frontend/public/` | statische Assets: Interpreter-Bundle (`kotlite/`, eingecheckt), Vorlagen (`examples/`), generierte Player-Vorlage (`player/`) und Offline-ZIP (`downloads/`) |
 | `frontend/build/` | Vite-Plugin, das das Interpreter-Bundle für den Player gzip+base64-kodiert einbettet |
 | `runtime-contract/src/index.ts` | gemeinsame Typen von Oberfläche, Worker und Runtime-Host |
@@ -88,6 +90,8 @@ Runtime-State-Tests und GUI-Tests verwenden das gebaute Bundle unter
 | `npm run test:kotlin-surface` | zugesagte Stdlib-Oberfläche und bekannte Lücken (siehe `docs/kotlin-surface.md`) |
 | `npm run test:blueplay-demos` | Space-Invaders-Vorlage im Interpreter |
 | `npm run test:inspector`, `test:codepad-flow`, `test:project-format`, `test:program-export`, `test:blueplay-stage`, `test:player-worker`, `test:ui` | einzelne TypeScript-Module ohne Browser |
+| `npm run test:window-interaction` | gemeinsame Fenstergeometrie, Mindestgrößen, Pointer-Abbruch und Titelzeilen-Buttons; auch Teil von `test:regression` |
+| `npm run test:workspace` | echte kompilierte Svelte-Controller: klonbare Aufrufargumente, unabhängige App-Instanzen und verworfene Aufrufergebnisse nach Generationswechsel; auch Teil von `test:regression` |
 | `npm run test:offline` | baut das Offline-Paket und lädt es über dessen eigenen Server |
 | `npm run test:share-server` | Share-Dienst mit temporärer Datenbank |
 | `npm run test:gui` | Playwright/Chromium gegen einen eigenen Vite-Server auf Port 5194 |

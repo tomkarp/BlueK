@@ -281,6 +281,8 @@ test('GUI-57 maximize fills the browser viewport without scaling the world', asy
 test('GUI-94 BluePlay Reset preserves maximized and restored window sizes', async ({ page }) => {
   const stage = await loadBluePlay(page);
   const canvas = stage.locator('.game-stage');
+  // The canvas is drawn on the next animation frame, after the window appears.
+  await expect(canvas).toHaveAttribute('width', '600');
   const originalWorldWidth = await canvas.getAttribute('width');
   const input = page.getByLabel('Codepad input');
   await input.fill('val resetProbeWorld = World(100, 100, 1); resetProbeWorld.show()');

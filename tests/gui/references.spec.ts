@@ -10,7 +10,9 @@ async function load(page: Page) {
   }` },
     { fileName: 'Child.kt', kind: 'class', source: 'class Child { var value = 1 }' },
     { fileName: 'Parent.kt', kind: 'class', source: 'class Parent(val child: Child, val other: Child)' },
-    { fileName: 'Slow.kt', kind: 'class', source: 'class Slow(val child: Child) { val first: Int get() { Thread.sleep(250); return 1 }; val second: Int get() { Thread.sleep(250); return 2 } }' },
+    // Keep the interpreted getter pending through browser assertion polling
+    // and pointer delivery; 250 ms can finish between two visibility checks.
+    { fileName: 'Slow.kt', kind: 'class', source: 'class Slow(val child: Child) { val first: Int get() { Thread.sleep(1200); return 1 }; val second: Int get() { Thread.sleep(1200); return 2 } }' },
     { fileName: 'Faulty.kt', kind: 'class', source: 'class Faulty { var n = 1; val bad: String get() = throw IllegalStateException("No world"); val good: Int get() = n * 10; val absent: String? get() = null }' },
   ] };
   await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
