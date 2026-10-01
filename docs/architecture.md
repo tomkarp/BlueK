@@ -109,7 +109,10 @@ Der Worker hält genau eine `KotliteSession` mit genau einem lebenden
 - `localRuntimeClient.ts`: einziger Worker-Zugang. Besitzt Worker, laufende
   Anfragen, Epoche, Generation und den veröffentlichten Snapshot. Die
   Worker-Fabrik wird injiziert: die IDE übergibt `createLocalRuntimeWorker`
-  (`localRuntimeWorkerFactory.ts`), der Player seine eigene.
+  (`localRuntimeWorkerFactory.ts`), der Player seine eigene. Der Offline-Build
+  ersetzt ausschließlich die IDE-Worker-Fabrik durch
+  `offlineRuntimeWorkerFactory.ts` (Blob-Worker mit eingebettetem Interpreter);
+  Client, Protokoll, RuntimeHost und autoritativer Zustand bleiben gleich.
 - `codepadFlow.ts`: Compile-on-demand und Codepad-Auswertung. Nutzt nur die
   benötigten Client-Fähigkeiten, liefert typisierte Ergebnisse und verwirft
   Antworten nach einem Generationswechsel. History gehört `ExecutionWorkspace`,
@@ -122,6 +125,8 @@ Der Worker hält genau eine `KotliteSession` mit genau einem lebenden
   ergänzt nur geerbte Mitglieder und Funktionskarten pro Datei.
 - `mainEntries.ts`: leitet parameterlose `main()`-Einstiegspunkte aus den
   Metadaten ab, nie aus Quelltext.
+- `projectTemplates.ts`: lädt statische JSON-Vorlagen über HTTP; im Offline-Build
+  liefert es frische Kopien der eingebetteten Vorlagen, auch unter `file://`.
 - `projectFormat.ts`: typisiertes `.bluek.json`-Format. Validiert externe
   `unknown`-Payloads und wandelt Dateien, Ressourcen und Kartenpositionen in
   das interne `ProjectFile`-Modell. Keine DOM-, Svelte- oder
@@ -137,8 +142,9 @@ Der Worker hält genau eine `KotliteSession` mit genau einem lebenden
   Alpha-Masken und Standardgrafiken für BluePlay (siehe
   [blueplay.md](blueplay.md)).
 - `kotlinFormatterClient.ts`: Formatierung über den lokal gebündelten
-  ktfmt-WASM-Build im Hauptthread; kein Server- oder CDN-Aufruf, kein
-  Einfluss auf den Runtime-Zustand.
+  ktfmt-WASM-Build im Hauptthread; kein CDN-Aufruf, kein Einfluss auf den
+  Runtime-Zustand. Die gehostete IDE lädt das lokale Asset, die Offline-IDE
+  entpackt eingebettete gzip-WASM-Bytes und gibt sie direkt an den Formatter.
 - `editorDiagnostics.ts`, `markdownEditor.ts`, `uiParity.ts`, `shareApi.ts`:
   Editor-Markierungen, README-Editor, UI-Hilfsfunktionen (Projektlinks,
   Terminal, Argumentlisten) und Kurzlink-API.
@@ -149,7 +155,8 @@ Der Worker hält genau eine `KotliteSession` mit genau einem lebenden
   aus und leitet jeden Befehl an einen `RuntimeHost`. Nur die Quelle des
   Bundles unterscheidet sich: `localRuntimeWorker.ts` lädt in der IDE das
   statische Asset per `fetch`; `playerRuntimeWorker.ts` entpackt das
-  eingebettete gzip+base64-Bundle (`embeddedKotlite.ts`).
+  eingebettete gzip+base64-Bundle (`embeddedKotlite.ts`), auch in der
+  serverlosen Offline-IDE.
 - `runtimeHost.ts`: übersetzt Befehle in die explizite `KotliteSessionBridge`,
   führt Phasen und Ausführungs-IDs, sammelt Ausgaben und passive
   Inspektionen, veröffentlicht zusammenhängende Snapshots und besitzt den
@@ -195,9 +202,9 @@ Oberfläche (aus Svelte/TypeScript).
                         ┌──────────────────────────────────────────┼──────────────────────┐
                         ▼                                          ▼                      ▼
  build-player.mjs: Vite-IIFE (Player + Worker,        vite build (Svelte 5, TS,     build-offline.mjs:
-  Bundle gzip+base64 inline)                           CodeMirror, ktfmt-WASM)       vite build mit
-  → public/player/bluek-player.html                    → frontend/dist/              VITE_BLUEK_OFFLINE=1
-                                                        (Modul-Worker lädt           → dist-offline/ + ZIP
+  Bundle gzip+base64 inline)                           CodeMirror, ktfmt-WASM)       IIFE + Blob-Worker,
+  → public/player/bluek-player.html                    → frontend/dist/              alles inline
+                                                        (Modul-Worker lädt           → BlueK.html + ZIP
  build-standard-images.mjs (manuell):                   kotlite/… per fetch)         → public/downloads/
   assets/standard-images → standardImages.generated.ts
 ```
@@ -604,7 +611,15 @@ Ein Export ist eine einzelne HTML-Datei ohne Server- oder Netzwerkzugriff.
 - In der IDE startet „Export as HTML (Beta)“ im Save/Export-Dialog den Export. Er
   kompiliert bei Bedarf, fragt bei mehreren `main()` nach, prüft vor dem
   Schreiben, dass die Generation unverändert ist, lädt die Vorlage von
-  `<BASE_URL>player/bluek-player.html` und speichert `<Projektname>.html`.
+  `<BASE_URL>player/bluek-player.html` (im Offline-Build bereits eingebettet)
+  und speichert `<Projektname>.html`.
+
+Die vollständige Offline-IDE ist ebenfalls eine einzelne HTML-Datei. Der
+Build ersetzt `offlineAssets.ts` mit Formatter-Bytes und Player-Vorlage und
+bindet dieselbe Svelte-App über `offlineMain.ts` ein. Es entsteht kein zweiter
+Ausführungspfad. Kurzlink-Funktionen sind ausgeblendet, volle Projektlinks
+verweisen auf die öffentliche BlueK-Instanz. Das Entfernen des Projekt-Hashes
+bewahrt den Dateipfad, damit Neuladen über `file://` funktioniert.
 
 ## BluePlay
 

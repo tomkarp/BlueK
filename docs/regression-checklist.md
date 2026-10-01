@@ -114,7 +114,7 @@ bei Verweisen die Beschreibung mitnennen.
 | RT-14 | `getIntersecting<T>()`, `getOneIntersecting<T>()`, `isTouching<T>()` und `removeTouching<T>()` funktionieren in Schüler-Actors | Ursache: implizites `intersects(it)` im Lambda der inline-Library-Funktion war zur Laufzeit nicht auflösbar (auch im alten Bundle). Native BluePlay-Smoke prüft Treffer, Anzahl, Entfernen und den Zustand danach | Abgesichert |
 | GUI-60 | Ein BlueJ-Projekt als ZIP (auch mit umschließendem Ordner, `__MACOSX`, `.ctxt`) öffnet mit allen Kotlin-Klassen und den Kartenpositionen aus `package.bluej`; private Methoden erscheinen nicht im Objekt-Kontextmenü | Chromium-GUI-Test mit ZIP-Fixture, per Drop auf das Open/Import-Feld (die Dateiauswahl bietet nur JSON) (Karten, Codepad, Kontextmenü ohne `zieheKarte`); echte inf-schule-ZIPs Blackjack, Goldrausch, Ausgebüxt einmalig per Playwright geöffnet und ausgeführt | Abgesichert |
 | GUI-61 | Ein BlueJ-BluePlay-Projekt nutzt die eingebaute Library: `World.kt`/`Actor.kt`/`Image.kt`/`BluePlayFunctions.kt` werden ersetzt, `images/`/`sounds/` werden Projektressourcen. Seit 08963a8 (vom Nutzer als beabsichtigt bestätigt) bietet der Open/Import-Dialog nur JSON und keine Ordnerwahl; ZIPs und Ordner erreichen BlueK nur noch durch Ablegen auf dem Drop-Feld | Chromium-GUI-Test mit BluePlay-ZIP per Drop und `main()`; Ablegen eines Ordners nicht automatisiert | Ordner-Drop visuell abnehmen |
-| GUI-62 | `npm run build:offline` erzeugt ein lauffähiges Offline-Paket (App, Server, Startskripte); der mitgelieferte Server liefert App, Kotlite-Bundle und Beispiele lokal aus, Pfade außerhalb des App-Ordners werden abgelehnt; im Offline-Build fehlen Kurzlink-Aktion und Drei-Wort-Code | `smoke-offline-build`; Built-in-Browser auf dem gebauten Paket (Klasse angelegt, kompiliert, beide Dialoge ohne Server-Funktionen) | `start.bat` unter Windows noch nicht getestet (kein Windows-Rechner verfügbar) |
+| GUI-62 | `npm run build:offline` erzeugt eine einzelne `BlueK.html` plus Anleitung/ZIP; per Doppelklick (`file://`) laufen dieselbe Svelte-IDE und Runtime ohne Server, einschließlich Projektvorlagen, Formatter, BluePlay und HTML-Programmexport. Kurzlink-Aktion und Drei-Wort-Code fehlen | `smoke-offline-build` prüft HTML/ZIP; `offline.spec.ts` prüft die echte IDE mit blockiertem HTTP-Netzwerk in Chromium und den Worker in WebKit | 2026-10-01: 4/4 echte Offline-Browsertests grün (Chromium und WebKit); Benutzerbestätigung und visuelle Abnahme offen. Der frühere Server-/Startskript-Test ist durch die serverlose Paketprüfung ersetzt |
 | GUI-63 | Unten links in der Seitenleiste bietet BlueK die Offline-Version als ZIP an; `npm run build` und `npm run dev` (predev) legen die Datei immer an, im Offline-Build selbst fehlt der Link | Chromium-GUI-Test (Link sichtbar, `download`-Attribut, ZIP per Request geladen), `smoke-offline-build` (ZIP veröffentlicht, nicht im Offline-Paket selbst) | Abgesichert |
 | GUI-64 | Compilerfehler erscheinen nicht mehr im zentralen Dialog, sondern am Ort des Fehlers: der Editor der betroffenen Datei öffnet sich, markiert die Zeile (roter Hintergrund, Wellenlinie) und meldet den Text unter dem Editor wie die Parser-Meldungen des Formatierers; Tippen löscht die Markierung, der nächste Compile setzt sie neu. Der Dialog bleibt nur für Fehler ohne Quelltextstelle (z. B. fehlgeschlagener Methodenaufruf) | Chromium-GUI-Test GUI-64 (Markierung, Meldung unter dem Editor, kein Dialog, Löschen beim Tippen, erneutes Melden, Verschwinden nach der Korrektur) und GUI-24 (Fehler in `Actions.kt`) | Abgesichert |
 | GUI-65 | Compilerfehler lesen sich kompakt (kein `Token(...)`-Dump, keine wiederholte Position), lassen sich wie die Formatierer-Meldung per Kreuz schließen (samt Markierung), und ein Parser-Fehler des Formatierers markiert und zeigt seine Zeile ebenfalls | Chromium-GUI-Test GUI-65 (kompakter Text `Line 4: Unexpected token `fn``, Schließkreuz, markierte Zeile nach Format, Markierung verschwindet beim Schließen) | Abgesichert |
@@ -2075,3 +2075,48 @@ Darstellung bleiben erhalten.
   getesteten Build byte-identisch, daher kein weiterer GUI-Gesamtlauf nötig.
 - `git diff --check` ohne Befund. Der vor dem Umbau angeforderte
   Sicherungscommit ist `94e778f`.
+
+
+### GUI-62: Vollständige IDE als lokale HTML-Datei (2026-10-01)
+
+Das Offline-Paket enthält jetzt `BlueK.html` und `LIESMICH.txt`, ohne Server
+oder Startskripte. Der Build nutzt dieselbe Svelte-App, `LocalRuntimeClient`,
+`RuntimeHost` und das vorhandene gzip+base64-Kotlite des Player-Workers.
+Der Formatter erhält eingebettete WASM-Bytes; Vorlagen sind frische Kopien
+eingebetteter JSON-Daten. HTML-Programmexport nutzt die eingebettete
+Player-Vorlage. Volle Projektlinks aus lokalen Dateien zeigen auf bluek.de;
+das Bereinigen eines Projekt-Hashes bewahrt den lokalen Dateipfad.
+
+Tatsächliche Prüfungen:
+
+- `typecheck`: grün, 0 Fehler und 0 Svelte-Warnungen.
+- `test:offline`: HTML-/ZIP-Struktur grün, danach 4/4 echte Browsertests
+  über `file://` mit blockiertem HTTP-Netzwerk. Chromium: Kotlin-Compile,
+  main, Codepad, Terminaleingabe, Reset, Autosave/Reload, JSON-Import/-Export,
+  alle vier Vorlagen, BluePlay-Canvas/Act, Standardbildzugriff,
+  eingebetteter Formatter und exportierter HTML-Player. WebKit: IDE- und
+  BluePlay-Worker starten und liefern Welt plus Terminalausgabe.
+- Betroffene bestehende GUI-Fälle: 22/22 im ersten Lauf grün (EXP-01–11,
+  GUI-01, GUI-26, GUI-45, GUI-63, GUI-67). Nach der abschließenden Anpassung
+  des Vorlagenladens 22/23 grün, einschließlich GUI-72; EXP-11 scheiterte
+  ausschließlich beim Trace-Aufräumen, weil der gleichzeitig laufende
+  Offline-Test dasselbe Artefaktverzeichnis bereinigte. Offline-Tests haben
+  nun ein eigenes `test-results-offline/`; EXP-11 einzeln wiederholt: 1/1
+  tatsächlich grün. Kein vollständiger GUI-/Regressions-Sammellauf.
+- Runtime-State, Projektformat, Exportformat, Player-Worker (Chromium/WebKit),
+  Codepad-Flow, echte Svelte-Controller und beide Architektur-Smokes grün.
+- Player-, Offline- und Svelte-Produktionsbuilds erfolgreich. Vorhandene
+  Asset-/Node-Externalisierungs-/Bundlegrößenwarnungen sowie `import.meta`
+  in ungenutzten Formatter-Ladepfaden beim IIFE-Build; Formatter mit direkt
+  übergebenen Bytes im echten Chromium erfolgreich geprüft.
+- Erste Browserstarts innerhalb der Sandbox waren blockiert (Chromium
+  Mach-Port-Zugriff, WebKit-Prozessabbruch); außerhalb der Sandbox liefen
+  sie. Neue Tests hatten zunächst falsche UI-Selektoren und einen nicht
+  vorhandenen Bildnamen; korrigiert. Der WebKit-Lauf fand außerdem einen
+  echten Offline-Workerfehler: unmittelbares `URL.revokeObjectURL` nach dem
+  Worker-Konstruktor verhinderte den Start. Die unveränderliche Quell-URL
+  bleibt nun wie beim Player für die Dokumentlebensdauer bestehen.
+- `git diff --check` ohne Befund. Keine Kotlin-Änderung, deshalb kein neuer
+  Interpreter-Build erforderlich.
+- Benutzerbestätigung, manuelles Doppelklicken unter Windows/Linux, Firefox
+  und umfassende visuelle Abnahme stehen aus.

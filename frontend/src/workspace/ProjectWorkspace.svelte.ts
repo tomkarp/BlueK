@@ -1,3 +1,4 @@
+import { projectTemplate } from "../projectTemplates";
 import { untrack } from "svelte";
 import type { CardPosition, InheritanceEdge } from "../uiTypes";
 
@@ -21,6 +22,7 @@ import { mainFiles } from "../mainEntries";
 
 import {
   createProjectPayload,
+  parseProject,
   projectModelFromPayload,
 } from "../projectFormat";
 import { exportFileName } from "../programExport";
@@ -648,22 +650,11 @@ export class ProjectWorkspace {
       this.host.ui().status = "New project";
       return;
     }
-    const paths: Record<string, string> = {
-      "empty-blueplay": "./examples/blueplay-empty.bluek.json",
-      blueplay: "./examples/blueplay.bluek.json",
-      "bluek-demo": "./examples/kotlin-example.bluek.json",
-      "space-invaders": "./examples/space-invaders.bluek.json",
-    };
-    const path = paths[choice];
-    if (!path) {
-      this.host.ui().status = "Project template could not be found.";
-      return;
-    }
     try {
-      const payload = await (await fetch(path)).json();
+      const payload = parseProject(await projectTemplate(choice));
       if (choice === "empty-blueplay")
         payload.files = payload.files.filter(
-          (file: ProjectFile) => file.fileName !== "Main.kt",
+          (file) => file.fileName !== "Main.kt",
         );
       await this.loadProject(payload, "Project template loaded.");
     } catch {
@@ -716,7 +707,7 @@ export class ProjectWorkspace {
             await decodeProjectLink(shared),
             "Shared BlueK project loaded. Compile the project.",
           );
-          window.history.replaceState(window.history.state, "", "/");
+          window.history.replaceState(window.history.state, "", window.location.pathname);
           if (linkOpensReadme) this.openReadme();
         } catch (reason) {
           this.host.ui().status = "Project error";
@@ -734,9 +725,7 @@ export class ProjectWorkspace {
         return;
       try {
         await this.loadProject(
-          await (
-            await fetch("./examples/blueplay.bluek.json", { cache: "no-store" })
-          ).json(),
+          await projectTemplate("blueplay"),
           "BluePlay example loaded.",
         );
       } catch {

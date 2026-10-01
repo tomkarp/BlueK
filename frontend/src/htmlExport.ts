@@ -1,5 +1,6 @@
+import offlineAssets from "./offlineAssets";
 import type { SavedProject } from "./projectFormat";
-import { blueKUrlForExport, createExportedProgram, embedProgram } from "./programExport";
+import { blueKUrlForExport, createExportedProgram, embedProgram, PUBLIC_BLUEK_URL } from "./programExport";
 
 /**
  * Builds the runnable HTML file of a project from the player template that is
@@ -11,6 +12,7 @@ let template: Promise<string> | null = null;
 
 /** The player template, loaded once from the app's base path. */
 export function loadPlayerTemplate(basePath: string, pageUrl: string): Promise<string> {
+  if (offlineAssets) return Promise.resolve(offlineAssets.playerTemplate);
   template ||= fetch(new URL(`${basePath}player/bluek-player.html`, pageUrl))
     .then((response) => {
       if (!response.ok) throw new Error("The HTML player is not available.");
@@ -25,6 +27,6 @@ export function loadPlayerTemplate(basePath: string, pageUrl: string): Promise<s
 
 export async function htmlExport(project: SavedProject, mainFile: string, basePath: string, pageUrl: string): Promise<string> {
   const url = new URL(pageUrl);
-  const program = createExportedProgram(project, mainFile, blueKUrlForExport(url.origin, new URL(basePath, url).pathname));
+  const program = createExportedProgram(project, mainFile, url.protocol === "file:" ? PUBLIC_BLUEK_URL : blueKUrlForExport(url.origin, new URL(basePath, url).pathname));
   return embedProgram(await loadPlayerTemplate(basePath, pageUrl), program);
 }

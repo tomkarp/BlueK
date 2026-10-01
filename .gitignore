@@ -2,6 +2,7 @@ node_modules/
 .claude/
 playwright-report/
 test-results/
+test-results-offline/
 .npm-cache/
 frontend/dist/
 dist-offline/

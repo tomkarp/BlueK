@@ -1,10 +1,16 @@
+import offlineAssets from "./offlineAssets";
+import { byteStream } from "./byteStream";
 import { format as formatMain, init as initMain } from "@scalar/kotlin-fmt";
 import artifactUrl from "@scalar/kotlin-fmt/wasm?url";
 
 let mainReady: Promise<void> | undefined;
 
 async function initializeMainFormatter() {
-  const bytes = new Uint8Array(await (await fetch(artifactUrl)).arrayBuffer());
+  const response = offlineAssets
+    ? new Response(byteStream(Uint8Array.from(atob(offlineAssets.formatterGzipBase64), c => c.charCodeAt(0)))
+        .pipeThrough(new DecompressionStream("gzip")))
+    : await fetch(artifactUrl);
+  const bytes = new Uint8Array(await response.arrayBuffer());
   const isWasm = bytes[0] === 0 && bytes[1] === 0x61 && bytes[2] === 0x73 && bytes[3] === 0x6d;
   const browserInit = initMain as unknown as (options: {
     bytes?: ArrayBufferView;

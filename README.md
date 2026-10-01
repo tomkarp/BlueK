@@ -87,19 +87,26 @@ Worker sofort, auch mitten in einer Endlosschleife.
 
 ## Offline-Paket für Prüfungen
 
-`npm run build:offline` erzeugt unter `dist-offline/` den Ordner
-`BlueK-offline/` samt ZIP: die Anwendung (`app/`), einen kleinen Server und
-Startskripte für Windows (`start.bat`) und macOS/Linux (`start.command`). Auf
-dem Zielrechner wird nichts installiert; der Server lauscht nur auf
-`127.0.0.1:8901` und es gibt keinen externen Request. `start.bat` nutzt Node.js
-oder Python, falls vorhanden, sonst einen mitgelieferten PowerShell-Server.
+`npm run build:offline` erzeugt `dist-offline/BlueK-offline/BlueK.html`
+und ein ZIP mit dieser Datei und einer kurzen Anleitung. Nach dem Entpacken
+reicht ein Doppelklick auf **BlueK.html**. Es sind weder ein Server noch
+Node.js, Python oder eine Installation auf dem Zielrechner erforderlich.
+Oberfläche, Interpreter, BluePlay-Grafiken, Projektvorlagen, Kotlin-Formatter
+und HTML-Exportvorlage sind vollständig eingebettet.
 
 Das ZIP wird zusätzlich nach `frontend/public/downloads/` kopiert; die
 Online-Version verlinkt es in der Seitenleiste. `npm run build` baut es jedes
 Mal neu, `npm run dev` nur, falls es fehlt (ein veraltetes ZIP bleibt dort
-also liegen). Im Offline-Build sind die
-Kurzlink-Funktionen ausgeblendet; JSON-Export/-Import und „Copy Full Project
-Link“ funktionieren. Anleitung für Lehrkräfte: `scripts/offline/LIESMICH.txt`.
+also liegen). Im Offline-Build sind die Kurzlink-Funktionen ausgeblendet;
+JSON-Export/-Import und HTML-Programmexport funktionieren. „Copy Full Project
+Link“ erzeugt einen teilbaren Link zu `https://bluek.de/` mit dem vollständigen
+Projekt. Für die lokale Abgabe eignet sich die JSON-Datei.
+
+Browser können lokale Dateien unterschiedlich behandeln. Automatisches
+Speichern gehört zum jeweiligen Browser und Dateipfad; beim Verschieben von
+BlueK.html muss das bisherige Autosave nicht mehr verfügbar sein. Projekte
+für die Abgabe deshalb ausdrücklich als `.bluek.json` speichern.
+Anleitung für Lehrkräfte: `scripts/offline/LIESMICH.txt`.
 
 ## Kurz-Links (optional)
 

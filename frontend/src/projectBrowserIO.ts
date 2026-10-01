@@ -60,7 +60,7 @@ export async function copyFullProjectLink(
   payload: ProjectSource,
   readme: boolean,
 ): Promise<boolean> {
-  const url = new URL(window.location.href);
+  const url = new URL(window.location.protocol === "file:" ? "https://bluek.de/" : window.location.href);
   url.search = "";
   url.hash = `bluek=${await encodeBlueKLink(payload)}${readme ? "&readme=1" : ""}`;
   return copyLink(url.href);

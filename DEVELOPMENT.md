@@ -8,7 +8,7 @@ Architektur und Zuständigkeiten stehen verbindlich in
 
 - Node.js 22 (wie in CI)
 - Java 21, nur für `npm run build:kotlite` bzw. `npm run build`
-- Einmalig für GUI-Tests: `npx playwright install chromium`
+- Einmalig für GUI-/Offline-Tests: `npx playwright install chromium webkit`
 
 ## Verzeichnisse
 
@@ -18,7 +18,7 @@ Architektur und Zuständigkeiten stehen verbindlich in
 | `frontend/src/components/` | Darstellung von Fenstern, Dialogen, Diagramm und Hauptbedienelementen; typisierte Props und Rückruffunktionen |
 | `frontend/src/workspace/` | reaktive Svelte-Controller mit eigenem UI-Zustand für Projekt, Editor, Ausführung, Objekte, BluePlay und Terminal; Verdrahtung in `SvelteApp.svelte` |
 | `frontend/public/` | statische Assets: Interpreter-Bundle (`kotlite/`, eingecheckt), Vorlagen (`examples/`), generierte Player-Vorlage (`player/`) und Offline-ZIP (`downloads/`) |
-| `frontend/build/` | Vite-Plugin, das das Interpreter-Bundle für den Player gzip+base64-kodiert einbettet |
+| `frontend/build/` | Build-Helfer für einzelne HTML-Dateien und das gzip+base64-Interpreter-Bundle |
 | `runtime-contract/src/index.ts` | gemeinsame Typen von Oberfläche, Worker und Runtime-Host |
 | `kotlite-browser/` | Kotlin/JS-Projekt: `KotliteSession`, BlueK-Stdlib, BluePlay-Bibliothek, Fehlermeldungshilfen |
 | `vendor/kotlite-interpreter/` | Quellstand des Kotlite-Interpreters mit allen BlueK-Änderungen (siehe `PATCH.md`) |
@@ -53,10 +53,14 @@ allen Schritten steht in [docs/architecture.md](docs/architecture.md#build).
    IIFE-Skripte (Player-Worker mit eingebettetem gzip+base64-Interpreter und
    Player-Oberfläche) und schreibt sie inline in
    `frontend/public/player/bluek-player.html` (generiert, nicht eingecheckt).
-3. **`build:offline`** – `scripts/build-offline.mjs` baut die Anwendung mit
-   `VITE_BLUEK_OFFLINE=1` und relativer Basis nach
-   `dist-offline/BlueK-offline/app/`, legt Server und Startskripte dazu,
-   zippt und kopiert das ZIP nach `frontend/public/downloads/`.
+3. **`build:offline`** – `scripts/build-offline.mjs` baut die Svelte-IDE als
+   IIFE mit `VITE_BLUEK_OFFLINE=1`. Es bettet CSS, den Blob-Worker mit
+   gzip+base64-Interpreter, die Player-Vorlage und das zur Build-Zeit aus
+   Brotli entpackte und neu gzip-komprimierte Formatter-WASM ein.
+   Projektvorlagen sind eingebettete JSON-Daten. Ergebnis:
+   `dist-offline/BlueK-offline/BlueK.html`, direkt per Doppelklick ausführbar.
+   Ein ZIP aus HTML und Anleitung wird nach `frontend/public/downloads/`
+   kopiert; Server und Startskripte entfallen.
 4. **`vite build`** – kompiliert Svelte 5 und TypeScript nach
    `frontend/dist/`: Hauptbundle, Runtime-Worker als Modul-Worker, ktfmt-WASM
    und alle Dateien aus `frontend/public/`.
@@ -92,7 +96,7 @@ Runtime-State-Tests und GUI-Tests verwenden das gebaute Bundle unter
 | `npm run test:inspector`, `test:codepad-flow`, `test:project-format`, `test:program-export`, `test:blueplay-stage`, `test:player-worker`, `test:ui` | einzelne TypeScript-Module ohne Browser |
 | `npm run test:window-interaction` | gemeinsame Fenstergeometrie, Mindestgrößen, Pointer-Abbruch und Titelzeilen-Buttons; auch Teil von `test:regression` |
 | `npm run test:workspace` | echte kompilierte Svelte-Controller: klonbare Aufrufargumente, unabhängige App-Instanzen und verworfene Aufrufergebnisse nach Generationswechsel; auch Teil von `test:regression` |
-| `npm run test:offline` | baut das Offline-Paket und lädt es über dessen eigenen Server |
+| `npm run test:offline` | baut und prüft HTML/ZIP; echte Chromium-/WebKit-Tests über `file://` ohne Webserver und mit gesperrtem HTTP-Netzwerk |
 | `npm run test:share-server` | Share-Dienst mit temporärer Datenbank |
 | `npm run test:gui` | Playwright/Chromium gegen einen eigenen Vite-Server auf Port 5194 |
 | `node scripts/check-interactive-core.mjs` | Suspension bei `readln` direkt am Bundle |
