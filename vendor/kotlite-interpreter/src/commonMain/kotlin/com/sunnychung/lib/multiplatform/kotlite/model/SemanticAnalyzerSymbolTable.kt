@@ -122,28 +122,28 @@ class SemanticAnalyzerSymbolTable(
                         .let { thisScopeCandidates += it }
                 }
             }
-            findClass(originalName, isThisScopeOnly = true)?.let {
-                thisScopeCandidates += FindCallableResult(
-                    transformedName = it.first.fullQualifiedName,
-                    originalName = it.first.name,
-                    owner = null,
-                    type = CallableType.Constructor,
-                    isVararg = false,
-                    arguments = it.first.primaryConstructor?.parameters?.map { it.parameter } ?: emptyList(),
-                    typeParameters = it.first.typeParameters,
-                    receiverType = null,
-                    returnType = TypeNode(
-                        SourcePosition.NONE,
-                        it.first.fullQualifiedName,
-                        it.first.typeParameters.map { parameter ->
-                            TypeNode(SourcePosition.NONE, parameter.name, null, false)
-                        }.emptyToNull(),
-                        false,
-                    ),
-                    signature = it.first.fullQualifiedName,
-                    definition = it.first,
-                    scope = this
-                )
+            findClass(originalName, isThisScopeOnly = true)?.let { (clazz, _) ->
+                val secondary = clazz.secondaryConstructors
+                val parameterSets = if (secondary.isEmpty()) listOf(clazz.primaryConstructor?.parameters?.map { it.parameter }.orEmpty())
+                    else secondary.map { it.valueParameters }
+                parameterSets.forEachIndexed { index, parameters ->
+                    thisScopeCandidates += FindCallableResult(
+                        transformedName = clazz.fullQualifiedName,
+                        originalName = clazz.name,
+                        owner = null,
+                        type = CallableType.Constructor,
+                        isVararg = false,
+                        arguments = parameters,
+                        typeParameters = clazz.typeParameters,
+                        receiverType = null,
+                        returnType = TypeNode(SourcePosition.NONE, clazz.fullQualifiedName,
+                            clazz.typeParameters.map { TypeNode(SourcePosition.NONE, it.name, null, false) }.emptyToNull(), false),
+                        signature = clazz.fullQualifiedName + "(" + parameters.joinToString(",") { it.type.descriptiveName() } + ")",
+                        definition = clazz,
+                        scope = this,
+                        secondaryConstructorIndex = if (secondary.isEmpty()) null else index,
+                    )
+                }
             }
             if (modifierFilter != SearchFunctionModifier.ConstructorOnly) getPropertyTypeOrNull(originalName, isThisScopeOnly = true)?.let {
                 if (it.first.type !is FunctionType || it.first.type.isNullable) {
@@ -358,7 +358,7 @@ class SemanticAnalyzerSymbolTable(
             ?.let { if (it is TypeParameterType) it.upperBound else it }
             ?.let { (findClass(it.nameWithNullable) ?: throw RuntimeException("Class ${it.nameWithNullable} not found")).first }
         return findAllMatchingCallables(currentSymbolTable, originalName, receiverClass, receiverType, arguments, modifierFilter)
-            .distinctBy { it.definition }
+            .distinctBy { it.definition to it.secondaryConstructorIndex }
             .let { result -> // prioritize extension function first if they are special functions (toString/hashCode/equals)
                 val biasedResult = mutableListOf<FindCallableResult>()
                 val otherCandidates = mutableListOf<FindCallableResult>()

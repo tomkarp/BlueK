@@ -38,7 +38,7 @@ const stage = {
 };
 const decorated = decorateStage(stage, resources, { 'images/rocket.png': { width: 16, height: 12 } });
 assert.equal(decorated.objects[0].imageData, 'data:image/png;base64,ROCKET', 'Resource image resolves to its data');
-assert.deepEqual([decorated.objects[0].imageWidth, decorated.objects[0].imageHeight], [16, 12], 'Measured size wins');
+assert.deepEqual([decorated.objects[0].imageWidth, decorated.objects[0].imageHeight], [30, 30], 'Runtime size preserves explicit scaling over natural resource dimensions');
 assert.match(decorated.objects[1].imageData, /^data:image\/svg\+xml/, 'An actor without image gets an empty drawing');
 assert.equal(decorated.objects[1].imageWidth, 20);
 

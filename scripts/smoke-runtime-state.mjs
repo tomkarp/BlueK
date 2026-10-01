@@ -12,6 +12,7 @@ async function loadModule(path) {
 }
 const { LocalRuntimeClient } = await loadModule('frontend/src/localRuntimeClient.ts');
 const { RuntimeHost } = await loadModule('frontend/src/runtimeHost.ts');
+const { InspectorModel } = await loadModule('frontend/src/inspectorModel.ts');
 vm.runInThisContext(await readFile('frontend/public/kotlite/bluek-kotlite-browser.js', 'utf8'));
 const createSession = globalThis['bluek-kotlite-browser'].bluekCreateKotliteSession;
 const workers = [];
@@ -312,6 +313,34 @@ await nativeClient.reset();
 assert.equal(nativeClient.getSnapshot().simulation, 'paused');
 nativeClient.invalidate();
 projectClient.invalidate();
+// RT-47: a paused single step remains paused across input; an automatic Run
+// remains running across input. Public step() must use the owner's mode.
+{
+  const control = new LocalRuntimeClient(() => new TestWorker());
+  const waitFor = predicate => new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => { unsubscribe(); reject(new Error('BluePlay control state did not arrive')); }, 5000);
+    const check = () => { if (predicate()) { clearTimeout(timeout); unsubscribe(); resolve(); } };
+    const unsubscribe = control.subscribe(check); check();
+  });
+  const files = [
+    { id: 'ReadingWorld', fileName: 'ReadingWorld.kt', kind: 'class', revision: 1, source: 'class ReadingWorld : World(10,10,1) { var acts = 0; override fun act() { acts += 1; if (acts == 1) { readln(); step() }; stop() } }' },
+    { id: 'Main', fileName: 'Main.kt', kind: 'functions', revision: 1, source: 'var world = ReadingWorld(); fun main() { world = ReadingWorld(); world.show() }' },
+  ];
+  assert.deepEqual((await control.compile(files, 1, { id: 'blueplay', version: 1 })).diagnostics, []);
+  assert.notEqual((await control.execute({ op: 'main', fileName: 'Main.kt' })).kind, 'error');
+  const manual = control.simulation('step');
+  await waitFor(() => control.getSnapshot().phase === 'waitingForInput');
+  await control.sendInput('manual'); await manual;
+  assert.equal((await control.execute({ op: 'eval', code: 'world.acts' })).display, '2', 'step after manual input remains allowed while paused');
+  await control.reset();
+  await control.simulation('start');
+  await waitFor(() => control.getSnapshot().phase === 'waitingForInput');
+  await control.sendInput('automatic');
+  await waitFor(() => control.getSnapshot().simulation === 'paused' && control.getSnapshot().phase === 'ready');
+  assert.equal((await control.execute({ op: 'eval', code: 'world.acts' })).display, '1', 'step after automatic input remains ignored during Run');
+  control.invalidate();
+}
+
 // RT-25: explicit per-file entry points retain their identity.
 {
   const mains = new LocalRuntimeClient(() => new TestWorker());
@@ -425,6 +454,61 @@ projectClient.invalidate();
   assert.equal(result.diagnostics[0]?.line, 5);
   assert.match(result.diagnostics[0]?.message, /argument types \(Int, Int, Int\)/);
   diagnosticsClient.invalidate();
+}
+// RT-49: inspection catches ordinary getter failures per property without
+// changing program exceptions or automatically rerunning code on snapshots.
+{
+  const inspectionClient = new LocalRuntimeClient(() => new TestWorker());
+  const compile = await inspectionClient.compile([
+    { id: 'Leaf.kt', fileName: 'Leaf.kt', kind: 'class', revision: 1, source: 'class Leaf { override fun toString(): String = throw IllegalStateException("do not stringify") }' },
+    { id: 'Probe.kt', fileName: 'Probe.kt', kind: 'class', revision: 1, source: `class Probe {
+      private val hidden: Int get() = 42
+      var reads = 0
+      val bad: String get() { reads++; throw IllegalStateException("missing world") }
+      val good: Int get() = reads * 10
+      val absent: String? get() = null
+      val numbers: List<Int> get() = listOf(1,2)
+      val child: Leaf get() = Leaf()
+      val slow: Int get() { Thread.sleep(2); return 7 }
+    }` },
+  ], 1);
+  assert.deepEqual(compile.diagnostics, []);
+  const probe = await inspectionClient.execute({ op: 'create', className: 'Probe', name: 'probe', args: [] });
+  assert.notEqual(probe.kind, 'error', probe.display);
+  const model = new InspectorModel(inspectionClient, () => {});
+  await model.refresh(probe.objectId);
+  const fields = model.view(probe.objectId).fields;
+  const getField = name => fields.find(field => field.name === name);
+  assert.equal(getField('hidden').value, '42', 'Private computed properties can also be inspected');
+  assert.equal(getField('bad').error, 'IllegalStateException: missing world');
+  assert.equal(getField('good').value, '10', 'Properties after a failing getter still run');
+  assert.equal(getField('reads').value, '1', 'Side effects run once and appear in stored fields');
+  assert.equal(getField('absent').value, 'null');
+  assert.equal(getField('numbers').summary, true);
+  assert.match(getField('numbers').value, /size 2/);
+  assert.equal(getField('child').reference, true);
+  assert(getField('child').objectId, 'Computed object references have a runtime-owned handle');
+  assert.equal(getField('slow').value, '7', 'Suspending getters retain the normal async contract');
+  assert.equal(inspectionClient.getSnapshot().phase, 'ready');
+  assert.equal(inspectionClient.getSnapshot().error, null, 'Property errors stay in their row');
+  await inspectionClient.execute({ op: 'inspect', objectId: probe.objectId });
+  assert.equal(model.view(probe.objectId).fields.find(f => f.name === 'reads').value, '1', 'Snapshot refresh never reruns getters');
+  const failure = await inspectionClient.execute({ op: 'get', objectId: probe.objectId, property: 'bad' });
+  assert.equal(failure.fatal, true, 'A direct program getter call remains fatal when uncaught');
+  assert.equal(inspectionClient.getSnapshot().phase, 'faulted');
+  inspectionClient.invalidate();
+
+  const boundary = new LocalRuntimeClient(() => new TestWorker());
+  await boundary.compile([
+    { id: 'Blocking.kt', fileName: 'Blocking.kt', kind: 'class', revision: 1, source: 'class Blocking { override fun toString(): String { Thread.sleep(1); return "blocked" } }' },
+    { id: 'Unsafe.kt', fileName: 'Unsafe.kt', kind: 'class', revision: 1, source: 'class Unsafe { val value: Int get() { println(Blocking()); return 1 } }' },
+  ], 1);
+  const unsafe = await boundary.execute({ op: 'create', className: 'Unsafe', name: 'unsafe', args: [] });
+  const blocked = await boundary.execute({ op: 'inspectGet', objectId: unsafe.objectId, property: 'value' });
+  assert.equal(blocked.fatal, true, 'Inspection does not hide non-catchable interpreter boundaries');
+  assert.match(blocked.display, /InterpreterStateException: Thread.sleep\(\) cannot pause/);
+  assert.equal(boundary.getSnapshot().phase, 'faulted');
+  boundary.invalidate();
 }
 console.log('Runtime state integration passed: shared identity, main, inspectors, input, reset, concurrency, stale replies and transport failure.');
 console.log('Project validation passed: declarations only, source positions, no effects on rejection, recovery and executable Codepad.');

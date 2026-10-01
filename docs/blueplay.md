@@ -1,8 +1,11 @@
 # BluePlay in BlueK
 
 BluePlay ist die Spielbibliothek aus dem inf-schule-Kurs „OOP mit Kotlin“
-(dort für BlueJ/JVM). BlueK stellt eine Browserfassung mit derselben
-Schüler-API bereit. Übergeordnete Architekturregeln stehen in
+(dort für BlueJ/JVM). BlueK stellt eine Browserfassung bereit, die sich an
+der Original-Schüler-API orientiert. Maßstab ist das BlueJ-Projekt auf GitHub,
+Stand `c8ace580f0506571fc34f287280a3e04eba7c876`, nicht der Browseradapter.
+Der [API-Abgleich vom 30. September 2026](blueplay-api-audit.md) dokumentiert
+Ausgangsfehler und ihre Korrektur. Übergeordnete Architekturregeln stehen in
 [architecture.md](architecture.md).
 
 ## Aufbau
@@ -26,10 +29,29 @@ Oberklassen echter Schülerklassen, einschließlich Property-Zugriff,
 `getIntersecting<T>()`) und Metadaten. Es gibt keine Quelltext-RegEx für
 Vererbung oder Typfilterung und keine zweite Typinformation.
 
+Ein `Actor` darf vor `addObject` und nach `removeObject` ohne Welt existieren.
+`world: World` wirft dann `IllegalStateException`, statt `null` zu liefern.
+So benötigen Schüler beim gewöhnlichen Weltzugriff keine Nullbehandlung.
+Weltabhängige Properties (`isAtEdge`,
+`isClicked`) und Kollisionsabfragen einschließlich `removeTouching` verlangen über den privaten
+Helper `requireWorld()` eine Welt und werfen sonst `IllegalStateException`.
+`intersects` verlangt eine Welt für beide Actors. Bewegung, Rotation und
+Bildänderungen benötigen dagegen keine Welt. Eine unbehandelte Ausnahme im
+Schülerprogramm beendet die Ausführung und versetzt die Laufzeit in `faulted`;
+der Objektinspektor fängt gewöhnliche Exceptions je Property und zeigt sie
+in deren Zeile. Der Typ von `world` entspricht der gepinnten BlueJ-Referenz;
+weltabhängige Zugriffe werfen statt stiller Ersatzwerte. Die Fehlerbehandlung des Inspektors ist in
+[architecture.md](architecture.md#inspektor) beschrieben.
+
 Die Session ist die einzige Quelle von Welt-, Actor-, Bild- und
 Kollisionszustand. `runtime-contract` transportiert einen typisierten
 `BluePlayStage`-Frame und den Simulationszustand; Svelte leitet daraus
-Canvas, Bibliothekskarten und API-Dokumentation ab. Medien bleiben
+Canvas und Bibliothekskarten ab. Die API-Dokumentation verwendet das beim
+Interpreter-Build erzeugte, unveränderliche Library-Manifest
+(`build-blueplay-api.mjs` → `bluePlayApi.generated.json`). Nur kurze
+Erklärungen werden in `bluePlayApi.ts` gepflegt; Signaturen, Typen,
+Parameternamen und Typschranken kommen aus Kotlite. Die Hilfe führt keinen
+Schülercode aus und enthält weder Beispiele noch GitHub-Links. Medien bleiben
 projektbezogene, validierte Data-URL-Ressourcen und werden nicht in die
 Kotlin-Library kopiert.
 
@@ -54,8 +76,10 @@ Dateiauswahl stoppt der Host den Scheduler und ruft die gewählte parameterlose
 `main()` direkt in derselben Session auf (`startBluePlayMain`, aufgelöst über
 die interne Namenszuordnung). Top-Level-Initialisierer laufen nicht erneut.
 Die Ausführung meldet ihre Phase und kann interaktive Eingabe anfordern.
-Ein normales `World.show()` setzt kein Stop-Signal; nur die fachliche
-`stop()`-Aktion beendet den nächsten Lauf.
+Wie im BlueJ-Projekt pausiert ein explizites `World.show()` die Simulation.
+Reines Frame-Rendering sendet kein Stop-Signal (RT-11). `step()` wird während
+Run ignoriert; die Session liest dafür über eine schmale Abfrage den Zustand
+des autoritativen Host-Schedulers und hält keine zweite Zustandskopie.
 
 ## Rendering und Weltfenster
 
@@ -148,8 +172,7 @@ Hauptkosten. Die Gegenmaßnahmen im Fork (siehe `PATCH.md`):
 Auf BlueK-Seite:
 
 - Die Bibliothek kopiert Objektlisten mit `toList()` statt über
-  interpretierte Lambdas und führt `isTouching(other)` direkt zur nativen
-  Kollisionsprüfung.
+  interpretierte Lambdas; `intersects(other)` führt zur nativen Kollisionsprüfung.
 - Der Scheduler überspringt `act()` mit leerem Rumpf (etwa die geerbte
   Default-Methode), ohne beobachtbaren Unterschied.
 - Automatische Ticks verzichten auf vollständige Inspektionen; Terminal-
@@ -169,16 +192,30 @@ IDE-Metadaten. Ein anderer Renderer oder ein zweiter Scheduler behebt den
 gemessenen Interpreter-Engpass nicht. Kollisionsprüfungen werden nie
 übersprungen.
 
-## API
+## API der Browserfassung
+
+Öffentliche Signaturen werden unabhängig gegen die originalen Frameworkdateien
+und die Schüler-API in `tests/fixtures/blueplay-reference/` geprüft. Die
+unveränderten Schülerdateien des BlueJ-Projekts laufen mit der Library.
 
 | Einheit | Öffentliche Oberfläche | Nachweis |
 | --- | --- | --- |
-| `World` | `World(width, height, cellSize = 1)`, `background: Image`, `show`, `act`, `addObject`, `removeObject`, `allObjects`, `getObjects<T>`, `getObjectsAt`, `numberOfObjects`, `isClicked`, `setBackground(fileName)`, `setBackground(r, g, b)`, `showText` | `smoke-blueplay-browser.mjs`: Unterklassen, World-Callback, Objektlebensdauer, Text-/Bild-Frames |
-| `Actor` | `x`, `y`, `rotation`, `image: Image?`, `world`, `act`, `setImage`, `getImage`, `setLocation`, `getX`, `getY`, `setRotation`, `getRotation`, `move`, `turn`, `turnTowards`, `distanceTo`, `intersects`, `isTouching(other)`, `isTouching<T>()`, `getIntersecting<T>`, `getOneIntersecting<T>`, `removeTouching<T>`, `isAtEdge`, `isClicked` | dynamischer `act`-Aufruf, Reified-Suche, Eingabe und Identität im Browser-Smoke |
-| `Image` | `Image(width, height)`, `Image(fileName)`, `Image(other)`, `width`, `height`, `path`, `transparency`, `setColor`, `fill`, `fillRect`, `drawRect`, `fillOval`, `drawOval`, `drawLine`, `drawString`, `drawImage`, `clear`, `scale`, `setTransparency` | Kopie/geteilte Instanz, Zeichenoperationen, Skalierung, Transparenz, Canvas-Frame |
-| Funktionen | `activeWorld`, `showWorld`, `show`, `isKeyDown`, `start`, `stop`, `step`, `getSpeed`, `setSpeed`, `playSound` | native Bridge, Input-/Sound-Effekt, Scheduler- und Reset-Smokes |
+| `World` | `World(width: Int, height: Int, cellSize: Int)`, `width`, `height`, `cellSize`, `background: Image`, `show`, `act`, `addObject(Actor, x, y)`, `removeObject(Actor)`, `allObjects(): List<Actor>`, `getObjects<T : Actor>()`, `getObjectsAt(): List<Actor>`, `numberOfObjects`, `isClicked`, beide `setBackground`-Varianten, `showText` | `test:blueplay-api`, `smoke-blueplay-browser` |
+| `Actor` | `Actor()`, `x`, `y`, `rotation`, `image: Image?`, `world`, `act`, `move`, `turn`, `turnTowards`, `distanceTo`, `intersects`, `isTouching<T>()`, `getIntersecting<T>`, `getOneIntersecting<T>`, `removeTouching<T>`, `isAtEdge`, `isClicked` | `test:blueplay-api`, typisierte Kollisions-/Klicktests |
+| `Image` | `Image(width: Int, height: Int)`, `Image(fileName: String)`, `Image(other: Image)`, `width`, `height`, `setColor`, `fill`, `fillRect`, `drawRect`, `fillOval`, `drawOval`, `drawLine`, `drawString`, `drawImage`, `clear`, `scale`, `setTransparency` | drei echte Konstruktoren, Kopien, Ressourcen, Zeichenoperationen, Skalierung und Transparenz |
+| Funktionen | `isKeyDown`, `start`, `stop`, `step`, `getSpeed`, `setSpeed`, `playSound` | Scheduler-, Input-, Reset- und Player-Tests |
 
 `move(distance)` unterstützt beliebige Winkel und rundet auf ganze Zellen;
-Koordinaten-Setter klemmen an den Weltrand. Die Matrix beschreibt die
-vorhandene Oberfläche, keine Zusage für JVM-Interna wie `awtImage`,
-`java.awt.Color` oder Dateizugriffe.
+Koordinaten-Setter klemmen an den Weltrand. `turnTowards` zum eigenen Standort
+behält die Rotation. Bildgrößen werden wie im Original auf mindestens einen
+Pixel begrenzt. `drawImage` kopiert Inhalt und Transparenz im Aufrufzeitpunkt;
+`scale` skaliert den vorhandenen Inhalt, statt nur die Zeichenfläche zu ändern.
+Geladene Ressourcen und zusätzliche Zeichenoperationen werden gemeinsam
+gerendert. Auch Hintergründe behalten Größe und Transparenz. Private
+Engine-Felder und Hilfsmethoden erscheinen weder in der Hilfe noch im
+Library-Manifest oder passiven Inspektor.
+
+JVM-/AWT-Interna wie `awtImage`, `java.awt.Color` und Dateizugriffe gehören nicht
+zur Browser-API. Schriftmetriken und Kantenglättung im Browser sind keine
+pixelidentische AWT-Nachbildung; Textkollisionen verwenden weiterhin eine
+geometrische Näherung.

@@ -12,33 +12,50 @@ object BluePlayLibrary {
     // command completes, so state changes here do not render individually.  It is analyzed together with the project, so
     // inheritance, overriding and generic calls use Kotlite's normal rules.
     val source: String = """
-        class Image(private val seed: Any? = null, private val dimension: Int = 0) {
+        class Image {
             private var drawingColor = "rgb(0,0,0)"
             private var drawingOperations = mutableListOf<String>()
-            private var imageWidth: Int = if (seed is Int) (seed as Int) else if (seed is String) bluekImageWidth(seed as String) else 30
-            private var imageHeight: Int = if (seed is Int) dimension else if (seed is String) bluekImageHeight(seed as String) else 30
-            var path: String = if (seed is String) (seed as String) else ""
-            var transparency = 255
-                set(value) { field = if (value < 0) 0 else if (value > 255) 255 else value }
+            private var imageWidth = 1
+            private var imageHeight = 1
+            private var path = ""
+            private var transparency = 255
             val width: Int get() = imageWidth
             val height: Int get() = imageHeight
 
-            init {
-                if (seed is Image) {
-                    val copy = seed as Image
-                    path = copy.path; imageWidth = copy.width; imageHeight = copy.height
-                    transparency = copy.transparency; drawingColor = copy.drawingColor
-                    drawingOperations = copy.drawingOperations.map { it }.toMutableList()
-                }
+            constructor(width: Int, height: Int) {
+                imageWidth = if (width < 1) 1 else width
+                imageHeight = if (height < 1) 1 else height
             }
-            fun setTransparency(value: Int) { transparency = value }
-            fun scale(newWidth: Int, newHeight: Int) { imageWidth = if (newWidth < 1) 1 else newWidth; imageHeight = if (newHeight < 1) 1 else newHeight }
-            fun setColor(red: Int, green: Int, blue: Int) { drawingColor = "rgb(" + red + "," + green + "," + blue + ")" }
-            fun fill() { drawingOperations = mutableListOf("fill|" + drawingColor) }
-            fun fillRect(x: Int, y: Int, width: Int, height: Int) { drawingOperations.add("fillRect|" + x + "|" + y + "|" + width + "|" + height + "|" + drawingColor) }
-            fun drawRect(x: Int, y: Int, width: Int, height: Int) { drawingOperations.add("drawRect|" + x + "|" + y + "|" + width + "|" + height + "|" + drawingColor) }
-            fun fillOval(x: Int, y: Int, width: Int, height: Int) { drawingOperations.add("fillOval|" + x + "|" + y + "|" + width + "|" + height + "|" + drawingColor) }
-            fun drawOval(x: Int, y: Int, width: Int, height: Int) { drawingOperations.add("drawOval|" + x + "|" + y + "|" + width + "|" + height + "|" + drawingColor) }
+            constructor(fileName: String) {
+                imageWidth = bluekImageWidth(fileName)
+                imageHeight = bluekImageHeight(fileName)
+                path = fileName
+            }
+            constructor(other: Image) {
+                imageWidth = other.width; imageHeight = other.height
+                path = other.path; transparency = other.transparency
+                drawingOperations = other.drawingOperations.toMutableList()
+            }
+            fun setTransparency(value: Int) { transparency = if (value < 0) 0 else if (value > 255) 255 else value }
+            fun scale(width: Int, height: Int) {
+                val w = if (width < 1) 1 else width; val h = if (height < 1) 1 else height
+                val oldTransparency = transparency
+                transparency = 255
+                val snapshot = encodedSnapshot()
+                transparency = oldTransparency
+                path = ""
+                drawingOperations = mutableListOf("drawImage|__bluek:" + snapshot + "|0|0|" + w + "|" + h)
+                imageWidth = w; imageHeight = h
+            }
+            fun setColor(r: Int, g: Int, b: Int) {
+                bluekCheckColor(r, g, b)
+                drawingColor = "rgb(" + r + "," + g + "," + b + ")"
+            }
+            fun fill() { path = ""; drawingOperations = mutableListOf("fill|" + drawingColor) }
+            fun fillRect(x: Int, y: Int, w: Int, h: Int) { drawingOperations.add("fillRect|" + x + "|" + y + "|" + w + "|" + h + "|" + drawingColor) }
+            fun drawRect(x: Int, y: Int, w: Int, h: Int) { drawingOperations.add("drawRect|" + x + "|" + y + "|" + w + "|" + h + "|" + drawingColor) }
+            fun fillOval(x: Int, y: Int, w: Int, h: Int) { drawingOperations.add("fillOval|" + x + "|" + y + "|" + w + "|" + h + "|" + drawingColor) }
+            fun drawOval(x: Int, y: Int, w: Int, h: Int) { drawingOperations.add("drawOval|" + x + "|" + y + "|" + w + "|" + h + "|" + drawingColor) }
             fun drawLine(x1: Int, y1: Int, x2: Int, y2: Int) { drawingOperations.add("drawLine|" + x1 + "|" + y1 + "|" + x2 + "|" + y2 + "|" + drawingColor) }
             fun drawString(text: String, x: Int, y: Int) {
                 var encoded = ""; var index = 0
@@ -50,67 +67,47 @@ object BluePlayLibrary {
                 drawingOperations.add("drawString|" + encoded + "|" + x + "|" + y + "|" + drawingColor)
             }
             fun drawImage(image: Image, x: Int, y: Int) {
-                var nested = "{\"operations\":" + image.drawingJson() + ",\"width\":" + image.width + ",\"height\":" + image.height + "}"
+                val snapshot = image.encodedSnapshot()
+                drawingOperations.add("drawImage|__bluek:" + snapshot + "|" + x + "|" + y + "|" + image.width + "|" + image.height)
+            }
+            private fun encodedSnapshot(): String {
+                val nested = bluekImageSnapshot(this)
                 var encoded = ""; var index = 0
                 while (index < nested.length) {
                     val character = nested.substring(index, index + 1)
                     encoded += if (character == "\\") "\\\\" else if (character == "\"") "\\\"" else if (character == "|") "\\p" else if (character == "\n") "\\n" else character
                     index += 1
                 }
-                drawingOperations.add("drawImage|__bluek:" + encoded + "|" + x + "|" + y + "|" + image.width + "|" + image.height)
+                return encoded
             }
             fun clear() { drawingOperations.clear(); path = "" }
-            fun drawingJson(): String {
-                var json = "["; var index = 0
-                while (index < drawingOperations.size) {
-                    if (index > 0) json += ","
-                    val operation = drawingOperations[index]
-                    var escaped = ""; var characterIndex = 0
-                    while (characterIndex < operation.length) {
-                        val character = operation.substring(characterIndex, characterIndex + 1)
-                        escaped += if (character == "\\") "\\\\" else if (character == "\"") "\\\"" else if (character == "\n") "\\n" else character
-                        characterIndex += 1
-                    }
-                    json += "\"" + escaped + "\""; index += 1
-                }
-                return json + "]"
-            }
         }
 
-        open class World(val width: Int, val height: Int, val cellSize: Int = 1) {
-            // Keep the declaration order analyzable: Actor refers back to
-            // World, so the bridge stores the instances opaquely here while
-            // getObjects<T>() restores the public generic type for callers.
-            private val actors = mutableListOf<Any>()
+        open class World(val width: Int, val height: Int, val cellSize: Int) {
+            private val actors = mutableListOf<Actor>()
             private val textX = mutableListOf<Int>()
             private val textY = mutableListOf<Int>()
             private val textValues = mutableListOf<String>()
             var background: Image = Image(width * cellSize, height * cellSize).also { it.setColor(255, 255, 255); it.fill() }
-            var backgroundPath = ""
-            var backgroundColor = "rgb(255,255,255)"
-            var running = false
-            var speed = 50
 
             fun show() { bluekShowWorld(this) }
             open fun act() {}
-            fun addObject(actor: Any, x: Int, y: Int) {
+            fun addObject(actor: Actor, x: Int, y: Int) {
                 if (!actors.contains(actor)) actors.add(actor)
                 bluekWorldAddObject(this, actor, x, y)
             }
-            fun removeObject(actor: Any) {
+            fun removeObject(actor: Actor) {
                 actors.remove(actor)
                 bluekWorldRemoveObject(this, actor)
             }
-            fun allObjects(): List<Any> = actors.toList()
-            inline fun <reified T> getObjects(): List<T> = allObjects().filterIsInstance<T>()
-            fun getObjectsAt(x: Int, y: Int): List<Any> = actors.filter { bluekObjectX(it) == x && bluekObjectY(it) == y }
+            fun allObjects(): List<Actor> = actors.toList()
+            inline fun <reified T : Actor> getObjects(): List<T> = allObjects().filterIsInstance<T>()
+            fun getObjectsAt(x: Int, y: Int): List<Actor> = actors.filter { bluekObjectX(it) == x && bluekObjectY(it) == y }
             val numberOfObjects: Int get() = actors.size
             val isClicked: Boolean get() = bluekIsWorldClicked()
-            fun setBackground(fileName: String) { backgroundPath = fileName; background = Image(fileName); background.scale(width * cellSize, height * cellSize) }
-            fun setBackground(red: Int, green: Int, blue: Int) {
-                backgroundPath = ""
-                backgroundColor = "rgb(" + red + "," + green + "," + blue + ")"
-                background = Image(width * cellSize, height * cellSize).also { it.setColor(red, green, blue); it.fill() }
+            fun setBackground(fileName: String) { background = Image(fileName); background.scale(width * cellSize, height * cellSize) }
+            fun setBackground(r: Int, g: Int, b: Int) {
+                background = Image(width * cellSize, height * cellSize).also { it.setColor(r, g, b); it.fill() }
             }
             fun showText(text: String, x: Int, y: Int) {
                 var index = 0
@@ -125,13 +122,12 @@ object BluePlayLibrary {
                 }
                 if (!text.isEmpty()) { textX.add(x); textY.add(y); textValues.add(text) }
             }
-            fun tick() { act(); bluekWorldTick(this) }
         }
 
         open class Actor {
-            var worldWidth = 0
-            var worldHeight = 0
-            var worldCellSize = 1
+            private var worldWidth = 0
+            private var worldHeight = 0
+            private var worldCellSize = 1
             var x = 0
                 set(value) { field = if (worldWidth > 0) if (value < 0) 0 else if (value >= worldWidth) worldWidth - 1 else value else value }
             var y = 0
@@ -139,44 +135,33 @@ object BluePlayLibrary {
             var rotation = 0
                 set(value) { field = ((value % 360) + 360) % 360 }
             var image: Image? = null
-            val world: World get() = bluekActorWorld(this) as World
-            fun setImage(path: String) { image = Image(path) }
-            fun setImage(newImage: Image) { image = newImage }
-            fun getImage(): Image? = image
+            private fun requireWorld(): World = (bluekActorWorld(this) as World?) ?: throw IllegalStateException("The actor is not in a world (add it with addObject first).")
+            val world: World get() = requireWorld()
             open fun act() {}
-            // The setters clamp to the world bounds.
-            fun setLocation(newX: Int, newY: Int) { x = newX; y = newY }
-            fun getX(): Int = x
-            fun getY(): Int = y
-            fun setRotation(degrees: Int) { rotation = ((degrees % 360) + 360) % 360 }
-            fun getRotation(): Int = rotation
-            fun move(distance: Int) { setLocation(x + bluekMoveDeltaX(rotation, distance), y + bluekMoveDeltaY(rotation, distance)) }
-            fun turn(degrees: Int) { setRotation(rotation + degrees) }
-            fun turnTowards(targetX: Int, targetY: Int) { rotation = bluekHeading(x, y, targetX, targetY) }
+            fun move(distance: Int) { x += bluekMoveDeltaX(rotation, distance); y += bluekMoveDeltaY(rotation, distance) }
+            fun turn(degrees: Int) { rotation += degrees }
+            fun turnTowards(x: Int, y: Int) {
+                if (x != this.x || y != this.y) rotation = bluekHeading(this.x, this.y, x, y)
+            }
             fun distanceTo(other: Actor): Int = bluekDistance(x, y, other.x, other.y)
-            fun intersects(other: Actor): Boolean = bluekIntersects(this, other)
-            fun isTouching(other: Actor): Boolean = bluekIntersects(this, other)
+            fun intersects(other: Actor): Boolean { requireWorld(); other.requireWorld(); return bluekIntersects(this, other) }
             // Name the receiver explicitly: an implicit-receiver call inside the
             // lambda of an inlined member is not resolvable at runtime.
             inline fun <reified T : Actor> getIntersecting(): List<T> {
                 val self = this
-                return world.getObjects<T>().filter { it != self && bluekIntersects(self, it) }
+                return requireWorld().getObjects<T>().filter { it != self && bluekIntersects(self, it) }
             }
             inline fun <reified T : Actor> getOneIntersecting(): T? = getIntersecting<T>().firstOrNull()
             inline fun <reified T : Actor> isTouching(): Boolean = getIntersecting<T>().size > 0
-            inline fun <reified T : Actor> removeTouching() { getOneIntersecting<T>()?.let { world.removeObject(it as Any) } }
-            val isAtEdge: Boolean get() = worldWidth > 0 && worldHeight > 0 && (x <= 0 || y <= 0 || x >= worldWidth - 1 || y >= worldHeight - 1)
-            val isClicked: Boolean get() = bluekIsActorClicked(this, x, y)
+            inline fun <reified T : Actor> removeTouching() { val currentWorld = requireWorld(); getOneIntersecting<T>()?.let { currentWorld.removeObject(it as Actor) } }
+            val isAtEdge: Boolean get() { val currentWorld = requireWorld(); return x <= 0 || y <= 0 || x >= currentWorld.width - 1 || y >= currentWorld.height - 1 }
+            val isClicked: Boolean get() { requireWorld(); return bluekIsActorClicked(this, x, y) }
         }
 
-        // The session tracks the shown world for every path (showWorld(w) and w.show()).
-        fun activeWorld(): World = bluekActiveWorld() as World
-        fun showWorld(world: World) { world.show() }
-        fun show() { activeWorld().show() }
         fun isKeyDown(key: String): Boolean = bluekIsKeyDown(key)
-        fun start() { bluekSimulationStart(); activeWorld().running = true }
-        fun stop() { bluekSimulationStop(); activeWorld().running = false }
-        fun step() { activeWorld().tick() }
+        fun start() { bluekSimulationStart() }
+        fun stop() { bluekSimulationStop() }
+        fun step() { bluekStep() }
         fun getSpeed(): Int = bluekGetSpeed()
         fun setSpeed(value: Int) { bluekSetSpeed(value) }
         fun playSound(fileName: String) { bluekPlaySound(fileName) }

@@ -125,7 +125,7 @@ const rocketGame: Files = [
         val picture = Image(20, 20)
         picture.setColor(200, 0, 0)
         picture.fillRect(0, 0, 20, 20)
-        setImage(picture)
+        image = picture
     }
     override fun act() {
         if (isKeyDown("right")) move(5)
@@ -134,7 +134,7 @@ const rocketGame: Files = [
     }
 }
 ` },
-  { fileName: 'Game.kt', source: 'fun main() {\n    println("start")\n    val world = World(200, 100)\n    world.addObject(Rocket(), 50, 50)\n    showWorld(world)\n}\n' },
+  { fileName: 'Game.kt', source: 'fun main() {\n    println("start")\n    val world = World(200, 100, 1)\n    world.addObject(Rocket(), 50, 50)\n    world.show()\n}\n' },
 ];
 
 async function redPixels(page: Page) {

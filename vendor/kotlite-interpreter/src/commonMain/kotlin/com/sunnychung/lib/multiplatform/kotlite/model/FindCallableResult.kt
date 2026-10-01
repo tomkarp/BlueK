@@ -14,6 +14,7 @@ data class FindCallableResult(
     val definition: Any,
     var isSpecialFunction: Boolean = false,
     val scope: SymbolTable,
+    val secondaryConstructorIndex: Int? = null,
 ) {
     fun toDisplayableSignature() = buildString {
         if (receiverType != null) {

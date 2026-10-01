@@ -9,7 +9,7 @@
     {
       "fileName": "Figure.kt",
       "kind": "class",
-      "source": "/** A simple figure that slowly walks to the right. */\nclass Figure : Actor() {\n\n    init {\n        setImage(\"figure.png\")\n    }\n\n    override fun act() {\n        move(1)\n    }\n}\n"
+      "source": "/** A simple figure that slowly walks to the right. */\nclass Figure : Actor() {\n\n    init {\n        image = Image(\"figure.png\")\n    }\n\n    override fun act() {\n        move(1)\n    }\n}\n"
     },
     {
       "fileName": "MyWorld.kt",
@@ -19,7 +19,7 @@
     {
       "fileName": "Main.kt",
       "kind": "functions",
-      "source": "/** Minimal BluePlay example. The Reset button runs this main() again. */\nfun main() {\n    val world = MyWorld()\n    showWorld(world)\n}\n"
+      "source": "/** Minimal BluePlay example. The Reset button runs this main() again. */\nfun main() {\n    val world = MyWorld()\n    world.show()\n}\n"
     }
   ],
   "resources": [

@@ -76,10 +76,14 @@ footer{flex:0 0 108px}
 .inspect-row{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);align-items:center;margin:3px 0;background:#fff0f0;border:1px solid #e65f6b}
 .inspect-row span{min-width:0;padding:5px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:16px Arial,sans-serif}
 .inspect-value{grid-column:2;display:flex;align-items:stretch;min-width:0;background:#fff;border-left:2px solid #e65f6b}
-.inspect-value output{flex:1 1 auto;min-width:0;padding:5px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:16px monospace}
+.inspect-value output,.inspect-value .inspect-error-value{flex:1 1 auto;min-width:0;padding:5px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:16px monospace}
 .inspect-value input{width:100%;min-width:0;padding:5px;border:1px solid #888;font:16px monospace}
 .inspect-row input[aria-invalid="true"]{outline:2px solid #c00000;outline-offset:-2px}
 .inspect-error{grid-column:1 / -1;padding:4px 8px;color:#a00000;font:13px Arial,sans-serif;background:#ffe0e0}
+.inspect-value .inspect-error-value{margin:0;border:0;border-radius:0;background:transparent;color:inherit;text-align:left;cursor:pointer}
+.inspect-value .inspect-error-value:focus-visible{outline:2px solid #087c9d;outline-offset:-2px}
+.inspector-error-dialog{width:min(520px,calc(100vw - 32px))}
+.inspector-error-dialog p{white-space:pre-wrap;overflow-wrap:anywhere}
 .dialog-error{margin:4px 0 12px;padding:8px 10px;color:#a00000;background:#ffe0e0;border:1px solid #d66;font-size:14px}
 .editor-dialog-error{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .editor-dialog-error>span{min-width:0;overflow-wrap:anywhere}
@@ -186,7 +190,21 @@ footer{flex:0 0 108px}
 .compiler-error-message{max-height:18vh}
 
 /* BluePlay API cards use the same visual treatment as every other class card. */
-.game-stage.game-canvas{display:block;width:min(40%,420px);height:auto;max-width:none;background-image:none!important;image-rendering:auto;cursor:crosshair}.blueplay-api-dialog{width:min(620px,calc(100vw - 40px));max-height:84vh;overflow:auto}.blueplay-api-dialog h3{margin-bottom:6px}.blueplay-api-dialog>p{color:#555}.blueplay-api-members{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 18px;margin:18px 0;padding:14px 18px;background:#fff;border:1px solid #bbb;border-radius:6px;list-style:none}.blueplay-api-members li{min-width:0}.blueplay-api-members code{font:12px monospace;overflow-wrap:anywhere}@media(max-width:700px){.blueplay-api-members{grid-template-columns:1fr}}
+.game-stage.game-canvas{display:block;width:min(40%,420px);height:auto;max-width:none;background-image:none!important;image-rendering:auto;cursor:crosshair}.blueplay-api-dialog{width:min(820px,calc(100vw - 32px));max-height:84vh;display:flex;flex-direction:column;padding:0;overflow:hidden;border-radius:10px;background:#fff}
+.blueplay-api-header{padding:20px 24px 16px;border-bottom:1px solid #e5e7eb;flex:none}
+.blueplay-api-header h3{margin:0 0 5px;font-size:21px;letter-spacing:-.3px}
+.blueplay-api-header p{margin:0;font-size:13px;line-height:1.45;color:#626873}
+.blueplay-api-content{min-height:0;overflow:auto;padding:10px 24px 16px}
+.blueplay-api-section h4{font-size:12px;font-weight:600;letter-spacing:.04em;color:#6b4ba4;margin:14px 0 6px}
+.blueplay-api-members{margin:0}
+.blueplay-api-member{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:8px 20px;align-items:baseline;padding:8px 0;border-bottom:1px solid #eef0f3}
+.blueplay-api-member:last-child{border-bottom:0}
+.blueplay-api-member dt,.blueplay-api-member dd{margin:0;min-width:0}
+.blueplay-api-member code{font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;color:#284f80;overflow-wrap:anywhere}
+.blueplay-api-member dd{font-size:12px;line-height:1.5;color:#626873}
+.blueplay-api-dialog>.dialog-actions{flex:none;margin:0;padding:12px 24px;border-top:1px solid #e5e7eb;background:#fafbfc}
+@media(max-width:600px){.blueplay-api-header{padding:16px}.blueplay-api-content{padding:6px 16px 12px}.blueplay-api-member{grid-template-columns:1fr;gap:2px;padding:7px 0}}
+
 
 /* Final BluePlay window overrides: legacy fixed rules must not split the
    world, header and controls again. */
@@ -457,7 +475,8 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 @keyframes bluek-spin{to{transform:rotate(360deg)}}
 
 /* BlueJ-style class-card context menu. */
-.popup{width:max-content;min-width:210px;max-width:calc(100vw - 16px);overflow:visible;background:#fff;border:1px solid #aaa;box-shadow:2px 4px 12px #777;display:flex;flex-direction:column}
+/* Context menus, including inherited methods, sit above ordinary windows. */
+.popup{z-index:40;width:max-content;min-width:210px;max-width:calc(100vw - 16px);overflow:visible;background:#fff;border:1px solid #aaa;box-shadow:2px 4px 12px #777;display:flex;flex-direction:column}
 .popup-title{display:none}
 .popup button{color:#222;background:#fff;padding:10px 12px;font-size:15px;white-space:nowrap}
 .popup button:hover,.popup button:focus-visible{background:#08a6d2;color:#fff;outline:0}
@@ -708,6 +727,8 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 .dark .inspect-value .inspect-edit,.dark .inspect-value .inspect-edit:hover:not(:disabled),.dark .inspect-value .inspect-edit:active:not(:disabled){background:transparent;border:0;box-shadow:none}
 .dark .inspect-value .inspect-edit:hover:not(:disabled){color:#087c9d}
 .dark button:focus-visible{outline:2px solid #3794ff;outline-offset:2px}
+.dark .inspect-value .inspect-error-value,.dark .inspect-value .inspect-error-value:hover:not(:disabled),.dark .inspect-value .inspect-error-value:active:not(:disabled){background:transparent;border:0;color:inherit;box-shadow:none}
+.dark .inspect-value .inspect-error-value:focus-visible{outline-offset:-2px}
 .dark button:disabled{opacity:.48}
 .dark .editor-tabbed-dialog .editor-tabs button{background:#323236;color:#c8c8c8;border-color:#515157}
 .dark .editor-tabbed-dialog .editor-tabs button.active{background:#1e1e1e;color:#f3f3f3;border-color:#5a5a62;border-bottom-color:#1e1e1e;box-shadow:0 -1px 0 #5a5a62}
@@ -720,3 +741,9 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 /* Compile warnings: the program runs, but the marked code will misbehave. */
 .dialog-error.editor-warnings{color:#6b4700;background:#fff4d6;border-color:#d9a400}
 .dark .dialog-error.editor-warnings{color:#e5b94a}
+
+.dark .blueplay-api-header,.dark .blueplay-api-member{border-color:#3c3c3c}
+.dark .blueplay-api-header p,.dark .blueplay-api-member dd{color:#b7bbc4}
+.dark .blueplay-api-section h4{color:#c5a6ee}
+.dark .blueplay-api-member code{color:#91c2f1}
+.dark .blueplay-api-dialog>.dialog-actions{background:#202022;border-color:#3c3c3c}

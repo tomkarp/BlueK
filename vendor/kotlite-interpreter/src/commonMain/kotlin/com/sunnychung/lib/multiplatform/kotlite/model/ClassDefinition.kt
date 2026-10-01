@@ -45,6 +45,9 @@ open class ClassDefinition(
     var superClass: ClassDefinition? = null,
     var superInterfaces: List<ClassDefinition> = emptyList(),
 ) {
+    val secondaryConstructors: List<ClassSecondaryConstructorNode>
+        get() = declarations.filterIsInstance<ClassSecondaryConstructorNode>()
+
     private val declaredSuperClassInvocation = superClassInvocation
     internal val thisPropertyName = "this/$fullQualifiedName"
 

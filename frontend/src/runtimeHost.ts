@@ -16,6 +16,7 @@ export interface KotliteSessionBridge {
   startInvoke(objectId: string, methodName: string, argumentsSource: string, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
   startSet(objectId: string, propertyName: string, valueSource: string, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
   startGet(objectId: string, propertyName: string, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
+  startInspectGet(objectId: string, propertyName: string, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
   setOutputCallback(callback: (() => void) | null): void;
   create(className: string, argumentsSource: string, name: string): string;
   invoke(objectId: string, name: string, argumentsSource: string): string;
@@ -39,6 +40,7 @@ export interface KotliteSessionBridge {
   startBluePlayStep(onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
   startBluePlayMain(fileName: string | null, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
   takeBluePlayIntent(): string;
+  setBluePlayRunningQuery(query: () => boolean): void;
 }
 
 type Emit = (message: WorkerReply | RuntimeEvent) => void;
@@ -50,7 +52,7 @@ export class RuntimeHost {
   private sequence = 0;
   private lastOutputPublishAt = -Infinity;
   private outputTimer: ReturnType<typeof setTimeout> | null = null;
-  private active: { executionId: number; inputRequestId?: number } | null = null;
+  private active: { executionId: number; inputRequestId?: number; automaticSimulation?: boolean } | null = null;
   private lastStage: BluePlayStage | undefined;
   private simulation: { state: SimulationState; speed: number; emit: Emit | null; timer: ReturnType<typeof setTimeout> | null } = { state: 'inactive', speed: 50, emit: null, timer: null };
 
@@ -75,7 +77,7 @@ export class RuntimeHost {
     };
   }
 
-  private publish(id: number, response: RuntimeValue, includeInspections = true): WorkerReply {
+  private publish(id: number, response: RuntimeValue, includeInspections = true, reportError = true): WorkerReply {
     this.clearOutputTimer();
     this.refreshSnapshot(includeInspections);
     response.output = this.session?.takeOutput() || '';
@@ -84,7 +86,7 @@ export class RuntimeHost {
     if (stage) { const parsed = JSON.parse(stage); response.stage = parsed.stage || parsed; this.lastStage = response.stage as BluePlayStage; }
     const effects = this.session?.takeEffects();
     if (effects) response.effects = JSON.parse(effects);
-    this.snapshot = { ...this.snapshot, stage: this.lastStage, simulation: this.simulation.state, error: response.kind === 'error' ? response.display || 'Runtime error' : null };
+    this.snapshot = { ...this.snapshot, stage: this.lastStage, simulation: this.simulation.state, error: reportError && response.kind === 'error' ? response.display || 'Runtime error' : null };
     if (response.fatal) this.snapshot.phase = 'faulted';
     return { id, generationId: this.snapshot.generationId, response, snapshot: this.snapshot };
   }
@@ -147,6 +149,7 @@ export class RuntimeHost {
         this.snapshot = { ...initialSnapshot(), generationId: command.generationId, phase: 'compiling' };
         this.session = this.createSession();
         this.session.configureBluePlay(command.library?.id === 'blueplay', command.generationId);
+        this.session.setBluePlayRunningQuery(() => this.simulation.state === 'running' || (this.simulation.state === 'waiting' && this.active?.automaticSimulation === true));
         // Every resource is announced, so the runtime can tell a missing image
         // from one whose pixel mask could not be prepared; only prepared images
         // carry width/height/alpha.
@@ -209,7 +212,10 @@ export class RuntimeHost {
       const executionId = id;
       this.active = { executionId }; this.snapshot.phase = 'running';
       this.lastOutputPublishAt = -Infinity;
-      this.session.setOutputCallback(() => this.emitStreamingOutput(executionId, emit)); this.emitEvent(executionId, 'started', emit);
+      this.session.setOutputCallback(() => this.emitStreamingOutput(executionId, emit));
+      // Synchronous inspection reads complete in this dispatch; publish their
+      // final snapshot directly instead of flickering the UI into running.
+      if (command.op !== 'inspectGet') this.emitEvent(executionId, 'started', emit);
       const onInput = (inputRequestId: number) => {
         if (!this.active || this.active.executionId !== executionId) return;
         this.active.inputRequestId = inputRequestId; this.snapshot.phase = 'waitingForInput';
@@ -223,7 +229,7 @@ export class RuntimeHost {
         const intent = this.session!.takeBluePlayIntent();
         if (intent === 'start') { this.simulation.state = 'running'; this.simulation.emit = emit; this.scheduleSimulationStep(); }
         if (intent === 'stop') this.simulation.state = 'paused';
-        emit(this.publish(id, response));
+        emit(this.publish(id, response, true, command.op !== 'inspectGet' || !!response.fatal));
       };
       const started = command.op === 'create'
         ? this.session.startCreate(command.className + suffix, args, command.name, onInput, onComplete)
@@ -231,11 +237,14 @@ export class RuntimeHost {
           ? this.session.startInvoke(command.objectId, command.name + suffix, args, onInput, onComplete)
           : command.op === 'set'
             ? this.session.startSet(command.objectId, command.property, command.value, onInput, onComplete)
+            : command.op === 'inspectGet'
+              ? this.session.startInspectGet(command.objectId, command.property, onInput, onComplete)
             : command.op === 'get'
               ? this.session.startGet(command.objectId, command.property, onInput, onComplete)
               : this.session.startEvaluate(filename, source, onInput, onComplete);
       const initial = JSON.parse(started) as RuntimeValue;
       if (initial.kind === 'error' && this.active?.executionId === executionId) { this.active = null; this.snapshot.phase = initial.fatal ? 'faulted' : 'ready'; emit(this.publish(id, initial)); }
+      else if (command.op === 'inspectGet' && this.active?.executionId === executionId && this.snapshot.phase === 'running') this.emitEvent(executionId, 'started', emit);
     } catch (error) {
       emit(this.publish(id, { kind: 'error', display: error instanceof Error ? error.message : String(error), phase: error instanceof RequestError ? 'request' : 'transport', fatal: !(error instanceof RequestError) }));
     }
@@ -264,6 +273,7 @@ export class RuntimeHost {
     }
     if (command.action === 'start') {
       if (this.simulation.state === 'running' || this.simulation.state === 'stopping') { emit(this.publish(id, { kind: 'unit', display: 'Unit' })); return; }
+      this.session.takeBluePlayIntent();
       this.simulation.state = 'running'; this.simulation.emit = emit; emit(this.publish(id, { kind: 'unit', display: 'Unit' })); this.scheduleSimulationStep(); return;
     }
     if (command.action === 'reset') {
@@ -284,6 +294,9 @@ export class RuntimeHost {
       this.emitEvent(executionId, 'started', emit);
       const onComplete = (result: string) => {
         if (!this.active || this.active.executionId !== executionId) return;
+        // Reset finishes paused. Intents emitted by main() have been handled;
+        // they must not override the next explicit Run or Act command.
+        this.session!.takeBluePlayIntent();
         this.active = null; const response = JSON.parse(result) as RuntimeValue; this.snapshot.phase = response.fatal ? 'faulted' : 'ready'; this.simulation.state = response.fatal ? 'faulted' : 'paused'; emit(this.publish(id, response));
       };
       const started = this.session.startBluePlayMain(fileName, onInput, onComplete); const initial = JSON.parse(started) as RuntimeValue;
@@ -297,7 +310,7 @@ export class RuntimeHost {
   private runSimulationStep(id: number, emit: Emit, automatic: boolean) {
     if (!this.session) return;
     const startedAt = performance.now();
-    const executionId = automatic ? ++this.sequence : id; this.active = { executionId };
+    const executionId = automatic ? ++this.sequence : id; this.active = { executionId, automaticSimulation: automatic };
     const onInput = (inputRequestId: number) => {
       if (!this.active || this.active.executionId !== executionId) return;
       this.active.inputRequestId = inputRequestId; this.snapshot.phase = 'waitingForInput'; this.simulation.state = 'waiting';

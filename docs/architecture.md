@@ -66,10 +66,10 @@ Der Worker hält genau eine `KotliteSession` mit genau einem lebenden
   benötigten Client-Fähigkeiten, liefert typisierte Ergebnisse und verwirft
   Antworten nach einem Generationswechsel. Darstellung, History und Fokus
   bleiben in `SvelteApp.svelte`.
-- `inspectorModel.ts`: abgeleitete Inspektoransicht und ausdrücklich
-  angeforderte Getter-Auswertung. Keine DOM-, Svelte-, Worker- oder
+- `inspectorModel.ts`: abgeleitete Inspektoransicht und automatische
+  Property-Auswertung beim Öffnen/Aktualisieren eines Fensters. Keine DOM-, Svelte-, Worker- oder
   Projektdateiabhängigkeit; Schnittstelle zur Laufzeit nur `getSnapshot()`
-  und `execute(get)`.
+  und `execute(inspectGet)`.
 - `runtimeMetadata.ts`: gruppiert das Kotlite-Manifest zu Klassenkarten und
   ergänzt nur geerbte Mitglieder und Funktionskarten pro Datei.
 - `mainEntries.ts`: leitet parameterlose `main()`-Einstiegspunkte aus den
@@ -126,6 +126,11 @@ Der Worker hält genau eine `KotliteSession` mit genau einem lebenden
   Ansichtsdetails werden nicht ins Worker-Protokoll aufgenommen.
 
 ## Build
+
+Die API-Hilfe der BluePlay-Library erhält ein beim Interpreter-Build erzeugtes
+Manifest (`scripts/build-blueplay-api.mjs`, `bluePlayApi.generated.json`).
+Sie formatiert diese unveränderlichen Metadaten und kurze Erläuterungen; sie
+parst keinen Kotlin-Quelltext und führt beim Öffnen keinen Schülercode aus.
 
 Kotlin-Schülercode wird zu keinem Zeitpunkt in JavaScript oder Bytecode
 übersetzt. Zur Build-Zeit entstehen nur der Interpreter (aus Kotlin) und die
@@ -433,28 +438,48 @@ Regressionen: `test:references`, `test:runtime-state`,
 Die Laufzeit ist die Quelle gespeicherter Feldwerte. Inspektorfenster
 enthalten nur Objekt-ID und Position; der aktive Inspektor wird über seine ID
 ausgewählt. Die gemeinsame Fensteraktivierung ordnet Inspektor, Editor und
-Terminal im Z-Stapel.
+Terminal im Z-Stapel. Objekt- und Klassen-Kontextmenüs einschließlich
+Untermenüs liegen darüber; modale Aktionsdialoge bleiben über den Menüs.
 
-**Passiv (bei jedem Snapshot):** `KotliteSession.inspect` liest für jede
-Property der Klasse (einschließlich geerbter, aus dem AST gesammelt) das
-Backing-Feld über `ClassInstance.readBackingPropertyByDeclaredName`, eine
-Erweiterung des Forks. Dabei läuft kein Schülercode: kein Getter, kein
-`toString()` (Anzeige über `convertToString(isCallCustomFunction = false)`);
-Collections zeigen Größe und die ersten fünf Elemente. Properties mit
-eigenem Getter erscheinen als `<computed>`. Eine Property nur mit eigenem
-Setter liest weiterhin ihr Backing-Feld. Objektwertige Felder sind als
-Referenz markiert; `inspectField` folgt ihnen, ohne Getter auszuführen, und
-vergibt dafür ein Handle.
+**Passiv (bei jedem Snapshot):** `KotliteSession.inspect` liest gespeicherte
+Felder einschließlich geerbter über `ClassInstance.readBackingPropertyByDeclaredName`
+und ergänzt die zuletzt ausgewerteten Getter-Ergebnisse samt Fehlern aus der
+Runtime. Dabei läuft kein Schülercode. Insbesondere starten Snapshot und
+Rendern weder Getter noch Schüler-`toString()`. Collections zeigen Größe und
+die ersten fünf Elemente; noch ausstehende Getter-Werte erscheinen in der
+Oberfläche als „…“. Die Unterscheidung bleibt ein internes Detail.
 
-**Explizit:** `InspectorModel` hält ausschließlich Ergebnisse ausdrücklich
-ausgewerteter Getter. Rendern oder das Empfangen eines Snapshots löst keine
-Getter aus, denn Kotlin-Getter können Seiteneffekte haben. Nach
-Benutzeroperationen fragt die Oberfläche offene Inspektoren gezielt ab (ein
-`get`-Befehl pro `<computed>`-Feld); parallele Refreshes desselben Objekts
-werden übersprungen. Getter-Ergebnisse gelten nur für ihre Generation;
-Reset/Compile und Schließen eines Fensters entwerten ausstehende Ergebnisse.
-Transportfehler bleiben in der Laufzeit, fachliche Getter-Fehler sind Teil der
-Ansicht.
+**Automatisch bei Benutzeroperationen:** Beim Öffnen und nach Änderungen
+fragt `InspectorModel` alle Properties offener Inspektoren einzeln über
+`inspectGet` ab. Die Session liest sie im normalen Interpreterpfad innerhalb
+eines `try/catch (Throwable)`; gewöhnliche Exceptions werden als Fehlertext
+an der betreffenden Property veröffentlicht. Weitere Properties werden
+weiter ausgewertet, die Laufzeit bleibt benutzbar. `get` im Programmkontext
+bleibt unverändert fatal bei unbehandelten Exceptions. Nicht fangbare
+Interpreterfehler bleiben auch bei `inspectGet` fatal.
+
+Alle Property-Ergebnisse und Fehler gehören zum Runtime-Snapshot. Die
+Oberfläche hält nur Fensterdaten und ausstehende Anfragen, keinen zweiten
+Getter-Wertcache. Parallele Aktualisierungen desselben Objekts werden
+zusammengefasst; Compile/Reset und Schließen entwerten ausstehende Anfragen.
+Private Getter laufen über den typisierten Runtime-Zugriff, ohne eine
+Quelltext-Ausnahme in der UI. Eingabe und Warten behalten ihren bestehenden
+suspendierbaren Vertrag. Objektwertige Properties liefern Runtime-Handles;
+`inspectField` folgt gespeicherten Referenzen weiterhin passiv.
+
+Entwurfsentscheidung: Gespeicherte und berechnete Properties werden
+einheitlich dargestellt; die Art des Getters ist für die Bedienung unerheblich.
+Getterfehler stehen gekürzt im normalen Wertfeld. Hover zeigt den vollständigen
+Text als Tooltip, Klick öffnet eine Meldung. Der Inspektionskontext fängt
+gewöhnliche Exceptions pro Property, während sie im Programm unbehandelt
+die Ausführung beenden.
+
+`Actor.world` hat den Typ `World` und wirft ohne Welt. Dadurch erfordert
+der gewöhnliche Weltzugriff im Schülercode keine Nullbehandlung; der
+Inspektor behandelt den Getter wie alle anderen Properties.
+Eine Aktualisierungsanforderung während einer laufenden Inspektion löst
+anschließend einen weiteren Durchlauf aus. So ersetzen neue Ergebnisse
+auch bei schnellen aufeinanderfolgenden Aktionen ältere Getterfehler.
 
 Feldänderungen laufen als normaler `set`-Befehl auf das Handle des
 Fensters. Typinformationen stammen aus Kotlite, nicht aus dem Format des

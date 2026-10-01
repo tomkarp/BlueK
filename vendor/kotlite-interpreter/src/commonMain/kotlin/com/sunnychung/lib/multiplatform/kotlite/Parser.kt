@@ -20,6 +20,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.ClassInstanceInitializerNo
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassMemberReferenceNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassModifier
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassParameterNode
+import com.sunnychung.lib.multiplatform.kotlite.model.ClassSecondaryConstructorNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassPrimaryConstructorNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ContinueNode
 import com.sunnychung.lib.multiplatform.kotlite.model.DoWhileNode
@@ -2243,7 +2244,15 @@ open class Parser(protected val lexer: Lexer) {
     fun classMemberDeclarations(isInterface: Boolean): List<ASTNode> {
         val declarations = mutableListOf<ASTNode>()
         while (!isCurrentTokenExcludingNL(TokenType.Symbol, "}")) {
-            declarations += if (isCurrentToken(TokenType.Identifier, "init")) {
+            declarations += if (isCurrentToken(TokenType.Identifier, "constructor")) {
+                val t = eat(TokenType.Identifier, "constructor")
+                val parameters = functionValueParameters()
+                repeatedNL()
+                if (isCurrentToken(TokenType.Symbol, ":")) {
+                    throw UnsupportedOperationException("Secondary constructor delegation (this/super) is not supported by this Kotlite build.")
+                }
+                ClassSecondaryConstructorNode(t.position, parameters, block(ScopeType.Function))
+            } else if (isCurrentToken(TokenType.Identifier, "init")) {
                 val t = eat(TokenType.Identifier, "init")
                 repeatedNL()
                 val block = block(ScopeType.Initializer)
@@ -2452,6 +2461,9 @@ open class Parser(protected val lexer: Lexer) {
             } else {
                 declarations = classBody(isInterface = isInterface)
             }
+        }
+        if (declarations.any { it is ClassSecondaryConstructorNode } && primaryConstructor != null) {
+            throw UnsupportedOperationException("Secondary constructors alongside a primary constructor are not supported by this Kotlite build.")
         }
         return ClassDeclarationNode(
             position = t.position,

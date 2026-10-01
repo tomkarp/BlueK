@@ -458,6 +458,58 @@ test('GUI-85 method parameter dialog stays above an open editor', async ({ page 
   expect(dialogIndex).toBeGreaterThan(editorIndex);
 });
 
+test('GUI-93 object methods and inherited submenus stay above inspectors', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, files: [
+    { fileName: 'Tier.kt', kind: 'class', source: 'open class Tier { fun fressen() { println("gefressen") } }' },
+    { fileName: 'Hund.kt', kind: 'class', source: `class Hund : Tier() {
+      var a = 1; var b = 2; var c = 3; var d = 4; var e = 5; var f = 6
+      fun laufen(weite: Int) {}
+    }` },
+  ] };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  const entry = await evaluate(page, 'Hund()');
+  await entry.getByRole('button').click();
+  await page.getByLabel('Name of instance').fill('hund1');
+  await page.getByRole('button', { name: 'OK', exact: true }).click();
+  const object = page.locator('.bench .object');
+  await object.dblclick();
+  const inspector = page.locator('.inspect-window');
+  const objectBox = (await object.boundingBox())!;
+  const before = (await inspector.boundingBox())!;
+  await page.mouse.move(before.x + 16, before.y + 16);
+  await page.mouse.down();
+  await page.mouse.move(objectBox.x + objectBox.width + 28, objectBox.y - 144);
+  await page.mouse.up();
+
+  const assertAboveInspector = async (button: ReturnType<Page['locator']>) => {
+    const menuBox = (await button.boundingBox())!;
+    const inspectorBox = (await inspector.boundingBox())!;
+    const left = Math.max(menuBox.x, inspectorBox.x), right = Math.min(menuBox.x + menuBox.width, inspectorBox.x + inspectorBox.width);
+    const top = Math.max(menuBox.y, inspectorBox.y), bottom = Math.min(menuBox.y + menuBox.height, inspectorBox.y + inspectorBox.height);
+    expect(right - left).toBeGreaterThan(10);
+    expect(bottom - top).toBeGreaterThan(10);
+    expect(await page.evaluate(({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest('.popup')), {
+      x: (left + right) / 2, y: (top + bottom) / 2,
+    })).toBe(true);
+  };
+  await object.click({ button: 'right', position: { x: objectBox.width - 8, y: 12 } });
+  const method = page.locator('.popup').getByRole('button', { name: 'laufen(weite: Int)', exact: true });
+  await expect(method).toBeVisible();
+  await assertAboveInspector(method);
+  await method.click();
+  const parameters = page.getByRole('dialog', { name: /hund1\.laufen/ });
+  await expect(parameters).toBeVisible();
+  await parameters.getByRole('button', { name: 'Cancel', exact: true }).click();
+
+  await object.click({ button: 'right', position: { x: objectBox.width - 8, y: 12 } });
+  await page.locator('.popup-submenu-trigger').filter({ hasText: 'inherited from Tier' }).hover();
+  const inherited = page.locator('.popup-submenu-panel').getByRole('button', { name: 'fressen()', exact: true });
+  await expect(inherited).toBeVisible();
+  await assertAboveInspector(inherited);
+  await inherited.click();
+  await expect(page.locator('.terminal-output pre')).toContainText('gefressen');
+});
+
 test('GUI-31 additional editor files open in tabs by default', async ({ page }) => {
   const payload = { format: 'bluek-project', version: 1, files: [
     { fileName: 'Hund.kt', kind: 'class', source: 'class Hund {}' },
@@ -1302,6 +1354,31 @@ test('GUI-64 a compiler error is marked in the source and reported below the edi
   await expect(page.locator('.classcard.uncompiled')).toHaveCount(0);
   await expect(message).toHaveCount(0);
   await expect(editor.locator('.cm-bluek-error-line')).toHaveCount(0);
+});
+
+test('RT-50 nullable for-loop reports iterator requirement at the subject', async ({ page }) => {
+  // Keep an explicitly nullable test property independent of Actor.world's API.
+  const source = 'class Krokodil { val world: World? = null\n    fun act() {\n        for (ente in world?.getObjects<Ente>()) {}\n    }\n}';
+  const payload = { format: 'bluek-project', version: 1, library: { id: 'blueplay', version: 1 }, files: [
+    { fileName: 'Krokodil.kt', kind: 'class', source },
+    { fileName: 'Ente.kt', kind: 'class', source: 'class Ente : Actor()' },
+  ] };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  await page.getByRole('button', { name: 'Compile', exact: true }).click();
+  const editor = page.locator('.editor-dialog');
+  await expect(editor.locator('.editor-header h3')).toHaveText('Krokodil.kt');
+  await expect(editor.locator('.editor-diagnostics')).toContainText("Line 3: Non-nullable value required to call 'iterator()' method in a for-loop.");
+  await expect(editor.locator('.cm-bluek-error-span')).toHaveText('world');
+  await expect(editor.locator('.cm-bluek-error-line')).toContainText('for (ente in world?.getObjects<Ente>())');
+  await expect(editor.locator('.editor-diagnostics')).not.toContainText('Only safe');
+  const line = editor.locator('.cm-line').filter({ hasText: 'for (ente in' });
+  await line.click();
+  await page.keyboard.press('End');
+  await page.keyboard.press('Shift+Home');
+  await page.keyboard.type('        for (ente in world?.getObjects<Ente>() ?: listOf<Ente>()) {}');
+  await page.getByRole('button', { name: 'Compile', exact: true }).click();
+  await expect(page.getByLabel('Ready', { exact: true })).toBeVisible();
+  await expect(editor.locator('.editor-diagnostics')).toHaveCount(0);
 });
 
 test('RT-40 classes that reference each other compile and link their objects', async ({ page }) => {

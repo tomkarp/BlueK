@@ -6,6 +6,7 @@ import com.sunnychung.lib.multiplatform.kotlite.extension.fullClassName
 import com.sunnychung.lib.multiplatform.kotlite.extension.isHostStackOverflow
 import com.sunnychung.lib.multiplatform.kotlite.lexer.Lexer
 import com.sunnychung.lib.multiplatform.kotlite.model.ASTNode
+import com.sunnychung.lib.multiplatform.kotlite.model.ClassSecondaryConstructorNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.error.EvaluateRuntimeException
 import com.sunnychung.lib.multiplatform.kotlite.error.InterpreterStateException
@@ -42,6 +43,7 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.js.ExperimentalJsExport
 import kotlin.js.JsExport
+import kotlin.js.JSON
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
@@ -55,6 +57,7 @@ import kotlin.coroutines.startCoroutine
  */
 private data class BlueKReference(val symbol: String, val interactive: Boolean, var onBench: Boolean)
 private data class BluePlayResourceMask(val width: Int, val height: Int, val alphaHex: String)
+private data class BluePlayDrawing(val path: String, val width: Int, val height: Int, val opacity: Double, val operations: List<String>)
 private data class BluePlayActorBounds(val left: Double, val top: Double, val right: Double, val bottom: Double)
 
 @OptIn(ExperimentalJsExport::class)
@@ -78,6 +81,10 @@ class KotliteSession {
     private val retiredProperties = linkedMapOf<Int, MutableList<String>>()
     private val propertyNames = linkedMapOf<String, MutableList<String>>()
     private val computedPropertyNames = linkedMapOf<String, MutableSet<String>>()
+    // Inspector results belong to the runtime. Snapshots never execute getters.
+    private val inspectionResults = linkedMapOf<String, MutableMap<String, String>>()
+    private var inspectionFailure: String? = null
+    private var inspectedPropertyValue: RuntimeValue? = null
     private val privateSetterNames = linkedMapOf<String, MutableSet<String>>()
     private var nextHandle = 1
     private var analysisSource = ""
@@ -109,12 +116,15 @@ class KotliteSession {
     private val bluePlayActorIds = mutableMapOf<ClassInstance, String>()
     /** Every known resource path; the mask is null when no pixel data was prepared. */
     private val bluePlayResources = linkedMapOf<String, BluePlayResourceMask?>()
+    // Derived immutable drawing snapshots only; bounded to avoid retaining old images.
+    private val bluePlayDrawings = mutableMapOf<String, BluePlayDrawing>()
     private var nextBluePlayActorId = 1
     private var bluePlayActorHint: ClassInstance? = null
     private var bluePlaySpeed = 50
     private var bluePlayFrameVersion = 0
     private var bluePlayBatching = false
     private var bluePlayIntent = ""
+    private var bluePlayRunningQuery: () -> Boolean = { false }
     private var bluePlayGeneration = ""
     private val projectFunctionRanges = mutableListOf<Triple<String, Int, Int>>()
     private val mainFunctionNames = linkedMapOf<String, String>()
@@ -132,6 +142,7 @@ class KotliteSession {
         bluePlayWorld = null
         bluePlayActors.clear()
         bluePlayActorIds.clear()
+        bluePlayDrawings.clear()
         bluePlayResources.clear()
         nextBluePlayActorId = 1
         bluePlayActorHint = null
@@ -194,6 +205,32 @@ class KotliteSession {
             module.properties.forEach { knownNames += it.declaredName }
         }
         knownNames += setOf("readln", "readLine", "readlnOrNull", "println", "print", "main")
+        environment.registerFunction(CustomFunctionDefinition(
+            position = SourcePosition.BUILTIN,
+            receiverType = null,
+            functionName = "bluekInspectProperty",
+            returnType = "Any?",
+            parameterTypes = listOf(CustomFunctionParameter("objectId", "String"), CustomFunctionParameter("property", "String")),
+            executable = { _, _, _, _ -> throw InterpreterStateException("Inspector property access requires its suspendable path.") },
+        ).also { definition ->
+            definition.suspendExecutable = { currentInterpreter, _, args, _ ->
+                val owner = handles[(args[0] as StringValue).value] as ClassInstance
+                (owner.read(currentInterpreter, (args[1] as StringValue).value) as RuntimeValue).also { inspectedPropertyValue = it }
+            }
+        })
+        environment.registerFunction(CustomFunctionDefinition(
+            position = SourcePosition.BUILTIN,
+            receiverType = null,
+            functionName = "bluekInspectFailure",
+            returnType = "Nothing?",
+            parameterTypes = listOf(CustomFunctionParameter("error", "Throwable")),
+            executable = { _, _, args, _ ->
+                val thrown = args[0] as ThrowableValue
+                inspectionFailure = (thrown.externalExceptionClassName ?: thrown.type().name) +
+                    (thrown.message?.let { ": $it" } ?: "")
+                NullValue
+            },
+        ))
         environment.registerFunction(CustomFunctionDefinition(
             position = SourcePosition.BUILTIN,
             receiverType = "Throwable",
@@ -354,7 +391,7 @@ class KotliteSession {
             returnType = "Boolean",
             parameterTypes = emptyList(),
             executable = { interpreter, _, _, _ ->
-                val matches = clickX != null && clickY != null
+                val matches = clickX != null && clickY != null && clickActorId.isNullOrEmpty()
                 if (matches) { clickX = null; clickY = null; clickActorId = null }
                 BooleanValue(matches, interpreter.symbolTable())
             }
@@ -452,11 +489,16 @@ class KotliteSession {
             requireResource(path)
             IntValue(resourceMask(path)?.height ?: 30, currentInterpreter.symbolTable())
         }
-        definition("bluekActiveWorld", "Any", emptyList()) { _, _ ->
-            bluePlayWorld ?: throw IllegalStateException("No BluePlay world is shown yet. Call show() on a world first.")
+        definition("bluekImageSnapshot", "String", listOf(CustomFunctionParameter("image", "Any"))) { currentInterpreter, args ->
+            StringValue(imageFrame(args[0] as ClassInstance), currentInterpreter.symbolTable())
+        }
+        definition("bluekCheckColor", "Unit", listOf(CustomFunctionParameter("r", "Int"), CustomFunctionParameter("g", "Int"), CustomFunctionParameter("b", "Int"))) { _, args ->
+            require(args.all { (it as IntValue).value in 0..255 }) { "Color components must be in 0..255." }
+            UnitValue
         }
         definition("bluekShowWorld", "Unit", listOf(CustomFunctionParameter("world", "Any"))) { _, args ->
             bluePlayWorld = args[0] as ClassInstance
+            bluePlayIntent = "stop"
             UnitValue
         }
         definition("bluekRenderWorld", "Unit", listOf(CustomFunctionParameter("world", "Any"))) { _, args ->
@@ -528,10 +570,10 @@ class KotliteSession {
             assignInt("worldCellSize", 1)
             UnitValue
         }
-        definition("bluekActorWorld", "Any", listOf(CustomFunctionParameter("actor", "Any"))) { _, args ->
+        definition("bluekActorWorld", "Any?", listOf(CustomFunctionParameter("actor", "Any"))) { _, args ->
             val actor = args[0] as ClassInstance
             val entry = bluePlayActors.firstOrNull { sameBluePlayInstance(it.second, actor) }
-                ?: throw IllegalStateException("The actor is not in a world (add it with addObject first).")
+                ?: return@definition NullValue
             bluePlayActorHint = entry.second
             entry.first
         }
@@ -545,13 +587,14 @@ class KotliteSession {
         val tickDefinition = CustomFunctionDefinition(
             position = SourcePosition.BUILTIN,
             receiverType = null,
-            functionName = "bluekWorldTick",
+            functionName = "bluekStep",
             returnType = "Unit",
-            parameterTypes = listOf(CustomFunctionParameter("world", "Any")),
+            parameterTypes = emptyList(),
             executable = { _, _, _, _ -> UnitValue },
         )
-        tickDefinition.suspendExecutable = { currentInterpreter, _, args, _ ->
-            val world = args[0] as ClassInstance
+        tickDefinition.suspendExecutable = step@ { currentInterpreter, _, _, _ ->
+            if (bluePlayIntent == "start" || (bluePlayIntent != "stop" && bluePlayRunningQuery())) return@step UnitValue
+            val world = bluePlayWorld ?: return@step UnitValue
             suspend fun invokeMember(target: ClassInstance, name: String) {
                 val function = target.findMemberFunctionByDeclaredName(name) ?: return
                 if (function.hasEmptyBody()) return
@@ -642,14 +685,11 @@ class KotliteSession {
     }
 
     private fun imageFrame(image: ClassInstance?): String {
-        if (image == null) return "{\"width\":30,\"height\":30,\"opacity\":1,\"operations\":[]}"
+        if (image == null) return "{\"width\":30,\"height\":30,\"opacity\":1,\"operations\":[\"fill|rgb(180,180,190)\",\"drawRect|0|0|29|29|rgb(90,90,100)\",\"drawString|?|12|20|rgb(90,90,100)\"]}"
         val path = stringMember(image, "path")
         val width = intMember(image, "imageWidth", 30)
         val height = intMember(image, "imageHeight", 30)
         val transparency = intMember(image, "transparency", 255)
-        val operations = stringMember(image, "drawingJson", "[]")
-        // drawingJson is a computed property in the adapter; call its backing
-        // data instead so stage publication stays passive.
         val rawOperations = runtimeList(member(image, "drawingOperations")).joinToString(",", "[", "]") { value ->
             "\"${escape((value as? StringValue)?.value ?: "")}\""
         }
@@ -667,6 +707,63 @@ class KotliteSession {
         val halfWidth = (kotlin.math.abs(cos(radians)) * width + kotlin.math.abs(sin(radians)) * height) / 2.0
         val halfHeight = (kotlin.math.abs(sin(radians)) * width + kotlin.math.abs(cos(radians)) * height) / 2.0
         return BluePlayActorBounds(centerX - halfWidth, centerY - halfHeight, centerX + halfWidth, centerY + halfHeight)
+    }
+
+    private fun drawingSnapshot(encoded: String): BluePlayDrawing? = bluePlayDrawings[encoded] ?: runCatching {
+        val decoded = StringBuilder()
+        var index = 0
+        while (index < encoded.length) {
+            val ch = encoded[index++]
+            if (ch != '\\' || index >= encoded.length) decoded.append(ch)
+            else when (val escaped = encoded[index++]) {
+                '\\' -> decoded.append('\\')
+                '"' -> decoded.append('"')
+                'p' -> decoded.append('|')
+                'n' -> decoded.append('\n')
+                else -> { decoded.append('\\'); decoded.append(escaped) }
+            }
+        }
+        val parsed = JSON.parse<dynamic>(decoded.toString())
+        BluePlayDrawing((parsed.resourcePath as? String).orEmpty(),
+            (parsed.width as? Int)?.coerceAtLeast(1) ?: 1,
+            (parsed.height as? Int)?.coerceAtLeast(1) ?: 1,
+            (parsed.opacity as? Double)?.coerceIn(0.0, 1.0) ?: 1.0,
+            (parsed.operations as? Array<String>)?.toList().orEmpty()).also {
+            if (bluePlayDrawings.size >= 64) bluePlayDrawings.clear()
+            bluePlayDrawings[encoded] = it
+        }
+    }.getOrNull()
+
+    private fun imagePixelAlpha(path: String, width: Int, height: Int, operations: List<String>, x: Double, y: Double, depth: Int = 0): Double {
+        if (x < 0 || y < 0 || x >= width || y >= height || depth > 64) return 0.0
+        val mask = if (path.isEmpty()) null else resourceMask(path)
+        var alpha = if (mask != null) {
+            val sourceX = ((x / width) * mask.width).toInt().coerceIn(0, mask.width - 1)
+            val sourceY = ((y / height) * mask.height).toInt().coerceIn(0, mask.height - 1)
+            val offset = (sourceY * mask.width + sourceX) * 2
+            (mask.alphaHex.substring(offset, offset + 2).toIntOrNull(16) ?: 0).toDouble()
+        } else if (path.isNotEmpty()) 255.0 else 0.0
+        for (operation in operations) {
+            val parts = operation.split('|')
+            val next = if (parts.firstOrNull() == "drawImage") {
+                fun number(index: Int) = parts.getOrNull(index)?.toDoubleOrNull() ?: 0.0
+                val w = number(4); val h = number(5)
+                val localX = x - number(2); val localY = y - number(3)
+                if (w <= 0 || h <= 0 || localX < 0 || localY < 0 || localX >= w || localY >= h) 0.0
+                else {
+                    val source = parts.getOrNull(1).orEmpty()
+                    if (source.startsWith("__bluek:")) {
+                        drawingSnapshot(source.removePrefix("__bluek:"))?.let { nested ->
+                            imagePixelAlpha(nested.path, nested.width, nested.height, nested.operations,
+                                localX * nested.width / w, localY * nested.height / h, depth + 1) * nested.opacity
+                        } ?: 0.0
+                    } else imagePixelAlpha(source, w.toInt(), h.toInt(), emptyList(), localX, localY, depth + 1)
+                }
+            } else if (operationPixelVisible(operation, x, y)) 255.0 else 0.0
+            alpha = next + alpha * (1.0 - next / 255.0)
+            if (alpha >= 255.0) return 255.0
+        }
+        return alpha
     }
 
     private fun operationPixelVisible(operation: String, x: Double, y: Double): Boolean {
@@ -718,18 +815,9 @@ class KotliteSession {
         val localX = cos(radians) * dx + sin(radians) * dy + width / 2.0
         val localY = -sin(radians) * dx + cos(radians) * dy + height / 2.0
         if (localX < 0 || localY < 0 || localX >= width || localY >= height) return false
-        val path = stringMember(image, "path")
-        val mask = if (path.isEmpty()) null else resourceMask(path)
-        if (mask != null) {
-            val sourceX = ((localX / width) * mask.width).toInt().coerceIn(0, mask.width - 1)
-            val sourceY = ((localY / height) * mask.height).toInt().coerceIn(0, mask.height - 1)
-            val offset = (sourceY * mask.width + sourceX) * 2
-            val alpha = mask.alphaHex.substring(offset, offset + 2).toIntOrNull(16) ?: 0
-            return alpha * transparency / 255 > 16
-        }
-        if (path.isNotEmpty()) return true
         val operations = runtimeList(member(image, "drawingOperations")).mapNotNull { (it as? StringValue)?.value }
-        return operations.any { operationPixelVisible(it, localX, localY) }
+        return imagePixelAlpha(stringMember(image, "path"), width, height, operations, localX, localY) * transparency / 255 > 16
+
     }
 
     private fun bluePlayIntersects(first: ClassInstance, second: ClassInstance): Boolean {
@@ -770,19 +858,19 @@ class KotliteSession {
         val texts = textValues.indices.joinToString(",", "[", "]") { index ->
             "{\"x\":${(textX.getOrNull(index) as? IntValue)?.value ?: 0},\"y\":${(textY.getOrNull(index) as? IntValue)?.value ?: 0},\"text\":\"${escape((textValues[index] as? StringValue)?.value ?: "")}\"}"
         }
-        val bgPath = background?.let { stringMember(it, "path") } ?: stringMember(world, "backgroundPath")
+        val bgPath = background?.let { stringMember(it, "path") }.orEmpty()
         val bgOps = background?.let { runtimeList(member(it, "drawingOperations")).joinToString(",", "[", "]") { value -> "\"${escape((value as? StringValue)?.value ?: "")}\"" } } ?: "[]"
-        return "{\"stage\":{\"worldId\":${handles.entries.firstOrNull { it.value === world }?.key?.let { "\"${escape(it)}\"" } ?: "null"},\"frameVersion\":${++bluePlayFrameVersion},\"width\":$width,\"height\":$height,\"cellSize\":$cellSize,\"backgroundColor\":\"${escape(stringMember(world, "backgroundColor", "rgb(255,255,255)"))}\",\"backgroundPath\":\"${escape(bgPath)}\",\"backgroundOperations\":$bgOps,\"speed\":$bluePlaySpeed,\"simulation\":\"paused\",\"objects\":$objects,\"texts\":$texts}}"
+        return "{\"stage\":{\"worldId\":${handles.entries.firstOrNull { it.value === world }?.key?.let { "\"${escape(it)}\"" } ?: "null"},\"frameVersion\":${++bluePlayFrameVersion},\"width\":$width,\"height\":$height,\"cellSize\":$cellSize,\"backgroundColor\":\"rgb(255,255,255)\",\"background\":${imageFrame(background)},\"backgroundPath\":\"${escape(bgPath)}\",\"backgroundOperations\":$bgOps,\"speed\":$bluePlaySpeed,\"simulation\":\"paused\",\"objects\":$objects,\"texts\":$texts}}"
     }
+
+    /** Read scheduler state from its owner; no duplicate simulation state lives here. */
+    fun setBluePlayRunningQuery(query: () -> Boolean) { bluePlayRunningQuery = query }
 
     fun takeBluePlayIntent(): String = bluePlayIntent.also { bluePlayIntent = "" }
 
     fun setBluePlaySpeed(value: Int): String {
         bluePlaySpeed = value.coerceIn(1, 100)
         bluePlayWorld?.let { world ->
-            interpreter.runImmediately {
-                world.assign(interpreter, "speed", IntValue(bluePlaySpeed, interpreter.symbolTable()))
-            }
             if (!bluePlayBatching) stageSnapshot = renderBluePlayStage(world)
         }
         return result("unit", UnitValue)
@@ -1045,8 +1133,12 @@ class KotliteSession {
         val functions = script.nodes.filterIsInstance<FunctionDeclarationNode>()
         val classJson = classes.joinToString(",", "[", "]") { declaration ->
             val constructors = if (declaration.isInterface) "[]" else {
-                val parameters = declaration.primaryConstructor?.parameters.orEmpty().joinToString(",", "[", "]") { parameterJson(it.parameter) }
-                "[{\"id\":\"${escape(declaration.name)}.constructor\",\"parameters\":$parameters}]"
+                val secondary = declaration.declarations.filterIsInstance<ClassSecondaryConstructorNode>()
+                val parameterSets = if (secondary.isEmpty()) listOf(declaration.primaryConstructor?.parameters.orEmpty().map { it.parameter })
+                    else secondary.map { it.valueParameters }
+                parameterSets.mapIndexed { index, parameters ->
+                    "{\"id\":\"${escape(declaration.name)}.constructor${if (secondary.isEmpty()) "" else ".$index"}\",\"parameters\":${parameters.joinToString(",", "[", "]") { parameterJson(it) }}}"
+                }.joinToString(",", "[", "]")
             }
             val primaryProperties = declaration.primaryConstructor?.parameters.orEmpty().filter { it.isProperty }.map { parameter ->
                 jsonProperty(declaration.name, parameter.parameter.name, parameter.parameter.type, parameter.isMutable, parameter.modifiers.any { it.name == "private" }, false, false, false)
@@ -1054,8 +1146,8 @@ class KotliteSession {
             val bodyProperties = declaration.declarations.filterIsInstance<PropertyDeclarationNode>().map { property ->
                 jsonProperty(declaration.name, property.name, property.type, property.isMutable, property.modifiers.any { it.name == "private" }, property.accessors?.getter != null, property.accessors?.setter != null, property.accessors?.setterIsPrivate == true)
             }
-            val properties = (primaryProperties + bodyProperties).distinctBy { it.substringBefore("\",\"name\":") }.joinToString(",", "[", "]")
-            val methods = declaration.declarations.filterIsInstance<FunctionDeclarationNode>().mapIndexed { index, function -> jsonFunction(declaration.name, function, index) }.joinToString(",", "[", "]")
+            val properties = (primaryProperties + bodyProperties).filterNot { bluePlayEnabled && declaration.name in setOf("World", "Actor", "Image") && it.contains("\"visibility\":\"private\"") }.distinctBy { it.substringBefore("\",\"name\":") }.joinToString(",", "[", "]")
+            val methods = declaration.declarations.filterIsInstance<FunctionDeclarationNode>().filterNot { it is ClassSecondaryConstructorNode || (bluePlayEnabled && declaration.name in setOf("World", "Actor", "Image") && it.modifiers.any { modifier -> modifier.name == "private" }) }.mapIndexed { index, function -> jsonFunction(declaration.name, function, index) }.joinToString(",", "[", "]")
             val supers = declaration.superInvocations.orEmpty().mapNotNull(::superName).joinToString(",", "[", "]") { jsonTypeName(it) }
             val kind = if (declaration.isInterface) "interface" else if (declaration.modifiers.any { it.name == "abstract" }) "abstract" else "class"
             val typeParameters = declaration.typeParameters.joinToString(",", "[", "]") { parameter -> "\"${escape(parameter.name)}\"" }
@@ -1083,7 +1175,7 @@ class KotliteSession {
     }
 
     private fun jsonFunction(owner: String, function: FunctionDeclarationNode, index: Int, sourceFile: String? = null, builtin: Boolean = false): String =
-        "{\"sourceLine\":${function.position.lineNum},\"id\":\"${escape(owner)}.${escape(function.name)}.$index\",\"name\":\"${escape(if (function.name.startsWith(MAIN_ALIAS_PREFIX)) "main" else function.name)}\",\"declaringType\":\"${escape(owner)}\",\"parameters\":${function.valueParameters.joinToString(",", "[", "]", transform = ::parameterJson)},\"returnType\":${jsonType(function.returnType)},\"visibility\":\"${visibility(function.modifiers)}\"${sourceFile?.let { ",\"sourceFile\":\"${escape(it)}\"" } ?: ""}${if (builtin) ",\"builtin\":true" else ""}}"
+        "{\"sourceLine\":${function.position.lineNum},\"id\":\"${escape(owner)}.${escape(function.name)}.$index\",\"name\":\"${escape(if (function.name.startsWith(MAIN_ALIAS_PREFIX)) "main" else function.name)}\",\"declaringType\":\"${escape(owner)}\",\"typeParameters\":${function.typeParameters.joinToString(",", "[", "]") { parameter -> "\"${escape(parameter.name + (parameter.typeUpperBound?.let { " : " + it.descriptiveName() } ?: ""))}\"" }},\"parameters\":${function.valueParameters.joinToString(",", "[", "]", transform = ::parameterJson)},\"returnType\":${jsonType(function.returnType)},\"visibility\":\"${visibility(function.modifiers)}\"${sourceFile?.let { ",\"sourceFile\":\"${escape(it)}\"" } ?: ""}${if (builtin) ",\"builtin\":true" else ""}}"
     private fun jsonType(type: TypeNode): String =
         "{\"classifier\":\"${escape(type.name)}\",\"arguments\":${type.arguments.orEmpty().joinToString(",", "[", "]", transform = ::jsonType)},\"nullable\":${type.isNullable},\"displayName\":\"${escape(type.descriptiveName())}\"}"
 
@@ -1108,20 +1200,20 @@ class KotliteSession {
         }
     }
 
-    private fun evaluateWithBindings(filename: String, source: String, interactiveNames: Set<String>): String {
+    private fun evaluateWithBindings(filename: String, source: String, interactiveNames: Set<String>, inspection: Boolean = false): String {
         // Legacy synchronous callers must retain their historical contract;
         // interactive start* calls install the yielding scheduler explicitly.
         val hook = interpreter.checkpointHook
         interpreter.checkpointHook = null
         return try {
-            interpreter.runImmediately { evaluateSuspended(filename, source, interactiveNames) }
+            interpreter.runImmediately { evaluateSuspended(filename, source, interactiveNames, inspection = inspection) }
         } finally {
             interpreter.checkpointHook = hook
         }
     }
 
     /** [unitOffsets]: further source units inside [source], as offsets into it. */
-    private suspend fun evaluateSuspended(filename: String, source: String, interactiveNames: Set<String> = emptySet(), unitOffsets: List<Int> = emptyList()): String {
+    private suspend fun evaluateSuspended(filename: String, source: String, interactiveNames: Set<String> = emptySet(), unitOffsets: List<Int> = emptyList(), inspection: Boolean = false): String {
         if (faulted) return errorMessage("Runtime failed. Reset or compile before running more code.", "runtime", true)
         val boundary = analysisSource.length + 1
         val candidate = analysisSource + "\n" + source
@@ -1151,13 +1243,13 @@ class KotliteSession {
             // Kotlin values are objects from BlueK's point of view. Keep every
             // non-Unit expression addressable by the Codepad object control,
             // including values such as Int and String.
-            var objectId = if (value !== UnitValue) registerExpressionValue(value) else null
+            var objectId = if (value !== UnitValue && (!inspection || value is ClassInstance && value !is DelegatedValue<*>)) registerExpressionValue(value) else null
             reconcileReferences()
             // A fresh expression may return the value it just detached (e.g.
             // list.removeAt). Its old history handles stay invalid, but this
             // new result is transferable under a fresh provisional handle.
             if (objectId != null && objectId !in handles) objectId = registerExpressionValue(value)
-            result("value", value, objectId)
+            result("value", value, objectId, inspection = inspection)
         } catch (error: Throwable) {
             faulted = true
             error(error, "runtime", true)
@@ -1169,11 +1261,11 @@ class KotliteSession {
         return startEvaluateInternal(filename, source, onInput, onComplete, emptySet())
     }
 
-    private fun startEvaluateInternal(filename: String, source: String, onInput: (Int) -> Unit, onComplete: (String) -> Unit, interactiveNames: Set<String>, unitOffsets: List<Int> = emptyList()): String {
+    private fun startEvaluateInternal(filename: String, source: String, onInput: (Int) -> Unit, onComplete: (String) -> Unit, interactiveNames: Set<String>, unitOffsets: List<Int> = emptyList(), inspection: Boolean = false): String {
         if (executionCompleted != null) return errorMessage("Another runtime command is running.")
         inputRequested = onInput
         executionCompleted = onComplete
-        (suspend { evaluateSuspended(filename, source, interactiveNames, unitOffsets) }).startCoroutine(object : Continuation<String> {
+        (suspend { evaluateSuspended(filename, source, interactiveNames, unitOffsets, inspection) }).startCoroutine(object : Continuation<String> {
             override val context = kotlin.coroutines.EmptyCoroutineContext
             override fun resumeWith(result: Result<String>) {
                 inputContinuation = null
@@ -1231,6 +1323,7 @@ class KotliteSession {
                 bindingNames.remove(id)?.let(::retire)
                 handles.remove(id)
                 managedHandles.remove(id)
+                inspectionResults.remove(id)
             }
         }
     }
@@ -1257,13 +1350,13 @@ class KotliteSession {
             declaration.primaryConstructor?.parameters.orEmpty().filter { it.isProperty }.forEach { parameter ->
                 if (parameter.parameter.name !in names) names += parameter.parameter.name
             }
-            declaration.declarations.filterIsInstance<PropertyDeclarationNode>().forEach { property ->
+            declaration.declarations.filterIsInstance<PropertyDeclarationNode>().filterNot { bluePlayEnabled && declaration.name in setOf("World", "Actor", "Image") && it.modifiers.any { modifier -> modifier.name == "private" } }.forEach { property ->
                 if (property.name !in names) names += property.name
                 if (property.accessors?.setterIsPrivate == true) privateSetters += property.name
                 // A custom setter does not make a property computed: its
                 // default getter still reads the backing field. Only an
-                // explicitly declared getter must stay unevaluated during
-                // inspection.
+                // explicitly declared getter needs its last inspection result
+                // instead of a passive backing-field read.
                 if (property.accessors?.getter != null) computedPropertyNames.getOrPut(declaration.name) { linkedSetOf() } += property.name
             }
             declaration.superInvocations.orEmpty().mapNotNull(::superName).mapNotNull(byName::get).forEach { parent ->
@@ -1368,13 +1461,13 @@ class KotliteSession {
         if (value !is ClassInstance) return result("value", value)
         // Kotlite deliberately keeps its complete member map internal, so the
         // names are collected from the source declarations while loading the
-        // project. Computed properties are reported without reading them: a
-        // getter may contain arbitrary student code and must not run during
-        // inspection.
+        // project. Snapshot publication stays passive; explicit inspection
+        // refreshes evaluate every property through startInspectGet.
         val fields = propertyNames[value.type().name].orEmpty().joinToString(",", "[", "]") { name ->
             val setterPrivate = name in privateSetterNames[value.type().name].orEmpty()
+            val cached = inspectionResults[objectId]?.get(name)
             if (name in computedPropertyNames[value.type().name].orEmpty()) {
-                "{\"name\":\"${escape(name)}\",\"value\":\"<computed>\",\"setterPrivate\":$setterPrivate}"
+                cached ?: "{\"name\":\"${escape(name)}\",\"value\":\"<computed>\",\"computed\":true,\"setterPrivate\":$setterPrivate}"
             } else {
                 val member = value.readBackingPropertyByDeclaredName(name)
                 val display = member?.let(::inspectorDisplay) ?: "<uninitialized>"
@@ -1429,6 +1522,47 @@ class KotliteSession {
         return startEvaluate("<BlueK property>", "$binding.$propertyName", onInput, onComplete)
     }
 
+    private fun inspectionSource(objectId: String, propertyName: String): String? {
+        val owner = handles[objectId] as? ClassInstance ?: return null
+        if (propertyName !in propertyNames[owner.type().name].orEmpty()) return null
+        return "try { bluekInspectProperty(\"${escape(objectId)}\", \"${escape(propertyName)}\") } catch (__bluek_error: Throwable) { bluekInspectFailure(__bluek_error) }"
+    }
+
+    private fun finishInspection(objectId: String, propertyName: String, evaluated: String): String {
+        val failure = inspectionFailure
+        inspectionFailure = null
+        val response = if (failure != null) errorMessage(failure, "runtime") else evaluated
+        val parsed = JSON.parse<dynamic>(response)
+        val owner = handles[objectId] as? ClassInstance ?: return response
+        val computed = propertyName in computedPropertyNames[owner.type().name].orEmpty()
+        val setterPrivate = propertyName in privateSetterNames[owner.type().name].orEmpty()
+        val value = inspectedPropertyValue
+        inspectedPropertyValue = null
+        val content = (value as? DelegatedValue<*>)?.value
+        val summary = content is Collection<*> || content is Map<*, *>
+        val reference = value is ClassInstance && value !is DelegatedValue<*> && parsed.kind != "error"
+        val field = "{\"name\":\"${escape(propertyName)}\",\"value\":\"${escape(parsed.display as? String ?: "<uninitialized>")}\",\"type\":${JSON.stringify(parsed.type ?: null)},\"computed\":$computed,\"setterPrivate\":$setterPrivate,\"reference\":$reference,\"summary\":$summary" +
+            (if (reference) ",\"objectId\":\"${escape(parsed.objectId as String)}\"" else "") +
+            (if (parsed.kind == "error") ",\"error\":\"${escape(parsed.display as String)}\"" else "") + "}"
+        inspectionResults.getOrPut(objectId) { linkedMapOf() }[propertyName] = field
+        return response
+    }
+
+    fun inspectGet(objectId: String, propertyName: String): String {
+        val source = inspectionSource(objectId, propertyName) ?: return errorMessage("Property is no longer available.")
+        inspectionFailure = null; inspectedPropertyValue = null
+        return finishInspection(objectId, propertyName, evaluateWithBindings("<BlueK inspection>", source, emptySet(), inspection = true))
+    }
+
+    fun startInspectGet(objectId: String, propertyName: String, onInput: (Int) -> Unit, onComplete: (String) -> Unit): String {
+        if (executionCompleted != null) return errorMessage("Another runtime command is running.")
+        val source = inspectionSource(objectId, propertyName) ?: return errorMessage("Property is no longer available.")
+        inspectionFailure = null; inspectedPropertyValue = null
+        return startEvaluateInternal("<BlueK inspection>", source, onInput, { evaluated ->
+            onComplete(finishInspection(objectId, propertyName, evaluated))
+        }, emptySet(), inspection = true)
+    }
+
     fun reset(): String {
         inputContinuation?.resumeWith(Result.failure(RuntimeException("Runtime reset.")))
         inputContinuation = null
@@ -1444,6 +1578,9 @@ class KotliteSession {
         analyzedScript = null
         propertyNames.clear()
         computedPropertyNames.clear()
+        inspectionResults.clear()
+        inspectionFailure = null
+        inspectedPropertyValue = null
         privateSetterNames.clear()
         stageSnapshot = ""
         pendingSounds.clear()
@@ -1456,6 +1593,7 @@ class KotliteSession {
         bluePlayWorld = null
         bluePlayActors.clear()
         bluePlayActorIds.clear()
+        bluePlayDrawings.clear()
         bluePlaySpeed = 50
         bluePlayFrameVersion = 0
         bluePlayBatching = false
@@ -1525,8 +1663,8 @@ class KotliteSession {
         return result("value", UnitValue)
     }
 
-    private fun result(kind: String, value: RuntimeValue, objectId: String? = null, name: String? = null): String {
-        val display = if (value === UnitValue) "Unit" else if (value === NullValue) "null" else value.convertToString()
+    private fun result(kind: String, value: RuntimeValue, objectId: String? = null, name: String? = null, inspection: Boolean = false): String {
+        val display = if (value === UnitValue) "Unit" else if (value === NullValue) "null" else if (inspection) inspectorDisplay(value) else value.convertToString()
         val actualKind = if (value === UnitValue) "unit" else if (value === NullValue) "null" else if (value is ClassInstance) "object" else "scalar"
         return "{\"kind\":\"$actualKind\",\"display\":\"${escape(display)}\",\"type\":${jsonType(value.type().toTypeNode())}" +
             (objectId?.let { ",\"objectId\":\"${escape(it)}\",\"className\":\"${escape(value.type().toTypeNode().descriptiveName())}\"" } ?: "") +

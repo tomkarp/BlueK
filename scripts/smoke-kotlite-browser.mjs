@@ -606,8 +606,41 @@ if (privateWriteError.kind !== 'error' || !/private/i.test(privateWriteError.dis
 const syntaxSession = api.bluekCreateKotliteSession();
 const protectedError = JSON.parse(syntaxSession.load('<visibility>', 'class Protected { protected fun hidden() {} }'));
 if (protectedError.kind !== 'error' || !protectedError.display.includes('protected')) throw new Error('Unsupported protected visibility did not produce a clear error.');
-const secondaryConstructorError = JSON.parse(syntaxSession.evaluate('<visibility>', 'class Secondary { constructor(value: Int) {} }'));
-if (secondaryConstructorError.kind !== 'error' || !secondaryConstructorError.display.includes('Secondary constructors are not supported')) throw new Error('Secondary constructors did not produce a clear local error.');
+const secondaryConstructorError = JSON.parse(syntaxSession.evaluate('<visibility>', 'class Secondary { constructor(value: Int) : this() {} }'));
+if (secondaryConstructorError.kind !== 'error' || !secondaryConstructorError.display.includes('Secondary constructor delegation')) throw new Error('Secondary constructors did not produce a clear local error.');
+
+// RT-48: overload resolution, caller evaluation and suspended constructor bodies.
+const ctorSession = api.bluekCreateKotliteSession();
+expectOk(JSON.parse(ctorSession.load('<constructors>', `
+ var argumentCalls = 0
+ var initCalls = 0
+ fun argument(): Int { argumentCalls += 1; return 7 }
+ class Constructed {
+   var text = ""
+   init { initCalls += 1 }
+   constructor(value: Int, suffix: String = "!") { text = value.toString() + suffix }
+   constructor(value: String) { text = value }
+ }
+ class Asked {
+   var text = ""
+   constructor(prefix: String) { text = prefix + readln() }
+ }
+ class Paused {
+   var text = ""
+   constructor(value: String) { Thread.sleep(5); text = value }
+ }
+`)), 'secondary constructor declarations');
+const ctorEval = source => expectOk(JSON.parse(ctorSession.evaluate('<constructors>', source)), source).display;
+if (ctorEval('val built = Constructed(suffix = "?", value = argument()); built.text') !== '7?' || ctorEval('argumentCalls == 1 && initCalls == 1') !== 'true') throw new Error('Constructor arguments or init blocks ran more than once.');
+if (ctorEval('Constructed(8).text') !== '8!' || ctorEval('Constructed("copy").text') !== 'copy') throw new Error('Secondary constructor overload/default resolution failed.');
+if (ctorEval('initCalls') !== '3') throw new Error('Incremental reanalysis reran constructor initialization.');
+expectOk((await runInteractive(ctorSession, 'val asked = Asked("hello "); asked.text', ['world'], 'secondary constructor input')).result, 'secondary constructor input completion');
+if (ctorEval('asked.text') !== 'hello world') throw new Error('Secondary constructor input lost its receiver or arguments.');
+const pausedCtor = await new Promise(resolve => ctorSession.startEvaluate('<constructors>', 'val paused = Paused("done"); paused.text', () => {}, value => resolve(JSON.parse(value))));
+if (expectOk(pausedCtor, 'secondary constructor sleep').display !== 'done') throw new Error('Secondary constructor sleep did not resume.');
+for (const source of ['Constructed(true)', 'Constructed()', 'class Mixed(val n: Int) { constructor() {} }']) {
+ if (JSON.parse(ctorSession.evaluate('<constructors>', source)).kind !== 'error') throw new Error('Invalid secondary constructor was accepted: ' + source);
+}
 
 // A forward-referenced class is analyzed after its own dependencies, including
 // a nullable member type inherited from a base class declared in between.
@@ -634,6 +667,44 @@ const startAndWait = (start, label) => new Promise((resolve, reject) => {
   const started = JSON.parse(start(() => reject(new Error(`${label} asked for input`)), value => { clearTimeout(timeout); resolve(JSON.parse(value)); }));
   if (started.kind === 'error') { clearTimeout(timeout); resolve(started); }
 });
+// RT-50: nullable loop subjects need a loop-specific diagnostic at the
+// expression after `in`, rather than at the synthetic iterator call / `for`.
+const nullableLoopMessage = "Non-nullable value required to call 'iterator()' method in a for-loop.";
+for (const [declaration, expression] of [
+  ['val values: List<Int>? = null', 'values'],
+  ['val values: IntRange? = null', 'values'],
+  ['val values: String? = null', 'values'],
+  ['class Source { fun values(): List<Int> = listOf(1) }; val source: Source? = null', 'source?.values()'],
+]) {
+  const source = `fun main() {\n    ${declaration}\n    for (value in ${expression}) {}\n}`;
+  const result = await loadProject(api.bluekCreateKotliteSession(), { 'Main.kt': source });
+  const [diagnostic] = result.diagnostics || [];
+  if (result.kind !== 'error' || result.phase !== 'analysis' || result.fatal !== false ||
+      !diagnostic?.message.includes(nullableLoopMessage) || diagnostic.fileName !== 'Main.kt' ||
+      diagnostic.line !== 3 || diagnostic.column !== 19 || diagnostic.severity !== 'error') {
+    throw new Error(`RT-50 ${expression}: ${JSON.stringify(result)}`);
+  }
+}
+for (const [source, expected] of [
+  ['var total = 0; for (n in listOf(1, 2)) total += n; total', '3'],
+  ['val values: List<Int>? = null; var total = 0; for (n in values ?: listOf<Int>()) total += n; total', '0'],
+  ['val values: List<Int>? = listOf(1, 2); var total = 0; for (n in values!!) total += n; total', '3'],
+  ['val values: List<Int>? = listOf(1, 2); var total = 0; if (values != null) { for (n in values) total += n }; total', '3'],
+]) {
+  const result = JSON.parse(api.bluekCreateKotliteSession().evaluate('<RT-50>', source));
+  if (expectOk(result, `RT-50 ${source}`).display !== expected) throw new Error(`RT-50 result: ${JSON.stringify(result)}`);
+}
+// This is a compile diagnostic: a nullable-receiver extension makes the loop
+// valid even when its subject is nullable. Do not reject nullable types early.
+expectOk(await loadProject(api.bluekCreateKotliteSession(), {
+  'Bucket.kt': 'class Bucket',
+  'Main.kt': 'operator fun Bucket?.iterator(): Iterator<Int> = listOf(1, 2).iterator()\nfun main() { val bucket: Bucket? = null; for (n in bucket) {} }',
+}), 'RT-50 nullable iterator extension compiles');
+const unsafeCall = JSON.parse(api.bluekCreateKotliteSession().evaluate('<RT-50>', 'val values: List<Int>? = null; values.iterator()'));
+if (unsafeCall.kind !== 'error' || !unsafeCall.display.includes('Only safe (?.)')) throw new Error(`RT-50 ordinary nullable call: ${JSON.stringify(unsafeCall)}`);
+const unsafeSubject = JSON.parse(api.bluekCreateKotliteSession().evaluate('<RT-50>', 'val values: List<Int>? = null; for (n in values.size) {}'));
+if (unsafeSubject.kind !== 'error' || !unsafeSubject.display.includes('Only safe (?.)')) throw new Error(`RT-50 error inside loop subject: ${JSON.stringify(unsafeSubject)}`);
+
 const recursiveSetter = {
   'Hund.kt': 'class Hund {\n    var herrchen: Mensch? = null\n        set(value) {\n            if (value != null) {\n                herrchen = value\n                alle.add(value)\n            }\n        }\n    var alle: MutableList<Mensch> = mutableListOf<Mensch>()\n}',
   'Mensch.kt': 'class Mensch {\n    var aua = 0\n}',

@@ -23,6 +23,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.BreakNode
 import com.sunnychung.lib.multiplatform.kotlite.model.CallableType
 import com.sunnychung.lib.multiplatform.kotlite.model.CatchNode
 import com.sunnychung.lib.multiplatform.kotlite.model.CharNode
+import com.sunnychung.lib.multiplatform.kotlite.model.ClassSecondaryConstructorNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassDefinition
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassInstance
@@ -913,7 +914,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 primaryConstructor = node.primaryConstructor,
                 // Constructor properties are added by the analysis, after their parameters.
                 rawMemberProperties = emptyList(),
-                memberFunctions = node.declarations.filterIsInstance<FunctionDeclarationNode>(),
+                memberFunctions = node.declarations.filterIsInstance<FunctionDeclarationNode>().filterNot { it is ClassSecondaryConstructorNode },
                 orderedInitializersAndPropertyDeclarations = node.declarations
                     .filter { it is ClassInstanceInitializerNode || it is PropertyDeclarationNode },
                 declarations = node.declarations,
@@ -1772,6 +1773,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 }
                 functionRefName = resolution.transformedName
                 callableType = resolution.type
+                secondaryConstructorIndex = resolution.secondaryConstructorIndex
                 resolvedDeclaration = resolution.definition as? FunctionDeclarationNode
                 if (resolution.type == CallableType.Property) checkInlineInvocation(resolution.transformedName, position)
                 if (resolution.type == CallableType.Property && resolution.scope === symbolTable) {
@@ -1868,6 +1870,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
                 functionRefName = resolution.transformedName
                 callableType = resolution.type
+                secondaryConstructorIndex = resolution.secondaryConstructorIndex
                 isSpecialFunction = resolution.isSpecialFunction
 
                 /**
@@ -2486,6 +2489,9 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         // instead of calling the member unknown.
         val receiverType = subject.type().unboxClassTypeAsCompanion().toDataType()
         if (operator == "." && receiverType.isNullable && !found.isNullable) {
+            if (isForLoopIterator) {
+                throw SemanticException(position, "Non-nullable value required to call 'iterator()' method in a for-loop.")
+            }
             throw SemanticException(position, "Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type '${subject.type().unboxClassTypeAsCompanion().descriptiveName()}'.")
         }
         return found
@@ -2899,7 +2905,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     primaryConstructor = primaryConstructor,
                     rawMemberProperties = constructorProperties,
                     memberFunctions = declarations
-                        .filterIsInstance<FunctionDeclarationNode>(),
+                        .filterIsInstance<FunctionDeclarationNode>().filterNot { it is ClassSecondaryConstructorNode },
                     orderedInitializersAndPropertyDeclarations = declarations
                         .filter { it is ClassInstanceInitializerNode || it is PropertyDeclarationNode },
                     declarations = declarations,
@@ -3395,9 +3401,17 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         ).also { it.visit(modifier = modifier, isSkipConstructionSecurityCheck = true) }
     }
 
+    private fun forLoopSubjectPosition(node: ASTNode): SourcePosition = when (node) {
+        // Calls/navigation store the '(' / '.' position, not the receiver's start.
+        is FunctionCallNode -> forLoopSubjectPosition(node.function)
+        is NavigationNode -> forLoopSubjectPosition(node.subject)
+        else -> node.position
+    }
+
     fun ForNode.visit(modifier: Modifier = Modifier()) {
         subject.visit(modifier = modifier)
         val subjectType = subject.type().toDataType()
+        val subjectPosition = forLoopSubjectPosition(subject)
 
         pushScope(
             scopeName = "<for>",
@@ -3411,11 +3425,11 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
         val call = FunctionCallNode(
             function = NavigationNode(
-                position,
-                VariableReferenceNode(position, "#subject"),
+                subjectPosition,
+                VariableReferenceNode(subjectPosition, "#subject"),
                 ".",
-                ClassMemberReferenceNode(position, "iterator")
-            ),
+                ClassMemberReferenceNode(subjectPosition, "iterator")
+            ).also { it.isForLoopIterator = true },
             arguments = emptyList(),
             declaredTypeArguments = emptyList(),
             position = position,

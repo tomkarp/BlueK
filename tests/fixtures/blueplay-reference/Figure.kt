@@ -8,7 +8,6 @@ class Figure : Actor() {
     }
 
     override fun act() {
-        // An inherited method can be called like ordinary Kotlin code.
         move(1)
     }
 }

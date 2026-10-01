@@ -30,6 +30,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.CallableType
 import com.sunnychung.lib.multiplatform.kotlite.model.CatchNode
 import com.sunnychung.lib.multiplatform.kotlite.model.CharNode
 import com.sunnychung.lib.multiplatform.kotlite.model.CharValue
+import com.sunnychung.lib.multiplatform.kotlite.model.ClassSecondaryConstructorNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassDefinition
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassInstance
@@ -1090,6 +1091,18 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         callStack.push(functionFullQualifiedName = "class", scopeType = ScopeType.ClassInitializer, callPosition = this.position)
         try {
             // TODO generalize duplicated code
+            val secondary = secondaryConstructorIndex?.let { clazz.secondaryConstructors[it] }
+            if (secondary != null) {
+                val values = arrayOfNulls<RuntimeValue>(secondary.valueParameters.size)
+                arguments.forEach { argument ->
+                    val index = argument.name?.let { name -> secondary.valueParameters.indexOfFirst { it.name == name } } ?: argument.index
+                    values[index] = replaceArguments[index] ?: argument.value.eval() as RuntimeValue
+                }
+                val instance = clazz.construct(this@Interpreter, emptyArray(),
+                    typeArguments.map { symbolTable().assertToDataType(it) }.toTypedArray(), position)
+                evalClassMemberAnyFunctionCall(position, instance, secondary, values, typeArguments.toTypedArray())
+                return instance
+            }
             val parameters = clazz.primaryConstructor?.parameters ?: emptyList()
             val callArguments = arrayOfNulls<RuntimeValue>(parameters.size)
             arguments.forEach { a ->
@@ -1470,6 +1483,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 rawMemberProperties = emptyList(),
                 memberFunctions = declarations
                     .filterIsInstance<FunctionDeclarationNode>()
+                    .filterNot { it is ClassSecondaryConstructorNode }
                     .filter { it.receiver == null },
 //                    .associateBy { it.transformedRefName!! },
                 orderedInitializersAndPropertyDeclarations = declarations

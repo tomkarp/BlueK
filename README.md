@@ -117,7 +117,11 @@ Betrieb auf dem Server: [docs/deployment.md](docs/deployment.md).
 
 ## Aktuelle Grenzen
 
-Stand: 26. September 2026, geprüft gegen das eingecheckte Interpreter-Bundle.
+Stand: 1. Oktober 2026, geprüft gegen das eingecheckte Interpreter-Bundle.
+Der Objektinspektor wertet alle Properties automatisch aus und zeigt gewöhnliche
+Getter-Exceptions in der jeweiligen Zeile. `Actor.world` hat den Typ `World`
+und wirft ohne Welt `IllegalStateException`; der Inspektor zeigt den Fehler
+wie bei anderen Properties, ohne die Ausführung zu beenden.
 
 **Projektdateien.** Eine Datei enthält entweder genau eine Klasse (bzw. ein
 Interface oder Enum) oder Top-Level-Funktionen und -Properties. Direkte
@@ -128,6 +132,7 @@ und Zeile abgewiesen. `package`-Deklarationen gibt es nicht.
 **Sprache.** BlueK unterstützt die Kotlite-Teilmenge von Kotlin plus die
 Erweiterungen des eigenen Forks (siehe [docs/kotlite.md](docs/kotlite.md)).
 Es funktionieren unter anderem Klassen mit Primärkonstruktor und `init`,
+sekundäre Konstruktoren ohne Primärkonstruktor und ohne Delegation,
 Klassen, die einander in beliebiger Datei- und Deklarationsreihenfolge und
 auch gegenseitig verwenden (`Hund` mit `var herrchen: Mensch?`, `Mensch` mit
 `val hunde = mutableListOf<Hund>()`, RT-40), Top-Level-Funktionen und
@@ -147,7 +152,8 @@ Nicht unterstützt sind derzeit:
 
 - `data class`, `object`, `companion object`, `sealed`, verschachtelte und
   innere Klassen, anonyme Objekte, `fun interface`, `typealias`
-- sekundäre Konstruktoren (mit eigener Fehlermeldung), `protected`,
+- sekundäre Konstruktoren zusammen mit einem Primärkonstruktor oder mit
+  `this`-/`super`-Delegation (mit eigener Fehlermeldung), `protected`,
   `internal`, `lateinit`, `const`
 - Default-Methoden und Properties in Interfaces, abstrakte Properties,
   Extension-Properties mit Getter
@@ -228,7 +234,12 @@ nennt BlueK eine verständliche Meldung statt Kotlites generischem Fehler.
 - `Thread.sleep` wird unterstützt, andere Thread-APIs nicht.
 
 **BluePlay.** Die Browser-API ist in [docs/blueplay.md](docs/blueplay.md)
-aufgelistet. JVM-/AWT-Interna (`java.awt.Color`, Dateizugriffe) gehören nicht
+aufgelistet. Öffentliche Signaturen, Parameternamen und Beispiele sind gegen
+das BlueJ-Projekt auf GitHub abgeglichen; die API-Hilfe enthält diese Signaturen
+mit kurzen Erklärungen. Frühere BlueK-Zusätze wie `setImage`, `setLocation`,
+`showWorld` und `Image()` sind entfernt. Der
+[API-Abgleich](docs/blueplay-api-audit.md) hält Ausgangsfehler und Nachweise fest.
+JVM-/AWT-Interna (`java.awt.Color`, Dateizugriffe) gehören nicht
 dazu. Eine Grafik, die weder im Projekt noch unter den Standardgrafiken
 existiert, ergibt einen Laufzeitfehler (`Image file not found: …`).
 
@@ -241,6 +252,7 @@ existiert, ergibt einen Laufzeitfehler (`Image file not found: …`).
 | [docs/architecture.md](docs/architecture.md) | Verbindliche Architektur: Zuständigkeiten, Laufzeit, Objekt- und Referenzmodell, Inspektor, Codepad, HTML-Export |
 | [docs/kotlite.md](docs/kotlite.md) | Kotlite in BlueK: Upstream, Fork, Einbindung, Interpreter-Pipeline, Sprachgrenzen |
 | [docs/blueplay.md](docs/blueplay.md) | BluePlay-Bibliothek, Scheduler, Rendering, Kollision, Performance, API |
+| [docs/blueplay-api-audit.md](docs/blueplay-api-audit.md) | Abgleich mit der GitHub-API und dem BlueJ-Projekt; reproduzierte Abweichungen |
 | [docs/kotlin-surface.md](docs/kotlin-surface.md) | Zugesagte Standardbibliothek und bekannte Lücken |
 | [docs/kotlite-generics.md](docs/kotlite-generics.md) | Generics, `reified`, Inline-Lambdas und Host-Funktionen |
 | [docs/regression-checklist.md](docs/regression-checklist.md) | Regressionsliste mit stabilen IDs und Prüfprotokoll |

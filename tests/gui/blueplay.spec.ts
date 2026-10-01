@@ -83,7 +83,7 @@ test('GUI-58 BluePlay library cards are normal movable cards with per-file API d
   await world.dblclick();
   const api = page.getByRole('dialog', { name: 'World API' });
   await expect(api).toBeVisible();
-  await expect(api).toContainText('World(width: Int, height: Int, cellSize: Int = 1)');
+  await expect(api).toContainText('World(width: Int, height: Int, cellSize: Int)');
   await api.getByRole('button', { name: 'Close' }).click();
 
   await page.locator('.classcard[aria-label="Actor"]').click({ button: 'right' });
@@ -230,7 +230,7 @@ test('GUI-54 a world without a custom background is rendered on white', async ({
 test('GUI-55 small worlds keep their pixel size and receive a grey surround', async ({ page }) => {
   const stage = await loadBluePlay(page);
   const input = page.getByLabel('Codepad input');
-  await input.fill('val smallWorld = World(100, 100, 1); showWorld(smallWorld)');
+  await input.fill('val smallWorld = World(100, 100, 1); smallWorld.show()');
   await input.press('Enter');
   await expect(input).toBeEnabled();
   const canvas = stage.locator('.game-stage');
@@ -244,7 +244,7 @@ test('GUI-55 small worlds keep their pixel size and receive a grey surround', as
 test('GUI-56 the world window grows to fit a large unscaled world before scrolling', async ({ page }) => {
   const stage = await loadBluePlay(page);
   const input = page.getByLabel('Codepad input');
-  await input.fill('val wideWorld = World(1000, 100, 1); showWorld(wideWorld)');
+  await input.fill('val wideWorld = World(1000, 100, 1); wideWorld.show()');
   await input.press('Enter');
   await expect(input).toBeEnabled();
   const canvas = stage.locator('.game-stage');
@@ -258,7 +258,7 @@ test('GUI-56 the world window grows to fit a large unscaled world before scrolli
 test('GUI-57 maximize fills the browser viewport without scaling the world', async ({ page }) => {
   const stage = await loadBluePlay(page);
   const input = page.getByLabel('Codepad input');
-  await input.fill('val fullWorld = World(100, 100, 1); showWorld(fullWorld)');
+  await input.fill('val fullWorld = World(100, 100, 1); fullWorld.show()');
   await input.press('Enter');
   await expect(input).toBeEnabled();
   await stage.getByRole('button', { name: 'Maximize BluePlay world' }).click();
@@ -307,7 +307,7 @@ test('PERF-01 Space Invaders advances in coherent frames while a key is held', a
   await page.route('**/examples/space-invaders.bluek.json', async route => {
     const response = await route.fetch();
     const project = await response.json();
-    for (const file of project.files) file.source = file.source.replaceAll('x - 5', 'x - 1').replaceAll('x + 5', 'x + 1');
+    for (const file of project.files) file.source = file.source.replaceAll('x -= 5', 'x -= 1').replaceAll('x += 5', 'x += 1');
     await route.fulfill({ json: project });
   });
   const stage = await loadSpaceInvaders(page);
@@ -355,7 +355,7 @@ test('GUI-53 canvas clicks target visible Actor pixels and ignore transparent pi
   const stage = await loadBluePlay(page);
   const input = page.getByLabel('Codepad input');
   const entries = page.locator('.codepad-entry');
-  await input.fill('val clickWorld = MyWorld(); val clickActor = Figure(); clickWorld.addObject(clickActor, 100, 100); showWorld(clickWorld)');
+  await input.fill('val clickWorld = MyWorld(); val clickActor = Figure(); clickWorld.addObject(clickActor, 100, 100); clickWorld.show()');
   await input.press('Enter');
   await expect(entries).toHaveCount(2);
 
@@ -417,7 +417,7 @@ test('GUI-69 standard graphics are available everywhere and a missing name is re
   await expect(entries.last()).toContainText('true');
 
   // The stage draws it, so the standard graphics reach the renderer as well.
-  await input.fill('val duckWorld = MyWorld(); val duck = Figure(); duck.setImage("duck.png"); duckWorld.addObject(duck, 100, 100); showWorld(duckWorld)');
+  await input.fill('val duckWorld = MyWorld(); val duck = Figure(); duck.image = Image("duck.png"); duckWorld.addObject(duck, 100, 100); duckWorld.show()');
   await input.press('Enter');
   await expect(entries).toHaveCount(3);
   await expect(stage).toBeVisible();
@@ -467,4 +467,45 @@ test('GUI-70 generated masks of the standard graphics match the browser', async 
     expect(decoded.height, entry.path).toBe(entry.imageHeight);
     expect(decoded.alpha, entry.path).toBe(entry.alphaHex);
   }
+});
+
+
+test('GUI-91 BluePlay help contains the exact reference API and stays compact', async ({ page }) => {
+  await loadBluePlay(page);
+  await page.getByRole('button', { name: 'Close BluePlay world' }).click();
+  const required: Record<string, string[]> = {
+    World: ['World(width: Int, height: Int, cellSize: Int)', 'fun allObjects(): List<Actor>', 'fun getObjects<T : Actor>(): List<T>', 'var background: Image'],
+    Actor: ['val world: World', 'var image: Image?', 'fun turnTowards(x: Int, y: Int)', 'fun getOneIntersecting<T : Actor>(): T?'],
+    Image: ['Image(width: Int, height: Int)', 'Image(fileName: String)', 'Image(other: Image)', 'fun fillRect(x: Int, y: Int, w: Int, h: Int)', 'fun scale(width: Int, height: Int)'],
+    BluePlayFunctions: ['fun isKeyDown(key: String): Boolean', 'fun playSound(fileName: String)', 'fun step()'],
+  };
+  for (const [name, signatures] of Object.entries(required)) {
+    await page.locator(`.classcard[aria-label="${name}"]`).dblclick();
+    const help = page.getByRole('dialog', { name: `${name} API` });
+    await expect(help).toBeVisible();
+    for (const signature of signatures) await expect(help).toContainText(signature);
+    await expect(help.locator('a, pre')).toHaveCount(0);
+    await expect(help).not.toContainText(/showWorld|setImage|setLocation|drawingJson|Example/);
+    expect(await help.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+    await expect(help.getByRole('button', { name: 'Close', exact: true })).toBeInViewport();
+    if (name === 'Image') await page.screenshot({ path: '/tmp/blueplay-api-desktop.png' });
+    await help.getByRole('button', { name: 'Close', exact: true }).click();
+  }
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  const settings = page.getByRole('dialog', { name: 'Settings' });
+  await settings.getByLabel('Dark mode', { exact: true }).check();
+  await settings.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.locator('.classcard[aria-label="Actor"]').dblclick();
+  const darkHelp = page.getByRole('dialog', { name: 'Actor API' });
+  await expect(darkHelp.locator('code').first()).toHaveCSS('color', 'rgb(145, 194, 241)');
+  await page.screenshot({ path: '/tmp/blueplay-api-dark.png' });
+  await darkHelp.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('.classcard[aria-label="World"]').dblclick();
+  const help = page.getByRole('dialog', { name: 'World API' });
+  await expect(help).toBeVisible();
+  expect(await help.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await help.locator('.blueplay-api-content').evaluate(element => { element.scrollTop = element.scrollHeight; });
+  await expect(help.getByRole('button', { name: 'Close', exact: true })).toBeInViewport();
+  await page.screenshot({ path: '/tmp/blueplay-api-mobile.png' });
 });

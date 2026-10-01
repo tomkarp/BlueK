@@ -158,14 +158,14 @@ const drawnImageDataUrl = (
   width: number,
   height: number,
   resources: ResourceModel[] = [],
+  resourcePath?: string,
 ): string | undefined => {
   if (operations === null) return undefined;
-  if (!operations.length) return emptyImageDataUrl(width, height);
-  const elements = operations
-    .map((operation) =>
-      drawingElement(operation, width, height, resources, "rgb(0, 0, 0)"),
-    )
-    .join("");
+  const resource = resourcePath ? resources.find(item =>
+    item.path === resourcePath || item.path === `images/${resourcePath}` || item.path.endsWith(`/${resourcePath}`)) : undefined;
+  if (!operations.length) return resource?.data || emptyImageDataUrl(width, height);
+  const base = resource ? `<image href="${svgEscape(resource.data)}" width="${width}" height="${height}"/>` : "";
+  const elements = base + operations.map(operation => drawingElement(operation, width, height, resources, "rgb(0, 0, 0)")).join("");
   if (!elements) return undefined;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(drawingSvg(elements, width, height))}`;
 };
@@ -188,8 +188,10 @@ const renderImageElement = (
         Number(nested.width) || Number(imageWidth) || 1,
         Number(nested.height) || Number(imageHeight) || 1,
         resources,
+        nested.resourcePath,
       );
-      return `<image href="${href}" x="${x}" y="${y}" width="${imageWidth}" height="${imageHeight}"/>`;
+      const opacity = Math.max(0, Math.min(1, Number(nested.opacity ?? 1)));
+      return `<image href="${href}" x="${x}" y="${y}" width="${imageWidth}" height="${imageHeight}" opacity="${opacity}"/>`;
     } catch {
       return "";
     }

@@ -55,8 +55,8 @@ export function decorateStage(value: BluePlayStage, resources: ProjectResource[]
         ? resources.find((item) => item.path === `images/${imagePath}` || item.path.endsWith(`/images/${imagePath}`))
         : undefined;
       const size = resource ? sizes[resource.path] : undefined;
-      const width = size?.width || image.width || object.imageWidth || 30,
-        height = size?.height || image.height || object.imageHeight || 30;
+      const width = image.width || object.imageWidth || size?.width || 30,
+        height = image.height || object.imageHeight || size?.height || 30;
       return {
         ...object,
         image: {
@@ -70,8 +70,7 @@ export function decorateStage(value: BluePlayStage, resources: ProjectResource[]
         imageData:
           object.imageData ||
           (typeof rawImage === "string" ? rawImage : undefined) ||
-          resource?.data ||
-          drawnImageDataUrl(operations, width, height, resources),
+          drawnImageDataUrl(operations || [], width, height, resources, imagePath),
         imagePath,
         imageOperations: operations,
         imageWidth: width,
@@ -206,9 +205,13 @@ export class StageRenderer {
       context.restore();
       return true;
     };
-    const backgroundResource = value.backgroundPath ? resourceData(resources, `images/${value.backgroundPath}`) : undefined;
-    const backgroundSvg = backgroundDataUrl(value.backgroundOperations || [], logicalWidth, logicalHeight, resources);
-    drawImage(backgroundResource || canvasDataUrl(backgroundSvg), 0, 0, logicalWidth, logicalHeight);
+    const background = value.background;
+    const backgroundWidth = background?.width || logicalWidth, backgroundHeight = background?.height || logicalHeight;
+    const backgroundData = background
+      ? drawnImageDataUrl(background.operations || [], backgroundWidth, backgroundHeight, resources, background.resourcePath)
+      : resourceData(resources, value.backgroundPath ? `images/${value.backgroundPath}` : undefined) ||
+        canvasDataUrl(backgroundDataUrl(value.backgroundOperations || [], logicalWidth, logicalHeight, resources));
+    drawImage(backgroundData, 0, 0, backgroundWidth, backgroundHeight, 0, background?.opacity ?? 1);
     (value.objects || []).forEach((object: any) => {
       const frame = object.image && typeof object.image === "object" ? object.image : {};
       const width = Number(object.imageWidth || frame.width || 30);

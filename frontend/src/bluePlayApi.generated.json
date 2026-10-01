@@ -1,0 +1,1573 @@
+{
+  "version": 1,
+  "classes": [
+    {
+      "id": "Image",
+      "name": "Image",
+      "kind": "class",
+      "modifiers": [],
+      "typeParameters": [],
+      "supertypes": [],
+      "constructors": [
+        {
+          "id": "Image.constructor.0",
+          "parameters": [
+            {
+              "name": "width",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "height",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            }
+          ]
+        },
+        {
+          "id": "Image.constructor.1",
+          "parameters": [
+            {
+              "name": "fileName",
+              "type": {
+                "classifier": "String",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "String"
+              },
+              "hasDefault": false
+            }
+          ]
+        },
+        {
+          "id": "Image.constructor.2",
+          "parameters": [
+            {
+              "name": "other",
+              "type": {
+                "classifier": "Image",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Image"
+              },
+              "hasDefault": false
+            }
+          ]
+        }
+      ],
+      "properties": [
+        {
+          "id": "Image.width",
+          "name": "width",
+          "type": {
+            "classifier": "Int",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Int"
+          },
+          "mutable": false,
+          "visibility": "public",
+          "getter": true,
+          "setter": false,
+          "setterPrivate": false
+        },
+        {
+          "id": "Image.height",
+          "name": "height",
+          "type": {
+            "classifier": "Int",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Int"
+          },
+          "mutable": false,
+          "visibility": "public",
+          "getter": true,
+          "setter": false,
+          "setterPrivate": false
+        }
+      ],
+      "methods": [
+        {
+          "sourceLine": 26,
+          "id": "Image.setTransparency.0",
+          "name": "setTransparency",
+          "declaringType": "Image",
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "value",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            }
+          ],
+          "returnType": {
+            "classifier": "Unit",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Unit"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 27,
+          "id": "Image.scale.1",
+          "name": "scale",
+          "declaringType": "Image",
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "width",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "height",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            }
+          ],
+          "returnType": {
+            "classifier": "Unit",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Unit"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 37,
+          "id": "Image.setColor.2",
+          "name": "setColor",
+          "declaringType": "Image",
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "r",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "g",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "b",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            }
+          ],
+          "returnType": {
+            "classifier": "Unit",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Unit"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 41,
+          "id": "Image.fill.3",
+          "name": "fill",
+          "declaringType": "Image",
+          "typeParameters": [],
+          "parameters": [],
+          "returnType": {
+            "classifier": "Unit",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Unit"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 42,
+          "id": "Image.fillRect.4",
+          "name": "fillRect",
+          "declaringType": "Image",
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "x",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "y",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "w",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "h",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            }
+          ],
+          "returnType": {
+            "classifier": "Unit",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Unit"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 43,
+          "id": "Image.drawRect.5",
+          "name": "drawRect",
+          "declaringType": "Image",
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "x",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "y",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "w",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "h",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            }
+          ],
+          "returnType": {
+            "classifier": "Unit",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Unit"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 44,
+          "id": "Image.fillOval.6",
+          "name": "fillOval",
+          "declaringType": "Image",
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "x",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "y",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "w",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "h",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            }
+          ],
+          "returnType": {
+            "classifier": "Unit",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Unit"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 45,
+          "id": "Image.drawOval.7",
+          "name": "drawOval",
+          "declaringType": "Image",
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "x",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "y",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "w",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "h",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            }
+          ],
+          "returnType": {
+            "classifier": "Unit",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Unit"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 46,
+          "id": "Image.drawLine.8",
+          "name": "drawLine",
+          "declaringType": "Image",
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "x1",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "y1",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "x2",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "y2",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            }
+          ],
+          "returnType": {
+            "classifier": "Unit",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Unit"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 47,
+          "id": "Image.drawString.9",
+          "name": "drawString",
+          "declaringType": "Image",
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "text",
+              "type": {
+                "classifier": "String",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "String"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "x",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "y",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            }
+          ],
+          "returnType": {
+            "classifier": "Unit",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Unit"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 56,
+          "id": "Image.drawImage.10",
+          "name": "drawImage",
+          "declaringType": "Image",
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "image",
+              "type": {
+                "classifier": "Image",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Image"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "x",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "y",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            }
+          ],
+          "returnType": {
+            "classifier": "Unit",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Unit"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 70,
+          "id": "Image.clear.11",
+          "name": "clear",
+          "declaringType": "Image",
+          "typeParameters": [],
+          "parameters": [],
+          "returnType": {
+            "classifier": "Unit",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Unit"
+          },
+          "visibility": "public"
+        }
+      ],
+      "builtin": true
+    },
+    {
+      "id": "World",
+      "name": "World",
+      "kind": "class",
+      "modifiers": [
+        "open"
+      ],
+      "typeParameters": [],
+      "supertypes": [],
+      "constructors": [
+        {
+          "id": "World.constructor",
+          "parameters": [
+            {
+              "name": "width",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "height",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "cellSize",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            }
+          ]
+        }
+      ],
+      "properties": [
+        {
+          "id": "World.width",
+          "name": "width",
+          "type": {
+            "classifier": "Int",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Int"
+          },
+          "mutable": false,
+          "visibility": "public",
+          "getter": false,
+          "setter": false,
+          "setterPrivate": false
+        },
+        {
+          "id": "World.height",
+          "name": "height",
+          "type": {
+            "classifier": "Int",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Int"
+          },
+          "mutable": false,
+          "visibility": "public",
+          "getter": false,
+          "setter": false,
+          "setterPrivate": false
+        },
+        {
+          "id": "World.cellSize",
+          "name": "cellSize",
+          "type": {
+            "classifier": "Int",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Int"
+          },
+          "mutable": false,
+          "visibility": "public",
+          "getter": false,
+          "setter": false,
+          "setterPrivate": false
+        },
+        {
+          "id": "World.background",
+          "name": "background",
+          "type": {
+            "classifier": "Image",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Image"
+          },
+          "mutable": true,
+          "visibility": "public",
+          "getter": false,
+          "setter": false,
+          "setterPrivate": false
+        },
+        {
+          "id": "World.numberOfObjects",
+          "name": "numberOfObjects",
+          "type": {
+            "classifier": "Int",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Int"
+          },
+          "mutable": false,
+          "visibility": "public",
+          "getter": true,
+          "setter": false,
+          "setterPrivate": false
+        },
+        {
+          "id": "World.isClicked",
+          "name": "isClicked",
+          "type": {
+            "classifier": "Boolean",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Boolean"
+          },
+          "mutable": false,
+          "visibility": "public",
+          "getter": true,
+          "setter": false,
+          "setterPrivate": false
+        }
+      ],
+      "methods": [
+        {
+          "sourceLine": 80,
+          "id": "World.show.0",
+          "name": "show",
+          "declaringType": "World",
+          "typeParameters": [],
+          "parameters": [],
+          "returnType": {
+            "classifier": "Unit",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Unit"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 81,
+          "id": "World.act.1",
+          "name": "act",
+          "declaringType": "World",
+          "typeParameters": [],
+          "parameters": [],
+          "returnType": {
+            "classifier": "Unit",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Unit"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 82,
+          "id": "World.addObject.2",
+          "name": "addObject",
+          "declaringType": "World",
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "actor",
+              "type": {
+                "classifier": "Actor",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Actor"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "x",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "y",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            }
+          ],
+          "returnType": {
+            "classifier": "Unit",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Unit"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 86,
+          "id": "World.removeObject.3",
+          "name": "removeObject",
+          "declaringType": "World",
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "actor",
+              "type": {
+                "classifier": "Actor",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Actor"
+              },
+              "hasDefault": false
+            }
+          ],
+          "returnType": {
+            "classifier": "Unit",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Unit"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 90,
+          "id": "World.allObjects.4",
+          "name": "allObjects",
+          "declaringType": "World",
+          "typeParameters": [],
+          "parameters": [],
+          "returnType": {
+            "classifier": "List",
+            "arguments": [
+              {
+                "classifier": "Actor",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Actor"
+              }
+            ],
+            "nullable": false,
+            "displayName": "List<Actor>"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 91,
+          "id": "World.getObjects.5",
+          "name": "getObjects",
+          "declaringType": "World",
+          "typeParameters": [
+            "T : Actor"
+          ],
+          "parameters": [],
+          "returnType": {
+            "classifier": "List",
+            "arguments": [
+              {
+                "classifier": "T",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "T"
+              }
+            ],
+            "nullable": false,
+            "displayName": "List<T>"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 92,
+          "id": "World.getObjectsAt.6",
+          "name": "getObjectsAt",
+          "declaringType": "World",
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "x",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "y",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            }
+          ],
+          "returnType": {
+            "classifier": "List",
+            "arguments": [
+              {
+                "classifier": "Actor",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Actor"
+              }
+            ],
+            "nullable": false,
+            "displayName": "List<Actor>"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 95,
+          "id": "World.setBackground.7",
+          "name": "setBackground",
+          "declaringType": "World",
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "fileName",
+              "type": {
+                "classifier": "String",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "String"
+              },
+              "hasDefault": false
+            }
+          ],
+          "returnType": {
+            "classifier": "Unit",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Unit"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 96,
+          "id": "World.setBackground.8",
+          "name": "setBackground",
+          "declaringType": "World",
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "r",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "g",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "b",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            }
+          ],
+          "returnType": {
+            "classifier": "Unit",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Unit"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 99,
+          "id": "World.showText.9",
+          "name": "showText",
+          "declaringType": "World",
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "text",
+              "type": {
+                "classifier": "String",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "String"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "x",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "y",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            }
+          ],
+          "returnType": {
+            "classifier": "Unit",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Unit"
+          },
+          "visibility": "public"
+        }
+      ],
+      "builtin": true
+    },
+    {
+      "id": "Actor",
+      "name": "Actor",
+      "kind": "class",
+      "modifiers": [
+        "open"
+      ],
+      "typeParameters": [],
+      "supertypes": [],
+      "constructors": [
+        {
+          "id": "Actor.constructor",
+          "parameters": []
+        }
+      ],
+      "properties": [
+        {
+          "id": "Actor.x",
+          "name": "x",
+          "type": {
+            "classifier": "Int",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Int"
+          },
+          "mutable": true,
+          "visibility": "public",
+          "getter": false,
+          "setter": true,
+          "setterPrivate": false
+        },
+        {
+          "id": "Actor.y",
+          "name": "y",
+          "type": {
+            "classifier": "Int",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Int"
+          },
+          "mutable": true,
+          "visibility": "public",
+          "getter": false,
+          "setter": true,
+          "setterPrivate": false
+        },
+        {
+          "id": "Actor.rotation",
+          "name": "rotation",
+          "type": {
+            "classifier": "Int",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Int"
+          },
+          "mutable": true,
+          "visibility": "public",
+          "getter": false,
+          "setter": true,
+          "setterPrivate": false
+        },
+        {
+          "id": "Actor.image",
+          "name": "image",
+          "type": {
+            "classifier": "Image",
+            "arguments": [],
+            "nullable": true,
+            "displayName": "Image?"
+          },
+          "mutable": true,
+          "visibility": "public",
+          "getter": false,
+          "setter": false,
+          "setterPrivate": false
+        },
+        {
+          "id": "Actor.world",
+          "name": "world",
+          "type": {
+            "classifier": "World",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "World"
+          },
+          "mutable": false,
+          "visibility": "public",
+          "getter": true,
+          "setter": false,
+          "setterPrivate": false
+        },
+        {
+          "id": "Actor.isAtEdge",
+          "name": "isAtEdge",
+          "type": {
+            "classifier": "Boolean",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Boolean"
+          },
+          "mutable": false,
+          "visibility": "public",
+          "getter": true,
+          "setter": false,
+          "setterPrivate": false
+        },
+        {
+          "id": "Actor.isClicked",
+          "name": "isClicked",
+          "type": {
+            "classifier": "Boolean",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Boolean"
+          },
+          "mutable": false,
+          "visibility": "public",
+          "getter": true,
+          "setter": false,
+          "setterPrivate": false
+        }
+      ],
+      "methods": [
+        {
+          "sourceLine": 127,
+          "id": "Actor.act.0",
+          "name": "act",
+          "declaringType": "Actor",
+          "typeParameters": [],
+          "parameters": [],
+          "returnType": {
+            "classifier": "Unit",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Unit"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 128,
+          "id": "Actor.move.1",
+          "name": "move",
+          "declaringType": "Actor",
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "distance",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            }
+          ],
+          "returnType": {
+            "classifier": "Unit",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Unit"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 129,
+          "id": "Actor.turn.2",
+          "name": "turn",
+          "declaringType": "Actor",
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "degrees",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            }
+          ],
+          "returnType": {
+            "classifier": "Unit",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Unit"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 130,
+          "id": "Actor.turnTowards.3",
+          "name": "turnTowards",
+          "declaringType": "Actor",
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "x",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            },
+            {
+              "name": "y",
+              "type": {
+                "classifier": "Int",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Int"
+              },
+              "hasDefault": false
+            }
+          ],
+          "returnType": {
+            "classifier": "Unit",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Unit"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 133,
+          "id": "Actor.distanceTo.4",
+          "name": "distanceTo",
+          "declaringType": "Actor",
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "other",
+              "type": {
+                "classifier": "Actor",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Actor"
+              },
+              "hasDefault": false
+            }
+          ],
+          "returnType": {
+            "classifier": "Int",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Int"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 134,
+          "id": "Actor.intersects.5",
+          "name": "intersects",
+          "declaringType": "Actor",
+          "typeParameters": [],
+          "parameters": [
+            {
+              "name": "other",
+              "type": {
+                "classifier": "Actor",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "Actor"
+              },
+              "hasDefault": false
+            }
+          ],
+          "returnType": {
+            "classifier": "Boolean",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Boolean"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 137,
+          "id": "Actor.getIntersecting.6",
+          "name": "getIntersecting",
+          "declaringType": "Actor",
+          "typeParameters": [
+            "T : Actor"
+          ],
+          "parameters": [],
+          "returnType": {
+            "classifier": "List",
+            "arguments": [
+              {
+                "classifier": "T",
+                "arguments": [],
+                "nullable": false,
+                "displayName": "T"
+              }
+            ],
+            "nullable": false,
+            "displayName": "List<T>"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 141,
+          "id": "Actor.getOneIntersecting.7",
+          "name": "getOneIntersecting",
+          "declaringType": "Actor",
+          "typeParameters": [
+            "T : Actor"
+          ],
+          "parameters": [],
+          "returnType": {
+            "classifier": "T",
+            "arguments": [],
+            "nullable": true,
+            "displayName": "T?"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 142,
+          "id": "Actor.isTouching.8",
+          "name": "isTouching",
+          "declaringType": "Actor",
+          "typeParameters": [
+            "T : Actor"
+          ],
+          "parameters": [],
+          "returnType": {
+            "classifier": "Boolean",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Boolean"
+          },
+          "visibility": "public"
+        },
+        {
+          "sourceLine": 143,
+          "id": "Actor.removeTouching.9",
+          "name": "removeTouching",
+          "declaringType": "Actor",
+          "typeParameters": [
+            "T : Actor"
+          ],
+          "parameters": [],
+          "returnType": {
+            "classifier": "Unit",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Unit"
+          },
+          "visibility": "public"
+        }
+      ],
+      "builtin": true
+    }
+  ],
+  "functions": [
+    {
+      "sourceLine": 148,
+      "id": "<top-level>.isKeyDown.0",
+      "name": "isKeyDown",
+      "declaringType": "<top-level>",
+      "typeParameters": [],
+      "parameters": [
+        {
+          "name": "key",
+          "type": {
+            "classifier": "String",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "String"
+          },
+          "hasDefault": false
+        }
+      ],
+      "returnType": {
+        "classifier": "Boolean",
+        "arguments": [],
+        "nullable": false,
+        "displayName": "Boolean"
+      },
+      "visibility": "public",
+      "builtin": true
+    },
+    {
+      "sourceLine": 149,
+      "id": "<top-level>.start.1",
+      "name": "start",
+      "declaringType": "<top-level>",
+      "typeParameters": [],
+      "parameters": [],
+      "returnType": {
+        "classifier": "Unit",
+        "arguments": [],
+        "nullable": false,
+        "displayName": "Unit"
+      },
+      "visibility": "public",
+      "builtin": true
+    },
+    {
+      "sourceLine": 150,
+      "id": "<top-level>.stop.2",
+      "name": "stop",
+      "declaringType": "<top-level>",
+      "typeParameters": [],
+      "parameters": [],
+      "returnType": {
+        "classifier": "Unit",
+        "arguments": [],
+        "nullable": false,
+        "displayName": "Unit"
+      },
+      "visibility": "public",
+      "builtin": true
+    },
+    {
+      "sourceLine": 151,
+      "id": "<top-level>.step.3",
+      "name": "step",
+      "declaringType": "<top-level>",
+      "typeParameters": [],
+      "parameters": [],
+      "returnType": {
+        "classifier": "Unit",
+        "arguments": [],
+        "nullable": false,
+        "displayName": "Unit"
+      },
+      "visibility": "public",
+      "builtin": true
+    },
+    {
+      "sourceLine": 152,
+      "id": "<top-level>.getSpeed.4",
+      "name": "getSpeed",
+      "declaringType": "<top-level>",
+      "typeParameters": [],
+      "parameters": [],
+      "returnType": {
+        "classifier": "Int",
+        "arguments": [],
+        "nullable": false,
+        "displayName": "Int"
+      },
+      "visibility": "public",
+      "builtin": true
+    },
+    {
+      "sourceLine": 153,
+      "id": "<top-level>.setSpeed.5",
+      "name": "setSpeed",
+      "declaringType": "<top-level>",
+      "typeParameters": [],
+      "parameters": [
+        {
+          "name": "value",
+          "type": {
+            "classifier": "Int",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "Int"
+          },
+          "hasDefault": false
+        }
+      ],
+      "returnType": {
+        "classifier": "Unit",
+        "arguments": [],
+        "nullable": false,
+        "displayName": "Unit"
+      },
+      "visibility": "public",
+      "builtin": true
+    },
+    {
+      "sourceLine": 154,
+      "id": "<top-level>.playSound.6",
+      "name": "playSound",
+      "declaringType": "<top-level>",
+      "typeParameters": [],
+      "parameters": [
+        {
+          "name": "fileName",
+          "type": {
+            "classifier": "String",
+            "arguments": [],
+            "nullable": false,
+            "displayName": "String"
+          },
+          "hasDefault": false
+        }
+      ],
+      "returnType": {
+        "classifier": "Unit",
+        "arguments": [],
+        "nullable": false,
+        "displayName": "Unit"
+      },
+      "visibility": "public",
+      "builtin": true
+    }
+  ],
+  "library": {
+    "id": "blueplay",
+    "version": 1
+  }
+}

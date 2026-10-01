@@ -69,6 +69,7 @@ export interface BluePlayStage {
   height: number;
   cellSize: number;
   backgroundColor: string;
+  background?: BluePlayImageFrame;
   backgroundPath?: string;
   backgroundOperations?: string[];
   objects: BluePlayActorFrame[];
@@ -82,7 +83,7 @@ export type SimulationState = 'inactive' | 'paused' | 'running' | 'stopping' | '
 /** A session has exactly one phase, shared by every UI surface. */
 export type Phase = 'uncompiled' | 'compiling' | 'ready' | 'running' | 'waitingForInput' | 'faulted';
 /** `reference`: the value is an object; `summary`: the value text describes a collection and is no Kotlin expression. */
-export interface InspectedField { name: string; value: string; type?: TypeRef | null; setterPrivate?: boolean; reference?: boolean; summary?: boolean }
+export interface InspectedField { name: string; value: string; type?: TypeRef | null; setterPrivate?: boolean; reference?: boolean; summary?: boolean; computed?: boolean; objectId?: string; error?: string }
 export interface RuntimeValue {
   kind: 'unit' | 'null' | 'scalar' | 'object' | 'inspect' | 'error';
   display?: string;
@@ -123,6 +124,7 @@ export type RuntimeCommand = { generationId?: string } & (
   | { op: 'create'; className: string; name: string; args: string[]; typeArguments?: string[] }
   | { op: 'invoke'; objectId: string; name: string; args: string[]; typeArguments?: string[] }
   | { op: 'get'; objectId: string; property: string }
+  | { op: 'inspectGet'; objectId: string; property: string }
   | { op: 'set'; objectId: string; property: string; value: string }
   | { op: 'inspect'; objectId: string }
   | { op: 'inspectField'; objectId: string; property: string }

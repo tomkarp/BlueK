@@ -123,3 +123,13 @@ Jeder Push löst den passenden Workflow unter `.github/workflows/` aus; der
 Build läuft dort vollständig neu (Java 21, Node 22, `npm ci`,
 `npm run build`). Einrichtung von Server, Caddy und Share-Dienst:
 [docs/deployment.md](docs/deployment.md).
+
+### BluePlay-API-Abgleich
+
+`npm run test:blueplay-api` vergleicht öffentliche Signaturen und das erzeugte
+Hilfemanifest mit dem festgehaltenen BlueJ-Projekt in
+`tests/fixtures/blueplay-reference/`. Es prüft gültige und ungültige Aufrufe,
+benannte Argumente, originale Schülerdateien, Objektlebensdauer und Bildkopien.
+Der Test gehört zu `browser-smoke` und `test:regression`.
+`npm run build:kotlite` erzeugt nach dem Bundle auch
+`frontend/src/bluePlayApi.generated.json`; beide Dateien gemeinsam aktualisieren.

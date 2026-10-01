@@ -323,16 +323,20 @@ fails((await project({ 'Anzeige.kt': 'class Anzeige {\n    fun zeige(text: Strin
   {
     const p = await project({ 'Feld.kt': 'class Feld : World(20, 10, 1) {\n    fun f() = liste("a").size\n}', 'Util.kt': 'fun liste(text: String) = mutableListOf(text)\nfun mutableListOf(text: String): MutableList<String> = listOf(text, "Projekt").toMutableList()' }, 'blueplay');
     ok(p.result, 'RT-45 BluePlay library with a clashing project function');
-    assert.equal(ok(p.evaluate('val bild = Image(30, 20); bild.fill(); bild.drawingJson().contains("Projekt")'), 'RT-45 BluePlay library: run').display, 'false');
+    ok(p.evaluate('val bild = Image(30, 20); bild.fill(); val probe = Actor(); probe.image = bild; val welt = Feld(); welt.addObject(probe, 0, 0); welt.show()'), 'RT-45 BluePlay library: run');
+    assert.deepEqual(JSON.parse(p.session.takeStage()).stage.objects[0].image.operations, ['fill|rgb(0,0,0)']);
     assert.equal(ok(p.evaluate('Feld().f()'), 'RT-45 BluePlay project call').display, '2');
   }
 }
 
-// stop()/start() also work after `welt.show()` (not only after showWorld(welt)).
+// stop()/start() work after the original API call `welt.show()`.
 {
   const p = await project({ 'Feld.kt': 'class Feld : World(20, 10, 1)' }, 'blueplay');
   ok(p.result, 'BluePlay project');
-  ok(p.evaluate('val welt = Feld(); welt.show(); start(); stop(); welt.running'), 'stop after show()');
+  ok(p.evaluate('val welt = Feld(); welt.show(); start()'), 'start after show()');
+  assert.equal(p.session.takeBluePlayIntent(), 'start');
+  ok(p.evaluate('stop()'), 'stop after show()');
+  assert.equal(p.session.takeBluePlayIntent(), 'stop');
 }
 
 // Smart casts after `is` (RT-46): the analysis narrows the variable, the interpreter still reads members

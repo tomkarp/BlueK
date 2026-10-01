@@ -374,6 +374,7 @@ data class FunctionCallNode(
     @ModifyByAnalyzer var inferredTypeArguments: List<TypeNode?>? = null,
     @ModifyByAnalyzer var modifierFilter: SearchFunctionModifier? = null,
     @ModifyByAnalyzer var resolvedInvoke: FunctionCallNode? = null,
+    @ModifyByAnalyzer var secondaryConstructorIndex: Int? = null,
 ) : ASTNode {
     /** Declared type of the receiving property, e.g. `val k: MutableList<Karte> = mutableListOf()`. */
     @ModifyByAnalyzer var expectedReturnType: TypeNode? = null
@@ -463,6 +464,20 @@ data class ClassParameterNode(
     }
 }
 
+/** A constructor body uses the ordinary callable scope, but is never a member method. */
+class ClassSecondaryConstructorNode(
+    position: SourcePosition,
+    parameters: List<FunctionValueParameterNode>,
+    body: BlockNode,
+) : FunctionDeclarationNode(
+    position = position,
+    name = "<constructor>",
+    declaredReturnType = TypeNode(position, "Unit", null, false),
+    valueParameters = parameters,
+    body = body,
+    declaredModifiers = setOf(FunctionModifier.private),
+)
+
 data class ClassPrimaryConstructorNode(override val position: SourcePosition, val parameters: List<ClassParameterNode>) : ASTNode {
     override fun toMermaid(): String {
         val self = "${generateId()}[\"Class Primary Constructor Node\"]"
@@ -515,6 +530,9 @@ data class NavigationNode(
     @ModifyByAnalyzer var memberType: MemberType? = null,
     @ModifyByAnalyzer var transformedRefName: String? = null, // for extension property use
 ) : ASTNode {
+    /** The analyzer synthesizes this access for a for-loop's iterator call. */
+    @ModifyByAnalyzer var isForLoopIterator: Boolean = false
+
     override fun toMermaid(): String {
         val self = "${generateId()}[\"Navigation Node\"]"
         return "$self-- subject -->${subject.toMermaid()}\n" +

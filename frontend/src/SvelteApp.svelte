@@ -16,6 +16,7 @@
   import { LocalRuntimeClient } from "./localRuntimeClient";
   import { createLocalRuntimeWorker } from "./localRuntimeWorkerFactory";
   import { mainFiles } from "./mainEntries";
+  import { bluePlayApiDocs } from "./bluePlayApi";
   import { StageAudio, StageRenderer, decorateStage, measureImageSizes, stageKeyName, stageStyle } from "./bluePlayStage";
   import { KotlinFormatterClient } from "./kotlinFormatterClient";
   import { InspectorModel, inspectorFieldText, type InspectionView, type InspectorField } from "./inspectorModel";
@@ -81,11 +82,6 @@
     className?: string;
   };
   type CardPosition = { x: number; y: number };
-  type BluePlayApiDoc = {
-    title: string;
-    summary: string;
-    members: string[];
-  };
   const bluePlayFrameworkNames = [
     "BluePlayFunctions.kt",
     "World.kt",
@@ -104,7 +100,7 @@
       id: "blueplay-framework-World.kt",
       fileName: "World.kt",
       kind: "class",
-      source: "open class World(val width: Int, val height: Int, val cellSize: Int = 1)",
+      source: "open class World(val width: Int, val height: Int, val cellSize: Int)",
       revision: 1,
     },
     {
@@ -118,85 +114,10 @@
       id: "blueplay-framework-Image.kt",
       fileName: "Image.kt",
       kind: "class",
-      source: "class Image(val path: String = \"\")",
+      source: "class Image",
       revision: 1,
     },
   ];
-  const bluePlayApiDocs: Record<string, BluePlayApiDoc> = {
-    "BluePlayFunctions.kt": {
-      title: "BluePlayFunctions API",
-      summary: "Top-level functions for showing, controlling and interacting with a BluePlay world.",
-      members: [
-        "showWorld(world: World)",
-        "show()",
-        "start()",
-        "stop()",
-        "step()",
-        "setSpeed(value: Int)",
-        "getSpeed(): Int",
-        "isKeyDown(key: String): Boolean",
-        "playSound(fileName: String)",
-      ],
-    },
-    "World.kt": {
-      title: "World API",
-      summary: "A two-dimensional world that contains actors, a background and optional text.",
-      members: [
-        "World(width: Int, height: Int, cellSize: Int = 1)",
-        "width: Int",
-        "height: Int",
-        "cellSize: Int",
-        "background: Image",
-        "addObject(actor: Actor, x: Int, y: Int)",
-        "removeObject(actor: Actor)",
-        "getObjects<T>(): List<T>",
-        "getObjectsAt(x: Int, y: Int): List<Actor>",
-        "numberOfObjects: Int",
-        "showText(text: String, x: Int, y: Int)",
-        "act()",
-      ],
-    },
-    "Actor.kt": {
-      title: "Actor API",
-      summary: "The base class for objects that can be placed, drawn and animated in a World.",
-      members: [
-        "x: Int",
-        "y: Int",
-        "rotation: Int",
-        "image: Image?",
-        "setImage(image: Image)",
-        "setImage(fileName: String)",
-        "move(distance: Int)",
-        "turn(degrees: Int)",
-        "turnTowards(x: Int, y: Int)",
-        "isAtEdge: Boolean",
-        "isClicked: Boolean",
-        "isTouching(actor: Actor): Boolean",
-        "act()",
-      ],
-    },
-    "Image.kt": {
-      title: "Image API",
-      summary: "An image or drawing surface used for world backgrounds and actor images.",
-      members: [
-        "Image(width: Int, height: Int)",
-        "Image(fileName: String)",
-        "width: Int",
-        "height: Int",
-        "setColor(red: Int, green: Int, blue: Int)",
-        "fill()",
-        "fillRect(x: Int, y: Int, width: Int, height: Int)",
-        "drawRect(x: Int, y: Int, width: Int, height: Int)",
-        "drawOval(x: Int, y: Int, width: Int, height: Int)",
-        "drawLine(x1: Int, y1: Int, x2: Int, y2: Int)",
-        "drawString(text: String, x: Int, y: Int)",
-        "drawImage(image: Image, x: Int, y: Int)",
-        "clear()",
-        "scale(width: Int, height: Int)",
-        "setTransparency(value: Int)",
-      ],
-    },
-  };
   type EditorWindowState = {
     id: string;
     fileId: string;
@@ -297,9 +218,10 @@
   }> = [];
   let inspectorModel: InspectorModel;
   let inspectorRevision = 0;
+  let inspectorError: { property: string; message: string } | null = null;
   let inspectorViews: Array<{ id: string; referenceName: string; position: { left: number; top: number }; data: InspectionView }> = [];
   $: {
-    // Both runtime fields and independently resolved getters update the derived view.
+    // Every displayed property comes from the authoritative runtime snapshot.
     void runtime;
     void inspectorRevision;
     inspectorViews = inspectorWindows.map(item => ({
@@ -1427,6 +1349,7 @@
   // What Escape would close right now — shared by handleWindowKeydown so
   // the Vim-and-editor special case there stays in sync with everything else.
   function escapeWindowAction(): (() => void) | null {
+    if (inspectorError) return () => { inspectorError = null; };
     if (mainDialog) return () => { mainDialog = null; };
     if (projectInfo) return () => { projectInfo = null; };
     if (readmeOpen) return () => {
@@ -2096,7 +2019,7 @@
           result,
           `${dialog.object ? dialog.object.name + "." : dialog.receiver || ""}${method.name}${suffix}()`,
         );
-        if (request.op !== "get") await refreshComputedInspectors();
+        await refreshComputedInspectors();
       }
     } catch (reason) {
       if (client.getSnapshot().generationId === generation) showCallError(reason);
@@ -3750,6 +3673,12 @@
                       title={`Open ${field.name}`}
                       on:click={() => inspectFieldReference(inspector.id, field)}
                       ><svg viewBox="0 0 48 24" aria-hidden="true"><path d="M3 12h32"/><path d="m29 5 8 7-8 7"/></svg></button
+                    >{:else if field.error}<button
+                      class="inspect-error-value"
+                      aria-label={`Show error for ${field.name}`}
+                      title={field.error}
+                      on:click={() => { inspectorError = { property: field.name, message: field.error! }; }}
+                      >{fieldValue(inspector.data, field)}</button
                     >{:else}<output title={fieldValue(inspector.data, field)}
                       >{fieldValue(inspector.data, field)}</output
                     >{/if}
@@ -3773,6 +3702,13 @@
       </div>
     </div>
   {/each}
+  {#if inspectorError}<div class="modal topmost-modal" role="presentation">
+      <div class="dialog inspector-error-dialog" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="inspector-error-title" use:containClicks>
+        <h3 id="inspector-error-title">Property error: {inspectorError.property}</h3>
+        <p>{inspectorError.message}</p>
+        <div class="dialog-actions"><button use:focusOnMount on:click={() => (inspectorError = null)}>Close</button></div>
+      </div>
+    </div>{/if}
   {#if createDialog}<div class="modal topmost-modal" role="presentation">
       <div
         class="dialog create-object-dialog"
@@ -4052,11 +3988,22 @@
         tabindex="-1"
         aria-labelledby="blueplay-api-title"
       >
-        <h3 id="blueplay-api-title">{api.title}</h3>
-        <p>{api.summary}</p>
-        <ul class="blueplay-api-members">
-          {#each api.members as member}<li><code>{member}</code></li>{/each}
-        </ul>
+        <div class="blueplay-api-header">
+          <h3 id="blueplay-api-title">{api.title}</h3>
+          <p>{api.summary}</p>
+        </div>
+        <div class="blueplay-api-content">
+          {#each api.sections as section}
+            <section class="blueplay-api-section" aria-label={section.title}>
+              <h4>{section.title}</h4>
+              <dl class="blueplay-api-members">
+                {#each section.members as member}
+                  <div class="blueplay-api-member"><dt><code>{member.signature}</code></dt><dd>{member.description}</dd></div>
+                {/each}
+              </dl>
+            </section>
+          {/each}
+        </div>
         <div class="dialog-actions"><button on:click={() => (bluePlayApiFile = null)}>Close</button></div>
       </div>
     </div>{/if}

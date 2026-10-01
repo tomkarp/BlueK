@@ -28,6 +28,17 @@ browser-session fixes without replacing Kotlite with a separate interpreter.
 
 ## Changes
 
+Nullable for-loop subjects (RT-50): the synthetic `iterator()` navigation
+is marked by the analyzer and points at the loop subject (the receiver's
+start for calls/navigation). When member resolution requires a non-null
+receiver, it reports "Non-nullable value required to call 'iterator()' method
+in a for-loop." instead of the generic nullable-call diagnostic at `for`.
+Nullable-receiver iterator extensions still resolve normally; errors inside
+the subject and ordinary unsafe calls retain their existing messages.
+Coverage: `scripts/smoke-kotlite-browser.mjs` (diagnostic/file/line/column,
+lists/ranges/strings, safe calls, Elvis/!!/smart casts and a nullable iterator
+extension) and the RT-50 browser test in `tests/gui/regressions.spec.ts`.
+
 Suspendable execution: every AST node evaluates through `suspend` functions,
 so a running program can pause without blocking the worker.
 `CustomFunctionDefinition.suspendExecutable` lets host functions suspend
@@ -85,8 +96,19 @@ with recursion and suspension, bypass `catch` and still run `finally`.
 adds inline metadata the binary stdlib lacks. Details in
 `docs/kotlite-generics.md`; coverage: `npm run test:generics`.
 
-The fork also reports secondary constructors explicitly as unsupported instead
-of exposing the parser's generic unexpected-token error.
+Secondary constructors without a primary constructor or `this`/`super`
+delegation are supported (RT-48, needed for BluePlay's three typed Image
+constructors). The parser records `ClassSecondaryConstructorNode`; constructor
+lookup preserves separate overload candidates and the selected index. Arguments
+are evaluated once in the caller, instance initializers run once, and the body
+uses the normal member-call path with `enterCall`/`leaveCall`, recursion limits
+and suspension. Constructor signatures are read directly from declarations;
+looking them up must not force member analysis while a primary constructor's
+default values are being analyzed (RT-40). Unsupported delegation and mixing
+with a primary constructor have explicit parser errors. Constructors do not
+appear as member methods. Coverage: `smoke-kotlite-browser.mjs` RT-48 (overloads,
+named/default arguments, once-only side effects, input and sleep), existing
+RT-40 curriculum cases, `smoke-blueplay-api.mjs` (three Image constructors).
 
 It also resolves unqualified calls to inherited member methods through the
 implicit `this` receiver. This keeps ordinary Kotlin spelling such as

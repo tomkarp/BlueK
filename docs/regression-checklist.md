@@ -136,7 +136,7 @@ bei Verweisen die Beschreibung mitnennen.
 | GUI-81 | Eine geschlossene BluePlay-Welt bleibt bei gewöhnlichen Codepad-Auswertungen geschlossen; erneutes Starten von `main()` oder explizites `show()` öffnet sie wieder | Chromium-GUI-Test GUI-81 schließt die Welt, führt `5 + 3` aus und prüft Ergebnis `8` bei weiterhin fehlendem Weltfenster; danach startet `main()` die Welt erneut | Abgesichert |
 | GUI-83 | Wenn Laufzeiteingabe oder Programmausgabe das Terminal öffnet, wird es auch über bereits geöffnete Editoren nach vorn geholt | Chromium-Test GUI-83 prüft Terminalausgabe, aktives Fenster und Z-Index über einem Editor; Testaufbau am 2026-09-25 korrigiert (öffnet erst das Terminal, dann den Editor), 1/1 grün | Abgesichert |
 | GUI-84 | Der Dialog zur Objekterzeugung per Rechtsklick auf eine Klasse liegt über einem geöffneten Editor | Chromium-Test GUI-84 prüft den Dialog und dessen Z-Index über dem aktiven Editor | Implementiert; nicht ausgeführt |
-| GUI-85 | Der Parameterdialog eines per Mausklick aufgerufenen Objekts liegt über einem geöffneten Editor | Chromium-Test GUI-85 prüft den Methodendialog und dessen Z-Index über dem aktiven Editor | Implementiert; nicht ausgeführt |
+| GUI-85 | Der Parameterdialog eines per Mausklick aufgerufenen Objekts liegt über einem geöffneten Editor | Chromium-Test GUI-85 prüft den Methodendialog und dessen Z-Index über dem aktiven Editor | Am 01.10.2026 im GUI-93-Prüflauf tatsächlich grün |
 | GUI-82 | Geerbte Methoden im Objekt-Kontextmenü sind beim Öffnen des Oberklassen-Untermenüs vollständig sichtbar, ohne horizontalen Scrollen; das Untermenü bleibt auch vertikal im Browser-Viewport | Chromium-GUI-Test GUI-82 prüft sichtbare `World`-Methoden, deaktiviertes horizontales Scrollen und vollständig im Viewport liegende Grenzen des Untermenüs | Abgesichert |
 | GUI-86 | Selbst gezeichnete Actor-Bilder werden auf der Bühne gezeichnet: `Image(20, 20)`, `setColor(200, 0, 0)`, `fill()`, `setImage(picture)` ergibt ein rotes Quadrat statt des Platzhalters mit Klasseninitiale; ebenso `fill()` mit anschließend per `drawImage` eingebettetem gefülltem Bild. Hintergrund und Actor-Bilder nutzen dieselbe Umsetzung aller Image-Operationen (`fill`, `fillRect`, `drawRect`, `fillOval`, `drawOval`, `drawLine`, `drawString`, `drawImage`); `clear`, `setTransparency` und `scale` erzeugen keine Operationen | Chromium-GUI-Test GUI-86 (`blueplay-images.spec.ts`) lädt ein BluePlay-Projekt per `#bluek=p1.`-Link, startet main und prüft Canvas-Pixel beider Actors; `test:ui` prüft die Hilfsfunktionen für `fill`, verschachtelte Bilder und bestehende Operationen | Ursache: `drawnImageDataUrl` kannte `fill` nicht (nur `backgroundDataUrl`). GUI-86 und Hilfsfunktionstest scheiterten vor der Korrektur und sind danach grün. Visuelle Benutzerabnahme offen. Prüflauf siehe unten |
 | GUI-87 | Ein angeklickter oder verschobener Objektinspektor liegt über einem offenen Editor; nach Aktivierung des Editors liegt dieser wieder oben und Escape schließt den Editor | Erster GUI-Lauf durch Testaufbau blockiert (Inspector verdeckte Klassenkarte); nach geänderter Öffnungsreihenfolge prüft GUI-87 Aktivierung, Z-Index, tatsächlichen Treffer im Überlappungsbereich, Ziehposition und Escape: 1/1 grün; GUI-18 und GUI-30 ebenfalls grün; Typecheck 0 Fehler/0 Warnungen | Abgesichert |
@@ -184,8 +184,32 @@ bei Verweisen die Beschreibung mitnennen.
 | RT-44 | Ein Safe Call von `toString()`, `equals()` oder `hashCode()` auf einem nullable Wert (`n?.toString()` bei `Int?`, `s?.equals("a")` bei `String?`, eigene Klasse mit und ohne Überschreibung) kompiliert und ruft die Funktion des nicht-nullable Typs auf; mit `null` ergibt er `null`. Das BluePlay-Projekt aus `examples/blueplay/` (`World.kt` Zeile 35: `current.image?.transparency?.toString() ?: "255"`) lädt. Seit 34c8c91 (`Any?`-Erweiterungen in `BlueKStdlibModule`) war das ein Compilefehler „Ambiguous function call for `toString`. 2 candidates match: Int.toString(), Any?.toString()“; `s?.equals("a")` war schon vorher mehrdeutig | 2026-09-26: `smoke-blueplay-browser` und 11 neue Fälle in `smoke-kotlin-surface.mjs` rot gegen das Bundle aus 936652c, grün nach der Korrektur in `SemanticAnalyzer.FunctionCallNode.visit` (`PATCH.md`); danach `browser-smoke` komplett, `test:references`, `test:generics` und Playwright 125/125 grün (Prüfprotokoll „RT-44“) | Automatisiert abgesichert (Node, echtes Bundle); kein eigener GUI-Test |
 | RT-45 | Top-Level-Funktionen (auch Erweiterungs- und Operatorfunktionen) und -Properties lassen sich unabhängig von der Dateireihenfolge verwenden: `Main.kt` mit `fun main() { println(hilfe()) }` und `Util.kt` mit `fun hilfe(): Int = 1`, `class Hund { fun f() = hilfe() }` bzw. `class Hund { fun f() = maximum + 1 }` mit `val maximum = 3` in einer späteren Datei, eine `var` einer späteren Datei aus einer Klasse ändern, gegenseitig rekursive Funktionen in zwei Dateien, ein Initialisierer, der eine spätere Funktion aufruft; Überladungen nach dem Aufruf nehmen an der Auflösung teil. Im Codepad darf eine Eingabe ihre eigenen späteren Deklarationen verwenden; spätere Eingaben (auch eine neue Überladung) ändern frühere nicht. Property-Initialisierer laufen weiter in Dateireihenfolge: direktes Lesen einer später initialisierten Property ist ein Compilefehler („`b` is initialized after this code in file order …“), indirektes über Funktion/Klasse ein nicht fangbarer Laufzeitfehler („`maximum` is used before it is initialized …“) | 2026-09-26: mit dem Bundle vor der Korrektur (RT-40-Stand) scheitern alle drei gemeldeten Reproduktionen (`No matching function or constructor hilfe`, `` `maximum` is unknown``), in umgekehrter Dateireihenfolge funktionieren sie; im GUI markiert Compile `Line 2: SemanticException: No matching function or constructor hilfe`. Behoben durch Analyse bei Bedarf innerhalb der Quelltexteinheit, Funktionsdeklarationen vor den übrigen Knoten und Prüfung der Initialisierungsreihenfolge (`vendor/kotlite-interpreter`, `PATCH.md`; Einheitsgrenzen in `KotliteSession`). RT-45-Block in `smoke-curriculum-kotlin.mjs` und GUI-Test RT-45 in `regressions.spec.ts` scheitern mit dem alten Bundle und sind mit dem neuen grün | **Behoben**, abgesichert durch Node-Laufzeittest (Teil von `browser-smoke`) und Chromium-GUI-Test. Grenzen: Initialisierer laufen strikt in Dateireihenfolge (Kotlin/JVM initialisiert Dateien bei Bedarf); gegenseitig rekursive Funktionen mit Ausdruckskörper brauchen einen Rückgabetyp an der zuerst analysierten (siehe README „Aktuelle Grenzen“, `docs/kotlite.md`) |
 | RT-46 | Smart Casts nach `is`: `other is Q && other.n == n` in `equals(other: Any?)` wird akzeptiert (vorher `` `n` is unknown for Any ``, Workaround `(other as Q).n`). Ebenso `if (x is T) { x.f }`, `x !is T` mit frühem `return`/`throw`/`continue`, der `else`-Zweig von `x !is T`, `when (x) { is T -> … }` (auch `!is`, ohne Subjekt, `when (val y = …)`), `while (x is T && …)`, `!(x is T)`, Argumente an überladene Funktionen und `x is Int`/`String` auf `Any?`. Nicht gecastet werden wie in Kotlin: nach `\|\|`, außerhalb des Blocks, nach einer Zuweisung an die Variable, `var`-/Getter-/`open`-Properties, `var` in einem Lambda, ein verdeckter (shadowing) Name, mehrere Bedingungen in einem `when`-Eintrag. Null-Prüfungen gelten jetzt auch im `else`-Zweig, in `while (k != null)` und nach `continue`/`break`/`throw`, und enden mit dem umgebenden Block | 2026-09-26: Vorher-Probe mit dem eingecheckten Bundle: keine der Formen außer `x as T` ging (`smoke-curriculum-kotlin.mjs` scheitert dort schon an der ersten Form). `smoke-curriculum-kotlin.mjs` (neuer RT-40-Block) prüft 48 akzeptierte Ausdrücke mit Laufzeitergebnis (auch `equals` mit fremdem Typ und `null`) und 14 Gegenfälle, die weiter abgelehnt werden. Eingebauter Browser gegen den Dev-Server dieses Worktrees: `Punkt(1) == Punkt(1)` `true`, `Punkt(1) == Punkt(2)` `false`, im Codepad `val a: Any = "abc"; if (a is String) a.length else -1` → `3`, `if (a is String \|\| a.length > 1) 1 else 2` weiter abgelehnt | Abgesichert durch Node-Laufzeittest (`browser-smoke`) und eine Browser-Probe; Grenzen siehe README „Aktuelle Grenzen“: nur einfache Namen (nicht `objekt.eigenschaft`), keine Schnittmengen-Typen, keine Schleifen-Rückkanten bei `var` |
+| GUI-91 | Die BluePlay-API-Hilfe zeigt die vollständige Schüler-API des GitHub-BlueJ-Projekts: Konstruktoren, val/var-Properties, Methoden und kurze Erklärungen; ohne Links/Beispiele, kompakt, scrollbar und in Light/Dark Mode lesbar | `test:blueplay-api` vergleicht das generierte Interpreter-Manifest mit den Originalsignaturen; Chromium GUI-91 prüft alle vier Dialoge, korrekte Signaturen, keine Links/Beispiele, horizontalen Überlauf und erreichbares Close; Screenshots bei 1440×1000, 390×844 und Dark Mode geprüft | **Behoben**, Helper-/Runtime-Test und echter Browsertest grün; visuell durch Agent anhand Screenshots geprüft, keine Benutzerabnahme |
+| GUI-92 / RT-49 | Alle Properties im Objektinspektor werden automatisch ausgewertet. Gewöhnliche Getter-Exceptions stehen gekürzt im normalen Wertfeld; Hover/Klick zeigt die volle Meldung. Weitere Werte/null/Referenzen bleiben sichtbar, die Runtime bleibt bereit. Im Programm ist derselbe unbehandelte Zugriff fatal. `Actor.world: World` wirft ohne Welt; weltabhängige Zugriffe werfen ebenfalls | `test:inspector`, tatsächlicher Host/Client-Runtime-Test RT-49 und Chromium GUI-92; Einzelheiten und echte Laufresultate im Protokoll unten | Runtime-/Helper-Tests und echte Browsertests grün; visuell durch Agent geprüft, keine Benutzerabnahme; Entscheidung im Inspektor-Abschnitt von `docs/architecture.md` |
+| RT-47 | Library und Beispiele entsprechen der öffentlichen BlueJ-Schüler-API: exakte Typen/Namen/Typschranken, echte Image-Konstruktoren, keine Zusatzmethoden oder sichtbaren Engine-Felder; Bildkopie, drawImage, Skalierung, Transparenz und Simulationssteuerung funktionieren | `test:blueplay-api`: vollständige Signaturen, 14 gültige/28 ungültige Aufrufe, unveränderte GitHub-Schülerdateien, Objektlebensdauer, kopierte/scalierte Pixelmasken. Native BluePlay-Smoke und Chromium RT-47 prüfen Canvas-Pixel geladener/gemalter/kopierter/skaliert-transparenter Bilder und des grauen Platzhalters sowie show/step während Run | **Behoben**; Runtime-/Helper-Tests und echte Browser-Pixeltests; keine JVM-Ausführung. Font-/Antialiasing-Gleichheit mit AWT nicht zugesagt |
+| RT-48 | Sekundäre Konstruktoren ohne Primärkonstruktor/Delegation lösen Überladungen und benannte/default Argumente auf; Argumente und init laufen einmal, der Rumpf kann Eingabe und sleep suspendieren; bisherige Primärkonstruktoren und vorwärts referenzierte Klassen bleiben korrekt | RT-48-Block in `smoke-kotlite-browser.mjs`, vorhandener RT-40-Block im Curriculum-Smoke, alle drei Image-Konstruktoren im BluePlay-Konformitätstest; Änderung in `vendor/kotlite-interpreter/PATCH.md` | Node-Tests mit tatsächlich gebautem Bundle grün; Grenzen in README/kotlite.md dokumentiert |
+
+| RT-50 | Eine nullable Sammlung als `for`-Subjekt ergibt „Non-nullable value required to call 'iterator()' method in a for-loop.“; die Position zeigt auf den Ausdruck nach `in`, bei Safe Calls auf den Empfänger. Elvis, `!!`, Smart Casts und Iterator-Erweiterungen auf nullable Empfängern bleiben gültig. Fehler im Subjekt und gewöhnliche unsafe Calls behalten ihre Meldung | RT-50 in `smoke-kotlite-browser.mjs`: echte Bundle-Analyse, Datei/Zeile/Spalte, List/Range/String/Safe Call und gültige Gegenfälle; Chromium RT-50 prüft `world?.getObjects<Ente>()`, Markierung von `world` und Korrektur mit Elvis | Echte Bundle-Tests und drei Chromium-Tests grün; Ergebnisse im RT-50-Prüfprotokoll |
+
+| GUI-93 | Objekt-Kontextmenüs und geerbte Methoden-Untermenüs liegen über offenen Inspektoren und bleiben anklickbar; Parameterdialoge liegen weiterhin darüber | Chromium GUI-93 erzeugt tatsächliche Überlappungen mit einem verschobenen Inspektor, prüft den vordersten DOM-Treffer, öffnet den Parameterdialog und ruft eine geerbte Methode auf. Vor der Korrektur rot, nachher grün; GUI-49/82/85/87 ebenfalls grün | Automatisch im echten Browser abgesichert; keine separate visuelle Benutzerabnahme |
 
 ## Prüfprotokoll
+
+### BluePlay-API gegen das GitHub-BlueJ-Projekt geprüft (2026-09-30)
+
+Referenz ist ausschließlich `tomkarp/BluePlay` bei
+`c8ace580f0506571fc34f287280a3e04eba7c876`, einschließlich `docs/README.md`
+und der Kotlin-Dateien des dortigen BlueJ-Projekts. BlueK-interne
+Frameworkdateien sind keine unabhängige Referenz. Der vollständige Abgleich
+mit reproduzierten Fehlern und Grenzen der Prüfung steht in
+[blueplay-api-audit.md](blueplay-api-audit.md).
+
+Geprüft wurde das bestehende Bundle aus BlueK-Stand `21bc5cc` durch
+einmalige Node/VM-Proben. GUI und Laufzeit wurden nicht geändert;
+kein neuer Kotlin-Build war erforderlich. Die zehn Compilefehler sind
+festgestellte Konformitätsfehler, keine bestandenen Konformitätstests.
+Die übrigen Proben zeigen unter anderem zu weit gefasste Typen und
+zusätzliche Funktionen. Keine neue Nutzerbestätigung oder visuelle Abnahme.
 
 Tatsächlich ausgeführte Prüfläufe. Die Einträge bis 2026-09-22 stehen nicht
 streng chronologisch; ab 2026-09-23 hat jede Änderung einen eigenen Abschnitt.
@@ -1671,3 +1695,260 @@ Kein Push. Beim Zusammenführen mit
 `claude/kotlin-compiler-error-message-4625f4` (ändert
 `NavigationNode.visit` und das Bundle): Bundle nicht von Hand mergen, sondern
 `npm run build:kotlite` neu ausführen.
+
+
+### BluePlay-Referenz-API und Anzeige (30.09.–01.10.2026)
+
+Maßstab ist `tomkarp/BluePlay`, Commit `c8ace580f0506571fc34f287280a3e04eba7c876`.
+Die unveränderten Framework-/Schülerdateien und API-Dokumentation liegen in
+`tests/fixtures/blueplay-reference/`. Audit-Ausgangsstand und Einzelbefunde
+stehen in [blueplay-api-audit.md](blueplay-api-audit.md).
+
+Tatsächlich ausgeführt:
+
+- `build:kotlite` erfolgreich; daraus API-Manifest erzeugt. `build:player`,
+  `build:offline` und `build:svelte` erfolgreich; ausgelieferte Offline- und
+  Player-Dateien neu gebaut. Vorhandene Kotlin-Cast- und Bundlegrößenwarnungen.
+- Konformitätstest grün: vollständige Originalsignaturen und UI-Metadaten,
+  14 gültige / 28 ungültige Aufrufe, benannte Argumente, originale Schülerdateien,
+  Objektlebensdauer, Kopie/Skalierung/Transparenz einschließlich Pixelmasken.
+- `smoke-kotlite-browser` einschließlich neuer sekundärer Konstruktoren grün;
+  `smoke-curriculum-kotlin` nach Korrektur alter Tests für inzwischen entfernte
+  Engine-Felder grün. Die erste Constructor-Implementierung brach RT-40
+  (vorzeitige Memberanalyse bei Default-Argumenten); korrigiert und erneut grün.
+- Grün: `test:ui`, `test:references`, beide Generics-Smokes,
+  `test:kotlin-surface` (70 unterstützt, 13 bekannte Lücken, 23 Meldungen),
+  `test:blueplay-stage`, `test:blueplay-demos`, `test:inspector`,
+  `test:project-format`, `test:program-export`, `test:player-worker`
+  (Chromium/WebKit), `test:codepad-flow`, beide Architektur-Smokes.
+  `test:program-export` zunächst durch macOS-Sandbox am Browserstart gehindert,
+  außerhalb der Sandbox tatsächlich grün. Kein Produktfehler.
+- Vollständiger Chromium-Lauf vor dem letzten Steuerungstest: 129/129 grün.
+  Abschließender Lauf mit 130 Tests: 129 grün, neuer RT-47-Steuerungstest rot,
+  weil der Test bereits vor dem ersten Run-Schritt das Codepad abfragte.
+  Test wartet nun auf einen beobachtbaren Abschlussframe; gezielte Wiederholung
+  1/1 grün. Die übrigen 129 Tests sind im abschließenden Lauf grün.
+- GUI-91: alle vier Hilfen, Desktop/schmale Ansicht, Light/Dark Mode,
+  korrekte Signaturen, keine Links/Beispiele, keine horizontale Überbreite.
+  GUI-86/RT-47 prüfen tatsächlich Canvas-Pixel für Zeichnungen, geladene Bilder,
+  verschachtelte Kopien, Skalierung, Transparenz und den originalen Platzhalter.
+  Screenshots der API-Hilfe durch den Agent visuell geprüft.
+- `test:runtime-state` erneut grün mit tatsächlichem Host/Client und Bundle;
+  zusätzlicher RT-47-Test unterscheidet manuellen Act und automatischen Run
+  nach suspendierender Eingabe, damit `step()` den ursprünglichen Modus behält.
+  Dabei gefundener Fehler: eine Stop-Absicht aus Reset-main blieb liegen und
+  überlagerte Run. Absichten bei Reset-Abschluss/explicit Run verbraucht,
+  automatischen Modus am aktiven Host-Aufruf erhalten; erneut grün.
+  Typecheck: 0 Fehler / 0 Svelte-Warnungen. Offline-Smoke erneut grün.
+- Nach dieser letzten Scheduler-Korrektur: alle 37 betroffenen Browsertests
+  (BluePlay inklusive Canvas und API-Hilfe, Main-Auswahl/Reset, HTML-Export,
+  Player inklusive WebKit) erneut grün. Die restlichen GUI-Tests waren im
+  vorherigen vollständigen Lauf grün; sie wurden danach nicht wiederholt.
+
+Keine JVM-/BlueJ-Ausführung und keine Benutzerabnahme. Schriftmetriken und
+Antialiasing sind plattformabhängig; Textkollisionen bleiben geometrisch
+angenähert. Keine Commits oder Pushes. Dev-Server auf `127.0.0.1:5173` gestartet
+und erreichbar gelassen.
+
+#### RT-47 / GUI-91: Actor ohne Welt (01.10.2026)
+
+Die Referenz verwendet `val world: World` mit einem werfenden Getter, keinen
+nullable Rückgabewert. Das bestehende Verhalten bleibt erhalten; die Hilfe
+erklärt jetzt die weltlose Konstruktion und `IllegalStateException` beim
+Getterzugriff. `docs/blueplay.md` beschreibt dieselbe Voraussetzung.
+
+Tatsächlich ausgeführt:
+
+- `smoke-blueplay-api.mjs` grün, erweitert um Konstruktion/Bild/Bewegung ohne
+  Welt, Laufzeitfehler bei `world` und allen vier weltabhängigen Methoden,
+  `fatal: true` und Verweigerung weiterer Ausführung nach unbehandeltem Fehler.
+  Nach `removeObject` wirft der Getter erneut; `catch (IllegalStateException)`
+  behandelt die Ausnahme regulär. Dies sind Runtime-Tests gegen das echte
+  Interpreter-Bundle, keine Browserprüfungen des Programmabbruchs.
+- Chromium GUI-91 erneut 1/1 grün: alle vier Hilfen einschließlich aktualisiertem
+  Actor-Text, Desktop/schmale Ansicht und Dark Mode. Typecheck 0 Fehler /
+  0 Warnungen. Keine neue Benutzerabnahme oder JVM-Ausführung.
+
+
+### RT-49 / GUI-92: Einheitliche Property-Inspektion (01.10.2026)
+
+Für die Inspektion wurde automatische Auswertung aller Properties mit
+`try/catch` je Property festgelegt. Werte und Fehler bleiben in der Runtime; der
+separate UI-Gettercache entfällt. Dieser Prüflauf verwendete noch
+`Actor.world: World?`; die spätere Rückkehr zum werfenden Getter mit Typ
+`World` ist unten separat geprüft. Die geltende Entwurfsentscheidung steht
+in den vorhandenen Architektur-/BluePlay-Notizen.
+
+Zwischenbuilds scheiterten zunächst an der falschen Verwendung der
+`CustomFunctionDefinition`-API und anschließend an einer vorhandenen
+Parsergrenze (`private` direkt nach einem Getter). Die Definition wurde
+korrigiert und der private Helper vor dem Getter angeordnet. Kotlin-Build
+und Generierung des API-Manifests anschließend erfolgreich; bestehende
+Cast-/Bundlegrößenwarnungen.
+
+Tatsächlich ausgeführt:
+
+- `test:runtime-state` mit tatsächlichem Host, Client und Interpreter-Bundle
+  grün: private Getter, Fehler vom Typ `IllegalStateException`, weitere
+  Properties nach dem Fehler, `null`, Collections, Objekt-Handles ohne
+  zusätzliches Schüler-`toString()`, suspendierender Getter und genau einmal
+  ausgeführte Seiteneffekte. Fehler bleiben in der Property-Zeile, Phase
+  bleibt `ready`; normaler `get` auf dieselbe Property ist fatal. Eine
+  `InterpreterStateException` aus `Thread.sleep` in `toString` bleibt auch
+  bei Inspektion fatal (RT-37/RT-38).
+- `test:inspector` grün: alle Properties werden über denselben Befehl
+  abgefragt, reine Projektion des Runtime-Snapshots, kein UI-Gettercache,
+  parallele Aktualisierungen, Generation und Schließen.
+- `test:blueplay-api` und native BluePlay-Browser-Smoke grün: nullable
+  `world`, Exceptions bei weltabhängigen Zugriffen, neue Metadaten/Hilfe,
+  ursprüngliche Schülerdateien weiterhin unverändert ausführbar, Bilder,
+  Lebensdauer und Simulationssteuerung.
+- Typecheck 0 Fehler / 0 Svelte-Warnungen; beide Architektur-Smokes grün.
+- Erster Chromium-Lauf: 102/105 grün. GUI-89 fand ein tatsächliches
+  Compile-Flackern durch synchrone Inspektionszugriffe; Client setzt dafür
+  keine optimistische Running-Phase, Host meldet Started erst bei tatsächlich
+  ausstehender Ausführung. Der neue Actor-Test erwartete fälschlich einen
+  Compile-Klick im leeren Library-Projekt; nutzt nun das bestehende
+  Compile-on-demand des Codepads. GUI-48 verlor während eines parallelen
+  Bundle-Rebuilds seinen Testzustand (Snapshot zeigte das vorherige
+  Hund-Projekt). Gezielte Wiederholung aller vier Fälle 4/4 grün.
+- Stabiler Chromium-Lauf ohne parallele Bundle-Änderungen: alle 105 Tests
+  der Dateien `references`, `regressions`, `blueplay` und `blueplay-images`
+  grün (2,2 min). Darunter beide neuen GUI-92-Fälle: String-Getterfehler ohne
+  zusätzliche Anführungszeichen, weitere Werte/null, Refresh nach Änderung,
+  Programmfehler bei direktem Zugriff, weltloser Actor und anschließendes
+  Hinzufügen zur Welt samt Referenznavigation.
+- Nach letzter Layoutanpassung für lesbare, umgebrochene Fehlermeldungen:
+  alle neun betroffenen Inspektor-Browsertests erneut grün; beide GUI-92-
+  Screenshots in Light/Dark Mode durch den Agent visuell geprüft. Keine
+  Benutzerabnahme. Die übrigen 96 Tests wurden nach dieser reinen
+  Fehlerzeilen-Layoutanpassung nicht wiederholt.
+
+`build:player`, `build:offline` und `build:svelte` erfolgreich; bestehende
+Vite-/Bundlegrößenwarnungen. Anschließend `test:offline`, `test:player-worker`
+(Chromium und WebKit, `file://`) und `test:references` tatsächlich grün.
+Dev-Server auf `http://127.0.0.1:5173/` abschließend mit HTTP 200 erreichbar.
+Kein Commit/Push.
+
+
+#### GUI-92: Zurückhaltende Fehleranzeige (01.10.2026)
+
+Getterfehler verwenden wieder die normale einzeilige Wertspalte mit Ellipse,
+ohne eigene Fehlerfarbe oder zusätzliche Zeile. Der vollständige Text steht
+im nativen Hover-Titel; Klick oder Enter/Leertaste öffnet eine Meldung, die
+mit Close/Escape geschlossen wird. Die Auswertung der Properties bleibt
+unverändert. Die Entwurfsentscheidung steht knapp im vorhandenen Abschnitt
+„Inspektor“ von `docs/architecture.md`; ein separates Dokument entfällt.
+
+- Chromium: alle neun betroffenen Tests aus `references`/`regressions`
+  tatsächlich grün (23,5 s). Beide GUI-92-Fälle prüfen die normale
+  Wertspalte, Ellipse, fehlende zusätzliche Fehlerfarbe, vollständigen
+  Hover-Titel, Klickmeldung und unveränderte Runtime-Funktion. Enter,
+  Leertaste und Escape sind ebenfalls geprüft. Der native Browser-Tooltip
+  wurde über Hover und Titel geprüft; sein eigenes Popup wurde nicht
+  fotografiert.
+- Die aktuellen Screenshots in Light/Dark Mode wurden durch den Agent
+  visuell geprüft; keine Benutzerabnahme. Die übrigen GUI-Tests aus dem
+  vorherigen Gesamtlauf wurden nach dieser Anzeigeänderung nicht wiederholt.
+- Typecheck: 0 Fehler / 0 Svelte-Warnungen. Svelte-Architektur-Smoke grün.
+- `build:player`, `build:offline`, `build:svelte` erfolgreich mit den
+  bestehenden Vite-/Bundlegrößenwarnungen; anschließender Offline-Smoke
+  tatsächlich grün. Dev-Server auf `http://127.0.0.1:5173/` mit HTTP 200
+  erreichbar.
+
+### RT-50: Diagnose für nullable `for`-Subjekte (01.10.2026)
+
+Kotlite meldet den benötigten nicht-nullable Wert für `iterator()` am
+Ausdruck nach `in`; bei Aufrufen/Safe Calls beginnt die Position am
+Empfänger. BlueK zeigt die Meldung ohne technischen Exception-Präfix.
+
+- Neuer Bundle-Test gegen den vorherigen Interpreter zunächst tatsächlich
+  rot: allgemeine Nullable-Meldung bei `for`, Spalte 5 statt 19.
+- Zwischenlauf: Chromium 2/3 grün, neuer Fall zunächst wegen
+  `SemanticException:`-Präfix rot; Durchreichen der fertigen Meldung in
+  `KotlinSurfaceHints` ergänzt. Im Bundle-Test wurde das hier nicht
+  unterstützte `emptyList` im Testcode durch `listOf<T>()` ersetzt.
+- Eine ergänzende Ausführungsprobe für einen nullable Iterator-Empfänger
+  mit tatsächlichem `null` fand die bestehende Grenze „Function iterator
+  for receiver Nothing? not found“, auch mit dem Bundle aus HEAD bestätigt.
+  Der relevante Konformitätstest prüft deshalb die erfolgreiche Analyse
+  dieser Erweiterung; ihre Ausführung auf null wurde hier nicht geändert.
+- Abschließend `smoke-kotlite-browser` tatsächlich grün: Fehler für
+  List/Range/String/Safe Call, Datei/Zeile/Spalte, Elvis/`!!`/Smart Casts,
+  erfolgreiche Analyse eines nullable Iterator-Empfängers sowie unveränderte
+  Meldungen für gewöhnliche unsafe Calls und Fehler im Schleifensubjekt.
+- Chromium: RT-50, GUI-64 und GUI-65 tatsächlich 3/3 grün (8,2 s).
+  Der neue Fall prüft den Krokodil-Ausdruck, die Markierung von `world`
+  und die erfolgreiche Korrektur mit Elvis. Kein gesonderter Screenshot
+  oder manuelle visuelle Abnahme.
+- Kotlin-Build inklusive API-Generierung, Player-/Offline-/Svelte-Builds
+  erfolgreich; bekannte Cast-/Bundlegrößenwarnungen. Typecheck 0 Fehler /
+  0 Svelte-Warnungen, beide Architektur-Smokes, BluePlay-Konformitätstest
+  und abschließender Offline-Smoke tatsächlich grün.
+
+### RT-49 / GUI-92: `world` wieder als `World` (01.10.2026)
+
+Die öffentliche Property entspricht wieder der BlueJ-Signatur: `world: World`.
+Ohne Welt wirft der Getter `IllegalStateException`; der Inspektor fängt sie
+wie andere Getterfehler ab und bleibt bereit. Der normale unbehandelte
+Programmzugriff bleibt fatal. API-Hilfe, Beispiele und bestehende Notizen
+sind angepasst; die unnötigen `world!!` in Space Invaders entfallen.
+
+- Kotlin-Build und API-Generierung erfolgreich. BluePlay-Konformitätstest,
+  native BluePlay-Smoke und Space-Invaders-Smoke tatsächlich grün. Geprüft:
+  exakter Typ `World`, direkte Weltaufrufe ohne Nullable-Behandlung,
+  Getterfehler vor `addObject` und nach `removeObject`, catchbare/fatale
+  Zugriffe sowie normale Weltrückgabe nach Hinzufügen.
+- Der ursprüngliche Krokodil-Rumpf mit `world.getObjects<Ente>()` und
+  `world.showText(...)` wurde mit der eingebauten Library erfolgreich
+  analysiert. Die erste direkte Probe hatte die native BluePlay-Konfiguration
+  vergessen und scheiterte an `bluekImageWidth`; mit derselben Konfiguration
+  wie im RuntimeHost grün. Kein Act-/Bild-Lauf dieses Krokodil-Projekts.
+- Erster Chromium-Lauf 4/6 grün: der neue schnelle Entfernen-/Hinzufügen-
+  Ablauf fand verlorene Inspektor-Aktualisierungen; `InspectorModel` merkt
+  weitere Anforderungen nun nur als Wiederholungsbedarf und führt danach
+  einen frischen Durchlauf aus, ohne eigenen Wertecache. Helper-Test
+  prüft dies sowie weiterhin Abbruch bei Reset/Schließen.
+- Der RT-50-Test wurde unabhängig von der Actor-API auf eine explizit
+  nullable Testproperty umgestellt: ein Safe Call auf dem jetzt nicht-nullable
+  `Actor.world` ergibt in Kotlite keine nullable Sammlung mehr.
+- Folgelauf 10/11 grün: alle Inspektor-/Editorfälle grün; GUI-91 scheiterte
+  beim Start der Testvorlage (keine Welt und keine Codepad-Historie).
+  Gezielte Wiederholung GUI-91 grün (4 s). Anschließend aktuelle Signatur-
+  und Welt-Getter-Klicktests GUI-91/GUI-92 nochmals tatsächlich 3/3 grün
+  (13,2 s). Insgesamt sind alle elf betroffenen Fälle durch grüne Läufe
+  abgedeckt; kein vollständiger GUI-Gesamtlauf.
+- `test:inspector`, `test:runtime-state`, Svelte-Architektur-Smoke grün;
+  Typecheck 0 Fehler / 0 Svelte-Warnungen. Aktueller Actor-Screenshot visuell
+  durch den Agent geprüft; normale gekürzte Wertfelder, keine Benutzerabnahme.
+- Player-/Offline-/Svelte-Builds erfolgreich mit bekannten Bundlewarnungen.
+  Abschließender Offline-Smoke tatsächlich grün; Dev-Server auf
+  `http://127.0.0.1:5173/` mit HTTP 200 erreichbar. Kein Commit/Push.
+
+
+### GUI-93: Objektmenüs über Inspektorfenstern (01.10.2026)
+
+Das gemeinsame Objekt-/Klassen-Kontextmenü liegt mit seinen Untermenüs
+auf Ebene 40 über normalen Fenstern (20/30). Modale Aktionsdialoge bleiben
+auf Ebene 100. Keine Änderung an Runtime oder Fensteraktivierung.
+
+- Neuer Chromium-Test zunächst tatsächlich rot: Im Überlappungsbereich
+  trifft `elementFromPoint` den Inspektor statt der Methodenschaltfläche.
+- Nach CSS-Korrektur GUI-93/49/82/85/87 tatsächlich 5/5 grün (10,1 s).
+  GUI-93 prüft echte geometrische Überlappung, den vordersten DOM-Treffer,
+  Klick auf die direkte Methode samt Parameterdialog und die geerbte
+  Methode samt Programmausgabe. Kein bloßer Z-Index-Vergleich.
+- Typecheck: 0 Fehler / 0 Svelte-Warnungen; Svelte-Architektur-Smoke grün.
+  Player-/Offline-/Svelte-Builds erfolgreich mit den bestehenden Warnungen.
+  Kein separater Screenshot-Abnahmelauf und keine Benutzerabnahme;
+  übrige GUI-Tests nicht wiederholt.
+
+### Abschlussprüfung vor Commit und Push (01.10.2026)
+
+- `npm run browser-smoke` tatsächlich grün: beide Architektur-Smokes,
+  Kotlite-Bundle, BluePlay-API-Konformität, native BluePlay-Runtime,
+  Curriculum-Kotlin und Runtime-State einschließlich Projektvalidierung.
+- `npm run test:generics` tatsächlich grün: Generics-Smoke, 49 Grenzfälle
+  und suspendierter Inline-Return.
+- `git diff --check` ohne Befund. Die oben protokollierten gezielten
+  Chromium-Läufe gelten weiterhin; kein neuer vollständiger GUI-Gesamtlauf.

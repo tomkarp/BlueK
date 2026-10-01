@@ -17,7 +17,7 @@ for (const shooting of [false, true]) {
   session.configureBluePlay(true, 'benchmark');
   await complete((input, done) => session.startLoadProject(
     project.files.map(f => f.fileName),
-    project.files.map(f => f.source.replaceAll('x - 5', 'x - 1').replaceAll('x + 5', 'x + 1')),
+    project.files.map(f => f.source.replaceAll('x -= 5', 'x -= 1').replaceAll('x += 5', 'x += 1')),
     'blueplay', 1, input, done));
   await complete((input, done) => session.startBluePlayMain(null, input, done));
   const initial = JSON.parse(session.takeStage()).stage;

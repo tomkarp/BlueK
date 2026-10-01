@@ -85,6 +85,7 @@ object KotlinSurfaceHints {
         fun exists(name: String) = name in knownNames || name in declaredNames
 
         if (unsafeCall.containsMatchIn(body)) return body
+        if (body == "Non-nullable value required to call 'iterator()' method in a for-loop.") return body
 
         notDeclared.find(body)?.let { match ->
             val name = match.groupValues[1]

@@ -109,7 +109,7 @@ test('EXP-10 a project without main cannot be exported and compile errors stop t
 });
 
 test('EXP-11 a BluePlay project exported from the IDE shows its world', async ({ page }, testInfo) => {
-  await project(page, [{ fileName: 'Spiel.kt', source: 'fun main() {\n    println("Spiel")\n    showWorld(World(160, 80))\n}\n' }],
+  await project(page, [{ fileName: 'Spiel.kt', source: 'fun main() {\n    println("Spiel")\n    World(160, 80, 1).show()\n}\n' }],
     { projectName: 'Spiel', library: { id: 'blueplay', version: 1 } });
   await page.getByRole('button', { name: 'Save / Export' }).click();
   const [download] = await Promise.all([page.waitForEvent('download'), exportButton(page).click()]);
