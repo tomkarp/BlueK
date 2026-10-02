@@ -88,12 +88,13 @@ BlueK-Smokes geprüft.
 ```text
  bluek-kotlite-browser.js
  ├─ kotlite-browser (BlueK, Kotlin)
- │   ├─ KotliteSession      Sitzung, Namensraum, Handles, I/O, Manifest, native BluePlay-Engine
+ │   ├─ KotliteSession      Sitzung, Namensraum, Handles, I/O, Manifest
+ │   ├─ BluePlayEngine      native BluePlay-Engine: Welten, Actors, Kollision, Frames
  │   ├─ BluePlayLibrary     Kotlin-Quelltext von World/Actor/Image (wird interpretiert)
  │   ├─ BlueKStdlibModule   native Stdlib-Ergänzungen (minOf, sum, String als Zeichenfolge …)
  │   ├─ KotlinSurfaceHints  verständliche Meldungen für fehlende Namen
- │   └─ RuntimeScheduler    Checkpoint-/Sleep-Fortsetzung über setTimeout,
- │                          frischer Stack für tiefe Rekursion über eine Microtask
+ │   └─ RuntimeScheduler    Zeitbudget für Checkpoints, Fortsetzung über Message-Channel
+ │                          bzw. setTimeout (Sleep), frischer Stack über eine Microtask
  ├─ kotlite-stdlib 1.1.0 (Upstream, binär)
  │   Core, Collections, Text, Math, Range, Regex, Byte, IO, KDateTime, UUID –
  │   generiert aus Kotlin-Deklarationen, Implementierungen rufen die echte
@@ -117,12 +118,12 @@ BluePlay-Klassen werden interpretiert.
 | Thema | Änderungen |
 | --- | --- |
 | Dauerhafte Sitzung (REPL) | `ReplAnalyzer` als Analyse-Einstieg für wachsenden Sitzungsquelltext; Namensfreigabe an historischen Grenzen im `SemanticAnalyzer`; eingebaute Erweiterungsfunktionen bleiben über wiederholte Analysen auflösbar; neue Knoten in Auswertungsreihenfolge (Klassen, dann Funktionen); Quelltexteinheiten (`unitStarts`) |
-| Suspendierbare Ausführung | `eval` aller Knoten als `suspend`; `CustomFunctionDefinition.suspendExecutable`; `checkpointHook` in Schleifen; `runImmediately` als synchrone Kompatibilitätsgrenze; Wiederholung von Stdlib-Aufrufen mit suspendiertem Callback (`isReplayable`, `callReplayable`, `StdlibReplayMetadata`), `canSuspend`; `Thread.sleep` mit injiziertem `sleepHandler`; Aufruftiefe `maxCallDepth` und `stackResetHook` für tiefe Rekursion |
+| Suspendierbare Ausführung | `eval` aller Knoten als `suspend`; `CustomFunctionDefinition.suspendExecutable`; `checkpointHook` in Schleifen (synchrone Abfrage `isDue`, nur bei Bedarf `yield`); `runImmediately` als synchrone Kompatibilitätsgrenze; Wiederholung von Stdlib-Aufrufen mit suspendiertem Callback (`isReplayable`, `callReplayable`, `StdlibReplayMetadata`), `canSuspend`; `Thread.sleep` mit injiziertem `sleepHandler`; Aufruftiefe `maxCallDepth` und `stackResetHook` für tiefe Rekursion |
 | Inspektion und Lebensdauer | `ClassInstance.readBackingPropertyByDeclaredName` (Feld lesen ohne Getter); `reachableRuntimeValues` und `retainedRuntimeValues` für die Erreichbarkeit |
 | Sprache | Smart Casts nach `is`/`!is` und Null-Prüfungen (`&&`, `||`, `if`, `when`, `while`, frühes `return`; RT-46), Klassen in beliebiger Reihenfolge, auch gegenseitig (Deklaration aller Klassen vor der Analyse, siehe [unten](#klassen-in-beliebiger-reihenfolge)), Top-Level-Funktionen und -Properties vor ihrer Stelle (Analyse bei Bedarf, siehe [unten](#top-level-deklarationen-in-beliebiger-reihenfolge)), `StackOverflowError` (und `Error`) statt Absturz bei zu tiefer Rekursion; Warnung für Accessoren, die ihre eigene Property statt `field` benutzen; `private` Funktionen und Properties (inkl. `private set`), Backing-Feld `field` in eigenen Accessoren, geerbte Methoden über implizites `this`, `inline`/`reified`/`noinline`/`crossinline` mit nichtlokalen Returns, Kovarianz von `List`/`Collection`/`Iterable`, Imports (`ScriptNode.imports`), Standardausnahmen (auch aus nativen Funktionen nach Klasse fangbar), `ArithmeticException` bei Ganzzahldivision durch 0, `InterpreterStateException` für Interpreterfehler und Grenzen wie `readln()` in `toString()` (von keinem `catch` gefangen), `Float` als `Double` (auch `1.5f`), Typinferenz aus deklariertem Property-Typ, Compilefehler für Properties ohne Wert, sekundäre Konstruktoren ohne Primärkonstruktor und Delegation (RT-48; benannte/default Argumente, suspendierender Rumpf), eigene Meldungen für nicht unterstützte Konstruktorformen, `;` nach Membern |
 | Ausgabe und Meldungen | Kotlin-Formate (`6.0`, `[1, 2]`), Argumenttypen in „No matching function“ |
 | Bibliothek | `GenericCollectionsModule` (`filterIsInstance`), gemeinsame Laufzeit-Typprüfung `acceptsRuntimeType`, `StdlibInlineMetadata` |
-| Performance | Symboltabellen legen Maps erst beim Schreiben an und suchen in Schleifen statt rekursiv; Typ-Caches pro Klassendefinition bzw. Interpreter; `ClassMemberResolver` merkt sich Signaturen; weniger Typauflösung pro Aufruf (siehe [blueplay.md](blueplay.md#performance)) |
+| Performance | Symboltabellen legen Maps erst beim Schreiben an, suchen in Schleifen statt rekursiv und sind kleine lineare Tabellen (`SymbolMap`, große mit JavaScript-`Map` als Index); eine Receiver-Bindung je Methodenaufruf; schlanke Aufrufe nativer Funktionen; Member-Zugriffe und Schleifen-Iteratoren je Klasse am AST-Knoten gemerkt; Blöcke ohne Deklarationen ohne Scope; Typ-Caches pro Klassendefinition bzw. Interpreter, Typprüfungen ohne Allokation; `ClassMemberResolver` merkt sich Signaturen (siehe [blueplay.md](blueplay.md#performance) und `PATCH.md`) |
 
 Die Sprachgrenzen aus Sicht der Schülerinnen und Schüler stehen im README
 unter „Aktuelle Grenzen“, die Stdlib-Oberfläche in
@@ -276,7 +277,7 @@ funktionieren, behandelt der Interpreter diese Grenze so (RT-37):
 - **Checkpoints:** Innerhalb eines synchronen Callbacks gibt eine Schleife
   nie an den Worker ab (die per `patchFunction` ersetzten `count`,
   `removeAll` und `retainAll` rufen ihr Lambda suspendierbar auf und sind
-  davon ausgenommen); sonst müsste der Stdlib-Aufruf alle 128 Iterationen
+  davon ausgenommen); sonst müsste der Stdlib-Aufruf bei jeder Abgabe
   wiederholt werden. Lange Rechnungen in solchen Lambdas blockieren den
   Worker deshalb wie tiefe Rekursion, bis sie fertig sind.
 - **Nicht unterbrechbare Callbacks:** `toString()`, `equals()`, `hashCode()`

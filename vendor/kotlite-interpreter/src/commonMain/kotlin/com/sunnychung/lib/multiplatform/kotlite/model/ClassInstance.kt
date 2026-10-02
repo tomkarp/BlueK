@@ -8,7 +8,7 @@ open class ClassInstance(
     protected val fullClassName: String,
     clazz: ClassDefinition? = null,
     val typeArguments: List<DataType>,
-    private val memberPropertyValues: MutableMap<String, RuntimeValueAccessor> = mutableMapOf(),
+    private val memberPropertyValues: MutableMap<String, RuntimeValueAccessor> = SymbolMap(),
 
     /**
      * The purpose of `parentInstance` is to support type parameters in superclass and private properties (not supported now)
@@ -45,38 +45,24 @@ open class ClassInstance(
         }
 
         clazz.getDeclaredPropertyAccessorsInThisClass().forEach {
+            val accessors = it.value
             val backing = RuntimeValueHolder(clazz.findMemberProperty(it.key)!!.type.resolveTypeParameter(), true, null)
+            val field = mapOf<String, RuntimeValueAccessor>("field" to backing)
             memberPropertyValues[it.key] = RuntimeValueDelegate(
                 type = clazz.findMemberProperty(it.key)!!.type.resolveTypeParameter(),
                 reader = { interpreter ->
                     with(interpreter!!) {
-                        val function = it.value.getter ?: return@with backing.read(this)
-                        FunctionCallNode(
-                            function,
-                            emptyList(),
-                            emptyList(),
-                            SourcePosition("", 1, 1)
-                        ).evalClassMemberAnyFunctionCall(this@ClassInstance, function, extraScopePropertyHolders = mapOf("field" to backing))
+                        val function = accessors.getter ?: return@with backing.read(this)
+                        accessors.getterCall!!.evalClassMemberAnyFunctionCall(this@ClassInstance, function, extraScopePropertyHolders = field)
                     }
                 },
                 writer = { interpreter, value ->
-                    if (it.value.setterIsDefault) {
+                    if (accessors.setterIsDefault) {
                         backing.assign(interpreter, value)
                     } else {
                         with(interpreter!!) {
-                            val function = it.value.setter ?: return@with backing.assign(this, value)
-                            FunctionCallNode(
-                                function,
-                                listOf(
-                                    FunctionCallArgumentNode(
-                                        SourcePosition.NONE, index = 0, value = ValueNode(
-                                            SourcePosition.NONE, value
-                                        )
-                                    )
-                                ),
-                                emptyList(),
-                                SourcePosition("", 1, 1)
-                            ).evalClassMemberAnyFunctionCall(this@ClassInstance, function, extraScopePropertyHolders = mapOf("field" to backing))
+                            val function = accessors.setter ?: return@with backing.assign(this, value)
+                            accessors.setterCall!!.evalClassMemberAnyFunctionCall(this@ClassInstance, function, replaceArguments = ArgumentValues.of(0, value), extraScopePropertyHolders = field)
                         }
                     }
                 },
@@ -102,31 +88,22 @@ open class ClassInstance(
         val name = resolveRuntimeMemberName(name)
             ?: return parentInstance?.assign(interpreter = interpreter, name = name, value = value)
             ?: throw RuntimeException("Property $name is not defined in class ${clazz!!.fullQualifiedName}")
+        assignResolved(interpreter, name, value)
+        return ASSIGNED
+    }
 
-        (memberPropertyValues[name] as? RuntimeValueDelegate)?.let {
-            it.assignSuspended(interpreter, value)
-            return true to null
+    /** [name] is a key of this part's member properties. */
+    private suspend fun assignResolved(interpreter: Interpreter?, name: String, value: RuntimeValue) {
+        // Properties with accessors run their setter; all others check the type first.
+        val accessor = memberPropertyValues[name]
+        if (accessor !is RuntimeValueDelegate) {
+            val propertyType = clazz!!.getDeclaredPropertiesInThisClass()[name]?.type
+                ?: throw RuntimeException("Property $name is not defined in class ${clazz!!.fullQualifiedName}")
+            if (!propertyType.resolveTypeParameter().isAssignableFrom(value.type())) {
+                throw RuntimeException("Type ${value.type().name} cannot be casted to ${propertyType.descriptiveName}")
+            }
         }
-
-        // TODO remove
-        val customAccessor = clazz!!.findMemberPropertyCustomAccessor(name, inThisClassOnly = true)
-        customAccessor?.setter?.let {
-//            return it
-            memberPropertyValues[name]!!.assignSuspended(interpreter, value)
-            return true to null
-        }
-
-        val propertyDefinition = clazz!!.findMemberPropertyWithoutAccessor(name, inThisClassOnly = true)
-            ?: throw RuntimeException("Property $name is not defined in class ${clazz!!.fullQualifiedName}")
-//        if (!propertyDefinition.isMutable && memberPropertyValues.containsKey(name)) {
-//            throw RuntimeException("val cannot be reassigned")
-//        }
-        if (!propertyDefinition.type.resolveTypeParameter().isAssignableFrom(value.type())) {
-            throw RuntimeException("Type ${value.type().name} cannot be casted to ${propertyDefinition.type.descriptiveName}")
-        }
-
-        memberPropertyValues[name]!!.assignSuspended(interpreter, value)
-        return true to null
+        accessor!!.assignSuspended(interpreter, value)
     }
 
     /**
@@ -136,21 +113,39 @@ open class ClassInstance(
         val name = resolveRuntimeMemberName(name)
             ?: return parentInstance?.read(interpreter = interpreter, name = name)
             ?: throw RuntimeException("Property $name is not defined in class ${clazz!!.fullQualifiedName}")
-
-        (memberPropertyValues[name] as? RuntimeValueDelegate)?.let { return it.readSuspended(interpreter) }
-
-        // TODO remove
-        val customAccessor = clazz!!.findMemberPropertyCustomAccessor(name, inThisClassOnly = true)
-        customAccessor?.getter?.let {
-//            return it
-            return memberPropertyValues[name]!!.readSuspended(interpreter)
-        }
-
-        val propertyDefinition = clazz!!.findMemberPropertyWithoutAccessor(name, inThisClassOnly = true)
-            ?: throw RuntimeException("Property $name is not defined in class ${clazz!!.fullQualifiedName}")
-
+        // A property with a getter runs it; all others read their value.
         return memberPropertyValues[name]!!.readSuspended(interpreter)
     }
+
+    /**
+     * Where a member property is stored: the inheritance part at [depth] and its
+     * key there. The same for every instance of one class, so call sites can keep it.
+     */
+    class MemberSlot internal constructor(internal val depth: Int, internal val key: String)
+
+    /** Resolves a declared or transformed member property name of this object's class. */
+    fun memberSlot(name: String): MemberSlot? {
+        var part: ClassInstance? = this
+        var depth = 0
+        while (part != null) {
+            part.resolveRuntimeMemberName(name)?.let { return MemberSlot(depth, it) }
+            part = part.parentInstance
+            depth += 1
+        }
+        return null
+    }
+
+    private fun partAt(depth: Int): ClassInstance {
+        var part = this
+        repeat(depth) { part = part.parentInstance!! }
+        return part
+    }
+
+    suspend fun read(interpreter: Interpreter?, slot: MemberSlot): RuntimeValue =
+        partAt(slot.depth).memberPropertyValues[slot.key]!!.readSuspended(interpreter)
+
+    suspend fun assign(interpreter: Interpreter?, slot: MemberSlot, value: RuntimeValue) =
+        partAt(slot.depth).assignResolved(interpreter, slot.key, value)
 
     fun getPropertyHolder(name: String): RuntimeValueAccessor? {
         val name = resolveRuntimeMemberName(name)
@@ -246,4 +241,8 @@ open class ClassInstance(
     }
 
     override fun toString(): String = convertToString()
+
+    private companion object {
+        val ASSIGNED: Pair<Boolean, FunctionDeclarationNode?> = true to null
+    }
 }

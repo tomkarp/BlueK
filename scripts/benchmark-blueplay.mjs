@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 
-vm.runInThisContext(await readFile('frontend/public/kotlite/bluek-kotlite-browser.js', 'utf8'));
+// BLUEK_BUNDLE selects another interpreter build, e.g. the unminified one for profiling (DEVELOPMENT.md).
+vm.runInThisContext(await readFile(process.env.BLUEK_BUNDLE || 'frontend/public/kotlite/bluek-kotlite-browser.js', 'utf8'));
 const project = JSON.parse(await readFile('frontend/public/examples/space-invaders.bluek.json', 'utf8'));
 const complete = start => new Promise((resolve, reject) => {
   const accept = raw => {
@@ -57,4 +58,39 @@ for (const shooting of [false, true]) {
     return { mean: +(values.reduce((a,b) => a+b, 0)/values.length).toFixed(2), p95: +sorted[Math.floor(sorted.length*.95)].toFixed(2), max: +sorted.at(-1).toFixed(2) };
   };
   console.log(JSON.stringify({ shooting, steps: durations.length, maxObjects, stepMs: stats(durations), publicationMs: stats(renders) }));
+}
+
+// Scaling: the Space Invaders world plus many moving shots that each look for
+// an invader per step, like Laser.act() does. The step time grows linearly with
+// the shots; all shots share one image in the frame.
+const bullet = `class Bullet : Actor() {
+    var hits = 0
+    init { val sprite = Image(4, 14); sprite.setColor(255, 230, 90); sprite.fillRect(0, 0, 4, 14); image = sprite }
+    override fun act() {
+        y -= 4
+        if (y < 10) y = 470
+        if (getOneIntersecting<Invader>() != null) hits += 1
+    }
+}`;
+for (const count of [0, 100, 200, 400]) {
+  const session = globalThis['bluek-kotlite-browser'].bluekCreateKotliteSession();
+  session.configureBluePlay(true, 'benchmark-scaling');
+  const files = project.files.map(f => f.fileName === 'SpaceInvadersWorld.kt'
+    ? f.source.replace('addObject(Defender(), 360, 420)', `addObject(Defender(), 360, 420)\n        var b = 0\n        while (b < ${count}) { addObject(Bullet(), 20 + (b * 37) % 680, 20 + (b * 53) % 440); b += 1 }`)
+    : f.source);
+  await complete((input, done) => session.startLoadProject([...project.files.map(f => f.fileName), 'Bullet.kt'], [...files, bullet], 'blueplay', 1, input, done));
+  await complete((input, done) => session.startBluePlayMain(null, input, done));
+  const durations = [];
+  for (let i = 0; i < 60; i++) {
+    const start = performance.now();
+    await complete((input, done) => session.startBluePlayStep(input, done));
+    durations.push(performance.now() - start);
+    session.renderBluePlay();
+    session.takeStage();
+  }
+  const frame = JSON.parse((session.renderBluePlay(), session.takeStage())).stage;
+  assert.equal(frame.objects.filter(object => object.className === 'Bullet').length, count, 'shots stay in the world');
+  const sorted = durations.slice(10).sort((a, b) => a - b);
+  console.log(JSON.stringify({ shots: count, objects: frame.objects.length, distinctImages: frame.images.length,
+    stepMs: { mean: +(sorted.reduce((a, b) => a + b, 0) / sorted.length).toFixed(2), p95: +sorted[Math.floor(sorted.length * .95)].toFixed(2) } }));
 }

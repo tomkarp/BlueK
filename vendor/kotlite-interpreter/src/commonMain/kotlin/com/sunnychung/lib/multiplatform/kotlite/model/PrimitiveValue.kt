@@ -1,7 +1,7 @@
 package com.sunnychung.lib.multiplatform.kotlite.model
 
 abstract class PrimitiveValue(symbolTable: SymbolTable) : RuntimeValue {
-    internal val rootSymbolTable = symbolTable.findScope(0)
+    internal val rootSymbolTable = symbolTable.rootScope
 
     val clazz: ClassDefinition = type().clazz
 
@@ -42,7 +42,7 @@ class PrimitiveType(val typeName: PrimitiveTypeName, isNullable: Boolean, val no
         nullableClass = nullableClass,
         superTypes = superTypes,
     )
-    override fun copyOf(isNullable: Boolean) = if (this.isNullable == isNullable) this else copyPrimitive(isNullable = isNullable)
+    override fun copyOf(isNullable: Boolean) = if (this.isNullable == isNullable) this else counterpart { copyPrimitive(isNullable = isNullable) }
 }
 
 enum class PrimitiveTypeName {

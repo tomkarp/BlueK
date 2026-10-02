@@ -313,6 +313,42 @@ await nativeClient.reset();
 assert.equal(nativeClient.getSnapshot().simulation, 'paused');
 nativeClient.invalidate();
 projectClient.invalidate();
+// PERF-03: Run publishes compact frames instead of complete snapshots. Class
+// metadata keeps its identity, frames arrive and effects of steps are delivered.
+{
+  // Like a real worker, every message is a structured clone.
+  class CloningTestWorker extends TestWorker {
+    postMessage(command) {
+      setTimeout(() => this.host.dispatch(command.id, structuredClone(command), data => this.onmessage?.({ data: structuredClone(data) })), 0);
+    }
+  }
+  const runner = new LocalRuntimeClient(() => new CloningTestWorker());
+  const files = [
+    { id: 'Beeper', fileName: 'Beeper.kt', kind: 'class', revision: 1, source: 'class Beeper : Actor() { var n = 0; override fun act() { n += 1; x += 1; if (n == 2) BlueK.beep() } }' },
+    { id: 'Main', fileName: 'Main.kt', kind: 'functions', revision: 1, source: 'fun main() { val pond = World(100, 10, 1); pond.addObject(Beeper(), 1, 1); pond.show() }' },
+  ];
+  assert.deepEqual((await runner.compile(files, 1, { id: 'blueplay', version: 1 })).diagnostics, []);
+  assert.notEqual((await runner.execute({ op: 'main', fileName: 'Main.kt' })).kind, 'error');
+  const effects = [], stages = [];
+  const stopEffects = runner.onResponse(value => effects.push(...(value.effects || [])));
+  const stopStages = runner.stageStream(value => stages.push(value));
+  await runner.simulation('setSpeed', 100);
+  await runner.simulation('start');
+  // Command replies are complete snapshots; only the steps of Run follow.
+  const classes = runner.getSnapshot().classes;
+  let replacedClasses = false;
+  const stopSnapshots = runner.subscribe(() => { if (runner.getSnapshot().classes !== classes) replacedClasses = true; });
+  const started = Date.now();
+  while (!(stages.at(-1)?.objects[0]?.x >= 6) && Date.now() - started < 5000) await new Promise(resolve => setTimeout(resolve, 5));
+  stopSnapshots();
+  await runner.simulation('stop');
+  stopEffects(); stopStages();
+  assert.ok(stages.at(-1).objects[0].x >= 6, 'Run must publish frames of its steps');
+  assert.ok(effects.some(effect => effect.name === 'beep'), 'effects of steps during Run must reach the client');
+  assert.equal(replacedClasses, false, 'frames of a Run must not replace the class metadata');
+  runner.invalidate();
+}
+
 // RT-47: a paused single step remains paused across input; an automatic Run
 // remains running across input. Public step() must use the owner's mode.
 {

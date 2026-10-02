@@ -57,6 +57,7 @@ export class LocalRuntimeClient {
       if (event.data?.type === 'event') {
         const runtimeEvent = event.data as RuntimeEvent;
         if (runtimeEvent.generationId !== this.snapshot.generationId) return;
+        if (runtimeEvent.kind === 'frame') { this.acceptFrame(runtimeEvent); return; }
         this.update(runtimeEvent.snapshot);
         if (runtimeEvent.kind === 'inputRequested') this.inputRequestId = runtimeEvent.inputRequestId;
         if (runtimeEvent.output) this.responseListeners.forEach(listener => listener({ kind: 'unit', output: runtimeEvent.output, display: 'Unit' }));
@@ -73,6 +74,13 @@ export class LocalRuntimeClient {
     };
     worker.onerror = event => { if (epoch === this.epoch) this.fail(event.message || 'Runtime worker failed.'); };
     worker.onmessageerror = () => { if (epoch === this.epoch) this.fail('Invalid runtime worker message.'); };
+  }
+  /** A running simulation's step changes only these fields; everything else keeps its identity. */
+  private acceptFrame(event: Extract<RuntimeEvent, { kind: 'frame' }>) {
+    const { stage, ...state } = event.frame;
+    this.update({ ...this.snapshot, ...state, ...(stage ? { stage } : {}) });
+    if (event.output || event.effects) this.responseListeners.forEach(listener => listener({ kind: 'unit', display: 'Unit', output: event.output, effects: event.effects }));
+    if (stage) this.stageListeners.forEach(listener => listener(stage));
   }
   private fail(message: string) {
     this.invalidate(message);

@@ -46,32 +46,25 @@ export interface BluePlayImageFrame {
   opacity: number;
 }
 export interface BluePlayActorFrame {
-  objectId?: string;
   /** Stable runtime identity used for pixel-accurate pointer targeting. */
-  hitId?: string;
+  hitId: string;
   className: string;
   x: number;
   y: number;
   rotation: number;
-  image: BluePlayImageFrame;
-  /** Compatibility fields for projects using the pre-library adapter. */
-  imagePath?: string;
-  imageOperations?: string[];
-  imageWidth?: number;
-  imageHeight?: number;
-  imageOpacity?: number;
+  /** Index into `BluePlayStage.images`. */
+  image: number;
 }
 export interface BluePlayTextFrame { x: number; y: number; text: string }
 export interface BluePlayStage {
-  worldId?: string;
   frameVersion: number;
   width: number;
   height: number;
   cellSize: number;
   backgroundColor: string;
   background?: BluePlayImageFrame;
-  backgroundPath?: string;
-  backgroundOperations?: string[];
+  /** Each distinct image of the frame once; many actors usually look alike. */
+  images: BluePlayImageFrame[];
   objects: BluePlayActorFrame[];
   texts: BluePlayTextFrame[];
   speed: number;
@@ -143,13 +136,25 @@ export interface WorkerReply {
   response: RuntimeValue;
   snapshot: RuntimeSnapshot;
 }
-export type RuntimeEvent = {
+/**
+ * What an automatic simulation step changes. A step neither declares names nor
+ * changes class metadata, so the client applies it to its current snapshot.
+ * `stage` is absent when the step's frame is drawn by a later one.
+ */
+export interface SimulationFrame {
+  revision: number;
+  phase: Phase;
+  simulation: SimulationState;
+  error: string | null;
+  stage?: BluePlayStage;
+}
+interface RuntimeEventBase {
   type: 'event';
   generationId: string;
   executionId: number;
   sequence: number;
-  kind: 'started' | 'output' | 'snapshot' | 'inputRequested';
-  inputRequestId?: number;
   output?: string;
-  snapshot: RuntimeSnapshot;
-};
+}
+export type RuntimeEvent =
+  | (RuntimeEventBase & { kind: 'started' | 'output' | 'snapshot' | 'inputRequested'; inputRequestId?: number; snapshot: RuntimeSnapshot })
+  | (RuntimeEventBase & { kind: 'frame'; frame: SimulationFrame; effects?: RuntimeEffect[] });

@@ -751,7 +751,7 @@
       ],
       "methods": [
         {
-          "sourceLine": 80,
+          "sourceLine": 79,
           "id": "World.show.0",
           "name": "show",
           "declaringType": "World",
@@ -766,7 +766,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 81,
+          "sourceLine": 80,
           "id": "World.act.1",
           "name": "act",
           "declaringType": "World",
@@ -781,7 +781,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 82,
+          "sourceLine": 81,
           "id": "World.addObject.2",
           "name": "addObject",
           "declaringType": "World",
@@ -827,7 +827,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 86,
+          "sourceLine": 82,
           "id": "World.removeObject.3",
           "name": "removeObject",
           "declaringType": "World",
@@ -853,7 +853,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 90,
+          "sourceLine": 83,
           "id": "World.allObjects.4",
           "name": "allObjects",
           "declaringType": "World",
@@ -875,7 +875,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 91,
+          "sourceLine": 84,
           "id": "World.getObjects.5",
           "name": "getObjects",
           "declaringType": "World",
@@ -899,7 +899,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 92,
+          "sourceLine": 85,
           "id": "World.getObjectsAt.6",
           "name": "getObjectsAt",
           "declaringType": "World",
@@ -942,7 +942,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 95,
+          "sourceLine": 88,
           "id": "World.setBackground.7",
           "name": "setBackground",
           "declaringType": "World",
@@ -968,7 +968,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 96,
+          "sourceLine": 89,
           "id": "World.setBackground.8",
           "name": "setBackground",
           "declaringType": "World",
@@ -1014,7 +1014,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 99,
+          "sourceLine": 92,
           "id": "World.showText.9",
           "name": "showText",
           "declaringType": "World",
@@ -1186,7 +1186,7 @@
       ],
       "methods": [
         {
-          "sourceLine": 127,
+          "sourceLine": 122,
           "id": "Actor.act.0",
           "name": "act",
           "declaringType": "Actor",
@@ -1201,7 +1201,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 128,
+          "sourceLine": 123,
           "id": "Actor.move.1",
           "name": "move",
           "declaringType": "Actor",
@@ -1227,7 +1227,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 129,
+          "sourceLine": 124,
           "id": "Actor.turn.2",
           "name": "turn",
           "declaringType": "Actor",
@@ -1253,7 +1253,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 130,
+          "sourceLine": 125,
           "id": "Actor.turnTowards.3",
           "name": "turnTowards",
           "declaringType": "Actor",
@@ -1289,7 +1289,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 133,
+          "sourceLine": 128,
           "id": "Actor.distanceTo.4",
           "name": "distanceTo",
           "declaringType": "Actor",
@@ -1315,7 +1315,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 134,
+          "sourceLine": 129,
           "id": "Actor.intersects.5",
           "name": "intersects",
           "declaringType": "Actor",
@@ -1341,7 +1341,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 137,
+          "sourceLine": 130,
           "id": "Actor.getIntersecting.6",
           "name": "getIntersecting",
           "declaringType": "Actor",
@@ -1365,7 +1365,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 141,
+          "sourceLine": 131,
           "id": "Actor.getOneIntersecting.7",
           "name": "getOneIntersecting",
           "declaringType": "Actor",
@@ -1382,7 +1382,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 142,
+          "sourceLine": 132,
           "id": "Actor.isTouching.8",
           "name": "isTouching",
           "declaringType": "Actor",
@@ -1399,7 +1399,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 143,
+          "sourceLine": 133,
           "id": "Actor.removeTouching.9",
           "name": "removeTouching",
           "declaringType": "Actor",
@@ -1421,7 +1421,7 @@
   ],
   "functions": [
     {
-      "sourceLine": 148,
+      "sourceLine": 138,
       "id": "<top-level>.isKeyDown.0",
       "name": "isKeyDown",
       "declaringType": "<top-level>",
@@ -1448,7 +1448,7 @@
       "builtin": true
     },
     {
-      "sourceLine": 149,
+      "sourceLine": 139,
       "id": "<top-level>.start.1",
       "name": "start",
       "declaringType": "<top-level>",
@@ -1464,7 +1464,7 @@
       "builtin": true
     },
     {
-      "sourceLine": 150,
+      "sourceLine": 140,
       "id": "<top-level>.stop.2",
       "name": "stop",
       "declaringType": "<top-level>",
@@ -1480,7 +1480,7 @@
       "builtin": true
     },
     {
-      "sourceLine": 151,
+      "sourceLine": 141,
       "id": "<top-level>.step.3",
       "name": "step",
       "declaringType": "<top-level>",
@@ -1496,7 +1496,7 @@
       "builtin": true
     },
     {
-      "sourceLine": 152,
+      "sourceLine": 142,
       "id": "<top-level>.getSpeed.4",
       "name": "getSpeed",
       "declaringType": "<top-level>",
@@ -1512,7 +1512,7 @@
       "builtin": true
     },
     {
-      "sourceLine": 153,
+      "sourceLine": 143,
       "id": "<top-level>.setSpeed.5",
       "name": "setSpeed",
       "declaringType": "<top-level>",
@@ -1539,7 +1539,7 @@
       "builtin": true
     },
     {
-      "sourceLine": 154,
+      "sourceLine": 144,
       "id": "<top-level>.playSound.6",
       "name": "playSound",
       "declaringType": "<top-level>",

@@ -138,21 +138,6 @@ const drawingElement = (
 const drawingSvg = (elements: string, width: number, height: number) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${elements}</svg>`;
 
-const backgroundDataUrl = (
-  operations: string[] = [],
-  width: number,
-  height: number,
-  resources: ResourceModel[] = [],
-) => {
-  if (!operations.length) return undefined;
-  const elements = operations
-    .map((operation) =>
-      drawingElement(operation, width, height, resources, "rgb(255, 255, 255)"),
-    )
-    .join("");
-  if (!elements) return undefined;
-  return `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(drawingSvg(elements, width, height))}")`;
-};
 const drawnImageDataUrl = (
   operations: string[] | null = [],
   width: number,
@@ -350,7 +335,6 @@ const cardBorderPoint = (
 export {
   encodeBlueKLink,
   decodeBlueKLink,
-  backgroundDataUrl,
   drawnImageDataUrl,
   runtimeClassName,
   specializeCallable,
@@ -362,11 +346,25 @@ export {
   defaultObjectName,
 };
 
+/** The terminal keeps the last million characters. */
+const TERMINAL_LIMIT = 1_000_000;
+
 export function appendTerminal(previous: string, addition: string) {
   const index = addition.lastIndexOf("\u000C");
   return (index >= 0 ? addition.slice(index + 1) : previous + addition).slice(
-    -1_000_000,
+    -TERMINAL_LIMIT,
   );
+}
+
+/**
+ * Combines output chunks that have not reached the terminal yet, so that
+ * `appendTerminal(previous, combined)` equals appending them one by one.
+ * A form feed (clear) is kept at the start of the combined text.
+ */
+export function combineTerminalOutput(pending: string, addition: string) {
+  const index = addition.lastIndexOf("\u000C");
+  const combined = index >= 0 ? addition.slice(index) : pending + addition;
+  return combined.length > TERMINAL_LIMIT ? combined.slice(-TERMINAL_LIMIT) : combined;
 }
 
 export function terminalParts(value: string) {

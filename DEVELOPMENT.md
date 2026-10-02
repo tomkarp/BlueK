@@ -20,7 +20,7 @@ Architektur und Zuständigkeiten stehen verbindlich in
 | `frontend/public/` | statische Assets: Interpreter-Bundle (`kotlite/`, eingecheckt), Vorlagen (`examples/`), generierte Player-Vorlage (`player/`) und Offline-ZIP (`downloads/`) |
 | `frontend/build/` | Build-Helfer für einzelne HTML-Dateien und das gzip+base64-Interpreter-Bundle |
 | `runtime-contract/src/index.ts` | gemeinsame Typen von Oberfläche, Worker und Runtime-Host |
-| `kotlite-browser/` | Kotlin/JS-Projekt: `KotliteSession`, BlueK-Stdlib, BluePlay-Bibliothek, Fehlermeldungshilfen |
+| `kotlite-browser/` | Kotlin/JS-Projekt: `KotliteSession`, BlueK-Stdlib, BluePlay-Bibliothek und -Engine, Fehlermeldungshilfen |
 | `vendor/kotlite-interpreter/` | Quellstand des Kotlite-Interpreters mit allen BlueK-Änderungen (siehe `PATCH.md`) |
 | `jvm/` | nur noch der Gradle-Wrapper (Gradle 8.14.1); der Name ist historisch |
 | `assets/standard-images/` | BluePlay-Standardgrafiken (Quelle für `standardImages.generated.ts`) |
@@ -101,9 +101,17 @@ Runtime-State-Tests und GUI-Tests verwenden das gebaute Bundle unter
 | `npm run test:gui` | Playwright/Chromium gegen einen eigenen Vite-Server auf Port 5194 |
 | `node scripts/check-interactive-core.mjs` | Suspension bei `readln` direkt am Bundle |
 | `node scripts/smoke-kotlite-browser.mjs` | Teil von `browser-smoke`; enthält u. a. die RT-37-Fälle (Eingabe in Stdlib-Lambdas, gepuffert und auf Anforderung) |
-| `node scripts/benchmark-blueplay.mjs` | Tick- und Frame-Kosten des Space-Invaders-Beispiels |
+| `node scripts/benchmark-blueplay.mjs` | Tick- und Frame-Kosten des Space-Invaders-Beispiels und ihr Wachstum mit vielen Schüssen (0–400) |
 
 GUI-Bericht: `playwright-report/`; Fehlerbilder und Traces: `test-results/`.
+
+**Profilieren.** Das eingecheckte Bundle ist minifiziert. Für lesbare
+Funktionsnamen im CPU-Profil `./jvm/gradlew -p kotlite-browser
+jsBrowserDevelopmentWebpack` bauen (bleibt unter `kotlite-browser/build/`)
+und den Benchmark damit profilieren:
+`BLUEK_BUNDLE=kotlite-browser/build/kotlin-webpack/js/developmentExecutable/bluek-kotlite-browser.js node --cpu-prof scripts/benchmark-blueplay.mjs`.
+Die Datei `*.cpuprofile` lässt sich in den Chrome DevTools (Performance)
+öffnen.
 Welche Tests zu welcher Regression gehören und was zuletzt tatsächlich lief,
 steht in [docs/regression-checklist.md](docs/regression-checklist.md).
 
@@ -116,7 +124,7 @@ steht in [docs/regression-checklist.md](docs/regression-checklist.md).
 | Sprachsemantik, Parser, Analyse, Interpreter | `vendor/kotlite-interpreter/`, Eintrag in `PATCH.md` |
 | Session: Laden, Codepad, Objektbank, Inspektion, Eingabe | `kotlite-browser/.../KotliteSession.kt` |
 | Befehle und Snapshot zwischen UI und Worker | `runtime-contract/src/index.ts`, `frontend/src/runtimeHost.ts`, `frontend/src/localRuntimeClient.ts` |
-| BluePlay-API | `BluePlayLibrary.kt` (Kotlin-Quelltext der Bibliothek) und native `bluek*`-Funktionen in `KotliteSession.kt`; Darstellung in `frontend/src/bluePlayStage.ts` |
+| BluePlay-API | `BluePlayLibrary.kt` (Kotlin-Quelltext der Bibliothek) und native `bluek*`-Funktionen in `BluePlayEngine.kt` (Bildgeometrie: `BluePlayDrawing.kt`); Darstellung in `frontend/src/bluePlayStage.ts`, Takt in `frontend/src/simulationTimer.ts` |
 | Oberfläche | `frontend/src/SvelteApp.svelte` und die dort genutzten Module |
 
 Bei jeder Änderung an GUI- oder Laufzeitverhalten wird

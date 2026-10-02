@@ -6,7 +6,7 @@
   import { mainFiles } from "./mainEntries";
   import { projectModelFromPayload } from "./projectFormat";
   import { MAX_PROJECT_LINK_LENGTH, exportFileName, type ExportedProgram } from "./programExport";
-  import { appendTerminal, encodeBlueKLink, terminalParts } from "./uiParity";
+  import { appendTerminal, combineTerminalOutput, encodeBlueKLink, terminalParts } from "./uiParity";
   import { prepareRuntimeResources } from "./imageAlpha";
   import { standardImages, withStandardImages } from "./standardImages";
   import {
@@ -33,6 +33,25 @@
 
   let runtime: RuntimeSnapshot = client.getSnapshot();
   let terminal = "";
+  // Output that has not reached the terminal yet: it is shown at most once per
+  // display frame, because a program can print faster than the terminal is laid out.
+  let pendingOutput = "";
+  let outputFrame = 0;
+
+  function flushOutput() {
+    outputFrame = 0;
+    if (!pendingOutput) return;
+    terminal = appendTerminal(terminal, pendingOutput);
+    pendingOutput = "";
+    tick().then(() => {
+      if (outputElement) outputElement.scrollTop = outputElement.scrollHeight;
+    });
+  }
+
+  function clearTerminal() {
+    pendingOutput = "";
+    terminal = "";
+  }
   let diagnostics: Diagnostic[] = [];
   let problem = "";
   let stage: StageFrame | null = null;
@@ -78,7 +97,7 @@
 
   async function start() {
     const current = ++run;
-    terminal = "";
+    clearTerminal();
     diagnostics = [];
     problem = "";
     stage = null;
@@ -121,7 +140,7 @@
 
   async function resetWorld() {
     if (!canReset) return;
-    terminal = "";
+    clearTerminal();
     problem = "";
     try {
       const result = await client.reset(program.mainFile);
@@ -171,6 +190,7 @@
     event.preventDefault();
     const value = inputElement.value;
     inputElement.value = "";
+    flushOutput();
     terminal += `\u0001${value}\u0002\n`;
     await client.sendInput(value).catch((reason) => (problem = message(reason)));
   }
@@ -190,10 +210,8 @@
     client.subscribe(() => (runtime = client.getSnapshot())),
     client.onResponse((value) => {
       if (value.output) {
-        terminal = appendTerminal(terminal, value.output);
-        tick().then(() => {
-          if (outputElement) outputElement.scrollTop = outputElement.scrollHeight;
-        });
+        pendingOutput = combineTerminalOutput(pendingOutput, value.output);
+        outputFrame ||= requestAnimationFrame(flushOutput);
       }
       value.effects?.forEach((effect) => {
         if (effect.type === "sound" && effect.name === "beep") audio.beep();

@@ -43,8 +43,10 @@ Suspendable execution: every AST node evaluates through `suspend` functions,
 so a running program can pause without blocking the worker.
 `CustomFunctionDefinition.suspendExecutable` lets host functions suspend
 (BlueK's `readln`, `readLine`, `readlnOrNull`). `Interpreter.checkpointHook`
-is called once per `while`, `do-while` and `for` iteration; the host decides
-when to yield. `Interpreter.runImmediately`/`eval()` remain as a synchronous
+(`CheckpointHook(isDue, yield)`) is asked once per `while`, `do-while` and
+`for` iteration: `isDue` is a cheap synchronous check, and only when it answers
+true does the loop suspend in `yield` (BlueK: after a time slice, not after a
+fixed number of iterations). `Interpreter.runImmediately`/`eval()` remain as a synchronous
 compatibility boundary and fail if execution suspends there, except inside
 replayable library code (below); this is also the path of
 `LambdaValue.execute`, used by the binary stdlib's callbacks.
@@ -132,8 +134,12 @@ REPL name. Callback execution carries the captured symbol table as well.
 `reachableRuntimeValues` provides passive, identity-based traversal of fields,
 captures and standard native containers. Opaque delegated values can expose
 their owned references through `retainedRuntimeValues`; iterable iterators
-use this to retain their source. The host uses this graph to invalidate UI
-handles, not to implement the JavaScript garbage collector.
+use this to retain their source. A host passes `hostRetained` for values it
+keeps alive outside any field (BlueK: the actors of a BluePlay world). Visited
+values are tracked in an identity set (`IdentitySet`, a JavaScript `Set`), so
+the traversal is linear; the result answers membership by identity. The host
+uses this graph to invalidate UI handles, not to implement the JavaScript
+garbage collector.
 
 Coverage: `npm run test:references`, `npm run test:runtime-state`,
 `node scripts/smoke-kotlite-browser.mjs` and `tests/gui/references.spec.ts`.
@@ -155,6 +161,54 @@ Coverage: `npm run test:generics` (including a cache case for alternating
 concrete arguments, nullability and a type parameter shadowing a class),
 `npm run test:references`, `npm run browser-smoke` and
 `node scripts/benchmark-blueplay.mjs`.
+
+Call and lookup costs (BluePlay with many actors). All of these keep the
+observable behaviour; they remove work per call, block, property access or
+type check:
+
+- `SymbolMap` replaces the hash maps of scopes, objects (`ClassInstance`
+  member values) and classes (member tables, interpreter member functions):
+  up to eight entries are searched linearly in two small arrays, larger
+  tables add a `StringIndex` (a JavaScript `Map`, which caches string hashes;
+  Kotlin/JS hashes a string on every lookup). Insertion order is kept.
+- A member call binds its receiver once (`SymbolTable.bindReceiver`) to
+  `this`, `super` and `this/<Class>` of the class hierarchy; the names come
+  from `ClassDefinition.receiverNames` per class. All property lookups of a
+  scope consult this binding after the scope's own table, as before for the
+  same names. Transformed-symbol tables are no longer filled at runtime (only
+  the analyzer reads them).
+- Native functions without function-typed, vararg or default parameters
+  (`CustomFunctionDeclarationNode.needsCallScope`) are called without receiver,
+  parameter and type-alias bindings; they still get a stack frame for the call
+  depth and stack traces. Natives that call lambdas or evaluate defaults keep
+  the full path.
+- `evalFunctionCall` builds type-parameter tables only when there are type
+  parameters, skips the runtime check of a `Unit` result of a `Unit` function,
+  passes the argument array as a list view and keeps the call's single return
+  target in fields instead of a map. Already evaluated arguments travel in an
+  array (`ArgumentValues`) instead of a map per call.
+- `CallStack.isInsideClassCode()` is a counter. New scopes find their root
+  scope through the parent; primitive types and `Any`/`Any?` exist once per
+  interpreter and are read from the root scope; `PrimitiveValue` uses it
+  directly.
+- AST nodes keep runtime resolutions keyed by the class they were made for:
+  the member slot of a property access (`ClassInstance.MemberSlot`: part of
+  the inheritance chain and key), the member access an implicit-owner
+  reference stands for and the iterator calls of a `for` loop per runtime
+  type; a loop resolves the type of its variables once per run instead of per
+  iteration. Accessor calls are built once per `PropertyAccessorsNode`. A
+  block that declares no names runs in the enclosing scope.
+- Object type checks (`isAssignableFrom`, `isCastableFrom`) compare the
+  precomputed names and allocate nothing for types without arguments;
+  `copyOf(isNullable)` returns a type created once per type and nullability.
+  Types of classes without own type parameters but with generic ancestors
+  (e.g. `IntRange`) are cached per root scope like concrete generic types.
+
+Coverage: the complete `npm run test:regression`, in particular
+`npm run test:generics`, `npm run test:kotlin-surface`,
+`scripts/smoke-curriculum-kotlin.mjs` (natives with default parameters that use
+`this`), `scripts/smoke-kotlite-browser.mjs` and the BluePlay suites;
+measurements with `node scripts/benchmark-blueplay.mjs`.
 
 Classes may reference each other in any order, also in a cycle (RT-40):
 upstream analyzed top-level declarations strictly in order, so `class Hund {

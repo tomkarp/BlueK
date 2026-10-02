@@ -198,4 +198,23 @@ for (const [setup, access, release] of [
   ok(s.bind(fresh.objectId, 'available'));
   assert.equal(named(s, 'available').origin, 'interactive');
 }
+// The BluePlay engine keeps a world's actors natively, not in a field. An actor
+// reachable only through its world keeps its handle until it leaves the world.
+{
+  const s = api.bluekCreateKotliteSession();
+  s.configureBluePlay(true, 'references');
+  const loaded = JSON.parse(await new Promise(resolve => {
+    const started = s.startLoadProject(['Duck.kt'], ['class Duck : Actor()'], 'blueplay', 1, () => {}, resolve);
+    if (JSON.parse(started).kind === 'error') resolve(started);
+  }));
+  assert.notEqual(loaded.kind, 'error', loaded.display);
+  evaluate(s, 'val pond = World(20, 20, 1)');
+  const duck = ok(s.create('Duck', '', 'duck'));
+  evaluate(s, 'pond.addObject(duck, 3, 4)');
+  ok(s.remove(duck.objectId, 'duck'));
+  assert.ok(snapshot(s).liveObjectIds.includes(duck.objectId), 'an actor in a named world stays addressable');
+  assert.equal(ok(s.get(duck.objectId, 'x')).display, '3');
+  evaluate(s, 'pond.removeObject(pond.allObjects()[0])');
+  assert.ok(!snapshot(s).liveObjectIds.includes(duck.objectId), 'a removed actor is no longer retained by its world');
+}
 console.log('Reference lifetime regressions passed.');

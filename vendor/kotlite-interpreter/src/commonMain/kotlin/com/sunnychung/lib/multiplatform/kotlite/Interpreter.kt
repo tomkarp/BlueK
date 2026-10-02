@@ -3,7 +3,6 @@ package com.sunnychung.lib.multiplatform.kotlite
 import com.sunnychung.lib.multiplatform.kotlite.error.EvaluateNullPointerException
 import com.sunnychung.lib.multiplatform.kotlite.error.EvaluateRuntimeException
 import com.sunnychung.lib.multiplatform.kotlite.error.EvaluateTypeCastException
-import com.sunnychung.lib.multiplatform.kotlite.error.IdentifierClassifier
 import com.sunnychung.lib.multiplatform.kotlite.error.InterpreterStateException
 import com.sunnychung.lib.multiplatform.kotlite.error.controlflow.NormalBreakException
 import com.sunnychung.lib.multiplatform.kotlite.error.controlflow.NormalContinueException
@@ -15,6 +14,8 @@ import com.sunnychung.lib.multiplatform.kotlite.extension.resolveGenericParamete
 import com.sunnychung.lib.multiplatform.kotlite.extension.resolveGenericParameterTypeToUpperBound
 import com.sunnychung.lib.multiplatform.kotlite.model.ASTNode
 import com.sunnychung.lib.multiplatform.kotlite.model.AbandonedNativeCall
+import com.sunnychung.lib.multiplatform.kotlite.model.ArgumentValues
+import com.sunnychung.lib.multiplatform.kotlite.model.SymbolMap
 import com.sunnychung.lib.multiplatform.kotlite.model.acceptsRuntimeType
 import com.sunnychung.lib.multiplatform.kotlite.model.AsOpNode
 import com.sunnychung.lib.multiplatform.kotlite.model.AssignmentNode
@@ -120,8 +121,15 @@ import kotlin.coroutines.startCoroutine
 
 open class Interpreter(val rootNode: ASTNode, val executionEnvironment: ExecutionEnvironment) {
 
-    /** Optional host scheduler hook used by interactive runtimes. */
-    var checkpointHook: (suspend () -> Unit)? = null
+    /**
+     * Optional host scheduler for long-running loops. [isDue] is asked on every
+     * loop iteration and must be cheap; only when it answers true does the
+     * interpreter suspend in [yield], so that the host can process its events.
+     */
+    class CheckpointHook(val isDue: () -> Boolean, val yield: suspend () -> Unit)
+
+    /** Used by interactive runtimes; see [CheckpointHook]. */
+    var checkpointHook: CheckpointHook? = null
 
     /** Synchronous callbacks ([runImmediately]) currently on the stack. */
     private var synchronousCallbacks = 0
@@ -146,7 +154,8 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
      * iterations, or fail if it cannot be replayed.
      */
     suspend fun checkpoint() {
-        if (synchronousCallbacks == 0) checkpointHook?.invoke()
+        val hook = checkpointHook ?: return
+        if (synchronousCallbacks == 0 && hook.isDue()) hook.yield()
     }
 
     /**
@@ -465,18 +474,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         when (this) {
             is VariableReferenceNode -> {
                 if (this.ownerRef != null) {
-                    NavigationNode(
-                        position = position,
-                        subject = VariableReferenceNode(position = position, variableName = ownerRef!!.ownerRefName),
-                        operator = ".",
-                        member = ClassMemberReferenceNode(
-                            position = this.position,
-                            name = this.variableName,
-                            transformedRefName = this.transformedRefName
-                        ),
-                        memberType = NavigationNode.MemberType.Extension,
-                        transformedRefName = ownerRef!!.extensionPropertyRef
-                    ).write(value)
+                    ownerAccess().write(value)
                 } else {
                     accessTopLevelProperty(this) { callStack.currentSymbolTable().assign(it, value) }
                 }
@@ -501,10 +499,10 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 val obj = subject as ClassInstance
 //                    obj.assign((subject.member as ClassMemberReferenceNode).transformedRefName!!, value)
                 // before type resolution is implemented in SemanticAnalyzer, reflect from clazz as a slower alternative
-                if (obj.clazz!!.isPrivateMemberProperty((this.member as ClassMemberReferenceNode).name) && !callStack.isInsideClassCode()) {
-                    throw RuntimeException("Private property `${(this.member as ClassMemberReferenceNode).name}` cannot be accessed here")
+                if (!callStack.isInsideClassCode() && obj.clazz!!.isPrivateMemberProperty(this.member.name)) {
+                    throw RuntimeException("Private property `${this.member.name}` cannot be accessed here")
                 }
-                obj.assign(interpreter = this@Interpreter, name = obj.clazz!!.findMemberPropertyTransformedName((this.member as ClassMemberReferenceNode).name)!!, value = value)/*?.also {
+                obj.assign(this@Interpreter, memberSlotIn(obj), value)/*?.also {
                     FunctionCallNode(
                         it,
                         listOf(FunctionCallArgumentNode(index = 0, value = ValueNode(value))),
@@ -538,7 +536,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         val result = value.eval() as RuntimeValue
 
         wholeFunctionCall?.let { func ->
-            func.eval(replaceArguments = mapOf(0 to result))
+            func.eval(replaceArguments = ArgumentValues.of(0, result))
             return
         }
 
@@ -546,7 +544,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         suspend fun write(value: RuntimeValue) {
             if (assignFunctionCall != null) {
                 // TODO any less "hacky" way to implement?
-                assignFunctionCall!!.eval(replaceArguments = mapOf(assignFunctionCall!!.arguments.lastIndex to value))
+                assignFunctionCall!!.eval(replaceArguments = ArgumentValues.of(assignFunctionCall!!.arguments.lastIndex, value))
             } else {
                 subject.write(value)
             }
@@ -565,7 +563,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         } else {
             val existing = read()
             preAssignFunctionCall?.let { func ->
-                write(func.eval(replaceArguments = mapOf(0 to result)))
+                write(func.eval(replaceArguments = ArgumentValues.of(0, result)))
                 return
             }
             val newResult = when (operator) {
@@ -591,18 +589,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         // usual variable -> transformedRefName
         // class constructor -> variableName? TODO
         if (ownerRef != null) {
-            return NavigationNode(
-                position = position,
-                subject = VariableReferenceNode(position = position, variableName = ownerRef!!.ownerRefName),
-                operator = ".",
-                member = ClassMemberReferenceNode(
-                    position = position,
-                    name = variableName,
-                    transformedRefName = transformedRefName
-                ),
-                memberType = NavigationNode.MemberType.Extension,
-                transformedRefName = ownerRef!!.extensionPropertyRef,
-            ).eval()
+            return ownerAccess().eval()
         }
         if (type is ClassTypeNode) {
             // TODO return singleton
@@ -615,6 +602,31 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             )
         }
         return accessTopLevelProperty(this) { callStack.currentSymbolTable().read(it) }
+    }
+
+    /** A member reference through an implicit owner (e.g. `y` for `this.y`), built once per node. */
+    private fun VariableReferenceNode.ownerAccess(): NavigationNode = ownerAccess ?: NavigationNode(
+        position = position,
+        subject = VariableReferenceNode(position = position, variableName = ownerRef!!.ownerRefName),
+        operator = ".",
+        member = ClassMemberReferenceNode(
+            position = position,
+            name = variableName,
+            transformedRefName = transformedRefName
+        ),
+        memberType = NavigationNode.MemberType.Extension,
+        transformedRefName = ownerRef!!.extensionPropertyRef,
+    ).also { ownerAccess = it }
+
+    /** Where the accessed member property of [obj] is stored, resolved once per class at this node. */
+    private fun NavigationNode.memberSlotIn(obj: ClassInstance): ClassInstance.MemberSlot {
+        val clazz = obj.clazz!!
+        if (resolvedClass === clazz) return resolvedMemberSlot!!
+        val name = clazz.findMemberPropertyTransformedName(member.name)!!
+        return (obj.memberSlot(name) ?: throw RuntimeException("Property $name is not defined in class ${clazz.fullQualifiedName}")).also {
+            resolvedClass = clazz
+            resolvedMemberSlot = it
+        }
     }
 
     /**
@@ -654,7 +666,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 }
 
                 if (function is VariableReferenceNode && function.ownerRef != null) {
-                    return this.copy(
+                    val ownerCall = ownerCall ?: this.copy(
                         function = NavigationNode(
                             position = position,
                             subject = VariableReferenceNode(
@@ -666,7 +678,8 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                             memberType = NavigationNode.MemberType.Extension,
                             transformedRefName = this.function.ownerRef!!.extensionPropertyRef,
                         )
-                    ).eval()
+                    ).also { ownerCall = it }
+                    return ownerCall.eval(replaceArguments)
                 }
 
                 when (callableType) {
@@ -904,40 +917,51 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 classResolver?.findMemberFunctionWithTypeByTransformedName(function.transformedRefName!!)
             }
 
-        val typeParametersReplacedWithArguments = (
+        val classTypeResolutions = classResolver?.let { resolver ->
+            resolvedFunction?.enclosingTypeName?.let { typeName ->
+                resolver.genericResolutionsByTypeName[typeName]!!.map {
+                    TypeParameterNode(it.value.position, it.key, it.value)
+                }
+            }
+        } ?: emptyList()
+        // Most calls involve no type parameters at all; skip building empty tables.
+        val typeParametersReplacedWithArguments: Map<String, TypeNode> =
+            if (extraTypeResolutions.isEmpty() && classTypeResolutions.isEmpty() && functionNode.typeParameters.isEmpty()) emptyMap()
+            else (
                 extraTypeResolutions + // add `extraTypeResolutions` at first because class type arguments have a lower precedence
-                (classResolver?.let { resolver ->
-                    resolvedFunction?.enclosingTypeName?.let { typeName ->
-                        resolver.genericResolutionsByTypeName[typeName]!!.map {
-                            TypeParameterNode(it.value.position, it.key, it.value)
-                        }
-                    }
-                } ?: emptyList()) +
+                classTypeResolutions +
                 functionNode.typeParameters.mapIndexed { index, tp ->
                     TypeParameterNode(tp.position, tp.name, typeArguments[index])
                 }
             )
-            .associate { it.name to it.typeUpperBound!! }
+            .associateTo(SymbolMap()) { it.name to it.typeUpperBound!! }
 
         // resolve type arguments to DataType first, so that
         // class with same name of function type parameter name is resolved before function type parameter declarations
-        val typeArgumentsInDataType = typeParametersReplacedWithArguments.mapValues {
-            symbolTable().assertToDataType(it.value)
-        }
+        val typeArgumentsInDataType: Map<String, DataType> =
+            if (typeParametersReplacedWithArguments.isEmpty()) emptyMap()
+            else typeParametersReplacedWithArguments.mapValuesTo(SymbolMap()) { symbolTable().assertToDataType(it.value) }
 
         val scopeType = if (functionNode is FunctionDeclarationNode) ScopeType.Function else ScopeType.Closure
 
+        val capturedTypeResolutions = extraSymbols?.listTypeAliasResolutionInThisScope() ?: emptyMap()
         val returnType = callStack.currentSymbolTable().assertToDataType(
             // 2nd resolution is needed, because the generic type may not be relevant to the class itself.
             // see test case GenericFunctionAndExtensionFunctionWithGenericClassTest#unrelatedTypeParameter()
-            type = (resolvedFunction?.resolvedReturnType ?: functionNode.returnType).resolveGenericParameterTypeArguments(
-//                (extraSymbols?.listTypeAliasInThisScope() ?: emptyList()) +
-                typeParametersReplacedWithArguments + // typeParametersReplacedWithArguments has higher precedence
-                (extraSymbols?.listTypeAliasResolutionInThisScope() ?: emptyMap()).mapValues {
-                    it.value.toTypeNode()
-                }
-            ),
+            type = (resolvedFunction?.resolvedReturnType ?: functionNode.returnType).let { declared ->
+                if (typeParametersReplacedWithArguments.isEmpty() && capturedTypeResolutions.isEmpty()) declared
+                else declared.resolveGenericParameterTypeArguments(
+                    typeParametersReplacedWithArguments + // typeParametersReplacedWithArguments has higher precedence
+                    capturedTypeResolutions.mapValues { it.value.toTypeNode() }
+                )
+            },
         )
+
+        if (functionNode is CustomFunctionDeclarationNode && !functionNode.needsCallScope && extraSymbols == null &&
+            extraScopeParameters.isEmpty() && extraScopePropertyHolders.isEmpty() && arguments.all { it != null }
+        ) {
+            return evalNativeFunctionCall(functionNode, arguments, typeArgumentsInDataType, callPosition, scopeType, returnType, subject)
+        }
 
         enterCall(callPosition)
         callStack.push(
@@ -952,7 +976,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             extraSymbols?.let{
                 symbolTable.mergeFrom(callPosition, it)
             }
-            symbolTable.returnTargets[functionNode.returnTargetId] = returnTarget
+            symbolTable.putReturnTarget(functionNode.returnTargetId, returnTarget)
             extraScopeParameters.forEach {
                 symbolTable.declareProperty(callPosition, it.key, it.value.type(), false)
                 symbolTable.assign(it.key, it.value)
@@ -1049,7 +1073,8 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
 
             // execute function
             val returnValue = try {
-                val result = functionNode.execute(this, subject, arguments.toList() as List<RuntimeValue>, typeArgumentsInDataType.toMap())
+                @Suppress("UNCHECKED_CAST")
+                val result = functionNode.execute(this, subject, arguments.asList() as List<RuntimeValue>, typeArgumentsInDataType)
                 if (returnType is UnitType) {
                     UnitValue
                 } else {
@@ -1075,11 +1100,42 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             }
 
             log.v { "Fun Return $returnValue; symbolTable = $symbolTable" }
-            if (!returnType.acceptsRuntimeType(returnValue.type())) {
+            // A Unit result of a Unit function needs no runtime type check.
+            if (!(returnValue === UnitValue && returnType is UnitType) && !returnType.acceptsRuntimeType(returnValue.type())) {
                 throw RuntimeException("Return value's type ${returnValue.type().descriptiveName} cannot be casted to ${returnType.descriptiveName} in function `${functionNode.name}` at ${functionNode.position}")
             }
 
             return FunctionCallResult(returnValue, symbolTable)
+        } finally {
+            callStack.pop(scopeType)
+            leaveCall()
+        }
+    }
+
+    /**
+     * A native call without parameter, type-alias and receiver bindings: the
+     * native reads them from the call itself. The frame remains for the call
+     * depth and for stack traces.
+     */
+    private suspend fun evalNativeFunctionCall(
+        functionNode: CustomFunctionDeclarationNode,
+        arguments: Array<RuntimeValue?>,
+        typeArguments: Map<String, DataType>,
+        callPosition: SourcePosition,
+        scopeType: ScopeType,
+        returnType: DataType,
+        subject: RuntimeValue?,
+    ): FunctionCallResult {
+        enterCall(callPosition)
+        callStack.push(functionFullQualifiedName = functionNode.name, isFunctionCall = true, scopeType = scopeType, callPosition = callPosition)
+        try {
+            @Suppress("UNCHECKED_CAST")
+            val result = functionNode.execute(this, subject, arguments.asList() as List<RuntimeValue>, typeArguments)
+            val returnValue = if (returnType is UnitType) UnitValue else result
+            if (!(returnValue === UnitValue && returnType is UnitType) && !returnType.acceptsRuntimeType(returnValue.type())) {
+                throw RuntimeException("Return value's type ${returnValue.type().descriptiveName} cannot be casted to ${returnType.descriptiveName} in function `${functionNode.name}` at ${functionNode.position}")
+            }
+            return FunctionCallResult(returnValue, callStack.currentSymbolTable())
         } finally {
             callStack.pop(scopeType)
             leaveCall()
@@ -1193,8 +1249,6 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             symbolTable.assign(receiverName, instance)
             receiverClass = receiverClass.superClass
         }
-//        symbolTable.registerTransformedSymbol(callPosition, IdentifierClassifier.Property, "this", "this")
-        symbolTable.registerTransformedSymbol(callPosition, IdentifierClassifier.Property, "this/${instance.clazz!!.fullQualifiedName}", "this")
 
 //            instance.memberPropertyValues.forEach {
 //                symbolTable.putPropertyHolder(instance.clazz!!.memberPropertyNameToTransformedName[it.key]!!, it.value)
@@ -1281,12 +1335,15 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         // of neueKarte() is the caller, not the list. Named, vararg and lambda
         // arguments keep the original path (different index mapping / capture).
         val isVararg = function.valueParameters.firstOrNull()?.modifiers?.contains(FunctionValueParameterModifier.vararg) == true
-        val replaceArguments = if (replaceArguments.isEmpty() && !isVararg && arguments.none { it.name != null || it.value is LambdaLiteralNode }) {
-            arguments.indices.associateWith { index -> arguments[index].value.eval() as RuntimeValue }
+        val replaceArguments = if (replaceArguments.isEmpty() && arguments.isNotEmpty() && !isVararg && arguments.none { it.name != null || it.value is LambdaLiteralNode }) {
+            val values = arrayOfNulls<RuntimeValue>(arguments.size)
+            for (index in arguments.indices) values[index] = arguments[index].value.eval() as RuntimeValue
+            ArgumentValues(values)
         } else replaceArguments
         return evalClassMemberAnyFunctionCall(position, subject, function.receiver, function) { typeResolutions ->
             evalFunctionCall(
-                callNode = this.copy(function = function),
+                // Only the arguments, type arguments and position of the call node are used.
+                callNode = this,
                 functionNode = function,
                 extraScopeParameters = emptyMap(),
                 extraScopePropertyHolders = extraScopePropertyHolders,
@@ -1313,21 +1370,22 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
     }
 
     private suspend fun evalClassMemberAnyFunctionCall(position: SourcePosition, subject: RuntimeValue, receiverType: TypeNode?, function: CallableNode, callOperation: suspend (typeResolutions: List<TypeParameterNode>) -> FunctionCallResult): RuntimeValue {
+        // A native member gets its receiver as an argument; `this` bindings are for interpreted code only.
+        if (function is CustomFunctionDeclarationNode && !function.needsCallScope) {
+            return callOperation(instanceGenericTypeResolutions(subject)).result
+        }
         callStack.push(functionFullQualifiedName = "class", scopeType = ScopeType.ClassMemberFunction, callPosition = position)
         try {
             val symbolTable = callStack.currentSymbolTable()
             // This scope is fresh, so a `this/<type>` binding exists here exactly
-            // when it was declared above; no separate name set is needed.
+            // when it was bound here; no separate name set is needed.
             val subjectType = subject.type()
-            if (subjectType is ObjectType) {
-                var clazz: ClassDefinition? = subjectType.clazz
-                while (clazz != null) {
-                    symbolTable.declareInitializedProperty(position, clazz.thisPropertyName, subjectType, subject)
-                    clazz = clazz.superClass
-                }
-            } else {
-                symbolTable.declareInitializedProperty(position, "this/${subjectType.name}", subjectType, subject)
-            }
+            // "super" is a hack to resolve the keyword. See documentation
+            val isObject = subject is ClassInstance
+            symbolTable.bindReceiver(position, subject, subjectType,
+                if (subjectType is ObjectType) subjectType.clazz.receiverNames(isObject)
+                else if (isObject) arrayOf("this/${subjectType.name}", "this", "super")
+                else arrayOf("this/${subjectType.name}", "this"))
             if (receiverType != null) {
                 val receiverIdentifier = receiverType.resolveGenericParameterTypeToUpperBound(function.typeParameters).descriptiveName()
                 val receiverPropertyName = "this/$receiverIdentifier"
@@ -1335,16 +1393,8 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                     symbolTable.declareInitializedProperty(position, receiverPropertyName, subjectType, subject)
                 }
             }
-            symbolTable.declareInitializedProperty(position, "this", subjectType, subject)
-//            symbolTable.registerTransformedSymbol(position, IdentifierClassifier.Property, "this", "this")
-            symbolTable.registerTransformedSymbol(position, IdentifierClassifier.Property, "this/${subject.type().name}", "this")
-
-            if (subject is ClassInstance) {
-                // a hack to resolve "super". See documentation
-                val parentInstance = subject.parentInstance ?: subject
-                symbolTable.declareInitializedProperty(position, "super", subjectType, subject)
-                symbolTable.registerTransformedSymbol(position, IdentifierClassifier.Property, "super", "super")
-            }
+            // Transformed-name tables are read by the semantic analyzer only;
+            // runtime scopes need just the bindings.
 
 //            // TODO optimize to only copy needed members
 //            if (subject is ClassInstance) {
@@ -1353,13 +1403,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
 //                }
 //            }
 
-            val instanceGenericTypeResolutions = if (subject is ClassInstance) {
-                subject.clazz!!.typeParameters.mapIndexed { index, it ->
-                    TypeParameterNode(it.position, it.name, subject.typeArguments[index].toTypeNode())
-                }
-            } else emptyList()
-
-            val result = callOperation(instanceGenericTypeResolutions)
+            val result = callOperation(instanceGenericTypeResolutions(subject))
 
             return result.result
         } finally {
@@ -1367,7 +1411,20 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
+    /** The subject's class type arguments, e.g. `T` = `Invader` for a `List<Invader>`. */
+    private fun instanceGenericTypeResolutions(subject: RuntimeValue): List<TypeParameterNode> =
+        if (subject is ClassInstance && subject.typeArguments.isNotEmpty()) {
+            subject.clazz!!.typeParameters.mapIndexed { index, it ->
+                TypeParameterNode(it.position, it.name, subject.typeArguments[index].toTypeNode())
+            }
+        } else emptyList()
+
     suspend fun BlockNode.eval(): RuntimeValue {
+        if (!declaresNames) {
+            var value: RuntimeValue = UnitValue
+            for (statement in statements) value = statement.eval() as? RuntimeValue ?: UnitValue
+            return value
+        }
         // additional scope because new variables can be declared in blocks of `if`, `while`, etc.
         // also, function parameters can be shadowed
         callStack.push(functionFullQualifiedName = null, scopeType = type, callPosition = position)
@@ -1640,11 +1697,11 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             throw EvaluateNullPointerException(callStack.currentSymbolTable(), callStack.getStacktrace(position))
         }
         obj as? ClassInstance ?: throw RuntimeException("Cannot access member `${member.name}` for type `${obj.type().nameWithNullable}`")
-        if (obj.clazz!!.isPrivateMemberProperty(member.name) && !callStack.isInsideClassCode()) {
+        if (!callStack.isInsideClassCode() && obj.clazz!!.isPrivateMemberProperty(member.name)) {
             throw RuntimeException("Private property `${member.name}` cannot be accessed here")
         }
         // before type resolution is implemented in SemanticAnalyzer, reflect from clazz as a slower alternative
-        return when (val r = obj.read(interpreter = this@Interpreter, name = obj.clazz!!.findMemberPropertyTransformedName(member.name)!!)) {
+        return when (val r = obj.read(this@Interpreter, memberSlotIn(obj))) {
             is RuntimeValue -> r
             /*is FunctionDeclarationNode -> {
                 FunctionCallNode(
@@ -1682,8 +1739,8 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         val currentSymbolTable = callStack.currentSymbolTable()
         val runtimeRefs = SymbolTable(Int.MAX_VALUE, "lambda-symbol-ref", ScopeType.Closure, currentSymbolTable.rootScope)
         refs.returnTargets.forEach { id ->
-            runtimeRefs.returnTargets[id] = currentSymbolTable.findReturnTarget(id)
-                ?: throw InterpreterStateException("Missing lexical return target: $id")
+            runtimeRefs.putReturnTarget(id, currentSymbolTable.findReturnTarget(id)
+                ?: throw InterpreterStateException("Missing lexical return target: $id"))
         }
         refs.properties.forEach {
             runtimeRefs.putPropertyHolder(it, false /* TODO review */, currentSymbolTable.getPropertyHolder(it))
@@ -1880,7 +1937,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                                     .let { result -> if (it.isNegateResult) !result else result }
                             }
                             WhenConditionNode.TestType.RangeTest -> {
-                                (it.call!!.eval(replaceArguments = mapOf(0 to subjectValue)) as BooleanValue).value
+                                (it.call!!.eval(replaceArguments = ArgumentValues.of(0, subjectValue)) as BooleanValue).value
                                     .let { result -> if (it.isNegateResult) !result else result }
                             }
                             else -> {
@@ -1947,54 +2004,49 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             symbolTable().assign("#subject", subjectValue)
 
             // TODO move the call lookups to Semantic Analyzer. Currently impossible because runtime class type member always has higher priority than compile-time type
-            val iteratorValue = FunctionCallNode(
+            // The lookups depend only on the runtime types; they are kept for the next run of this loop.
+            fun call(subjectName: String, functionName: String) = FunctionCallNode(
                 function = NavigationNode(
                     position = position,
-                    subject = VariableReferenceNode(position, "#subject"),
+                    subject = VariableReferenceNode(position, subjectName),
                     operator = ".",
-                    member = ClassMemberReferenceNode(position, "iterator")
+                    member = ClassMemberReferenceNode(position, functionName)
                 ),
                 arguments = emptyList(),
                 declaredTypeArguments = emptyList(),
                 position = position,
                 callableType = CallableType.ExtensionFunction,
-            ).enrichIterableCall(subjectValue.type()).eval()
+            )
+            val subjectType = subjectValue.type()
+            if (iteratorCallFor !== subjectType) {
+                iteratorCall = call("#subject", "iterator").enrichIterableCall(subjectType)
+                iteratorCallFor = subjectType
+            }
+            val iteratorValue = iteratorCall!!.eval()
             symbolTable().declareProperty(subject.position, "#iterator", iteratorValue.type(), false)
             symbolTable().assign("#iterator", iteratorValue)
-            val hasNextCall = FunctionCallNode(
-                function = NavigationNode(
-                    position = position,
-                    subject = VariableReferenceNode(position, "#iterator"),
-                    operator = ".",
-                    member = ClassMemberReferenceNode(position, "hasNext")
-                ),
-                arguments = emptyList(),
-                declaredTypeArguments = emptyList(),
-                position = position,
-                callableType = CallableType.ExtensionFunction,
-            ).enrichIterableCall(iteratorValue.type())
-            val nextCall = FunctionCallNode(
-                function = NavigationNode(
-                    position = position,
-                    subject = VariableReferenceNode(position, "#iterator"),
-                    operator = ".",
-                    member = ClassMemberReferenceNode(position, "next")
-                ),
-                arguments = emptyList(),
-                declaredTypeArguments = emptyList(),
-                position = position,
-                callableType = CallableType.ExtensionFunction,
-            ).enrichIterableCall(iteratorValue.type())
+            val iteratorType = iteratorValue.type()
+            if (iterationCallsFor !== iteratorType) {
+                hasNextCall = call("#iterator", "hasNext").enrichIterableCall(iteratorType)
+                nextCall = call("#iterator", "next").enrichIterableCall(iteratorType)
+                iterationCallsFor = iteratorType
+            }
+            val hasNextCall = hasNextCall!!
+            val nextCall = nextCall!!
+            // Every iteration declares the variables in this same scope: resolve their types once.
+            val variableTypes = variables.map {
+                symbolTable().typeNodeToPropertyType(it.type, false)?.type ?: throw RuntimeException("Unknown type ${it.type.name}")
+            }
 
             while ((hasNextCall.eval() as BooleanValue).value) {
                 checkpoint()
                 val nextValue = nextCall.eval()
 
-                variables.forEach {
+                variables.forEachIndexed { index, it ->
                     symbolTable().declareProperty(
                         position = position,
                         name = it.transformedRefName!!,
-                        type = it.type,
+                        type = variableTypes[index],
                         isMutable = false,
                     )
                     symbolTable().assign(name = it.transformedRefName!!, value = nextValue)

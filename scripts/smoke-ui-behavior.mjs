@@ -28,11 +28,11 @@ assert.equal(ui.sourceDeclarationName('interface Tier { }'), 'Tier');
 assert.equal(ui.sourceDeclarationName('// empty'), null);
 
 // GUI-83: every Image operation the BluePlay library emits is drawn, for actor
-// images (including nested ones) as well as backgrounds.
-const svgOf = (url) => decodeURIComponent(url.replace(/^url\("|"\)$/g, '').split(',')[1]);
+// images (including nested ones) as well as backgrounds, which are Images too.
+const svgOf = (url) => decodeURIComponent(url.split(',')[1]);
 assert.match(svgOf(ui.drawnImageDataUrl(['fill|rgb(200,0,0)'], 20, 20)),
   /<rect x="0" y="0" width="20" height="20" fill="rgb\(200,0,0\)"\/>/);
-assert.match(svgOf(ui.backgroundDataUrl(['fill|rgb(1,2,3)'], 40, 30)),
+assert.match(svgOf(ui.drawnImageDataUrl(['fill|rgb(1,2,3)'], 40, 30)),
   /<rect x="0" y="0" width="40" height="30" fill="rgb\(1,2,3\)"\/>/);
 const nested = '__bluek:{\\"operations\\":[\\"fill\\prgb(0,0,200)\\"],\\"width\\":6,\\"height\\":6}';
 const framed = svgOf(ui.drawnImageDataUrl(['fill|rgb(0,160,0)', `drawImage|${nested}|7|7|6|6`], 20, 20));
@@ -45,7 +45,14 @@ assert.match(shapes, /<ellipse cx="5" cy="3" rx="5" ry="3" fill="none" stroke="b
 assert.match(shapes, /<text x="1" y="9" fill="green">a\|b<\/text>/);
 assert.equal(ui.drawnImageDataUrl(null, 20, 20), undefined);
 assert.equal(ui.drawnImageDataUrl(['unknown|1'], 20, 20), undefined);
-assert.equal(ui.backgroundDataUrl([], 20, 20), undefined);
+
+// Output chunks combined before they reach the terminal give the same text as
+// appending each of them, including clears (form feed) and the size limit.
+for (const chunks of [['a', 'b\n'], ['old', '\fnew', 'er'], ['x\fy', 'z'], ['k'.repeat(700_000), 'm'.repeat(700_000), 'tail'], ['\f' + 'n'.repeat(1_200_000), 'end'], ['p', '\u0001in\u0002\n', 'q']]) {
+  const sequential = chunks.reduce((terminal, chunk) => ui.appendTerminal(terminal, chunk), 'before\n');
+  const combined = ui.appendTerminal('before\n', chunks.reduce(ui.combineTerminalOutput, ''));
+  assert.equal(combined, sequential, `combined output differs for ${JSON.stringify(chunks.map(chunk => chunk.slice(0, 8)))}`);
+}
 
 const params = [{ name: 'a', hasDefault: true }, { name: 'b', hasDefault: false }];
 assert.equal(ui.missingRequired(params, ['', '2']), false);

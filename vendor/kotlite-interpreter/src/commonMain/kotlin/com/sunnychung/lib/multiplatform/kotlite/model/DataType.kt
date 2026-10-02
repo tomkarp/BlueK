@@ -115,7 +115,7 @@ class AnyType(isNullable: Boolean = false) : ObjectType(AnyClass.clazz, emptyLis
     override val name: String = "Any"
     override val descriptiveName: String = "Any${if (isNullable) "?" else ""}" // if this line is absent, a strange Kotlin bug evaluates this field to be a String literal of "null"
 
-    override fun copyOf(isNullable: Boolean): ObjectType = if (this.isNullable == isNullable) this else AnyType(isNullable)
+    override fun copyOf(isNullable: Boolean): ObjectType = if (this.isNullable == isNullable) this else counterpart { AnyType(isNullable) }
 
     override fun isAssignableFrom(other: DataType): Boolean {
         return isNullable || !other.isNullable
@@ -157,6 +157,13 @@ open class ObjectType(val clazz: ClassDefinition, val arguments: List<DataType>,
     // for which the resolver does not depend on the calling scope.
     internal var memberResolverCache: com.sunnychung.lib.multiplatform.kotlite.util.ClassMemberResolver? = null
 
+    // Types are immutable; the variant with the other nullability is created
+    // once (generic calls derive `T?` from `T` on every call).
+    private var nullabilityCounterpart: ObjectType? = null
+
+    protected fun counterpart(create: () -> ObjectType): ObjectType =
+        nullabilityCounterpart ?: create().also { it.nullabilityCounterpart = this; nullabilityCounterpart = it }
+
     fun copy(
         clazz: ClassDefinition = this.clazz,
         arguments: List<DataType> = this.arguments,
@@ -168,7 +175,7 @@ open class ObjectType(val clazz: ClassDefinition, val arguments: List<DataType>,
 
 
 
-    override fun copyOf(isNullable: Boolean) = if (this.isNullable == isNullable) this else copy(isNullable = isNullable)
+    override fun copyOf(isNullable: Boolean) = if (this.isNullable == isNullable) this else counterpart { copy(isNullable = isNullable) }
 
     override fun isAssignableFrom(other: DataType): Boolean {
         if (other is NothingType && isNullable) return true
@@ -203,15 +210,10 @@ open class ObjectType(val clazz: ClassDefinition, val arguments: List<DataType>,
 //            val tp = clazz.typeParameters[it.index]
 //            it.value == scope.assertToDataType(resolutions.second[tp.name]!!)
 //        }
-        var otherType: ObjectType = other
-//        while (otherType.clazz.fullQualifiedName != clazz.fullQualifiedName && otherType.superType != null) {
-//            otherType = otherType.superType!!
-//        }
-        if (otherType.clazz.fullQualifiedName.removeSuffix("?") != clazz.fullQualifiedName.removeSuffix("?")) {
-            otherType = otherType.findSuperType(clazz.fullQualifiedName.removeSuffix("?")) ?: return false
-        }
-        if (otherType.clazz.fullQualifiedName.removeSuffix("?") != clazz.fullQualifiedName.removeSuffix("?")) return false
+        // `name` is the class name without a nullability suffix.
+        val otherType = (if (other.name == name) other else other.findSuperType(name)) ?: return false
         if (otherType.arguments.size != arguments.size) throw RuntimeException("runtime type argument mismatch")
+        if (arguments.isEmpty()) return true
         return arguments.withIndex().all {
             val otherTypeArg = otherType.arguments[it.index]
             when (clazz.typeParameters.getOrNull(it.index)?.variance ?: Variance.Invariant) {
@@ -259,14 +261,7 @@ open class ObjectType(val clazz: ClassDefinition, val arguments: List<DataType>,
 //            val tp = clazz.typeParameters[it.index]
 //            it.value.isConvertibleFrom(scope.assertToDataType(resolutions.second[tp.name]!!))
 //        }
-        var otherType: ObjectType = other
-//        while (otherType.clazz.fullQualifiedName != clazz.fullQualifiedName && otherType.superType != null) {
-//            otherType = otherType.superType!!
-//        }
-        if (otherType.clazz.fullQualifiedName.removeSuffix("?") != clazz.fullQualifiedName.removeSuffix("?")) {
-            otherType = otherType.findSuperType(clazz.fullQualifiedName.removeSuffix("?")) ?: return false to null
-        }
-        if (otherType.clazz.fullQualifiedName.removeSuffix("?") != clazz.fullQualifiedName.removeSuffix("?")) return false to null
+        val otherType = (if (other.name == name) other else other.findSuperType(name)) ?: return false to null
         if (otherType.arguments.size != arguments.size) throw RuntimeException("runtime type argument mismatch")
 
         return true to otherType
@@ -299,6 +294,12 @@ open class ObjectType(val clazz: ClassDefinition, val arguments: List<DataType>,
     }
 
     override fun isCastableFrom(other: DataType): Boolean {
+        // Without allocations for the common case of an object type.
+        if (other is ObjectType && (isNullable || !other.isNullable)) {
+            val otherType = (if (other.name == name) other else other.findSuperType(name)) ?: return false
+            if (otherType.arguments.size != arguments.size) throw RuntimeException("runtime type argument mismatch")
+            return true
+        }
         return checkCastAndFindSuperType(other).first
     }
 
@@ -313,7 +314,8 @@ open class ObjectType(val clazz: ClassDefinition, val arguments: List<DataType>,
     }
 
     fun findSuperType(typeName: String): ObjectType? {
-        return superTypes.firstOrNull { it.name == typeName }
+        for (superType in superTypes) if (superType.name == typeName) return superType
+        return null
     }
 
     override fun toTypeNode(isResolveTypeArguments: Boolean): TypeNode {
@@ -544,7 +546,7 @@ fun TypeNode.toPrimitiveDataType(symbolTable: SymbolTable) = when(this.name) {
     "Char" -> if (isNullable) symbolTable.NullableCharType else symbolTable.CharType
     "Byte" -> if (isNullable) symbolTable.NullableByteType else symbolTable.ByteType
     "Unit" -> UnitType(isNullable = isNullable)
-    "Any" -> AnyType(isNullable = isNullable)
+    "Any" -> symbolTable.anyType(isNullable)
     "Nothing" -> NothingType(isNullable = isNullable)
     else -> null //ObjectType(clazz = clazz!!, isNullable = isNullable)
 }

@@ -76,7 +76,9 @@ const removalSources = [
 expectOk(await awaitCompletion((onInput, onComplete) => removalSession.startLoadProject(removalFiles, removalSources, 'blueplay', 1, onInput, onComplete)), 'self-removal project load');
 expectOk(await awaitCompletion((onInput, onComplete) => removalSession.startBluePlayMain(null, onInput, onComplete)), 'self-removal main');
 const removableStage = JSON.parse(removalSession.takeStage()).stage;
-if (removableStage.objects.length !== 2 || removableStage.objects[0]?.image.width !== 4 || !removableStage.objects[0]?.hitId || !removableStage.objects[1]?.hitId) throw new Error('Runtime image metadata or stable hit identity is missing.');
+if (removableStage.objects.length !== 2 || removableStage.images[removableStage.objects[0]?.image]?.width !== 4 || !removableStage.objects[0]?.hitId || !removableStage.objects[1]?.hitId) throw new Error('Runtime image metadata or stable hit identity is missing.');
+// Both actors look alike: the frame lists their image once.
+if (removableStage.images.length !== 1 || removableStage.objects[1].image !== 0) throw new Error('A frame repeats an image instead of referring to it.');
 expectOk(JSON.parse(removalSession.setClick(7, 10, removableStage.objects[0].hitId)), 'off-centre actor click');
 if (expectOk(JSON.parse(removalSession.evaluate('<BluePlay removal smoke>', 'removalActor.isClicked')), 'off-centre actor query').display !== 'true') throw new Error('Stable actor click identity was not delivered outside the centre cell.');
 expectOk(JSON.parse(removalSession.setClick(7, 10, removableStage.objects[0].hitId)), 'off-centre actor click before removal');
@@ -115,6 +117,105 @@ collisionEvaluate('pixelB.rotation = 180', 'rotated transparent overlap setup');
 if (collisionEvaluate('pixelA.intersects(pixelB)', 'rotated transparent overlap').display !== 'false') throw new Error('Rotated transparent pixels incorrectly triggered isTouching.');
 collisionEvaluate('pixelB.rotation = 0', 'visible overlap setup');
 if (collisionEvaluate('pixelA.intersects(pixelB)', 'opaque overlap').display !== 'true') throw new Error('Visible source pixels did not trigger isTouching.');
+
+// Pixel-exact collisions of unrotated actors use a visibility map per image.
+// Compare them with the per-pixel rule for odd and even image sizes: pixel
+// centres inside both images' bounds, where both images are opaque.
+{
+  const mapSession = api.bluekCreateKotliteSession();
+  mapSession.configureBluePlay(true, 'native-blueplay-visibility-map');
+  const shapes = { a: { w: 9, h: 7, rect: [2, 1, 4, 5] }, b: { w: 6, h: 5, rect: [1, 1, 3, 2] } };
+  const image = ({ w, h, rect }) => `Image(${w}, ${h}).also { it.fillRect(${rect.join(', ')}) }`;
+  expectOk(await awaitCompletion((onInput, onComplete) => mapSession.startLoadProject(['Probe.kt', 'Main.kt'], [
+    'class Probe : Actor()',
+    `val mapWorld = World(60, 60, 1); val first = Probe(); val second = Probe()
+fun main() { first.image = ${image(shapes.a)}; second.image = ${image(shapes.b)}; mapWorld.addObject(first, 20, 20); mapWorld.addObject(second, 20, 20) }
+fun probe(): String { var result = ""; var dy = -7; while (dy <= 7) { var dx = -9; while (dx <= 9) { second.x = 20 + dx; second.y = 20 + dy; result += if (first.intersects(second)) "1" else "0"; dx += 1 }; dy += 1 }; return result }`,
+  ], 'blueplay', 1, onInput, onComplete)), 'visibility map project load');
+  expectOk(await awaitCompletion((onInput, onComplete) => mapSession.startBluePlayMain(null, onInput, onComplete)), 'visibility map main');
+  const visible = ({ w, h, rect: [left, top, width, height] }, x, y, pixelX, pixelY) => {
+    const localX = pixelX - (x + 0.5) + w / 2, localY = pixelY - (y + 0.5) + h / 2;
+    return localX >= 0 && localY >= 0 && localX < w && localY < h && localX >= left && localX < left + width && localY >= top && localY < top + height;
+  };
+  const touches = (dx, dy) => {
+    const placed = [[shapes.a, 20, 20], [shapes.b, 20 + dx, 20 + dy]];
+    const bounds = placed.map(([{ w, h }, x, y]) => [x + 0.5 - w / 2, y + 0.5 - h / 2, x + 0.5 + w / 2, y + 0.5 + h / 2]);
+    const left = Math.max(bounds[0][0], bounds[1][0]), top = Math.max(bounds[0][1], bounds[1][1]);
+    const right = Math.min(bounds[0][2], bounds[1][2]), bottom = Math.min(bounds[0][3], bounds[1][3]);
+    if (left >= right || top >= bottom) return false;
+    for (let y = Math.floor(top); y < Math.ceil(bottom); y++)
+      for (let x = Math.floor(left); x < Math.ceil(right); x++)
+        if (placed.every(([shape, ax, ay]) => visible(shape, ax, ay, x + 0.5, y + 0.5))) return true;
+    return false;
+  };
+  let expected = '';
+  for (let dy = -7; dy <= 7; dy++) for (let dx = -9; dx <= 9; dx++) expected += touches(dx, dy) ? '1' : '0';
+  const actual = expectOk(JSON.parse(mapSession.evaluate('<visibility map>', 'probe()')), 'visibility map probe').display;
+  if (actual !== expected) throw new Error(`Collisions from visibility maps differ from the per-pixel rule:\n${actual}\n${expected}`);
+  if (!expected.includes('1') || !expected.includes('0')) throw new Error('The visibility map probe must cover touching and separate positions.');
+}
+
+// The engine groups actors by class for queries; results keep the world's
+// order across classes. Re-adding keeps an actor's place; moving it to another
+// world and back puts it last, like the BlueJ list.
+{
+  const orderSession = api.bluekCreateKotliteSession();
+  orderSession.configureBluePlay(true, 'native-blueplay-order');
+  expectOk(await awaitCompletion((onInput, onComplete) => orderSession.startLoadProject(['Shape.kt', 'Circle.kt', 'Square.kt', 'Main.kt'], [
+    'open class Shape(val label: String) : Actor()',
+    'class Circle(label: String) : Shape(label)',
+    'class Square(label: String) : Shape(label)',
+    `val shapes = World(50, 50, 1); val elsewhere = World(50, 50, 1)
+val c1 = Circle("c1"); val s1 = Square("s1"); val c2 = Circle("c2"); val s2 = Square("s2")
+fun main() { shapes.addObject(c1, 5, 5); shapes.addObject(s1, 5, 5); shapes.addObject(c2, 6, 6); shapes.addObject(s2, 5, 5); shapes.show() }
+fun labels(actors: List<Shape>): String = actors.joinToString(",") { it.label }`,
+  ], 'blueplay', 1, onInput, onComplete)), 'order project load');
+  expectOk(await awaitCompletion((onInput, onComplete) => orderSession.startBluePlayMain(null, onInput, onComplete)), 'order main');
+  const orderOf = source => expectOk(JSON.parse(orderSession.evaluate('<order>', source)), source).display;
+  const expectOrder = (source, expected) => {
+    const actual = orderOf(source);
+    if (actual !== expected) throw new Error(`${source}: expected ${expected}, got ${actual}`);
+  };
+  expectOrder('labels(shapes.getObjects<Shape>())', 'c1,s1,c2,s2');
+  expectOrder('labels(shapes.getObjects<Square>())', 's1,s2');
+  orderOf('shapes.addObject(c1, 5, 5)');
+  expectOrder('labels(shapes.getObjects<Shape>())', 'c1,s1,c2,s2');
+  orderOf('elsewhere.addObject(s1, 5, 5); shapes.addObject(s1, 5, 5)');
+  expectOrder('labels(shapes.getObjects<Shape>())', 'c1,c2,s2,s1');
+  expectOrder('labels(c2.getIntersecting<Shape>())', 'c1,s2,s1');
+  expectOrder('c2.getOneIntersecting<Shape>()?.label ?: "none"', 'c1');
+  expectOrder('s2.getOneIntersecting<Square>()?.label ?: "none"', 's1');
+  expectOrder('shapes.getObjectsAt(5, 5).size', '3');
+  expectOrder('shapes.numberOfObjects', '4');
+  const frameOrder = JSON.parse(orderSession.takeStage()).stage.objects.map(object => object.className).join(',');
+  if (frameOrder !== 'Circle,Circle,Square,Square') throw new Error(`Frames must paint in world order: ${frameOrder}`);
+}
+
+// RT-51: worlds know their actors by identity. Actors that are equal by an
+// overridden equals are still separate members, removed and found separately.
+{
+  const identitySession = api.bluekCreateKotliteSession();
+  identitySession.configureBluePlay(true, 'native-blueplay-identity');
+  expectOk(await awaitCompletion((onInput, onComplete) => identitySession.startLoadProject(['Coin.kt', 'Main.kt'], [
+    'class Coin(val label: String) : Actor() { override fun equals(other: Any?): Boolean = other is Coin\n override fun hashCode(): Int = 1 }',
+    `val purse = World(20, 20, 1); val first = Coin("first"); val second = Coin("second")
+fun main() { purse.addObject(first, 5, 5); purse.addObject(second, 5, 5) }`,
+  ], 'blueplay', 1, onInput, onComplete)), 'identity project load');
+  expectOk(await awaitCompletion((onInput, onComplete) => identitySession.startBluePlayMain(null, onInput, onComplete)), 'identity main');
+  const valueOf = source => expectOk(JSON.parse(identitySession.evaluate('<identity>', source)), source).display;
+  const expectValue = (source, expected) => {
+    const actual = valueOf(source);
+    if (actual !== expected) throw new Error(`${source}: expected ${expected}, got ${actual}`);
+  };
+  expectValue('first == second', 'true');
+  expectValue('purse.numberOfObjects', '2');
+  expectValue('first.getOneIntersecting<Coin>()?.label ?: "none"', 'second');
+  expectValue('first.isTouching<Coin>()', 'true');
+  valueOf('purse.removeObject(second)');
+  expectValue('purse.allObjects().joinToString { (it as Coin).label }', 'first');
+  expectValue('try { second.world; "in a world" } catch (e: Exception) { e.message }', 'The actor is not in a world (add it with addObject first).');
+  expectValue('first.world === purse', 'true');
+}
 
 // Typed collision queries run inside student actors (they failed at runtime
 // while their inlined lambda used an implicit receiver).

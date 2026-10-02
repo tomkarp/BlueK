@@ -324,7 +324,8 @@ fails((await project({ 'Anzeige.kt': 'class Anzeige {\n    fun zeige(text: Strin
     const p = await project({ 'Feld.kt': 'class Feld : World(20, 10, 1) {\n    fun f() = liste("a").size\n}', 'Util.kt': 'fun liste(text: String) = mutableListOf(text)\nfun mutableListOf(text: String): MutableList<String> = listOf(text, "Projekt").toMutableList()' }, 'blueplay');
     ok(p.result, 'RT-45 BluePlay library with a clashing project function');
     ok(p.evaluate('val bild = Image(30, 20); bild.fill(); val probe = Actor(); probe.image = bild; val welt = Feld(); welt.addObject(probe, 0, 0); welt.show()'), 'RT-45 BluePlay library: run');
-    assert.deepEqual(JSON.parse(p.session.takeStage()).stage.objects[0].image.operations, ['fill|rgb(0,0,0)']);
+    const stage = JSON.parse(p.session.takeStage()).stage;
+    assert.deepEqual(stage.images[stage.objects[0].image].operations, ['fill|rgb(0,0,0)']);
     assert.equal(ok(p.evaluate('Feld().f()'), 'RT-45 BluePlay project call').display, '2');
   }
 }

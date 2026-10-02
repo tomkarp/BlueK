@@ -1,5 +1,6 @@
 import { manifestClasses } from './runtimeMetadata';
 import { resolveMainFile } from './mainEntries';
+import { scheduleAfter } from './simulationTimer';
 import type { BluePlayStage, RuntimeEvent, RuntimeSnapshot, RuntimeValue, SimulationState, WorkerCommand, WorkerReply } from '../../runtime-contract/src/index';
 
 class RequestError extends Error {}
@@ -44,6 +45,14 @@ export interface KotliteSessionBridge {
 }
 
 type Emit = (message: WorkerReply | RuntimeEvent) => void;
+type SnapshotEvent = Exclude<RuntimeEvent, { kind: 'frame' }>;
+/**
+ * Automatic simulation steps can run much faster than a display refreshes.
+ * Their frames are rendered and posted at most this often, still more often
+ * than a 60 Hz display shows them; output, sounds and effects of the steps in
+ * between are carried by the next frame.
+ */
+const FRAME_INTERVAL_MS = 10;
 const initialSnapshot = (): RuntimeSnapshot => ({ generationId: '', revision: 0, phase: 'uncompiled', classes: [], inspections: {}, references: [], liveObjectIds: [], error: null, simulation: 'inactive' });
 
 export class RuntimeHost {
@@ -54,7 +63,9 @@ export class RuntimeHost {
   private outputTimer: ReturnType<typeof setTimeout> | null = null;
   private active: { executionId: number; inputRequestId?: number; automaticSimulation?: boolean } | null = null;
   private lastStage: BluePlayStage | undefined;
-  private simulation: { state: SimulationState; speed: number; emit: Emit | null; timer: ReturnType<typeof setTimeout> | null } = { state: 'inactive', speed: 50, emit: null, timer: null };
+  private lastFrameAt = -Infinity;
+  /** `cancelStep` cancels the scheduled next step. */
+  private simulation: { state: SimulationState; speed: number; emit: Emit | null; cancelStep: (() => void) | null } = { state: 'inactive', speed: 50, emit: null, cancelStep: null };
 
   constructor(private readonly createSession: () => KotliteSessionBridge) {}
 
@@ -96,7 +107,7 @@ export class RuntimeHost {
     return { id, generationId: this.snapshot.generationId, response, snapshot: this.snapshot };
   }
 
-  private emitEvent(executionId: number, kind: RuntimeEvent['kind'], emit: Emit, extra: Partial<RuntimeEvent> = {}) {
+  private emitEvent(executionId: number, kind: SnapshotEvent['kind'], emit: Emit, extra: Partial<SnapshotEvent> = {}) {
     this.clearOutputTimer();
     const output = this.session?.takeOutput() || '';
     this.refreshSnapshot();
@@ -104,10 +115,36 @@ export class RuntimeHost {
     emit({ type: 'event', generationId: this.snapshot.generationId, executionId, sequence: ++this.sequence, kind, snapshot: this.snapshot, ...extra });
   }
 
+  /** A step that ends Run (stop(), a fault) publishes the complete state like a command reply. */
   private emitSimulationSnapshot(executionId: number, emit: Emit, response: RuntimeValue) {
-    const reply = this.publish(0, response, false);
+    const reply = this.publish(0, response);
     if (reply.response.output) emit({ type: 'event', generationId: reply.generationId, executionId, sequence: ++this.sequence, kind: 'output', output: reply.response.output, snapshot: reply.snapshot });
     emit({ type: 'event', generationId: reply.generationId, executionId, sequence: ++this.sequence, kind: 'snapshot', snapshot: reply.snapshot });
+  }
+
+  /**
+   * A step of a running simulation: a frame of what a step changes instead of
+   * the complete snapshot, at most every FRAME_INTERVAL_MS (see SimulationFrame).
+   */
+  private emitSimulationFrame(executionId: number, emit: Emit, response: RuntimeValue) {
+    if (response.fatal || this.simulation.state !== 'running') { this.emitSimulationSnapshot(executionId, emit, response); return; }
+    const now = performance.now();
+    if (now - this.lastFrameAt < FRAME_INTERVAL_MS) return;
+    this.lastFrameAt = now;
+    this.clearOutputTimer();
+    const output = this.session?.takeOutput() || '';
+    const effects = this.session?.takeEffects();
+    this.session?.renderBluePlay();
+    const stage = this.session?.takeStage();
+    if (stage) this.lastStage = JSON.parse(stage).stage as BluePlayStage;
+    this.snapshot = { ...this.snapshot, revision: this.snapshot.revision + 1, stage: this.lastStage, simulation: this.simulation.state, error: null };
+    const { revision, phase, simulation, error } = this.snapshot;
+    emit({
+      type: 'event', generationId: this.snapshot.generationId, executionId, sequence: ++this.sequence, kind: 'frame',
+      frame: { revision, phase, simulation, error, ...(stage ? { stage: this.lastStage } : {}) },
+      ...(output ? { output } : {}),
+      ...(effects && effects !== '[]' ? { effects: JSON.parse(effects) } : {}),
+    });
   }
 
   private clearOutputTimer() {
@@ -143,8 +180,8 @@ export class RuntimeHost {
   dispatch(id: number, command: WorkerCommand, emit: Emit): void {
     try {
       if (command.op === 'compile') {
-        if (this.simulation.timer !== null) clearTimeout(this.simulation.timer);
-        this.simulation = { state: 'inactive', speed: 50, emit: null, timer: null };
+        this.cancelScheduledStep();
+        this.simulation = { state: 'inactive', speed: 50, emit: null, cancelStep: null };
         this.lastStage = undefined; this.active = null; this.sequence = 0; this.lastOutputPublishAt = -Infinity;
         this.snapshot = { ...initialSnapshot(), generationId: command.generationId, phase: 'compiling' };
         this.session = this.createSession();
@@ -254,18 +291,14 @@ export class RuntimeHost {
     if (!this.session) throw new RequestError('BluePlay is not compiled.');
     if (command.action === 'setSpeed') {
       this.simulation.speed = Math.max(1, Math.min(100, Math.trunc(command.speed || 50)));
-      if (this.simulation.timer !== null) {
-        clearTimeout(this.simulation.timer);
-        this.simulation.timer = null;
+      if (this.simulation.cancelStep !== null) {
+        this.cancelScheduledStep();
         this.scheduleSimulationStep();
       }
       emit(this.publish(id, JSON.parse(this.session.setBluePlaySpeed(this.simulation.speed)), false)); return;
     }
     if (command.action === 'stop') {
-      if (this.simulation.timer !== null) {
-        clearTimeout(this.simulation.timer);
-        this.simulation.timer = null;
-      }
+      this.cancelScheduledStep();
       this.simulation.state = this.active ? 'stopping' : 'paused';
       this.session.takeBluePlayIntent();
       emit(this.publish(id, { kind: 'unit', display: 'Unit' }));
@@ -281,8 +314,7 @@ export class RuntimeHost {
       let fileName: string;
       try { fileName = resolveMainFile(this.snapshot.classes, command.fileName); }
       catch (error) { throw new RequestError((error as Error).message); }
-      if (this.simulation.timer !== null) clearTimeout(this.simulation.timer);
-      this.simulation.timer = null;
+      this.cancelScheduledStep();
       this.session.takeBluePlayIntent();
       this.simulation.state = 'stopping'; const executionId = id; this.active = { executionId };
       this.snapshot.phase = 'running';
@@ -321,7 +353,7 @@ export class RuntimeHost {
       this.active = null; const response = JSON.parse(result) as RuntimeValue; const intent = this.session!.takeBluePlayIntent();
       if (response.fatal) this.simulation.state = 'faulted'; else if (intent === 'stop' || this.simulation.state === 'stopping') this.simulation.state = 'paused'; else this.simulation.state = automatic ? 'running' : 'paused';
       this.snapshot.phase = response.fatal ? 'faulted' : 'ready';
-      if (automatic) this.emitSimulationSnapshot(executionId, emit, response); else emit(this.publish(id, response));
+      if (automatic) this.emitSimulationFrame(executionId, emit, response); else emit(this.publish(id, response));
       if (automatic && this.simulation.state === 'running') this.scheduleSimulationStep(performance.now() - startedAt);
     };
     const started = this.session.startBluePlayStep(onInput, onComplete); const initial = JSON.parse(started) as RuntimeValue;
@@ -329,9 +361,14 @@ export class RuntimeHost {
   }
 
   private scheduleSimulationStep(elapsed = 0) {
-    if (this.simulation.timer !== null || this.simulation.state !== 'running' || this.active || !this.simulation.emit) return;
+    if (this.simulation.cancelStep !== null || this.simulation.state !== 'running' || this.active || !this.simulation.emit) return;
     // Speed defines the interval between ticks, not an extra sleep after work.
     // Never catch up with a burst of queued ticks when a step exceeds its budget.
-    this.simulation.timer = setTimeout(() => { this.simulation.timer = null; if (this.simulation.state === 'running') this.runSimulationStep(0, this.simulation.emit!, true); }, Math.max(1, 100 - this.simulation.speed - elapsed));
+    this.simulation.cancelStep = scheduleAfter(Math.max(1, 100 - this.simulation.speed - elapsed), () => { this.simulation.cancelStep = null; if (this.simulation.state === 'running') this.runSimulationStep(0, this.simulation.emit!, true); });
+  }
+
+  private cancelScheduledStep() {
+    this.simulation.cancelStep?.();
+    this.simulation.cancelStep = null;
   }
 }
