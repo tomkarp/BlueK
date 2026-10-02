@@ -216,6 +216,9 @@ open class VariableReferenceNode(override val position: SourcePosition, val vari
     // A top-level property is initialized in source order and may not be yet when this runs.
     @ModifyByAnalyzer var isTopLevelProperty: Boolean = false
 
+    /** Interpreter only: the member access this reference stands for when it has an [ownerRef]. */
+    internal var ownerAccess: NavigationNode? = null
+
     override fun toMermaid(): String = "${generateId()}[\"Variable Reference Node `$variableName`\"]"
 }
 
@@ -259,6 +262,18 @@ data class BlockNode(
     @ModifyByAnalyzer var returnType: TypeNode? = null,
     @ModifyByAnalyzer var returnTypeUpperBound: TypeNode? = null,
 ) : ASTNode {
+    /**
+     * Whether the statements declare names in this block's own scope. A block
+     * that declares nothing runs in the enclosing scope: blocks run for every
+     * call, branch and loop iteration.
+     */
+    internal val declaresNames: Boolean
+        get() = declaresNamesStore ?: statements.any {
+            it is PropertyDeclarationNode || it is FunctionDeclarationNode || it is ClassDeclarationNode
+        }.also { declaresNamesStore = it }
+    // A plain field: `by lazy` creates a property reference on every access in Kotlin/JS.
+    private var declaresNamesStore: Boolean? = null
+
     override fun toMermaid(): String {
         val self = "${generateId()}[\"Block Node\"]"
         return statements.joinToString("") { "$self-->${it.toMermaid()}\n" }
@@ -378,6 +393,9 @@ data class FunctionCallNode(
 ) : ASTNode {
     /** Declared type of the receiving property, e.g. `val k: MutableList<Karte> = mutableListOf()`. */
     @ModifyByAnalyzer var expectedReturnType: TypeNode? = null
+
+    /** Interpreter only: this call on the implicit owner of its function reference. */
+    internal var ownerCall: FunctionCallNode? = null
 
     val typeArguments: List<TypeNode>
         get() = declaredTypeArguments.emptyToNull() ?: inferredTypeArguments?.let { args ->
@@ -533,6 +551,10 @@ data class NavigationNode(
     /** The analyzer synthesizes this access for a for-loop's iterator call. */
     @ModifyByAnalyzer var isForLoopIterator: Boolean = false
 
+    // Interpreter only: the member resolution for the last class seen here.
+    internal var resolvedClass: ClassDefinition? = null
+    internal var resolvedMemberSlot: ClassInstance.MemberSlot? = null
+
     override fun toMermaid(): String {
         val self = "${generateId()}[\"Navigation Node\"]"
         return "$self-- subject -->${subject.toMermaid()}\n" +
@@ -552,6 +574,13 @@ class PropertyAccessorsNode(
     val setterIsPrivate: Boolean = false,
     val setterIsDefault: Boolean = false,
 ) : ASTNode {
+    // Interpreter only: the accessor calls, built once instead of on every access.
+    internal val getterCall: FunctionCallNode? = getter?.let { FunctionCallNode(it, emptyList(), emptyList(), SourcePosition("", 1, 1)) }
+    internal val setterCall: FunctionCallNode? = setter?.let {
+        // The assigned value is passed as a replacement for this placeholder argument.
+        FunctionCallNode(it, listOf(FunctionCallArgumentNode(SourcePosition.NONE, index = 0, value = ValueNode(SourcePosition.NONE, NullValue))), emptyList(), SourcePosition("", 1, 1))
+    }
+
     override fun toMermaid(): String {
         val self = "${generateId()}[\"Navigation Node\"]"
         return "$self\n${getter?.let {"$self-- getter -->${it.toMermaid()}\n"} ?: ""}\n" +
@@ -883,6 +912,13 @@ data class ForNode(
     val subject: ASTNode,
     val body: BlockNode,
 ) : ASTNode {
+    // Interpreter only: the resolved iterator calls for the last runtime types seen here.
+    internal var iteratorCallFor: DataType? = null
+    internal var iteratorCall: FunctionCallNode? = null
+    internal var iterationCallsFor: DataType? = null
+    internal var hasNextCall: FunctionCallNode? = null
+    internal var nextCall: FunctionCallNode? = null
+
     override fun toMermaid(): String {
         val self = "${generateId()}[\"For\"]"
         return self +

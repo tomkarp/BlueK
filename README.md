@@ -124,7 +124,7 @@ Betrieb auf dem Server: [docs/deployment.md](docs/deployment.md).
 
 ## Aktuelle Grenzen
 
-Stand: 1. Oktober 2026, geprüft gegen das eingecheckte Interpreter-Bundle.
+Stand: 2. Oktober 2026, geprüft gegen das eingecheckte Interpreter-Bundle.
 Der Objektinspektor wertet alle Properties automatisch aus und zeigt gewöhnliche
 Getter-Exceptions in der jeweiligen Zeile. `Actor.world` hat den Typ `World`
 und wirft ohne Welt `IllegalStateException`; der Inspektor zeigt den Fehler
@@ -231,7 +231,8 @@ nennt BlueK eine verständliche Meldung statt Kotlites generischem Fehler.
   nötig. Analysefehler lassen die Sitzung dagegen unverändert benutzbar.
 - Jede Codepad-/Objektbank-Aktion analysiert den gesamten bisherigen
   Sitzungsquelltext erneut. Sehr lange Sitzungen werden dadurch langsamer.
-- Nur Schleifen besitzen kooperative Checkpoints. Rechnet Code ohne Schleife
+- Nur Schleifen besitzen kooperative Checkpoints; sie geben nach etwa 10 ms
+  Rechenzeit an den Worker ab. Rechnet Code ohne Schleife
   (z. B. eine häufig verzweigende Rekursion) lange, verarbeitet der Worker
   Eingaben erst danach;
   Stop funktioniert trotzdem immer. Dasselbe gilt für Schleifen in Lambdas
@@ -248,7 +249,9 @@ mit kurzen Erklärungen. Frühere BlueK-Zusätze wie `setImage`, `setLocation`,
 [API-Abgleich](docs/blueplay-api-audit.md) hält Ausgangsfehler und Nachweise fest.
 JVM-/AWT-Interna (`java.awt.Color`, Dateizugriffe) gehören nicht
 dazu. Eine Grafik, die weder im Projekt noch unter den Standardgrafiken
-existiert, ergibt einen Laufzeitfehler (`Image file not found: …`).
+existiert, ergibt einen Laufzeitfehler (`Image file not found: …`). Welten
+erkennen ihre Actors an der Identität: Ein überschriebenes `equals` wirkt sich
+weder auf `addObject`/`removeObject` noch auf Kollisionsabfragen aus.
 
 ## Dokumentation
 

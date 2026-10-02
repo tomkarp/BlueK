@@ -1,12 +1,27 @@
 package com.sunnychung.lib.multiplatform.kotlite.model
 
-/** Passive identity traversal for REPL hosts. Never runs getters, equals or iterators from student code. */
-fun reachableRuntimeValues(roots: List<RuntimeValue>): List<RuntimeValue> {
+import com.sunnychung.lib.multiplatform.kotlite.extension.IdentitySet
+
+/** Values found by [reachableRuntimeValues]; membership means identity, never `equals`. */
+class ReachableRuntimeValues internal constructor(val values: List<RuntimeValue>, private val identities: IdentitySet<RuntimeValue>) {
+    operator fun contains(value: RuntimeValue): Boolean = value in identities
+}
+
+/**
+ * Passive identity traversal for REPL hosts. Never runs getters, equals or iterators from student code.
+ * [hostRetained] names values that a host keeps alive for a value outside its fields (e.g. a game engine's
+ * actors of a world), like [DelegatedValue.retainedRuntimeValues] for host wrappers.
+ */
+fun reachableRuntimeValues(
+    roots: List<RuntimeValue>,
+    hostRetained: (RuntimeValue) -> Collection<RuntimeValue> = { emptyList() },
+): ReachableRuntimeValues {
+    val identities = IdentitySet<RuntimeValue>()
     val visited = mutableListOf<RuntimeValue>()
     val pending = roots.toMutableList()
     while (pending.isNotEmpty()) {
         val value = pending.removeAt(pending.lastIndex)
-        if (visited.any { it === value }) continue
+        if (!identities.add(value)) continue
         visited += value
         fun backing(accessor: RuntimeValueAccessor) {
             runCatching { accessor.read() }.getOrNull()?.let { pending += it }
@@ -23,6 +38,7 @@ fun reachableRuntimeValues(roots: List<RuntimeValue>): List<RuntimeValue> {
                 is Array<*> -> contents.forEach(::item)
             }
         }
+        pending.addAll(hostRetained(value))
     }
-    return visited
+    return ReachableRuntimeValues(visited, identities)
 }

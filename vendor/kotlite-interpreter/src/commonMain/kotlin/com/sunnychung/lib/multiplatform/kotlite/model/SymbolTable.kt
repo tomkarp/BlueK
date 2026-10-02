@@ -27,22 +27,33 @@ open class SymbolTable(
     }
 
     // Invocation tokens captured by inline lambdas. Tokens contain no runtime objects.
-    private var returnTargetsStore: MutableMap<String, Any>? = null
-    internal val returnTargets: MutableMap<String, Any> get() = returnTargetsStore ?: mutableMapOf<String, Any>().also { returnTargetsStore = it }
+    // A call scope holds exactly one token (its own); only lambda captures hold more.
+    private var returnTargetId: String? = null
+    private var returnTarget: Any? = null
+    private var moreReturnTargets: MutableMap<String, Any>? = null
+
+    internal fun putReturnTarget(id: String, target: Any) {
+        when {
+            returnTargetId == null || returnTargetId == id -> { returnTargetId = id; returnTarget = target }
+            else -> (moreReturnTargets ?: SymbolMap<Any>().also { moreReturnTargets = it })[id] = target
+        }
+    }
+
     internal fun findReturnTarget(id: String): Any? {
         var scope: SymbolTable? = this
         while (scope != null) {
-            scope.returnTargetsStore?.get(id)?.let { return it }
+            if (scope.returnTargetId == id) return scope.returnTarget
+            scope.moreReturnTargets?.get(id)?.let { return it }
             scope = scope.parentScope
         }
         return null
     }
 
     // Scopes of blocks and calls frequently declare no local property at all.
-    private var propertyDeclarationsStore: MutableMap<String, PropertyType>? = null
+    private var propertyDeclarationsStore: SymbolMap<PropertyType>? = null
     private var propertyValuesStore: MutableMap<String, RuntimeValueAccessor>? = null
-    private val propertyDeclarations: MutableMap<String, PropertyType> get() = propertyDeclarationsStore ?: mutableMapOf<String, PropertyType>().also { propertyDeclarationsStore = it }
-    internal val propertyValues: MutableMap<String, RuntimeValueAccessor> get() = propertyValuesStore ?: mutableMapOf<String, RuntimeValueAccessor>().also { propertyValuesStore = it }
+    private val propertyDeclarations: MutableMap<String, PropertyType> get() = propertyDeclarationsStore ?: SymbolMap<PropertyType>().also { propertyDeclarationsStore = it }
+    internal val propertyValues: MutableMap<String, RuntimeValueAccessor> get() = propertyValuesStore ?: SymbolMap<RuntimeValueAccessor>().also { propertyValuesStore = it }
     private var transformedSymbolsStore: MutableMap<Pair<IdentifierClassifier, String>, String>? = null
     private var transformedSymbolsByDeclaredNameStore: MutableMap<Pair<IdentifierClassifier, String>, String>? = null
     internal val transformedSymbols: MutableMap<Pair<IdentifierClassifier, String>, String> get() = transformedSymbolsStore ?: mutableMapOf<Pair<IdentifierClassifier, String>, String>().also { transformedSymbolsStore = it } // only use in SemanticAnalyzer. transformed name -> original name
@@ -54,55 +65,69 @@ open class SymbolTable(
     // reference on every delegated access, which dominated interpreter call time.
     // Lookups read `*Store` directly so that a miss does not allocate a table.
     private var propertyOwnersStore: MutableMap<String, PropertyOwnerInfo>? = null
-    internal val propertyOwners: MutableMap<String, PropertyOwnerInfo> get() = propertyOwnersStore ?: mutableMapOf<String, PropertyOwnerInfo>().also { propertyOwnersStore = it } // only use in SemanticAnalyzer
+    internal val propertyOwners: MutableMap<String, PropertyOwnerInfo> get() = propertyOwnersStore ?: SymbolMap<PropertyOwnerInfo>().also { propertyOwnersStore = it } // only use in SemanticAnalyzer
     private var functionOwnersStore: MutableMap<String, String>? = null
-    internal val functionOwners: MutableMap<String, String> get() = functionOwnersStore ?: mutableMapOf<String, String>().also { functionOwnersStore = it } // only use in SemanticAnalyzer
+    internal val functionOwners: MutableMap<String, String> get() = functionOwnersStore ?: SymbolMap<String>().also { functionOwnersStore = it } // only use in SemanticAnalyzer
     private var functionDeclarationsStore: MutableMap<String, FunctionDeclarationNode>? = null
-    protected val functionDeclarations: MutableMap<String, FunctionDeclarationNode> get() = functionDeclarationsStore ?: mutableMapOf<String, FunctionDeclarationNode>().also { functionDeclarationsStore = it }
+    protected val functionDeclarations: MutableMap<String, FunctionDeclarationNode> get() = functionDeclarationsStore ?: SymbolMap<FunctionDeclarationNode>().also { functionDeclarationsStore = it }
     private var extensionFunctionDeclarationsStore: MutableMap<String, Pair<DataType, FunctionDeclarationNode>>? = null
-    protected val extensionFunctionDeclarations: MutableMap<String, Pair<DataType, FunctionDeclarationNode>> get() = extensionFunctionDeclarationsStore ?: mutableMapOf<String, Pair<DataType, FunctionDeclarationNode>>().also { extensionFunctionDeclarationsStore = it }
+    protected val extensionFunctionDeclarations: MutableMap<String, Pair<DataType, FunctionDeclarationNode>> get() = extensionFunctionDeclarationsStore ?: SymbolMap<Pair<DataType, FunctionDeclarationNode>>().also { extensionFunctionDeclarationsStore = it }
     private var extensionPropertiesStore: MutableMap<String, ExtensionProperty>? = null
-    protected val extensionProperties: MutableMap<String, ExtensionProperty> get() = extensionPropertiesStore ?: mutableMapOf<String, ExtensionProperty>().also { extensionPropertiesStore = it }
+    protected val extensionProperties: MutableMap<String, ExtensionProperty> get() = extensionPropertiesStore ?: SymbolMap<ExtensionProperty>().also { extensionPropertiesStore = it }
     private var classDeclarationsStore: MutableMap<String, ClassDefinition>? = null
-    private val classDeclarations: MutableMap<String, ClassDefinition> get() = classDeclarationsStore ?: mutableMapOf<String, ClassDefinition>().also { classDeclarationsStore = it }
+    private val classDeclarations: MutableMap<String, ClassDefinition> get() = classDeclarationsStore ?: SymbolMap<ClassDefinition>().also { classDeclarationsStore = it }
     private var typeAliasStore: MutableMap<String, DataType>? = null
-    private val typeAlias: MutableMap<String, DataType> get() = typeAliasStore ?: mutableMapOf<String, DataType>().also { typeAliasStore = it }
+    private val typeAlias: MutableMap<String, DataType> get() = typeAliasStore ?: SymbolMap<DataType>().also { typeAliasStore = it }
     private var typeAliasResolutionStore: MutableMap<String, DataType>? = null
-    private val typeAliasResolution: MutableMap<String, DataType> get() = typeAliasResolutionStore ?: mutableMapOf<String, DataType>().also { typeAliasResolutionStore = it }
+    private val typeAliasResolution: MutableMap<String, DataType> get() = typeAliasResolutionStore ?: SymbolMap<DataType>().also { typeAliasResolutionStore = it }
 
     internal lateinit var rootScope: SymbolTable
+    private val isRootScopeKnown: Boolean get() = this::rootScope.isInitialized
     // Only used on the root scope: built-in classes are process-wide singletons,
     // so per-interpreter type caches must not be stored on their definitions.
     private var concreteGenericObjectTypesStore: MutableMap<ClassDefinition, MutableList<ObjectType>>? = null
-    val AnyType get() = AnyType()
-    lateinit var IntType: PrimitiveType
-        private set
-    lateinit var LongType: PrimitiveType
-        private set
-    lateinit var DoubleType: PrimitiveType
-        private set
-    lateinit var BooleanType: PrimitiveType
-        private set
-    lateinit var StringType: PrimitiveType
-        private set
-    lateinit var CharType: PrimitiveType
-        private set
-    lateinit var ByteType: PrimitiveType
-        private set
-    lateinit var NullableIntType: PrimitiveType
-        private set
-    lateinit var NullableLongType: PrimitiveType
-        private set
-    lateinit var NullableDoubleType: PrimitiveType
-        private set
-    lateinit var NullableBooleanType: PrimitiveType
-        private set
-    lateinit var NullableStringType: PrimitiveType
-        private set
-    lateinit var NullableCharType: PrimitiveType
-        private set
-    lateinit var NullableByteType: PrimitiveType
-        private set
+    val AnyType get() = anyType(isNullable = false)
+
+    // `Any` and `Any?` are the bound of every unbounded type parameter; one instance per interpreter.
+    private var anyTypesStore: Array<AnyType>? = null
+
+    fun anyType(isNullable: Boolean): AnyType {
+        if (!isRootScopeKnown) return AnyType(isNullable)
+        val root = rootScope
+        val types = root.anyTypesStore ?: arrayOf(AnyType(isNullable = false), AnyType(isNullable = true)).also { root.anyTypesStore = it }
+        return types[if (isNullable) 1 else 0]
+    }
+
+    /**
+     * Primitive types are resolved once by the root scope. Other scopes read
+     * them from there instead of copying them on creation (scopes are created
+     * for every call and block).
+     */
+    private class PrimitiveTypes(
+        val int: PrimitiveType, val long: PrimitiveType, val double: PrimitiveType, val boolean: PrimitiveType,
+        val string: PrimitiveType, val char: PrimitiveType, val byte: PrimitiveType,
+        val nullableInt: PrimitiveType, val nullableLong: PrimitiveType, val nullableDouble: PrimitiveType,
+        val nullableBoolean: PrimitiveType, val nullableString: PrimitiveType, val nullableChar: PrimitiveType,
+        val nullableByte: PrimitiveType,
+    )
+    private var primitiveTypesStore: PrimitiveTypes? = null
+    private val primitiveTypes: PrimitiveTypes
+        get() = rootScope.primitiveTypesStore ?: throw UninitializedPropertyAccessException("Primitive types are not initialized")
+
+    val IntType: PrimitiveType get() = primitiveTypes.int
+    val LongType: PrimitiveType get() = primitiveTypes.long
+    val DoubleType: PrimitiveType get() = primitiveTypes.double
+    val BooleanType: PrimitiveType get() = primitiveTypes.boolean
+    val StringType: PrimitiveType get() = primitiveTypes.string
+    val CharType: PrimitiveType get() = primitiveTypes.char
+    val ByteType: PrimitiveType get() = primitiveTypes.byte
+    val NullableIntType: PrimitiveType get() = primitiveTypes.nullableInt
+    val NullableLongType: PrimitiveType get() = primitiveTypes.nullableLong
+    val NullableDoubleType: PrimitiveType get() = primitiveTypes.nullableDouble
+    val NullableBooleanType: PrimitiveType get() = primitiveTypes.nullableBoolean
+    val NullableStringType: PrimitiveType get() = primitiveTypes.nullableString
+    val NullableCharType: PrimitiveType get() = primitiveTypes.nullableChar
+    val NullableByteType: PrimitiveType get() = primitiveTypes.nullableByte
 
     protected fun initPrimitiveTypes() {
         fun getPrimitiveClass(typeName: PrimitiveTypeName, isNullable: Boolean): ClassDefinition {
@@ -127,41 +152,29 @@ open class SymbolTable(
         }
 
         if (scopeLevel == 0) {
-            IntType = getPrimitiveType(PrimitiveTypeName.Int, isNullable = false)
-            LongType = getPrimitiveType(PrimitiveTypeName.Long, isNullable = false)
-            DoubleType = getPrimitiveType(PrimitiveTypeName.Double, isNullable = false)
-            BooleanType = getPrimitiveType(PrimitiveTypeName.Boolean, isNullable = false)
-            StringType = getPrimitiveType(PrimitiveTypeName.String, isNullable = false)
-            CharType = getPrimitiveType(PrimitiveTypeName.Char, isNullable = false)
-            ByteType = getPrimitiveType(PrimitiveTypeName.Byte, isNullable = false)
-            NullableIntType = getPrimitiveType(PrimitiveTypeName.Int, isNullable = true)
-            NullableLongType = getPrimitiveType(PrimitiveTypeName.Long, isNullable = true)
-            NullableDoubleType = getPrimitiveType(PrimitiveTypeName.Double, isNullable = true)
-            NullableBooleanType = getPrimitiveType(PrimitiveTypeName.Boolean, isNullable = true)
-            NullableStringType = getPrimitiveType(PrimitiveTypeName.String, isNullable = true)
-            NullableCharType = getPrimitiveType(PrimitiveTypeName.Char, isNullable = true)
-            NullableByteType = getPrimitiveType(PrimitiveTypeName.Byte, isNullable = true)
-        } else {
-            IntType = rootScope.IntType
-            LongType = rootScope.LongType
-            DoubleType = rootScope.DoubleType
-            BooleanType = rootScope.BooleanType
-            StringType = rootScope.StringType
-            CharType = rootScope.CharType
-            ByteType = rootScope.ByteType
-            NullableIntType = rootScope.NullableIntType
-            NullableLongType = rootScope.NullableLongType
-            NullableDoubleType = rootScope.NullableDoubleType
-            NullableBooleanType = rootScope.NullableBooleanType
-            NullableStringType = rootScope.NullableStringType
-            NullableCharType = rootScope.NullableCharType
-            NullableByteType = rootScope.NullableByteType
+            primitiveTypesStore = PrimitiveTypes(
+                int = getPrimitiveType(PrimitiveTypeName.Int, isNullable = false),
+                long = getPrimitiveType(PrimitiveTypeName.Long, isNullable = false),
+                double = getPrimitiveType(PrimitiveTypeName.Double, isNullable = false),
+                boolean = getPrimitiveType(PrimitiveTypeName.Boolean, isNullable = false),
+                string = getPrimitiveType(PrimitiveTypeName.String, isNullable = false),
+                char = getPrimitiveType(PrimitiveTypeName.Char, isNullable = false),
+                byte = getPrimitiveType(PrimitiveTypeName.Byte, isNullable = false),
+                nullableInt = getPrimitiveType(PrimitiveTypeName.Int, isNullable = true),
+                nullableLong = getPrimitiveType(PrimitiveTypeName.Long, isNullable = true),
+                nullableDouble = getPrimitiveType(PrimitiveTypeName.Double, isNullable = true),
+                nullableBoolean = getPrimitiveType(PrimitiveTypeName.Boolean, isNullable = true),
+                nullableString = getPrimitiveType(PrimitiveTypeName.String, isNullable = true),
+                nullableChar = getPrimitiveType(PrimitiveTypeName.Char, isNullable = true),
+                nullableByte = getPrimitiveType(PrimitiveTypeName.Byte, isNullable = true),
+            )
         }
     }
 
     init {
         if (parentScope != null || scopeLevel == 0) {
-            rootScope = findScope(0)
+            // Constant time for the many short-lived scopes of calls and blocks.
+            rootScope = parentScope?.takeIf { it.isRootScopeKnown }?.rootScope ?: findScope(0)
 
             if (isInitOnCreate && scopeLevel > 1) { // user scopes
                 init()
@@ -374,8 +387,9 @@ open class SymbolTable(
         if (typeArguments.isNullOrEmpty() && isNonGeneric(clazz)) {
             return plainObjectType(clazz, isNullable)
         }
-        if (visitCache == null && !typeArguments.isNullOrEmpty() && typeArguments.size == clazz.typeParameters.size) {
-            concreteGenericObjectType(clazz, typeArguments, isNullable)?.let { return it }
+        // Concrete arguments, including none for a class whose ancestors are generic (e.g. IntRange).
+        if (visitCache == null && (typeArguments?.size ?: 0) == clazz.typeParameters.size) {
+            concreteGenericObjectType(clazz, typeArguments ?: emptyList(), isNullable)?.let { return it }
         }
         val visitCache = visitCache ?: SymbolTableTypeVisitCache()
         val genericResolver = ClassMemberResolver.create(this, clazz, typeArguments ?: emptyList())!!
@@ -573,9 +587,37 @@ open class SymbolTable(
         }
     }
 
+    // The receiver of a member call, bound to each of `receiverNames` (`this`,
+    // `super` and `this/<Class>` for its class hierarchy) without a table entry
+    // and holder per name: such a scope is created for every member call.
+    private var receiverValue: RuntimeValue? = null
+    private var receiverPropertyType: PropertyType? = null
+    private var receiverNames: Array<String>? = null
+    private var receiverHolder: RuntimeValueHolder? = null
+
+    /** Binds an immutable [value] to all [names] of this scope, like [declareInitializedProperty] for each. */
+    internal fun bindReceiver(position: SourcePosition, value: RuntimeValue, type: DataType, names: Array<String>) {
+        if (receiverNames != null) throw RuntimeException("A receiver is already bound in this scope")
+        names.firstOrNull { propertyDeclarationsStore?.containsKey(it) == true }?.let {
+            throw DuplicateIdentifierException(position, it, IdentifierClassifier.Property)
+        }
+        receiverValue = value
+        receiverPropertyType = PropertyType(type, false)
+        receiverNames = names
+    }
+
+    private fun isReceiverName(name: String): Boolean {
+        val names = receiverNames ?: return false
+        for (receiverName in names) if (receiverName == name) return true
+        return false
+    }
+
+    private fun receiverHolder(): RuntimeValueHolder =
+        receiverHolder ?: RuntimeValueHolder(receiverPropertyType!!.type, false, receiverValue).also { receiverHolder = it }
+
     /** Declare an immutable binding and initialize it with a single lookup per table. */
     internal fun declareInitializedProperty(position: SourcePosition, name: String, type: DataType, value: RuntimeValue) {
-        if (propertyDeclarations.put(name, PropertyType(type, false)) != null) {
+        if (isReceiverName(name) || propertyDeclarations.put(name, PropertyType(type, false)) != null) {
             throw DuplicateIdentifierException(position, name, IdentifierClassifier.Property)
         }
         propertyValues[name] = RuntimeValueHolder(type, false, value)
@@ -595,13 +637,14 @@ open class SymbolTable(
                 scope.propertyValues.getOrPut(name) { RuntimeValueHolder(type.type, type.isMutable, null) }.assign(value = value)
                 return true
             }
+            if (scope.isReceiverName(name)) throw RuntimeException("val cannot be reassigned")
             scope = scope.parentScope
         }
         throw RuntimeException("The variable `$name` has not been declared")
     }
 
     fun hasAssignedInThisScope(name: String): Boolean {
-        return propertyValuesStore?.get(name) != null
+        return propertyValuesStore?.get(name) != null || isReceiverName(name)
     }
 
     fun getPropertyTypeOrNull(name: String, isThisScopeOnly: Boolean = false): Pair<PropertyType, SymbolTable>? {
@@ -609,6 +652,7 @@ open class SymbolTable(
         var result: Pair<PropertyType, SymbolTable>? = null
         while (scope != null) {
             scope.propertyDeclarationsStore?.get(name)?.let { result = it to scope }
+            if (result == null && scope.isReceiverName(name)) result = scope.receiverPropertyType!! to scope
             if (result != null || isThisScopeOnly) break
             scope = scope.parentScope
         }
@@ -639,6 +683,7 @@ open class SymbolTable(
         var scope: SymbolTable? = this
         while (scope != null) {
             scope.propertyValuesStore?.get(name)?.read()?.let { return it }
+            if (scope.isReceiverName(name)) return scope.receiverValue!!
             if (isThisScopeOnly) break
             scope = scope.parentScope
         }
@@ -646,7 +691,7 @@ open class SymbolTable(
     }
 
     fun putPropertyHolder(name: String, isMutable: Boolean, holder: RuntimeValueAccessor) {
-        if (propertyValuesStore?.containsKey(name) == true) {
+        if (propertyValuesStore?.containsKey(name) == true || isReceiverName(name)) {
             throw RuntimeException("Property `$name` has already been defined")
         }
         propertyDeclarations[name] = PropertyType(holder.type, isMutable)
@@ -657,6 +702,7 @@ open class SymbolTable(
         var scope: SymbolTable? = this
         while (scope != null) {
             scope.propertyValuesStore?.get(name)?.let { return it }
+            if (scope.isReceiverName(name)) return scope.receiverHolder()
             if (isThisScopeOnly) break
             scope = scope.parentScope
         }
@@ -664,13 +710,13 @@ open class SymbolTable(
     }
 
     fun hasProperty(name: String, isThisScopeOnly: Boolean = false): Boolean {
-        val thisScopeResult = propertyDeclarationsStore?.containsKey(name) == true
+        val thisScopeResult = propertyDeclarationsStore?.containsKey(name) == true || isReceiverName(name)
         if (isThisScopeOnly) {
             return thisScopeResult
         }
         var scope = parentScope
         while (!thisScopeResult && scope != null) {
-            if (scope.propertyDeclarationsStore?.containsKey(name) == true) return true
+            if (scope.propertyDeclarationsStore?.containsKey(name) == true || scope.isReceiverName(name)) return true
             scope = scope.parentScope
         }
         return thisScopeResult
@@ -993,7 +1039,8 @@ open class SymbolTable(
 
     fun mergeFrom(position: SourcePosition, other: SymbolTable) { // this is only involved in runtime
         log.d { "Merge from other SymbolTable" }
-        other.returnTargetsStore?.let { returnTargets.putAll(it) }
+        other.returnTargetId?.let { putReturnTarget(it, other.returnTarget!!) }
+        other.moreReturnTargets?.forEach { (id, target) -> putReturnTarget(id, target) }
         other.propertyValuesStore?.forEach {
             putPropertyHolder(it.key, false /* TODO review */, it.value)
         }

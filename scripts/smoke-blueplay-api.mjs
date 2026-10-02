@@ -127,7 +127,9 @@ assert.equal(JSON.parse(original.takeStage()).stage.objects[0].x, 101);
 // Copy and drawImage capture image contents and opacity at the call, rather than
 // retaining a mutable receiver; scaling preserves these pixels at the new size.
 evaluate('val source = Image("mask.png"); source.setTransparency(128); val target = Image(8,8); target.drawImage(source,2,2); source.clear(); b.image = target; otherWorld.show()');
-const drawn = JSON.parse(session.takeStage()).stage.objects[0].image;
+// A frame lists each distinct image once; actors refer to it by index.
+const actorImage = stage => stage.images[stage.objects[0].image];
+const drawn = actorImage(JSON.parse(session.takeStage()).stage);
 const decode = encoded => {
   let result = ''; for (let i = 0; i < encoded.length; i++) { const c = encoded[i]; if (c !== '\\' || i + 1 >= encoded.length) result += c; else { const next = encoded[++i]; result += next === 'p' ? '|' : next === 'n' ? '\n' : next; } } return JSON.parse(result);
 };
@@ -135,7 +137,7 @@ const nested = decode(drawn.operations[0].split('|')[1].slice('__bluek:'.length)
 assert.equal(nested.resourcePath, 'mask.png'); assert.equal(nested.opacity, 128 / 255);
 evaluate('val copy = Image(other = target); target.clear(); b.image = copy; copy.scale(width = 16, height = 16)');
 assert.equal(evaluate('copy.width == 16 && copy.height == 16').display, 'true');
-assert(JSON.parse(session.takeStage()).stage.objects[0].image.operations.length, 'The copied drawing survives clearing the source and scaling');
+assert(actorImage(JSON.parse(session.takeStage()).stage).operations.length, 'The copied drawing survives clearing the source and scaling');
 // The copied mask has only its first column opaque; it doubles in size on scale.
 evaluate('val point = Actor(); val dot = Image(1,1); dot.fill(); point.image = dot; otherWorld.addObject(point, 2, 5)');
 assert.equal(evaluate('b.intersects(point)').display, 'true', 'Nested copied resource mask remains visible after scale');

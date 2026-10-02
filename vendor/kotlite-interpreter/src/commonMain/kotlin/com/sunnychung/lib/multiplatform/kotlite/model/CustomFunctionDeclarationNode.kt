@@ -40,6 +40,15 @@ class CustomFunctionDeclarationNode(
     body = body ?: BlockNode(emptyList(), SourcePosition(definition.position.filename, 1, 1), ScopeType.Function, FunctionBodyFormat.Block, definition.returnType.toTypeNode(definition.position.filename)),
     transformedRefName = transformedRefName,
 ) {
+    /**
+     * A native function reads its receiver, arguments and type arguments from
+     * the call itself. It needs a call scope with bindings only to evaluate a
+     * default value (which may use `this`) or for the lambdas it calls (see
+     * `Interpreter.evalFunctionCall`).
+     */
+    internal val needsCallScope: Boolean = this.valueParameters.any { it.type is FunctionTypeNode || it.defaultValue != null } ||
+        this.valueParameters.firstOrNull()?.modifiers?.contains(FunctionValueParameterModifier.vararg) == true
+
     override suspend fun execute(interpreter: Interpreter, receiver: RuntimeValue?, arguments: List<RuntimeValue>, typeArguments: Map<String, DataType>): RuntimeValue {
         definition.suspendExecutable?.let { return it(interpreter, receiver, arguments, typeArguments) }
         if (definition.isReplayable) {

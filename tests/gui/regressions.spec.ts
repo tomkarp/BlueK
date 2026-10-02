@@ -510,6 +510,32 @@ test('GUI-93 object methods and inherited submenus stay above inspectors', async
   await expect(page.locator('.terminal-output pre')).toContainText('gefressen');
 });
 
+test('GUI-95 method menus show the return type after the parameters', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, files: [
+    { fileName: 'Person.kt', kind: 'class', source: 'open class Person { fun name(): String = "Ada" }' },
+    { fileName: 'Student.kt', kind: 'class', source: 'class Student : Person() { fun give(): Int = 1; fun speak() {}; fun <T> first(items: List<T>): T = items[0] }' },
+    { fileName: 'Util.kt', kind: 'functions', source: 'fun summe(a: Int, b: Int): Int = a + b' },
+  ] };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  const entry = await evaluate(page, 'Student()');
+  await entry.getByRole('button').click();
+  await page.getByLabel('Name of instance').fill('student1');
+  await page.getByRole('button', { name: 'OK', exact: true }).click();
+
+  await page.locator('.bench .object').click({ button: 'right' });
+  const popup = page.locator('.popup');
+  await expect(popup.getByRole('button', { name: 'give(): Int', exact: true })).toBeVisible();
+  await expect(popup.getByRole('button', { name: 'speak()', exact: true })).toBeVisible();
+  await expect(popup.getByRole('button', { name: 'first<T>(items: List<T>): T', exact: true })).toBeVisible();
+  await popup.locator('.popup-submenu-trigger').filter({ hasText: 'inherited from Person' }).hover();
+  await expect(page.locator('.popup-submenu-panel').getByRole('button', { name: 'name(): String', exact: true })).toBeVisible();
+
+  await page.keyboard.press('Escape');
+  await expect(popup).toHaveCount(0);
+  await page.locator('.classcard[aria-label="Util"]').click({ button: 'right' });
+  await expect(popup.getByRole('button', { name: 'summe(a: Int, b: Int): Int', exact: true })).toBeVisible();
+});
+
 test('GUI-31 additional editor files open in tabs by default', async ({ page }) => {
   const payload = { format: 'bluek-project', version: 1, files: [
     { fileName: 'Hund.kt', kind: 'class', source: 'class Hund {}' },

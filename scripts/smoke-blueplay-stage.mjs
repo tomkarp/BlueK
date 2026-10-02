@@ -26,25 +26,33 @@ const resources = [
 assert.equal(resourceData(resources, 'sounds/pop.wav'), 'data:audio/wav;base64,POP');
 assert.equal(resourceData(resources, 'sounds/missing.wav'), undefined);
 
+// Each distinct image appears once; actors refer to it by index.
 const stage = {
   frameVersion: 1, width: 10, height: 10, cellSize: 10, backgroundColor: '#fff',
+  images: [
+    { resourcePath: 'rocket.png', width: 30, height: 30, opacity: 1 },
+    { width: 20, height: 4, opacity: 1 },
+    { width: 20, height: 20, opacity: 0.05 },
+    { resourcePath: 'rocket.png', width: 0, height: 0, opacity: 1 },
+  ],
   objects: [
-    { hitId: 'rocket', className: 'Rocket', x: 2, y: 2, rotation: 0,
-      image: { resourcePath: 'rocket.png', width: 30, height: 30, opacity: 1 } },
-    { objectId: 'box', className: 'Box', x: 7, y: 7, rotation: 45, image: { width: 20, height: 4, opacity: 1 } },
-    { objectId: 'ghost', className: 'Ghost', x: 5, y: 5, rotation: 0, image: { width: 20, height: 20, opacity: 0.05 } },
+    { hitId: 'rocket', className: 'Rocket', x: 2, y: 2, rotation: 0, image: 0 },
+    { hitId: 'box', className: 'Box', x: 7, y: 7, rotation: 45, image: 1 },
+    { hitId: 'ghost', className: 'Ghost', x: 5, y: 5, rotation: 0, image: 2 },
   ],
   texts: [], speed: 50, simulation: 'paused',
 };
 const decorated = decorateStage(stage, resources, { 'images/rocket.png': { width: 16, height: 12 } });
-assert.equal(decorated.objects[0].imageData, 'data:image/png;base64,ROCKET', 'Resource image resolves to its data');
-assert.deepEqual([decorated.objects[0].imageWidth, decorated.objects[0].imageHeight], [30, 30], 'Runtime size preserves explicit scaling over natural resource dimensions');
-assert.match(decorated.objects[1].imageData, /^data:image\/svg\+xml/, 'An actor without image gets an empty drawing');
-assert.equal(decorated.objects[1].imageWidth, 20);
+assert.equal(decorated.images[0].data, 'data:image/png;base64,ROCKET', 'Resource image resolves to its data');
+assert.deepEqual([decorated.images[0].width, decorated.images[0].height], [30, 30], 'Runtime size preserves explicit scaling over natural resource dimensions');
+assert.deepEqual([decorated.images[3].width, decorated.images[3].height], [16, 12], 'Without a runtime size, the natural resource size applies');
+assert.match(decorated.images[1].data, /^data:image\/svg\+xml/, 'An actor without image gets an empty drawing');
+assert.equal(decorated.images[1].width, 20);
+assert.deepEqual(decorateStage(decorated, resources, {}).images.map(image => image.data), decorated.images.map(image => image.data), 'A decorated frame can be decorated again');
 
 // Without image data the actor's rotated bounds decide; decoding images needs a browser.
 const renderer = new StageRenderer(() => undefined);
-const frame = { ...stage, objects: stage.objects.slice(1) };
+const frame = { ...stage, images: stage.images.map(image => ({ ...image })), objects: stage.objects.slice(1) };
 const bounds = { left: 100, top: 50, width: 200, height: 200 }; // world is drawn at twice its size
 // The box centre is at world pixel (75, 75); rotated by 45 degrees its long axis is diagonal.
 assert.deepEqual(renderer.pointer(frame, bounds, 100 + 150, 50 + 150), { x: 7, y: 7, actorId: 'box' });

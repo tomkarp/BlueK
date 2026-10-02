@@ -51,6 +51,24 @@ open class ClassDefinition(
     private val declaredSuperClassInvocation = superClassInvocation
     internal val thisPropertyName = "this/$fullQualifiedName"
 
+    // `this`, `this/<Class>` for the class hierarchy and, for an object, `super`:
+    // the names a member call binds to its receiver (see SymbolTable.bindReceiver).
+    private var receiverNamesStore: Array<String>? = null
+    private var objectReceiverNamesStore: Array<String>? = null
+
+    internal fun receiverNames(isObject: Boolean): Array<String> {
+        (if (isObject) objectReceiverNamesStore else receiverNamesStore)?.let { return it }
+        val names = ArrayList<String>()
+        var clazz: ClassDefinition? = this
+        while (clazz != null) {
+            names += clazz.thisPropertyName
+            clazz = clazz.superClass
+        }
+        names += "this"
+        if (isObject) names += "super"
+        return names.toTypedArray().also { if (isObject) objectReceiverNamesStore = it else receiverNamesStore = it }
+    }
+
     // Runtime type cache owned by SymbolTable.plainObjectType.
     private var plainObjectTypeCacheEntry: PlainObjectTypeCacheEntry? = null
     private var nullablePlainObjectTypeCacheEntry: PlainObjectTypeCacheEntry? = null
@@ -196,13 +214,13 @@ open class ClassDefinition(
 
     // key = original name
     // does not include properties with custom accessors
-    private val memberProperties: Map<String, PropertyType> = mutableMapOf()
+    private val memberProperties: Map<String, PropertyType> = SymbolMap()
     // key = original name
-    private val memberPropertyTypes: Map<String, PropertyType> = mutableMapOf()
+    private val memberPropertyTypes: Map<String, PropertyType> = SymbolMap()
     // key = original name
-    private val memberPropertyCustomAccessors: Map<String, PropertyAccessorsNode> = mutableMapOf()
-    private val memberTransformedNameToPropertyName: Map<String, String> = mutableMapOf()
-    private val memberPropertyNameToTransformedName: Map<String, String> = mutableMapOf()
+    private val memberPropertyCustomAccessors: Map<String, PropertyAccessorsNode> = SymbolMap()
+    private val memberTransformedNameToPropertyName: Map<String, String> = SymbolMap()
+    private val memberPropertyNameToTransformedName: Map<String, String> = SymbolMap()
     private val privateMemberProperties: MutableSet<String> = rawMemberProperties
         .filter { PropertyModifier.private in it.modifiers }
         .map { it.name }
@@ -316,7 +334,7 @@ open class ClassDefinition(
                     }
                 }
             }
-        }.associateBy { it.toSignature(sa.currentScope) }
+        }.associateByTo(SymbolMap()) { it.toSignature(sa.currentScope) }
 
         val symbolTable = sa.currentScope
         if (isReady && !isInterface && classMemberResolver?.containsSuperType("Comparable") == true) {
@@ -449,7 +467,7 @@ open class ClassDefinition(
                     ).transformedName
                 }
             }
-        }.associateBy { it.transformedRefName!! }
+        }.associateByTo(SymbolMap()) { it.transformedRefName!! }
 
         val classMemberResolver = ClassMemberResolver.create(interpreter.symbolTable(), copyAsEmptyClass(), null)
 

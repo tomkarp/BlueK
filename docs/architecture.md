@@ -107,7 +107,8 @@ Der Worker hält genau eine `KotliteSession` mit genau einem lebenden
   Klassenmetadaten. `projectBrowserIO.ts`: Datei-/Verzeichnislesen,
   Downloads und Link-/Clipboard-Aktionen; besitzt weder Projekt noch Runtime.
 - `localRuntimeClient.ts`: einziger Worker-Zugang. Besitzt Worker, laufende
-  Anfragen, Epoche, Generation und den veröffentlichten Snapshot. Die
+  Anfragen, Epoche, Generation und den veröffentlichten Snapshot; die
+  `frame`-Ereignisse eines laufenden Spiels übernimmt er in diesen Snapshot. Die
   Worker-Fabrik wird injiziert: die IDE übergibt `createLocalRuntimeWorker`
   (`localRuntimeWorkerFactory.ts`), der Player seine eigene. Der Offline-Build
   ersetzt ausschließlich die IDE-Worker-Fabrik durch
@@ -160,16 +161,20 @@ Der Worker hält genau eine `KotliteSession` mit genau einem lebenden
 - `runtimeHost.ts`: übersetzt Befehle in die explizite `KotliteSessionBridge`,
   führt Phasen und Ausführungs-IDs, sammelt Ausgaben und passive
   Inspektionen, veröffentlicht zusammenhängende Snapshots und besitzt den
-  einzigen BluePlay-Scheduler.
+  einzigen BluePlay-Scheduler (genaues Warten über `simulationTimer.ts`).
 - `kotlite-browser/…/KotliteSession.kt`: Sitzungsquelltext, Interpreter,
   Namensraum und Objekt-Handles, Eingabepuffer und Fortsetzungen, Ausgabe,
-  Klassenmanifest, native BluePlay-Funktionen. Alle Ausführungswege benutzen
-  denselben Analyse-/Auswertungspfad.
+  Klassenmanifest. Alle Ausführungswege benutzen denselben
+  Analyse-/Auswertungspfad. Den BluePlay-Zustand besitzt die `BluePlayEngine`
+  der Session (`BluePlayEngine.kt`, `BluePlayDrawing.kt`): Welt- und
+  Actor-Register, Kollision, Eingabezustand, Simulationsschritt und Frames;
+  die Session reicht ihre Bridge-Methoden dorthin weiter.
 - `BlueKStdlibModule.kt`, `BlueKClass.kt`, `KotlinSurfaceHints.kt`,
   `BluePlayLibrary.kt`, `RuntimeScheduler*.kt`: Stdlib-Ergänzungen,
   `BlueK.beep()`, verständliche Meldungen für fehlende Namen, Kotlin-Quelltext
-  der BluePlay-Bibliothek, Checkpoint- und Sleep-Planung über `setTimeout`,
-  frischer Stack für tiefe Rekursion über eine Microtask.
+  der BluePlay-Bibliothek, Checkpoints nach Zeitbudget mit Fortsetzung über
+  einen Message-Channel, Sleep über `setTimeout`, frischer Stack für tiefe
+  Rekursion über eine Microtask.
 - `vendor/kotlite-interpreter`: Lexer, Parser, semantische Analyse,
   Interpreter; BlueK-Änderungen in `PATCH.md`, Einordnung in
   [kotlite.md](kotlite.md).
@@ -264,8 +269,13 @@ seiner Ausgabe repariert.
 Der `RuntimeSnapshot` enthält Generation, Revision, Phase, Klassenmetadaten,
 passive Inspektionen aller gültigen Handles, den Namensraum (`references`),
 `liveObjectIds`, Fehler, Simulationszustand und den letzten BluePlay-Frame.
-Nach jedem abgeschlossenen Befehl baut `RuntimeHost` ihn neu auf; automatische
-BluePlay-Ticks verzichten auf die vollständigen Inspektionen.
+Nach jedem abgeschlossenen Befehl baut `RuntimeHost` ihn neu auf. Automatische
+Schritte eines laufenden BluePlay-Spiels senden stattdessen ein
+`frame`-Ereignis (`SimulationFrame`: Revision, Phase, Simulationszustand,
+Fehler und, höchstens alle 10 ms, die Bühne; dazu Ausgabe und Effekte). Ein
+Schritt deklariert keine Namen und ändert keine Klassenmetadaten; der Client
+übernimmt die Felder in seinen Snapshot, alle übrigen behalten ihre Identität.
+Endet Run, folgt ein vollständiger Snapshot (siehe [blueplay.md](blueplay.md#scheduler)).
 
 Streaming-Ausgabe wird höchstens etwa alle 16 ms veröffentlicht statt einmal
 pro `println`. Der erste Text erscheint sofort, ein nachlaufender Timer liefert
@@ -359,12 +369,15 @@ dass der Worker blockiert:
   die Session die Continuation und meldet `inputRequested`. Die Antwort (Zeile,
   leerer String oder EOF) setzt genau diese Continuation fort. EOF ergibt bei
   `readlnOrNull`/`readLine` `null`, bei `readln` einen Fehler.
-- **Checkpoints:** `while`, `do-while` und `for` rufen pro Iteration einen
-  Checkpoint auf; nach 128 Checkpoints gibt die Session über `setTimeout(0)`
-  an die Event-Schleife des Workers ab. So verarbeitet der Worker Eingaben und
-  Tastaturereignisse auch während langer Schleifen. Code ohne Schleife (etwa
-  tiefe Rekursion) gibt nicht ab; Stop funktioniert trotzdem immer, weil der
-  Client den Worker von außen beendet.
+- **Checkpoints:** `while`, `do-while` und `for` fragen pro Iteration
+  synchron, ob ein Checkpoint fällig ist (`Interpreter.CheckpointHook`). Die
+  Session gibt nach einem Zeitbudget von 10 ms an die Event-Schleife des
+  Workers ab (Message-Channel, in Node `setImmediate`; ein verschachtelter
+  Timer würde im Browser mindestens 4 ms warten). Jede Ausführung, Eingabe und
+  Fortsetzung beginnt ein neues Budget, kurze Schleifen geben also nie ab. So
+  verarbeitet der Worker Eingaben und Tastaturereignisse auch während langer
+  Schleifen. Code ohne Schleife (etwa tiefe Rekursion) gibt nicht ab; Stop
+  funktioniert trotzdem immer, weil der Client den Worker von außen beendet.
 - **Rekursion:** Jeder Aufruf geht durch `Interpreter.enterCall`. Alle 32
   verschachtelten Aufrufe setzt der Interpreter über den `stackResetHook` auf
   leerem JavaScript-Stack fort (Microtask); nach 1000 Aufrufen wirft er einen
@@ -482,7 +495,10 @@ wenn der ursprüngliche interaktive Name entfernt oder neu vergeben wird. Der
 Iterator-Wrapper hält seine Quell-Collection über `retainedRuntimeValues`.
 Weitere opake Host-Wrapper müssen ihre internen Referenzen ebenfalls über
 diesen Vertrag offenlegen; beliebige native Closures lassen sich nicht
-passiv traversieren. Das Modell entwertet UI-Handles; es ersetzt nicht den
+passiv traversieren. Was der Host selbst außerhalb von Feldern festhält, meldet
+er über `hostRetained`: die BluePlay-Engine die Actors einer Welt. Die
+Traversierung merkt sich besuchte Werte in einer Identitätsmenge und ist
+dadurch linear. Das Modell entwertet UI-Handles; es ersetzt nicht den
 Garbage Collector von JavaScript.
 
 Regressionen: `test:references`, `test:runtime-state`,
@@ -627,8 +643,8 @@ BluePlay ist eine versionierte Projekt-Library (`{ id: "blueplay", version: 1 }`
 kein Satz editierbarer Framework-Dateien. `World`, `Actor` und `Image` sind
 Kotlin-Quelltext, der zusammen mit dem Projekt interpretiert wird;
 rechenintensive Teile (Weltregister, Kollision, Rendering, Eingabezustand)
-sind native Host-Funktionen der Session. Die Session ist die einzige Quelle
-von Welt-, Actor-, Bild- und Kollisionszustand; `RuntimeHost` besitzt den
+sind native Host-Funktionen der `BluePlayEngine` der Session. Sie ist die
+einzige Quelle von Welt-, Actor-, Bild- und Kollisionszustand; `RuntimeHost` besitzt den
 einzigen Scheduler; die Oberfläche leitet Canvas, Bibliothekskarten und
 API-Dokumentation aus dem typisierten `BluePlayStage` ab. Einzelheiten:
 [blueplay.md](blueplay.md).

@@ -224,15 +224,19 @@ export class BluePlayWorkspace {
         });
       else this.resourceSizes = {};
     });
+    // New frames are decorated on arrival; only measured sizes or new
+    // resources require decorating the current frame again.
     $effect(() => {
-      const frame = this.stage,
-        resources = this.host.project().runtimeResources,
+      const resources = this.host.project().runtimeResources,
         sizes = this.resourceSizes;
-      if (frame && Object.keys(sizes).length) {
-        const refreshed = decorateStage(frame, resources, sizes);
-        if (JSON.stringify(refreshed.objects) !== JSON.stringify(frame.objects))
-          this.stage = refreshed;
-      }
+      untrack(() => {
+        const frame = this.stage;
+        if (frame && Object.keys(sizes).length) {
+          const refreshed = decorateStage(frame, resources, sizes);
+          if (JSON.stringify(refreshed.objects) !== JSON.stringify(frame.objects))
+            this.stage = refreshed;
+        }
+      });
     });
     $effect(() => {
       void this.stage;

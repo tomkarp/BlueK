@@ -2,7 +2,7 @@ import { tick } from "svelte";
 
 import { beginWindowDrag, beginWindowResize } from "../windowInteraction";
 
-import { appendTerminal } from "../uiParity";
+import { appendTerminal, combineTerminalOutput } from "../uiParity";
 
 import type { WorkspaceUi } from "./WorkspaceUi.svelte";
 import type { ExecutionWorkspace } from "./ExecutionWorkspace.svelte";
@@ -26,6 +26,9 @@ export class TerminalWorkspace {
   terminalPosition: { left: number; top: number } | null = $state(null);
   terminalSize = $state({ width: 780, height: 520 });
   inputElement = $state<HTMLInputElement | null>(null);
+  // Output that has not reached the terminal yet; see appendOutput.
+  private pendingOutput = "";
+  private outputFrame = 0;
   renderTerminal = () => {
     tick().then(() => {
       const output = document.querySelector(".terminal-output pre");
@@ -37,6 +40,7 @@ export class TerminalWorkspace {
     this.host.ui().activeWindow = "terminal";
   };
   clearTerminal = () => {
+    this.pendingOutput = "";
     this.terminal = "";
     this.renderTerminal();
   };
@@ -90,6 +94,7 @@ export class TerminalWorkspace {
     if (!this.inputElement) return;
     const value = this.inputElement.value;
     this.inputElement.value = "";
+    this.flushOutput();
     this.terminal += `\u0001${value}\u0002\n`;
     await this.host.session().client.sendInput(value);
   };
@@ -97,10 +102,22 @@ export class TerminalWorkspace {
     if (!this.host.session().inputReady) return;
     await this.host.session().client.sendEof();
   };
+  /**
+   * A program can print far faster than a terminal of a million characters
+   * can be laid out. Output reaches the terminal at most once per display
+   * frame, with the same result as appending every chunk.
+   */
   appendOutput = (output: string) => {
     this.focusTerminalWindow();
-    this.terminal = appendTerminal(this.terminal, output);
-    window.setTimeout(this.renderTerminal, 0);
+    this.pendingOutput = combineTerminalOutput(this.pendingOutput, output);
+    this.outputFrame ||= requestAnimationFrame(this.flushOutput);
+  };
+  private flushOutput = () => {
+    this.outputFrame = 0;
+    if (!this.pendingOutput) return;
+    this.terminal = appendTerminal(this.terminal, this.pendingOutput);
+    this.pendingOutput = "";
+    this.renderTerminal();
   };
   connect = () => {
     $effect(() => {

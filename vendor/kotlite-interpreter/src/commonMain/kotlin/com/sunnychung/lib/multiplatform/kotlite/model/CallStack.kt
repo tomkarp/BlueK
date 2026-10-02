@@ -7,6 +7,9 @@ class CallStack {
 
     private val activationRecords = mutableListOf<ActivationRecord>()
 
+    /** Number of class, initializer and member-function scopes on the stack. */
+    private var classCodeScopes = 0
+
     init {
         activationRecords += ActivationRecord(
             functionFullQualifiedName = ":builtin",
@@ -67,6 +70,7 @@ class CallStack {
             scopeLevel = activationRecords.size,
             scopeType = scopeType,
         )
+        if (scopeType.isClassCode()) classCodeScopes += 1
     }
 
     fun pop(scopeType: ScopeType) {
@@ -74,14 +78,14 @@ class CallStack {
         if (ar.scopeType != scopeType) {
             throw InterpreterStateException("A wrong scope is completed")
         }
+        if (scopeType.isClassCode()) classCodeScopes -= 1
     }
 
     fun currentSymbolTable() = activationRecords.last().symbolTable
 
     /** Whether evaluation currently runs inside student class code. */
-    internal fun isInsideClassCode(): Boolean = activationRecords.any {
-        it.scopeType == ScopeType.Class ||
-            it.scopeType == ScopeType.ClassInitializer ||
-            it.scopeType == ScopeType.ClassMemberFunction
-    }
+    internal fun isInsideClassCode(): Boolean = classCodeScopes > 0
+
+    private fun ScopeType.isClassCode() =
+        this == ScopeType.Class || this == ScopeType.ClassInitializer || this == ScopeType.ClassMemberFunction
 }

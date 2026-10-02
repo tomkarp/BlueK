@@ -84,7 +84,6 @@ object BluePlayLibrary {
         }
 
         open class World(val width: Int, val height: Int, val cellSize: Int) {
-            private val actors = mutableListOf<Actor>()
             private val textX = mutableListOf<Int>()
             private val textY = mutableListOf<Int>()
             private val textValues = mutableListOf<String>()
@@ -92,18 +91,12 @@ object BluePlayLibrary {
 
             fun show() { bluekShowWorld(this) }
             open fun act() {}
-            fun addObject(actor: Actor, x: Int, y: Int) {
-                if (!actors.contains(actor)) actors.add(actor)
-                bluekWorldAddObject(this, actor, x, y)
-            }
-            fun removeObject(actor: Actor) {
-                actors.remove(actor)
-                bluekWorldRemoveObject(this, actor)
-            }
-            fun allObjects(): List<Actor> = actors.toList()
-            inline fun <reified T : Actor> getObjects(): List<T> = allObjects().filterIsInstance<T>()
-            fun getObjectsAt(x: Int, y: Int): List<Actor> = actors.filter { bluekObjectX(it) == x && bluekObjectY(it) == y }
-            val numberOfObjects: Int get() = actors.size
+            fun addObject(actor: Actor, x: Int, y: Int) { bluekWorldAddObject(this, actor, x, y) }
+            fun removeObject(actor: Actor) { bluekWorldRemoveObject(this, actor) }
+            fun allObjects(): List<Actor> = bluekWorldObjects<Actor>(this)
+            inline fun <reified T : Actor> getObjects(): List<T> = bluekWorldObjects<T>(this)
+            fun getObjectsAt(x: Int, y: Int): List<Actor> = bluekWorldObjectsAt<Actor>(this, x, y)
+            val numberOfObjects: Int get() = bluekWorldObjectCount(this)
             val isClicked: Boolean get() = bluekIsWorldClicked()
             fun setBackground(fileName: String) { background = Image(fileName); background.scale(width * cellSize, height * cellSize) }
             fun setBackground(r: Int, g: Int, b: Int) {
@@ -125,6 +118,8 @@ object BluePlayLibrary {
         }
 
         open class Actor {
+            // Set by the engine when the actor enters or leaves a world, so
+            // that the setters clamp without asking the engine.
             private var worldWidth = 0
             private var worldHeight = 0
             private var worldCellSize = 1
@@ -135,8 +130,8 @@ object BluePlayLibrary {
             var rotation = 0
                 set(value) { field = ((value % 360) + 360) % 360 }
             var image: Image? = null
-            private fun requireWorld(): World = (bluekActorWorld(this) as World?) ?: throw IllegalStateException("The actor is not in a world (add it with addObject first).")
-            val world: World get() = requireWorld()
+            // World-dependent members throw IllegalStateException without a world.
+            val world: World get() = bluekActorWorld<World>(this)
             open fun act() {}
             fun move(distance: Int) { x += bluekMoveDeltaX(rotation, distance); y += bluekMoveDeltaY(rotation, distance) }
             fun turn(degrees: Int) { rotation += degrees }
@@ -144,18 +139,13 @@ object BluePlayLibrary {
                 if (x != this.x || y != this.y) rotation = bluekHeading(this.x, this.y, x, y)
             }
             fun distanceTo(other: Actor): Int = bluekDistance(x, y, other.x, other.y)
-            fun intersects(other: Actor): Boolean { requireWorld(); other.requireWorld(); return bluekIntersects(this, other) }
-            // Name the receiver explicitly: an implicit-receiver call inside the
-            // lambda of an inlined member is not resolvable at runtime.
-            inline fun <reified T : Actor> getIntersecting(): List<T> {
-                val self = this
-                return requireWorld().getObjects<T>().filter { it != self && bluekIntersects(self, it) }
-            }
-            inline fun <reified T : Actor> getOneIntersecting(): T? = getIntersecting<T>().firstOrNull()
-            inline fun <reified T : Actor> isTouching(): Boolean = getIntersecting<T>().size > 0
-            inline fun <reified T : Actor> removeTouching() { val currentWorld = requireWorld(); getOneIntersecting<T>()?.let { currentWorld.removeObject(it as Actor) } }
-            val isAtEdge: Boolean get() { val currentWorld = requireWorld(); return x <= 0 || y <= 0 || x >= currentWorld.width - 1 || y >= currentWorld.height - 1 }
-            val isClicked: Boolean get() { requireWorld(); return bluekIsActorClicked(this, x, y) }
+            fun intersects(other: Actor): Boolean = bluekIntersects(this, other)
+            inline fun <reified T : Actor> getIntersecting(): List<T> = bluekIntersecting<T>(this)
+            inline fun <reified T : Actor> getOneIntersecting(): T? = bluekOneIntersecting<T>(this)
+            inline fun <reified T : Actor> isTouching(): Boolean = bluekIsTouching<T>(this)
+            inline fun <reified T : Actor> removeTouching() { bluekRemoveTouching<T>(this) }
+            val isAtEdge: Boolean get() { val currentWorld = world; return x <= 0 || y <= 0 || x >= currentWorld.width - 1 || y >= currentWorld.height - 1 }
+            val isClicked: Boolean get() = bluekIsActorClicked(this)
         }
 
         fun isKeyDown(key: String): Boolean = bluekIsKeyDown(key)

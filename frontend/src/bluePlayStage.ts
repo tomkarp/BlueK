@@ -1,5 +1,5 @@
-import type { BluePlayActorFrame, BluePlayStage, ProjectResource } from "../../runtime-contract/src/index";
-import { backgroundDataUrl, drawnImageDataUrl } from "./uiParity";
+import type { BluePlayActorFrame, BluePlayImageFrame, BluePlayStage, ProjectResource } from "../../runtime-contract/src/index";
+import { drawnImageDataUrl } from "./uiParity";
 
 /**
  * Drawing, pointer targeting, key names and sound for a published BluePlay
@@ -9,8 +9,9 @@ import { backgroundDataUrl, drawnImageDataUrl } from "./uiParity";
  */
 
 export type ImageSizes = Record<string, { width: number; height: number }>;
-export type StageActor = BluePlayActorFrame & { imageData?: string };
-export type StageFrame = Omit<BluePlayStage, "objects"> & { objects: StageActor[] };
+/** An image of a frame with its effective size and drawable data. */
+export type StageImage = BluePlayImageFrame & { data?: string };
+export type StageFrame = Omit<BluePlayStage, "images"> & { images: StageImage[] };
 export interface StagePointer { x: number; y: number; actorId?: string }
 
 export function resourceData(resources: ProjectResource[], path: string | undefined) {
@@ -42,43 +43,42 @@ export async function measureImageSizes(resources: ProjectResource[]): Promise<I
   );
 }
 
-/** Resolves each actor's image to drawable data and its effective size. */
-export function decorateStage(value: BluePlayStage, resources: ProjectResource[], sizes: ImageSizes): StageFrame {
-  return {
-    ...value,
-    objects: (value.objects || []).map((object: any) => {
-      const rawImage = object.image;
-      const image = rawImage && typeof rawImage === "object" ? rawImage : {};
-      const imagePath = object.imagePath || image.resourcePath;
-      const operations = object.imageOperations || image.operations;
-      const resource = imagePath
-        ? resources.find((item) => item.path === `images/${imagePath}` || item.path.endsWith(`/images/${imagePath}`))
-        : undefined;
-      const size = resource ? sizes[resource.path] : undefined;
-      const width = image.width || object.imageWidth || size?.width || 30,
-        height = image.height || object.imageHeight || size?.height || 30;
-      return {
-        ...object,
-        image: {
-          ...image,
-          resourcePath: imagePath,
-          operations,
-          width,
-          height,
-          opacity: object.imageOpacity ?? image.opacity ?? 1,
-        },
-        imageData:
-          object.imageData ||
-          (typeof rawImage === "string" ? rawImage : undefined) ||
-          drawnImageDataUrl(operations || [], width, height, resources, imagePath),
-        imagePath,
-        imageOperations: operations,
-        imageWidth: width,
-        imageHeight: height,
-        imageOpacity: object.imageOpacity ?? image.opacity ?? 1,
-      };
-    }),
-  };
+/**
+ * Data URLs of drawn images by content, per resource list. A frame repeats a
+ * few distinct images (e.g. every laser looks the same) on every frame.
+ */
+const drawnImages = new WeakMap<ProjectResource[], Map<string, string | undefined>>();
+const DRAWN_IMAGE_LIMIT = 512;
+
+function drawnImage(operations: string[], width: number, height: number, resources: ProjectResource[], path: string | undefined) {
+  let cache = drawnImages.get(resources);
+  if (!cache) drawnImages.set(resources, (cache = new Map()));
+  const key = `${width}\u0000${height}\u0000${path ?? ""}\u0000${operations.join("\u0000")}`;
+  if (cache.has(key)) return cache.get(key);
+  const data = drawnImageDataUrl(operations, width, height, resources, path);
+  // Images drawn anew each step (e.g. a score) must not accumulate.
+  if (cache.size >= DRAWN_IMAGE_LIMIT) cache.clear();
+  cache.set(key, data);
+  return data;
+}
+
+/**
+ * Resolves each distinct image of a frame to drawable data and its effective
+ * size. A decorated frame can be decorated again, e.g. once sizes are known.
+ */
+export function decorateStage(value: BluePlayStage | StageFrame, resources: ProjectResource[], sizes: ImageSizes): StageFrame {
+  return { ...value, images: (value.images || []).map((image) => decorateImage(image, resources, sizes)) };
+}
+
+function decorateImage(image: BluePlayImageFrame, resources: ProjectResource[], sizes: ImageSizes): StageImage {
+  const path = image.resourcePath || undefined;
+  const resource = path
+    ? resources.find((item) => item.path === `images/${path}` || item.path.endsWith(`/images/${path}`))
+    : undefined;
+  const size = resource ? sizes[resource.path] : undefined;
+  const width = image.width || size?.width || 30,
+    height = image.height || size?.height || 30;
+  return { ...image, width, height, opacity: image.opacity ?? 1, data: drawnImage(image.operations || [], width, height, resources, path) };
 }
 
 export function stageStyle(value: Pick<BluePlayStage, "width" | "height" | "cellSize" | "backgroundColor">) {
@@ -95,11 +95,7 @@ export function stageKeyName(key: string) {
   );
 }
 
-function canvasDataUrl(value: string | undefined) {
-  if (!value) return undefined;
-  const match = value.match(/^url\(["']?(.*?)["']?\)$/);
-  return match?.[1] || value;
-}
+const IMAGE_CACHE_LIMIT = 512;
 
 /**
  * Owns the decoded images and alpha masks of one canvas. `onImageLoad` asks the
@@ -114,6 +110,11 @@ export class StageRenderer {
   private image(data: string) {
     let image = this.images.get(data);
     if (!image) {
+      // Images drawn anew each step must not accumulate; decoded ones are reloaded on demand.
+      if (this.images.size >= IMAGE_CACHE_LIMIT) {
+        this.images.clear();
+        this.alphaMasks.clear();
+      }
       image = new Image();
       image.onload = () => this.onImageLoad();
       image.src = data;
@@ -145,11 +146,10 @@ export class StageRenderer {
     }
   }
 
-  private containsVisiblePixel(object: StageActor, worldX: number, worldY: number, cellSize: number) {
-    const frame: any = object.image && typeof object.image === "object" ? object.image : {};
-    const width = Math.max(1, Number(object.imageWidth || frame.width || 30));
-    const height = Math.max(1, Number(object.imageHeight || frame.height || 30));
-    const opacity = Math.max(0, Math.min(1, Number(object.imageOpacity ?? frame.opacity ?? 1)));
+  private containsVisiblePixel(object: BluePlayActorFrame, image: StageImage | undefined, worldX: number, worldY: number, cellSize: number) {
+    const width = Math.max(1, Number(image?.width || 30));
+    const height = Math.max(1, Number(image?.height || 30));
+    const opacity = Math.max(0, Math.min(1, Number(image?.opacity ?? 1)));
     if (opacity * 255 <= 16) return false;
     const centerX = (Number(object.x || 0) + 0.5) * cellSize;
     const centerY = (Number(object.y || 0) + 0.5) * cellSize;
@@ -159,7 +159,7 @@ export class StageRenderer {
     const localX = cosine * deltaX + sine * deltaY + width / 2;
     const localY = -sine * deltaX + cosine * deltaY + height / 2;
     if (localX < 0 || localY < 0 || localX >= width || localY >= height) return false;
-    const imageData = object.imageData || (typeof object.image === "string" ? (object.image as string) : undefined);
+    const imageData = image?.data;
     if (!imageData) return true;
     const mask = this.alphaMask(imageData);
     if (!mask) return false;
@@ -175,8 +175,9 @@ export class StageRenderer {
     const worldPixelY = ((clientY - bounds.top) / Math.max(bounds.height, 1)) * (stage.height || 1) * cellSize;
     const x = Math.max(0, Math.min((stage.width || 1) - 1, Math.floor(worldPixelX / Math.max(cellSize, 1))));
     const y = Math.max(0, Math.min((stage.height || 1) - 1, Math.floor(worldPixelY / Math.max(cellSize, 1))));
-    const actor = [...(stage.objects || [])].reverse().find((object) => this.containsVisiblePixel(object, worldPixelX, worldPixelY, cellSize));
-    return { x, y, actorId: actor?.hitId || actor?.objectId };
+    const actor = [...(stage.objects || [])].reverse()
+      .find((object) => this.containsVisiblePixel(object, stage.images[object.image], worldPixelX, worldPixelY, cellSize));
+    return { x, y, actorId: actor?.hitId };
   }
 
   draw(canvas: HTMLCanvasElement, value: StageFrame, resources: ProjectResource[], pixelRatio = 1) {
@@ -208,18 +209,16 @@ export class StageRenderer {
     const background = value.background;
     const backgroundWidth = background?.width || logicalWidth, backgroundHeight = background?.height || logicalHeight;
     const backgroundData = background
-      ? drawnImageDataUrl(background.operations || [], backgroundWidth, backgroundHeight, resources, background.resourcePath)
-      : resourceData(resources, value.backgroundPath ? `images/${value.backgroundPath}` : undefined) ||
-        canvasDataUrl(backgroundDataUrl(value.backgroundOperations || [], logicalWidth, logicalHeight, resources));
+      ? drawnImage(background.operations || [], backgroundWidth, backgroundHeight, resources, background.resourcePath || undefined)
+      : undefined;
     drawImage(backgroundData, 0, 0, backgroundWidth, backgroundHeight, 0, background?.opacity ?? 1);
-    (value.objects || []).forEach((object: any) => {
-      const frame = object.image && typeof object.image === "object" ? object.image : {};
-      const width = Number(object.imageWidth || frame.width || 30);
-      const height = Number(object.imageHeight || frame.height || 30);
+    (value.objects || []).forEach((object) => {
+      const image = value.images[object.image];
+      const width = Number(image?.width || 30);
+      const height = Number(image?.height || 30);
       const centerX = (Number(object.x || 0) + 0.5) * (value.cellSize || 1);
       const centerY = (Number(object.y || 0) + 0.5) * (value.cellSize || 1);
-      const imageData = object.imageData || (typeof object.image === "string" ? object.image : undefined);
-      if (!drawImage(imageData, centerX - width / 2, centerY - height / 2, width, height, Number(object.rotation || 0), Number(object.imageOpacity ?? frame.opacity ?? 1))) {
+      if (!drawImage(image?.data, centerX - width / 2, centerY - height / 2, width, height, Number(object.rotation || 0), Number(image?.opacity ?? 1))) {
         context.save();
         context.fillStyle = "#f33142";
         context.strokeStyle = "#111";
@@ -230,7 +229,7 @@ export class StageRenderer {
         context.font = "bold 14px Arial";
         context.textAlign = "center";
         context.textBaseline = "middle";
-        context.fillText(String(object.className || object.type || "?").slice(0, 1), centerX, centerY);
+        context.fillText(String(object.className || "?").slice(0, 1), centerX, centerY);
         context.restore();
       }
     });
