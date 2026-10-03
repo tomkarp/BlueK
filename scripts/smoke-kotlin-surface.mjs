@@ -102,6 +102,52 @@ const supported = [
   // Provided by the stdlib already (which is why BlueK cannot redeclare it).
   ['"abc".lastIndex', '2'],
 
+  // Maps (RT-58): `entries` is a snapshot of the entries; they print like Kotlin's.
+  ['mapOf("a" to 1, "b" to 2).entries', '[a=1, b=2]'],
+  ['var me = ""; for (e in mapOf("a" to 1, "b" to 2).entries) me += "${e.key}:${e.value} "; me', 'a:1 b:2 '],
+  ['mapOf("a" to 3, "b" to 1).entries.sortedBy { it.value }.map { it.key }', '[b, a]'],
+  ['mapOf("a" to 3, "b" to 1).entries.maxByOrNull { it.value }?.key', 'a'],
+  ['val mm = mutableMapOf("a" to 1); val ment = mm.entries; mm["b"] = 2; "${ment.size} $ment"', '1 [a=1]'],
+
+  // RT-59: limits, maps, strings, Char ranges, chunked/windowed.
+  ['Double.MAX_VALUE > 10.0.pow(300)', 'true'],
+  ['Double.MIN_VALUE > 0.0 && Double.MIN_VALUE < 10.0.pow(-300)', 'true'],
+  ['Double.POSITIVE_INFINITY', 'Infinity'],
+  ['Double.NaN.isNaN()', 'true'],
+  ['Char.MIN_VALUE.code', '0'],
+  ['Char.MAX_VALUE.code', '65535'],
+  ['mapOf("a" to 1).containsKey("a")', 'true'],
+  ['mapOf("a" to 1).containsKey("b")', 'false'],
+  ['mapOf("a" to 1).getOrDefault("x", 0)', '0'],
+  ['mapOf("a" to 1).getOrDefault("a", 0)', '1'],
+  ['"a\nb\r\nc".lines()', '[a, b, c]'],
+  ['"ab".zip("cde")', '[(a, c), (b, d)]'],
+  ['"banane".count { it == \'a\' }', '2'],
+  ["('a'..'c').toList()", '[a, b, c]'],
+  ["var abc = \"\"; for (c in 'a'..'e') abc += c; abc", 'abcde'],
+  ["('a'..'z').count()", '26'],
+  ['listOf(1, 2, 3, 4, 5).chunked(2)', '[[1, 2], [3, 4], [5]]'],
+  ['(1..5).chunked(2)', '[[1, 2], [3, 4], [5]]'],
+  ['listOf(1, 2, 3, 4).windowed(2)', '[[1, 2], [2, 3], [3, 4]]'],
+  ['listOf(1, 2, 3, 4, 5).windowed(3, 2, true)', '[[1, 2, 3], [3, 4, 5], [5]]'],
+
+  // RT-62: Triple, StringBuilder/buildString, kotlin.random.Random.
+  ['Triple(1, "a", 2.5)', '(1, a, 2.5)'],
+  ['val tr = Triple("x", 2, true); "${tr.first} ${tr.second} ${tr.third}"', 'x 2 true'],
+  ['Triple(1, 2, 3) == Triple(1, 2, 3)', 'true'],
+  ['buildString { append("a"); append(1); append(2.5) }', 'a12.5'],
+  ['buildString { for (i in 1..3) append(i) }', '123'],
+  ['buildString { append("a"); appendLine(); append("b") }.lines()', '[a, b]'],
+  ['val sb = StringBuilder(); sb.append("Hallo").append(" ").append("Welt"); "$sb ${sb.length}"', 'Hallo Welt 10'],
+  ['StringBuilder("abc").reverse().toString()', 'cba'],
+  ['val sb2 = StringBuilder("ab"); sb2.insert(1, "X"); "$sb2 ${sb2[0]} ${sb2.isEmpty()}"', 'aXb a false'],
+  ['StringBuilder().apply { append("x"); append("y") }.toString()', 'xy'],
+  ['Random.nextInt(5, 6)', '5'],
+  ['Random.nextInt(1)', '0'],
+  ['List(20) { Random.nextInt(1, 7) }.all { it in 1..6 }', 'true'],
+  ['Random.nextDouble() < 1.0 && Random.nextDouble(2.0, 3.0) >= 2.0', 'true'],
+  ['Random.nextBoolean() || true', 'true'],
+
   // A whole school-style routine, to prove the pieces combine.
   ['fun quersumme(wort: String): Int { var s = 0; for (c in wort) if (c.isDigit()) s += c.digitToInt(); return s }; quersumme("a1b22")', '5'],
 ];
@@ -119,8 +165,7 @@ const gaps = [
   '"abc".chunked(2)',
   'kotlin.math.abs(-5)',        // fully qualified calls (import + abs(-5) works)
   'Math.abs(-1)',               // Java, correctly unavailable
-  'Double.MAX_VALUE',
-  "Char.MIN_VALUE",
+  'mapOf(1 to 2).forEach { k, v -> }', // the JVM's two-parameter form; `forEach { it.key }` works
 ];
 
 // Messages for missing names: BlueK says which side the gap is on instead of
@@ -134,7 +179,6 @@ const messages = [
   ['"abc".map { it }', /a String is not a full character sequence/],
   ['listOf(1, 2).withIndex()', /`withIndex\(\)` is not available in BlueK/],
   ['"%.2f".format(3.14159)', /cannot format numbers with a format string/],
-  ['Double.MAX_VALUE', /provides `Int\.MAX_VALUE`/],
   // 2. close to a name BlueK has -> suggestion
   ['minOff(1, 2)', /`minOff` is not available in BlueK\. Did you mean `minOf`\?/],
   ['pritnln("a")', /Did you mean `println`\?/],

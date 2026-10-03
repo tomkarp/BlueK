@@ -32,15 +32,33 @@ und Actor auf, und ein interpretierter Rumpf kostet dort mehr als ein nativer.
 
 **Zahlen.** `minOf` / `maxOf` für `Int` und `Double` (zwei bis beliebig viele
 Werte), `coerceIn` / `coerceAtLeast` / `coerceAtMost` für `Int` und `Double`,
-`Int.MAX_VALUE` / `Int.MIN_VALUE`, `Int.toChar()`, `Char.code`,
-`Char.digitToInt()`.
+`Int.MAX_VALUE` / `Int.MIN_VALUE`, `Double.MAX_VALUE` / `MIN_VALUE` /
+`POSITIVE_INFINITY` / `NEGATIVE_INFINITY` / `NaN`, `Char.MIN_VALUE` /
+`MAX_VALUE` (RT-59), `Int.toChar()`, `Char.code`, `Char.digitToInt()`.
 
 **Listen und Ranges.** `sum()` (`Int`, `Double`), `average()`, `sumOf { }`,
-`reduce { }`, `flatten()`, `indices`. Ranges sind mit erfasst, `(1..4).sum()`
-funktioniert ebenso wie `listOf(1,2).sum()`.
+`reduce { }`, `flatten()`, `indices`, `chunked(n)`, `windowed(n, step,
+partialWindows)` (RT-59). Ranges sind mit erfasst, `(1..4).sum()`
+funktioniert ebenso wie `listOf(1,2).sum()`. Zeichenbereiche wie `'a'..'z'`
+lassen sich durchlaufen (`for (c in 'a'..'z')`), mit `toList()` umwandeln und
+mit `count()` zählen (RT-59).
 
 **String als Zeichenfolge.** `for (c in wort)`, `wort[i]`, `split(String)`,
-`split(Char)`, `toList()`, `indices`.
+`split(Char)`, `toList()`, `indices`, `lines()`, `zip(anderes)`,
+`count { }` (RT-59).
+
+**Maps.** `entries` als `Set` der Einträge (RT-58), `containsKey(k)` und
+`getOrDefault(k, standard)` (RT-59). Einträge werden wie in
+Kotlin als `a=1` ausgegeben und nach Schlüssel und Wert verglichen; das gilt
+auch für Einträge aus `for (e in map)`, `forEach { }` oder `maxByOrNull { }`.
+
+**Triple, StringBuilder, Random (RT-62).** `Triple(a, b, c)` mit `first`,
+`second`, `third`, Ausgabe `(a, b, c)` und Inhaltsvergleich; `StringBuilder()`
+bzw. `StringBuilder("text")` mit `append`, `appendLine`, `insert`, `reverse`,
+`clear`, `isEmpty()`, `length`, `sb[i]` und `toString()`; `buildString { }`
+(darin auch `readln()`); `Random.nextInt()`, `nextInt(bis)`,
+`nextInt(von, bis)`, `nextDouble()` (auch mit Grenzen) und `nextBoolean()`,
+mit oder ohne `import kotlin.random.Random`.
 
 **Nullable Empfänger.** `toString()`, `equals()` und `hashCode()` auf `T?`
 (`Any?.toString()` liefert `"null"`, `hashCode()` von `null` ist `0`). Eigene
@@ -54,6 +72,12 @@ Zug, und der Aufruf ist nicht mehrdeutig (RT-44).
 - `minOf(vararg values: Int)` statt Kotlins `minOf(a, vararg other)`. Kotlite
   erlaubt `vararg` nur als einzigen Parameter. Folge: `minOf()` ohne Argumente
   wird von der Analyse akzeptiert und scheitert erst zur Laufzeit.
+- `Random(seed)` für reproduzierbare Zufallszahlen fehlt; `Random` ist nur als
+  `Random.nextInt(...)` usw. nutzbar. `StringBuilder` hat nur die oben
+  gelisteten Funktionen.
+- `map.entries` ist eine Momentaufnahme statt einer Live-Ansicht: Wird die Map
+  danach verändert, bleibt die Menge wie sie war (Kotlin/JVM: sie ändert sich
+  mit). Die Einträge selbst bleiben lesbar.
 - `String.indices` und `List.indices` liefern `List<Int>` statt `IntRange`.
   `for (i in wort.indices)` verhält sich gleich; Range-eigene Operationen nicht.
 - `sumOf { }` gibt es nur in der `Int`-Variante — Kotlite unterscheidet
@@ -78,15 +102,14 @@ Zug, und der Aufruf ist nicht mehrdeutig (RT-44).
 | Arrays (`arrayOf`, `IntArray`, `Array(n) { }`) | Fehlt vollständig; eigenes Sprachfeature, bewusst offen. Der Lehrgang arbeitet mit `List`/`MutableList` |
 | `"%.2f".format(x)`, `String.format` | Braucht eine eigene Formatstring-Implementierung |
 | `withIndex()` | Braucht eine `IndexedValue`-Klasse |
-| `"abc".map { }`, `toCharArray()`, `chunked`, `windowed` | `String` ist kein `Iterable`; nur die oben gelisteten Zugänge sind nachgerüstet |
+| `"abc".map { }`, `toCharArray()`, `"abc".chunked(2)`, `"abc".windowed(2)` | `String` ist kein `Iterable`; nur die oben gelisteten Zugänge sind nachgerüstet. Für Listen gibt es `chunked`/`windowed` |
 | `kotlin.math.abs(-5)` als qualifizierter Aufruf | `import kotlin.math.abs` und dann `abs(-5)` funktioniert |
 | `Math.abs`, `java.*` | Java, bewusst nicht verfügbar |
-| `Double.MAX_VALUE`, `Char.MIN_VALUE` | Nicht nachgerüstet; `Int.MAX_VALUE`/`MIN_VALUE` gibt es |
+| `map.forEach { k, v -> }` | Java-Form mit zwei Parametern; eingebaute Überladungen, die sich nur in der Parameterzahl des Lambdas unterscheiden, kollidieren in Kotlite. `map.forEach { it.key … it.value }` funktioniert |
 
-Außerhalb dieser Tabelle fehlen unter anderem `buildString`/`StringBuilder`,
-`Triple`, `kotlin.random.Random` und `String.lines()`. Sie sind nicht Teil der
-Lückenliste im Test; BlueK meldet sie mit den allgemeinen Fällen unten
-(Vorschlag eines ähnlichen Namens oder „unknown“).
+Außerhalb dieser Tabelle fehlen weitere Funktionen der Kotlin-Bibliothek. Sie
+sind nicht Teil der Lückenliste im Test; BlueK meldet sie mit den allgemeinen
+Fällen unten (Vorschlag eines ähnlichen Namens oder „unknown“).
 
 ## Fehlermeldungen bei fehlenden Namen
 

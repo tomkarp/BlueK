@@ -1828,13 +1828,8 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 targetType = "Throwable",
             )
         }
-        result = ThrowableValue(
-            currentScope = symbolTable(),
-            message = result.message,
-            cause = result.cause,
-            stacktrace = result.stacktrace,
-            thisClazz = symbolTable().findClass(initialResult.type().name)!!.first,
-        )
+        // The thrown object's own `Throwable` part, not a copy: `catch` gets the object itself
+        // (`wholeInstance()`) with the fields of a student exception class.
         throw EvaluateRuntimeException(stacktrace = callStack.getStacktrace(position), error = result)
     }
 
@@ -1856,9 +1851,10 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         try {
             return mainBlock.eval() as RuntimeValue
         } catch (e: EvaluateRuntimeException) {
+            val thrown = e.error.wholeInstance()
             for (catch in catchBlocks) {
-                if (symbolTable().assertToDataType(catch.catchType).isAssignableFrom(e.error.type())) {
-                    return catch.eval(e.error)
+                if (symbolTable().assertToDataType(catch.catchType).isAssignableFrom(thrown.type())) {
+                    return catch.eval(thrown)
                 }
             }
             throw e
@@ -1895,7 +1891,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
-    suspend fun CatchNode.eval(value: ThrowableValue): RuntimeValue {
+    suspend fun CatchNode.eval(value: ClassInstance): RuntimeValue {
         callStack.push("<catch>", ScopeType.Catch, position)
         return try {
             valueTransformedRefName?.let { valueTransformedRefName ->
@@ -1954,6 +1950,8 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                     return entry.body.eval()
                 }
             }
+            // A `when` statement without `else` does nothing if no entry matches.
+            if (!isExhaustive) return UnitValue
             throw RuntimeException("No match for `when` expression at $position")
         } finally {
             callStack.pop(ScopeType.WhenOuter)
@@ -2038,26 +2036,31 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 symbolTable().typeNodeToPropertyType(it.type, false)?.type ?: throw RuntimeException("Unknown type ${it.type.name}")
             }
 
-            while ((hasNextCall.eval() as BooleanValue).value) {
-                checkpoint()
-                val nextValue = nextCall.eval()
+            // `break` and `continue` end the loop or this iteration, as in `while` (RT-55).
+            try {
+                while ((hasNextCall.eval() as BooleanValue).value) {
+                    checkpoint()
+                    val nextValue = nextCall.eval()
 
-                variables.forEachIndexed { index, it ->
-                    symbolTable().declareProperty(
-                        position = position,
-                        name = it.transformedRefName!!,
-                        type = variableTypes[index],
-                        isMutable = false,
-                    )
-                    symbolTable().assign(name = it.transformedRefName!!, value = nextValue)
+                    variables.forEachIndexed { index, it ->
+                        symbolTable().declareProperty(
+                            position = position,
+                            name = it.transformedRefName!!,
+                            type = variableTypes[index],
+                            isMutable = false,
+                        )
+                        symbolTable().assign(name = it.transformedRefName!!, value = nextValue)
+                    }
+
+                    try {
+                        body.eval()
+                    } catch (_: NormalContinueException) {}
+
+                    variables.forEach {
+                        symbolTable().undeclareProperty(it.transformedRefName!!)
+                    }
                 }
-
-                body.eval()
-
-                variables.forEach {
-                    symbolTable().undeclareProperty(it.transformedRefName!!)
-                }
-            }
+            } catch (_: NormalBreakException) {}
         } finally {
             callStack.pop(ScopeType.For)
         }

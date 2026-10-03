@@ -855,6 +855,9 @@ data class WhenNode(
     val entries: List<WhenEntryNode>,
     @ModifyByAnalyzer var type: TypeNode? = null,
 ) : ASTNode {
+    /** False for a `when` without `else` that does not cover every value: a statement whose value is `Unit`. */
+    @ModifyByAnalyzer var isExhaustive: Boolean = true
+
     override fun toMermaid(): String {
         val self = "${generateId()}[\"When\"]"
         return entries.withIndex().joinToString("\n") { "$self-- \"entry[${it.index}]\" -->${it.value.toMermaid()}" } +

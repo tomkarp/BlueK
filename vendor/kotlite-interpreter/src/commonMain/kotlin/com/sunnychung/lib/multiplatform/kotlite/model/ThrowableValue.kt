@@ -19,7 +19,9 @@ open class ThrowableValue(
 ) : ClassInstance(
     currentScope = currentScope,
     fullClassName = (thisClazz ?: clazz).fullQualifiedName,
-    clazz = thisClazz ?: clazz,
+    // The registered copy, attached to the interpreter like the one `DelegatedValue` uses: the static
+    // definition knows no members (`toString()` failed) and no supertypes (`cause` rejected a subclass).
+    clazz = currentScope.findClass((thisClazz ?: clazz).fullQualifiedName)?.first ?: thisClazz ?: clazz,
     typeArguments = emptyList(),
     parentInstance = parentInstance,
 ) {
@@ -35,7 +37,7 @@ open class ThrowableValue(
             ),
             constructInstance = { interpreter, callArguments, callPosition ->
                 val message = (callArguments[0] as? StringValue)?.value
-                val cause = callArguments[1] as? ThrowableValue
+                val cause = (callArguments[1] as? ClassInstance)?.throwablePart()
                 ThrowableValue(interpreter.symbolTable(), message, cause, interpreter.callStack.getStacktrace())
             },
             modifiers = setOf(ClassModifier.open),
@@ -48,7 +50,7 @@ open class ThrowableValue(
                 receiver = "Throwable",
                 type = "String?",
                 getter = { interpreter, receiver, typeArgs ->
-                    (receiver as ThrowableValue).message?.let { StringValue(it, interpreter.symbolTable()) } ?: NullValue
+                    receiver.throwable().message?.let { StringValue(it, interpreter.symbolTable()) } ?: NullValue
                 },
             ),
             ExtensionProperty(
@@ -57,7 +59,7 @@ open class ThrowableValue(
                 receiver = "Throwable",
                 type = "Throwable?",
                 getter = { interpreter, receiver, typeArgs ->
-                    (receiver as ThrowableValue).cause ?: NullValue
+                    receiver.throwable().cause?.wholeInstance() ?: NullValue
                 },
             ),
             ExtensionProperty(
@@ -66,8 +68,8 @@ open class ThrowableValue(
                 receiver = "Throwable",
                 type = "String",
                 getter = { interpreter, receiver, typeArgs ->
-                    val value = receiver as ThrowableValue
-                    StringValue(value.externalExceptionClassName ?: value.fullClassName, interpreter.symbolTable())
+                    val value = receiver.throwable()
+                    StringValue(value.externalExceptionClassName ?: (receiver as ClassInstance).type().name, interpreter.symbolTable())
                 },
             ),
         )
@@ -80,10 +82,13 @@ open class ThrowableValue(
                 returnType = "String",
                 parameterTypes = emptyList(),
                 executable = { interpreter, receiver, args, typeArgs ->
-                    (receiver as ThrowableValue).stacktrace.joinToString("\n").let { StringValue(it, interpreter.symbolTable()) }
+                    receiver.throwable().stacktrace.joinToString("\n").let { StringValue(it, interpreter.symbolTable()) }
                 },
             ),
         )
+
+        // An object of a student subclass (`class MyEx : Exception()`) keeps its state in its `Throwable` part.
+        private fun RuntimeValue?.throwable(): ThrowableValue = (this as ClassInstance).throwablePart()!!
     }
 }
 
@@ -118,7 +123,7 @@ open class ExceptionValue(
             ),
             constructInstance = { interpreter, callArguments, callPosition ->
                 val message = (callArguments[0] as? StringValue)?.value
-                val cause = callArguments[1] as? ThrowableValue
+                val cause = (callArguments[1] as? ClassInstance)?.throwablePart()
                 ExceptionValue(interpreter.symbolTable(), message, cause, interpreter.callStack.getStacktrace())
             },
             superClassInvocationString = "Throwable(message, cause)",
@@ -130,7 +135,8 @@ open class ExceptionValue(
 
 class NullPointerExceptionValue(
     currentScope: SymbolTable,
-    message: String? = "null",
+    // `null!!` has no message, as in Kotlin (RT-61); the text "null" used to show as `NullPointerException: null`.
+    message: String? = null,
     cause: ThrowableValue? = null,
     stacktrace: List<String>,
 ) : ExceptionValue(
@@ -153,7 +159,7 @@ class NullPointerExceptionValue(
             ),
             constructInstance = { interpreter, callArguments, callPosition ->
                 val message = (callArguments[0] as? StringValue)?.value
-                val cause = callArguments[1] as? ThrowableValue
+                val cause = (callArguments[1] as? ClassInstance)?.throwablePart()
                 NullPointerExceptionValue(interpreter.symbolTable(), message, cause, interpreter.callStack.getStacktrace())
             },
             superClassInvocationString = "Exception(message, cause)",
@@ -225,7 +231,7 @@ class StandardExceptionValue(
                 ),
                 constructInstance = { interpreter, callArguments, _ ->
                     val message = (callArguments[0] as? StringValue)?.value
-                    val cause = callArguments[1] as? ThrowableValue
+                    val cause = (callArguments[1] as? ClassInstance)?.throwablePart()
                     StandardExceptionValue(interpreter.symbolTable(), message, cause, interpreter.callStack.getStacktrace(), clazz)
                 },
                 superClassInvocationString = "$superClass(message, cause)",

@@ -458,4 +458,304 @@ fails((await project({ 'Anzeige.kt': 'class Anzeige {\n    fun zeige(text: Strin
   assert.equal(ok(q.evaluate('Halter(Hund("Rex")).leben()'), 'body val property').display, '2');
 }
 
+// Pairs, lists, sets and maps compare, hash and print by content like in Kotlin (RT-52). They
+// used to compare by identity (`listOf(1) == listOf(1)` was false) and a pair printed as `Pair()`.
+{
+  const p = await project({ 'Punkt.kt': 'class Punkt(val x: Int) {\n    override fun toString(): String = "P$x"\n    override fun equals(other: Any?): Boolean = other is Punkt && (other as Punkt).x == x\n    override fun hashCode(): Int = x\n}', 'Leer.kt': 'class Leer' });
+  ok(p.result, 'RT-52 project');
+  const cases = [
+    // Text
+    ['Pair(1, "a")', '(1, a)'],
+    ['"${1 to 2}"', '(1, 2)'],
+    ['(1 to "a").toString()', '(1, a)'],
+    ['Pair("a", null).toString()', '(a, null)'],
+    ['listOf(1, 2).zip(listOf("a", "b"))', '[(1, a), (2, b)]'],
+    ['listOf(1, 2, 3).partition { it > 1 }', '([2, 3], [1])'],
+    ['Pair(1, listOf(2)).toString()', '(1, [2])'],
+    // Elements use their own toString(), also through an explicit toString() call.
+    ['listOf(Punkt(1)).toString() + Pair(Punkt(1), Punkt(2)).toString() + mapOf(1 to Punkt(3)).toString()', '[P1](P1, P2){1=P3}'],
+    // Equality
+    ['Pair(1, 2) == Pair(1, 2)', 'true'],
+    ['(1 to 2) != (1 to 2)', 'false'],
+    ['Pair(1, 2) == Pair(2, 1)', 'false'],
+    ['Pair(1, 2) == Pair(1L, 2L)', 'false'],
+    ['Pair(1, 2).equals(Pair(1, 2))', 'true'],
+    ['listOf(1, 2) == listOf(1, 2)', 'true'],
+    ['mutableListOf(1) == listOf(1)', 'true'],
+    ['listOf(1, 2) == listOf(2, 1)', 'false'],
+    ['listOf(1).equals(listOf(1))', 'true'],
+    ['setOf(1, 2) == setOf(2, 1)', 'true'],
+    ['mapOf(1 to 2) == mapOf(1 to 2)', 'true'],
+    ['listOf(1) == setOf(1)', 'false'],
+    ['listOf(1) === listOf(1)', 'false'],
+    ['listOf(Punkt(1)) == listOf(Punkt(1))', 'true'],
+    ['listOf(Punkt(1)) == listOf(Punkt(2))', 'false'],
+    ['listOf(Leer()) == listOf(Leer())', 'false'],
+    ['val leer = Leer(); listOf(leer) == listOf(leer)', 'true'],
+    ['val liste = mutableListOf(1); val ref = liste; liste.add(2); ref == listOf(1, 2)', 'true'],
+    // Comparisons with null or other types, also through the member equals.
+    ['Pair(1, 2) == null', 'false'],
+    ['listOf(1) == null', 'false'],
+    ['val kein: Pair<Int, Int>? = null; kein == Pair(1, 2)', 'false'],
+    ['Pair(1, 2).equals(null)', 'false'],
+    ['Pair(1, 2).equals("x")', 'false'],
+    // Hash codes as in Kotlin, so sets, map keys and searches work with pairs and lists.
+    ['Pair(1, 2).hashCode()', '33'],
+    ['listOf(1, 2).hashCode()', '994'],
+    ['setOf(1 to 2, 1 to 2).size', '1'],
+    ['setOf(listOf(1), listOf(1)).size', '1'],
+    ['mapOf((1 to 2) to "x")[1 to 2]', 'x'],
+    ['listOf(1 to 2).indexOf(1 to 2)', '0'],
+    ['listOf(listOf(1)).contains(listOf(1))', 'true'],
+    ['mutableListOf(1 to 2).remove(1 to 2)', 'true'],
+    // Other library values keep identity and their plain text.
+    ['val it1 = listOf(1).iterator(); "${it1 == it1} ${it1 == listOf(1).iterator()} ${it1.equals(it1)} ${it1.hashCode() == it1.hashCode()}"', 'true false true true'],
+    ['listOf(1).iterator().toString()', 'Iterator()'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-52 ${source}`).display, expected, `RT-52 ${source}`);
+}
+
+// `super.equals()`, `super.hashCode()` and `super.toString()` that reach `Any` work on the whole
+// object (RT-53). They used to run on the object's `Any` part: an object with
+// `equals() = super.equals(other)` was not equal to itself, and `super.toString()` gave `Any()`.
+{
+  const p = await project({
+    'Eigen.kt': 'class Eigen(val n: Int) {\n    override fun equals(other: Any?): Boolean = super.equals(other)\n    override fun hashCode(): Int = super.hashCode()\n    override fun toString(): String = "E:" + super.toString()\n    fun basis(): Int = super.hashCode()\n}',
+    'Basis.kt': 'open class Basis {\n    override fun equals(other: Any?): Boolean = super.equals(other)\n}',
+    'Kind.kt': 'class Kind : Basis()',
+    'Wert.kt': 'class Wert(val n: Int) {\n    override fun equals(other: Any?): Boolean {\n        if (other is Wert) return (other as Wert).n == n\n        return super.equals(other)\n    }\n    override fun hashCode(): Int = n\n}',
+    'Tier.kt': 'open class Tier(val name: String) {\n    override fun toString(): String = "Tier $name"\n}',
+    'Hund.kt': 'class Hund(name: String) : Tier(name) {\n    override fun toString(): String = super.toString() + " bellt"\n}',
+    'Leer.kt': 'class Leer',
+  });
+  ok(p.result, 'RT-53 project');
+  const cases = [
+    ['val e = Eigen(1); "${e == e} ${e.equals(e)} ${e == Eigen(1)} ${e == null}"', 'true true false false'],
+    ['"${setOf(e, e).size} ${listOf(e).contains(e)} ${listOf(e).indexOf(e)}"', '1 true 0'],
+    ['e.hashCode() == e.hashCode()', 'true'],
+    ['e.basis() == e.hashCode()', 'true'],
+    ['e.toString()', 'E:Eigen()'],
+    ['"$e"', 'E:Eigen()'],
+    // Inherited from a student class whose `equals` calls `super.equals`.
+    ['val k = Kind(); "${k == k} ${k == Kind()}"', 'true false'],
+    ['"${Wert(1) == Wert(1)} ${Wert(1) == Wert(2)} ${Wert(1) == null} ${setOf(Wert(1), Wert(1)).size}"', 'true false false 1'],
+    // `super.toString()` of a student superclass keeps working.
+    ['Hund("Rex").toString()', 'Tier Rex bellt'],
+    ['val leer = Leer(); "${leer == leer} ${leer == Leer()} ${leer.hashCode() == leer.hashCode()} $leer"', 'true false true Leer()'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-53 ${source}`).display, expected, `RT-53 ${source}`);
+}
+
+// Exceptions are objects like in Kotlin (RT-54): `toString()` gives `MyEx: x`, `catch` receives the
+// thrown object itself with the fields of a student exception class, and `message`/`cause` work
+// outside `catch`. `IllegalStateException("x").toString()` used to fail with
+// "memberFunctionsForSA not initialized", a template gave `MyEx()`, `MyEx("x").message` a
+// ClassCastException, and `catch (e: KontoException) { e.betrag }` a NullPointerException.
+{
+  const files = {
+    'MyEx.kt': 'class MyEx(m: String) : Exception(m)',
+    'LeerEx.kt': 'class LeerEx : Exception()',
+    'KontoException.kt': 'class KontoException(val betrag: Int) : IllegalStateException("Konto zu niedrig: $betrag")',
+    'M2.kt': 'class M2(m: String) : Exception(m) {\n    override fun toString(): String = "M2:" + super.toString()\n}',
+  };
+  const p = await project(files);
+  ok(p.result, 'RT-54 project');
+  const cases = [
+    ['IllegalStateException("x").toString()', 'IllegalStateException: x'],
+    ['"${IllegalArgumentException("y")}"', 'IllegalArgumentException: y'],
+    ['Exception().toString()', 'Exception'],
+    ['MyEx("x").toString()', 'MyEx: x'],
+    ['"${MyEx("x")}"', 'MyEx: x'],
+    ['LeerEx().toString()', 'LeerEx'],
+    ['M2("q").toString()', 'M2:M2: q'],
+    ['"${listOf(MyEx("l"), IllegalStateException("m"))}"', '[MyEx: l, IllegalStateException: m]'],
+    ['MyEx("x").message', 'x'],
+    ['KontoException(5).message', 'Konto zu niedrig: 5'],
+    ['try { throw MyEx("x") } catch (e: Exception) { "$e | ${e.message} | ${e is MyEx}" }', 'MyEx: x | x | true'],
+    ['try { throw KontoException(3) } catch (e: KontoException) { e.betrag }', '3'],
+    ['try { throw KontoException(3) } catch (e: IllegalStateException) { "$e" }', 'KontoException: Konto zu niedrig: 3'],
+    ['val geworfen = MyEx("a"); try { throw geworfen } catch (e: Exception) { e === geworfen }', 'true'],
+    ['try { throw MyEx("x") } catch (e: IllegalStateException) { "falsch" } catch (e: Exception) { "richtig" }', 'richtig'],
+    ['try { try { throw MyEx("re") } catch (e: MyEx) { throw e } } catch (e: Exception) { "erneut " + e.message }', 'erneut re'],
+    ['try { "x".toInt() } catch (e: Exception) { e.toString() }', "NumberFormatException: Invalid number format: 'x'"],
+    ['try { 1 / 0 } catch (e: ArithmeticException) { "$e" }', 'ArithmeticException: / by zero'],
+    ['try { throw Exception("a", MyEx("b")) } catch (e: Exception) { "${e.cause} ${e.cause is MyEx}" }', 'MyEx: b true'],
+    ['Exception("a", IllegalStateException("b")).cause?.message', 'b'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-54 ${source}`).display, expected, `RT-54 ${source}`);
+  ok(p.evaluate('MyEx("y").printStackTrace()'), 'RT-54 printStackTrace outside catch');
+  assert.equal(p.output(), 'MyEx: y\n', 'RT-54 printStackTrace output');
+  // An uncaught exception names the thrown object; one without message only its class.
+  fails((await project(files)).evaluate('throw KontoException(7)'), 'RT-54 uncaught', /^KontoException: Konto zu niedrig: 7$/);
+  fails((await project(files)).evaluate('throw LeerEx()'), 'RT-54 uncaught without message', /^LeerEx$/);
+}
+
+// `break` and `continue` in `for` loops (RT-55). Every one of them used to end the program with
+// "NormalContinueException: Continue" / "NormalBreakException: Break"; `while` was not affected.
+{
+  const p = await project({
+    'Schleifen.kt': 'fun weiter(): String {\n    var s = ""\n    for (i in 1..4) {\n        if (i == 2) continue\n        if (i == 4) break\n        s += i\n    }\n    return s\n}\n' +
+      'fun ohneB(): String {\n    var s = ""\n    for (x in listOf("a", "b", "c")) {\n        if (x == "b") continue\n        s += x\n    }\n    return s\n}\n' +
+      'fun main() {\n    for (i in 1..3) {\n        if (i == 2) continue\n        println(i)\n    }\n}',
+  });
+  ok(p.result, 'RT-55 project');
+  assert.equal(ok(p.evaluate('weiter()'), 'RT-55 range').display, '13');
+  assert.equal(ok(p.evaluate('ohneB()'), 'RT-55 list').display, 'ac');
+  ok(p.evaluate('main()'), 'RT-55 main');
+  const cases = [
+    ['var s1 = ""; for (i in 0 until 5) { if (i == 3) break; s1 += i }; s1', '012'],
+    ['var s2 = ""; for (i in 1..3) { for (j in 1..3) { if (j == 2) break; s2 += "$i$j " } }; s2', '11 21 31 '],
+    ['var s3 = ""; for (i in 3 downTo 1) { if (i == 2) continue; s3 += i }; s3', '31'],
+    ['var s4 = 0; for (c in "abc") { if (c == \'b\') continue; s4++ }; s4', '2'],
+    ['var s5 = ""; for (i in 1..3) { if (i == 2) { continue }; s5 += i }; s5', '13'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-55 ${source}`).display, expected, `RT-55 ${source}`);
+  assert.equal(p.output(), '1\n3\n', 'RT-55 main output');
+}
+
+// `when` without `else` (RT-56): as a statement it does nothing if no entry matches; as a value it
+// needs `else` unless it covers every value (all enum entries, `true` and `false`, and `null` for a
+// nullable subject). It used to require `else` always ("Currently, `when` expression must be used
+// with an `else` branch").
+{
+  const p = await project({
+    'Farbe.kt': 'enum class Farbe { ROT, GRUEN, BLAU }',
+    'Ampel.kt': 'fun name(f: Farbe): String = when (f) {\n    Farbe.ROT -> "rot"\n    Farbe.GRUEN -> "grün"\n    Farbe.BLAU -> "blau"\n}\n' +
+      'fun drucke(n: Int) {\n    when (n) {\n        1 -> println("eins")\n        2 -> println("zwei")\n    }\n}',
+  });
+  ok(p.result, 'RT-56 project');
+  const cases = [
+    ['name(Farbe.BLAU)', 'blau'],
+    ['val t = when (Farbe.GRUEN) { Farbe.ROT -> 1; Farbe.GRUEN -> 2; Farbe.BLAU -> 3 }; t + 1', '3'],
+    ['val ja = false; val s: String = when (ja) { true -> "j"; false -> "n" }; s', 'n'],
+    ['val vielleicht: Farbe? = null; when (vielleicht) { Farbe.ROT -> 1; Farbe.GRUEN -> 2; Farbe.BLAU -> 3; null -> 0 }', '0'],
+    ['var r = ""; when (5) { 1 -> r = "a"; 5 -> r = "e" }; r', 'e'],
+    ['var r2 = ""; for (i in 1..3) { when (i) { 2 -> continue; 3 -> break }; r2 += i }; r2', '1'],
+    ['when (7) { 1 -> 1; else -> 2 }', '2'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-56 ${source}`).display, expected, `RT-56 ${source}`);
+  ok(p.evaluate('drucke(1); drucke(3); drucke(2); when { 1 > 2 -> println("nie") }'), 'RT-56 statements');
+  assert.equal(p.output(), 'eins\nzwei\n', 'RT-56 statement output');
+  const exhaustive = /'when' expression must be exhaustive\. Add an 'else' branch\./;
+  for (const source of [
+    'val v1 = when (2) { 1 -> "a" }',
+    'fun g1(w: Int): String = when (w) { 1 -> "a" }',
+    'fun h1(z: Int): String { return when (z) { 1 -> "a" } }',
+    'println(when (2) { 1 -> "a" })',
+    'var z1 = ""; z1 = when (2) { 1 -> "a" }',
+    'val v2 = when (Farbe.ROT) { Farbe.ROT -> 1; Farbe.GRUEN -> 2 }',
+    'val f3: Farbe? = Farbe.ROT; val v3 = when (f3) { Farbe.ROT -> 1; Farbe.GRUEN -> 2; Farbe.BLAU -> 3 }',
+  ]) fails(p.evaluate(source), `RT-56 ${source}`, exhaustive);
+  fails(p.evaluate('when (4) { 1 -> 1; else -> 2; 3 -> 3 }'), 'RT-56 else not last', /`else` branch must be the last branch/);
+}
+
+// `override fun toString() = …`, `equals` and `hashCode` without return type (RT-57). They used to
+// fail with "Cannot infer return type of function toString" because the lookup of these special
+// functions needed the return type before the body was analyzed.
+{
+  const p = await project({
+    'Hund.kt': 'class Hund(val name: String, val alter: Int) {\n    override fun toString() = "Hund $name ($alter)"\n    override fun equals(other: Any?) = other is Hund && (other as Hund).name == name\n    override fun hashCode() = name.hashCode()\n}',
+    'Tier.kt': 'open class Tier {\n    override fun toString() = "Tier"\n}',
+    'Katze.kt': 'class Katze : Tier() {\n    override fun toString() = "Katze/" + super.toString()\n}',
+  });
+  ok(p.result, 'RT-57 project');
+  const cases = [
+    ['Hund("Rex", 3).toString()', 'Hund Rex (3)'],
+    ['"${Hund("Rex", 3)}"', 'Hund Rex (3)'],
+    ['Hund("Rex", 3) == Hund("Rex", 5)', 'true'],
+    ['setOf(Hund("Rex", 3), Hund("Rex", 4)).size', '1'],
+    ['listOf(Hund("A", 1)).toString()', '[Hund A (1)]'],
+    ['Katze().toString()', 'Katze/Tier'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-57 ${source}`).display, expected, `RT-57 ${source}`);
+  // As in Kotlin, the body must still fit the overridden return type.
+  fails(p.evaluate('class Falsch { override fun toString() = 5 }'), 'RT-57 wrong toString type', /Expected type is `String`, but actual type is `Int`/);
+  fails(p.evaluate('class Falsch2 { override fun hashCode() = "x" }'), 'RT-57 wrong hashCode type', /Expected type is `Int`, but actual type is `String`/);
+}
+
+// Map entries print and compare like Kotlin's (RT-58): `a=1` instead of `MapEntry()`, equal by key and
+// value. `map.entries` itself is covered by smoke-kotlin-surface.mjs.
+{
+  const p = await project({ 'Punkt.kt': 'class Punkt(val x: Int) {\n    override fun toString(): String = "P$x"\n}' });
+  ok(p.result, 'RT-58 project');
+  const cases = [
+    ['mapOf("a" to 1).iterator().next()', 'a=1'],
+    ['var me = ""; for (e in mapOf("a" to 1, "b" to 2)) me += "$e "; me', 'a=1 b=2 '],
+    ['var mf = ""; mapOf("a" to 1).forEach { mf += it.toString() }; mf', 'a=1'],
+    ['mapOf("a" to 3, "b" to 1).maxByOrNull { it.value }.toString()', 'a=3'],
+    ['mapOf(1 to Punkt(2)).entries.first().toString()', '1=P2'],
+    ['val e1 = mapOf("a" to 1).iterator().next(); val e2 = mapOf("a" to 1).entries.first(); "${e1 == e2} ${e2 == e1} ${e1.hashCode() == e2.hashCode()}"', 'true true true'],
+    ['mapOf("a" to 1).iterator().next() == mapOf("a" to 2).iterator().next()', 'false'],
+    ['mapOf("a" to 1).entries == mapOf("a" to 1).entries', 'true'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-58 ${source}`).display, expected, `RT-58 ${source}`);
+}
+
+// Doubles print like Kotlin/JVM (RT-60): plain from 10^-3 up to below 10^7, otherwise with an
+// exponent. Kotlin/JS printed `100000000000000000000.0`, `1e-7` and `123456789000.0`.
+{
+  const p = await project({ 'Main.kt': 'fun main() {}' });
+  const cases = [
+    ['6.0', '6.0'],
+    ['-2.5', '-2.5'],
+    ['100.0', '100.0'],
+    ['1234567.0', '1234567.0'],
+    ['12345678.0', '1.2345678E7'],
+    ['10000000.0', '1.0E7'],
+    ['0.001', '0.001'],
+    ['0.0001', '1.0E-4'],
+    ['1.5 * 10.0.pow(-7)', '1.5E-7'],
+    ['10.0.pow(20)', '1.0E20'],
+    ['123456789.0 * 1000', '1.23456789E11'],
+    ['Double.MAX_VALUE', '1.7976931348623157E308'],
+    ['0.1 + 0.2', '0.30000000000000004'],
+    ['1.0 / 0.0', 'Infinity'],
+    ['"Summe: ${12345678.9}"', 'Summe: 1.23456789E7'],
+    ['listOf(1.0, 12345678.9).toString()', '[1.0, 1.23456789E7]'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-60 ${source}`).display, expected, `RT-60 ${source}`);
+}
+
+// `null!!` throws a NullPointerException without message, as in Kotlin (RT-61). It used to carry the
+// text "null" and showed as `NullPointerException: null`.
+{
+  const p = await project({ 'Main.kt': 'fun main() {}' });
+  const cases = [
+    ['val leer: String? = null; try { leer!!.length } catch (e: NullPointerException) { "${e.message == null} $e" }', 'true NullPointerException'],
+    ['try { throw NullPointerException("eigen") } catch (e: Exception) { "$e" }', 'NullPointerException: eigen'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-61 ${source}`).display, expected, `RT-61 ${source}`);
+  fails((await project({ 'Main.kt': 'fun main() {}' })).evaluate('val nichts: String? = null; nichts!!.length'), 'RT-61 uncaught', /^NullPointerException$/);
+}
+
+// Extension functions and supertype extension properties through an implicit receiver (RT-63):
+// `liste.apply { add(1) }`, `text.run { uppercase() }`, `with(liste) { size }` for a MutableList and
+// `gruss()` for `fun Hund.gruss()` inside Hund or another Hund extension. Kotlite used to find only
+// members there ("No matching function or constructor `add`", "`gruss` is unknown").
+{
+  const p = await project({
+    'Hund.kt': 'class Hund(var name: String) {\n    val tricks = mutableListOf<String>()\n    fun innen(): String = gruss()\n    fun lerne(t: String) { tricks.apply { add(t) } }\n    fun anzahl(): Int = with(tricks) { size }\n}',
+    'Ext.kt': 'fun Hund.gruss(): String = "Hallo " + name\nfun Hund.zweimal(): String = gruss() + " " + gruss()\nfun List<Int>.doppelt(): List<Int> = this.map { it * 2 }',
+  });
+  ok(p.result, 'RT-63 project');
+  const cases = [
+    ['mutableListOf(1).apply { add(2) }', '[1, 2]'],
+    ['with(mutableListOf(1)) { add(2); size }', '2'],
+    ['"abc".run { uppercase() }', 'ABC'],
+    ['with("abc") { substring(1) }', 'bc'],
+    ['listOf(3, 1).run { sorted() }', '[1, 3]'],
+    ['listOf(1, 2).run { map { it + 1 } }', '[2, 3]'],
+    ['listOf(1, 2).run { doppelt() }', '[2, 4]'],
+    ['mutableListOf(1, 2).run { lastIndex }', '1'],
+    ['Hund("Rex").innen()', 'Hallo Rex'],
+    ['Hund("Rex").zweimal()', 'Hallo Rex Hallo Rex'],
+    ['Hund("Rex").apply { name = gruss() }.name', 'Hallo Rex'],
+    ['val hund = Hund("A"); hund.lerne("Sitz"); hund.lerne("Platz"); "${hund.anzahl()} ${hund.tricks}"', '2 [Sitz, Platz]'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-63 ${source}`).display, expected, `RT-63 ${source}`);
+  // Unknown names and wrong argument types keep their messages.
+  fails(p.evaluate('mutableListOf(1).apply { gibtsNicht(2) }'), 'RT-63 unknown', /`gibtsNicht` is unknown/);
+  fails(p.evaluate('mutableListOf(1).apply { add("x") }'), 'RT-63 wrong argument', /No matching function or constructor `add` found for the argument types \(String\)/);
+}
+
 console.log('Curriculum Kotlin smoke test passed.');

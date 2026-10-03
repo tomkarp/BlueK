@@ -279,6 +279,11 @@ for (const answer of ['ja', 'nein', 'ja']) {
   expectOk(JSON.parse(lambdaInputSession.enqueueInput(answer)), `stdlib callback input ${requestId}`);
 }
 if (lambdaResult?.display !== '2' || lambdaRequests.length !== 0) throw new Error('A stdlib callback did not resume exactly once per input.');
+// RT-62: the builder lambda of BlueK's `buildString` may wait for input too.
+{
+  const builderInput = await runInteractive(api.bluekCreateKotliteSession(), 'buildString { append("A:"); append(readln()); append(":B") }', ['hallo'], 'buildString input');
+  if (builderInput.result?.display !== 'A:hallo:B') throw new Error(`buildString with readln returned ${builderInput.result?.display}`);
+}
 
 // RT-37: every other callback of the binary stdlib may suspend as well. A
 // suspended callback abandons the library call, which then runs again with the

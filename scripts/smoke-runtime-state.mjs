@@ -504,6 +504,8 @@ projectClient.invalidate();
       val good: Int get() = reads * 10
       val absent: String? get() = null
       val numbers: List<Int> get() = listOf(1,2)
+      var pair = Pair(1, Leaf())
+      val computedPair: Pair<String, Leaf> get() = Pair("a", Leaf())
       val child: Leaf get() = Leaf()
       val slow: Int get() { Thread.sleep(2); return 7 }
     }` },
@@ -522,6 +524,11 @@ projectClient.invalidate();
   assert.equal(getField('absent').value, 'null');
   assert.equal(getField('numbers').summary, true);
   assert.match(getField('numbers').value, /size 2/);
+  // Pairs are summaries too, shown without running the elements' toString() (RT-52).
+  assert.equal(getField('pair').value, '(1, Leaf())');
+  assert.equal(getField('pair').summary, true);
+  assert.equal(getField('computedPair').value, '(a, Leaf())');
+  assert.equal(getField('computedPair').summary, true);
   assert.equal(getField('child').reference, true);
   assert(getField('child').objectId, 'Computed object references have a runtime-owned handle');
   assert.equal(getField('slow').value, '7', 'Suspending getters retain the normal async contract');

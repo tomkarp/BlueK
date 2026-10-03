@@ -711,7 +711,7 @@ test('GUI-03 GUI-04 computed values update after every inspector edit', async ({
 });
 
 test('GUI-90 editing an object or list field starts empty and a bench click inserts an object name', async ({ page }) => {
-  await project(page, 'class Hund { var freund: Hund? = null; var tricks = mutableListOf("Sitz"); var alter: Int = 3 }');
+  await project(page, 'class Hund { var freund: Hund? = null; var tricks = mutableListOf("Sitz"); var paar = Pair(1, "a"); var alter: Int = 3 }');
   const object = (name: string) => page.locator('.bench .object').filter({ hasText: new RegExp(`^${name}:`) });
   for (const name of ['hund1', 'hund2', 'hund3']) {
     const entry = await evaluate(page, 'Hund()');
@@ -737,6 +737,11 @@ test('GUI-90 editing an object or list field starts empty and a bench click inse
   await inspector.getByLabel('Edit tricks', { exact: true }).click();
   await expect(inspector.getByLabel('Value of tricks')).toHaveValue('');
   await inspector.getByLabel('Value of tricks').press('Escape');
+  // A pair is shown as `(1, a)` (RT-52), which is no expression either.
+  await expect(inspector.getByText('(1, a)', { exact: true })).toBeVisible();
+  await inspector.getByLabel('Edit paar', { exact: true }).click();
+  await expect(inspector.getByLabel('Value of paar')).toHaveValue('');
+  await inspector.getByLabel('Value of paar').press('Escape');
   await inspector.getByLabel('Edit alter', { exact: true }).click();
   await expect(inspector.getByLabel('Value of alter')).toHaveValue('3');
   await inspector.getByLabel('Value of alter').press('Escape');

@@ -3,6 +3,31 @@ package com.sunnychung.lib.multiplatform.kotlite.model
 class AnyClass {
 
     companion object {
+        /*
+         * `equals()`, `hashCode()` and `toString()` of `Any`, also for hosts whose
+         * own `Any?` functions receive an object's `Any` part through `super`.
+         * Objects use the whole object (`super.equals()` runs on a part) and never
+         * call a student override, which would loop.
+         */
+        fun anyEquals(receiver: RuntimeValue, other: RuntimeValue): Boolean = when (receiver) {
+            // Lists, sets, maps and pairs compare by content, other library values by identity.
+            is DelegatedValue<*> -> receiver.anyEquals(other)
+            is ClassInstance -> receiver.wholeInstance() === (other as? ClassInstance)?.wholeInstance()
+            else -> receiver == other
+        }
+
+        fun anyHashCode(receiver: RuntimeValue): Int = when (receiver) {
+            is DelegatedValue<*> -> receiver.anyHashCode()
+            is ClassInstance -> receiver.wholeInstance().originalHashCode()
+            else -> receiver.hashCode()
+        }
+
+        fun anyToString(receiver: RuntimeValue): String = when (receiver) {
+            is DelegatedValue<*> -> receiver.anyToString()
+            is ClassInstance -> receiver.wholeInstance().convertToString(isCallCustomFunction = false)
+            else -> receiver.convertToString(isCallCustomFunction = false)
+        }
+
         val memberFunctions = listOf(
             CustomFunctionDefinition(
                 position = SourcePosition.BUILTIN,
@@ -14,12 +39,7 @@ class AnyClass {
                 modifiers = setOf(/*FunctionModifier.operator,*/ FunctionModifier.open),
                 parameterTypes = listOf(CustomFunctionParameter(name = "other", type = "Any?")),
                 executable = exe@ { interpreter, receiver, args, typeArgs ->
-                    val other = args[0]
-                    if (receiver is ClassInstance) { // prevent infinite loop of `equals()` calls
-                        BooleanValue(receiver === other, interpreter.symbolTable())
-                    } else {
-                        BooleanValue(receiver == other, interpreter.symbolTable())
-                    }
+                    BooleanValue(receiver != null && anyEquals(receiver, args[0]), interpreter.symbolTable())
                 }
             ),
             CustomFunctionDefinition(
@@ -30,11 +50,7 @@ class AnyClass {
                 modifiers = setOf(FunctionModifier.open),
                 parameterTypes = emptyList(),
                 executable = exe@ { interpreter, receiver, args, typeArgs ->
-                    if (receiver is ClassInstance) { // prevent infinite loop
-                        IntValue(receiver.originalHashCode(), interpreter.symbolTable())
-                    } else {
-                        IntValue(receiver.hashCode(), interpreter.symbolTable())
-                    }
+                    IntValue(receiver?.let(::anyHashCode) ?: 0, interpreter.symbolTable())
                 }
             ),
             CustomFunctionDefinition(
@@ -46,7 +62,7 @@ class AnyClass {
                 parameterTypes = emptyList(),
                 executable = exe@ { interpreter, receiver, args, typeArgs ->
                     StringValue(
-                        value = receiver?.convertToString(isCallCustomFunction = false) ?: "null",
+                        value = receiver?.let(::anyToString) ?: "null",
                         symbolTable = interpreter.symbolTable(),
                     )
                 }

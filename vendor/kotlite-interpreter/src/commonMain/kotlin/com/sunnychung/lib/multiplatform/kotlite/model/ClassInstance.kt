@@ -23,10 +23,23 @@ open class ClassInstance(
     internal var typeArgumentByName: Map<String, DataType> = emptyMap()
     internal var type: DataType? = null
 
+    /** The subclass part this part belongs to; null for the part of the most derived class. */
+    private var childInstance: ClassInstance? = null
+
     init {
+        parentInstance?.childInstance = this
         if (clazz != null) {
             attach(clazz, currentScope)
         }
+    }
+
+    /**
+     * The whole object this inheritance part belongs to. `super.equals(other)`
+     * runs on the `Any` part, but must compare and print the whole object.
+     */
+    fun wholeInstance(): ClassInstance {
+        var instance = this
+        while (true) instance = instance.childInstance ?: return instance
     }
 
     final override fun type(): DataType = type ?: throw RuntimeException("This object has not been initialized")
@@ -233,7 +246,19 @@ open class ClassInstance(
                 ?.call(clazz!!.interpreter!!, this, emptyList())
                 ?.let { return (it as StringValue).value }
         }
+        // Like Kotlin's `Throwable.toString()` without package: `MyEx: x`, or `MyEx` without message.
+        throwablePart()?.let { throwable ->
+            val name = (this as? ThrowableValue)?.externalExceptionClassName ?: clazz!!.fullQualifiedName
+            return name + (throwable.message?.let { ": $it" } ?: "")
+        }
         return "${clazz!!.fullQualifiedName}()"
+    }
+
+    /** The `Throwable` part of an exception object, also of a student subclass such as `class MyEx : Exception()`. */
+    fun throwablePart(): ThrowableValue? {
+        var part: ClassInstance? = this
+        while (part != null && part !is ThrowableValue) part = part.parentInstance
+        return part as? ThrowableValue
     }
 
     override fun convertToString(): String {

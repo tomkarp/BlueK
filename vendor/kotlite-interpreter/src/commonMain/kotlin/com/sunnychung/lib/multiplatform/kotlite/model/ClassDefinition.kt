@@ -303,6 +303,11 @@ open class ClassDefinition(
                     }
                 }
                 hasOverridden = identicalSuperClassFunctions.isNotEmpty()
+                // An override without return type has the overridden one until its body is analyzed: the
+                // special-function lookup below needs it for `override fun toString() = "…"` (RT-57).
+                if (hasOverridden && thisFunc.declaredReturnType == null && thisFunc.inferredReturnType == null) {
+                    thisFunc.inferredReturnType = identicalSuperClassFunctions.first().resolvedReturnType
+                }
                 if (hasOverridden && FunctionModifier.override !in thisFunc.modifiers) {
                     throw SemanticException(thisFunc.position, "A function cannot override anything without the modifier `override`")
                 }

@@ -144,7 +144,7 @@ bei Verweisen die Beschreibung mitnennen.
 | GUI-87 | Ein angeklickter oder verschobener Objektinspektor liegt über einem offenen Editor; nach Aktivierung des Editors liegt dieser wieder oben und Escape schließt den Editor | Erster GUI-Lauf durch Testaufbau blockiert (Inspector verdeckte Klassenkarte); nach geänderter Öffnungsreihenfolge prüft GUI-87 Aktivierung, Z-Index, tatsächlichen Treffer im Überlappungsbereich, Ziehposition und Escape: 1/1 grün; GUI-18 und GUI-30 ebenfalls grün; Typecheck 0 Fehler/0 Warnungen | Abgesichert |
 | GUI-88 | Objektattribute werden als abgerundete Referenzpfeile statt Konstruktorwerte dargestellt; Klick öffnet den referenzierten Inspektor mit Attributnamen (auch bei mehrfach referenziertem Objekt). Feld-Doppelklick startet keine Wertänderung; Bearbeiten läuft über den Stift | Chromium-Test GUI-88 grün: zwei Aliase für dieselbe Instanz und Doppelklick ohne Editiermodus; `npm run typecheck`: 0 Fehler/0 Warnungen; `npm run build:kotlite` und `npm run build:svelte`: erfolgreich (Webpack-/Chunk-Größenhinweise) | Automatisiert abgesichert; visuelle Abnahme der Pfeilform offen |
 | GUI-89 | Reine Inspektion per Objekt-Doppelklick, Kontextmenü oder Attributpfeil schaltet den Compile-Button nicht kurz um. Ein Pfeilklick auf einem inaktiven Inspektor oder während zweier laufender Getter-Aktualisierungen öffnet das referenzierte Objekt beim ersten Versuch; ein gespeichertes Attribut führt dabei keinen Getter aus. Entfernte Referenzen geben auch direkt geöffnete Objekt-Handles frei | Chromium-Test GUI-89 grün, inklusive inaktiver Fenster; kompletter `references.spec.ts`-Lauf 5/5 grün; GUI-87 Fenster-Aktivierung/Drag weiterhin grün; `test:references` inkl. direktem Attribut-Handle und Freigabe grün; `test:runtime-state` grün; Typecheck 0 Fehler/0 Warnungen | Automatisiert abgesichert; bei einem tatsächlich laufenden Getter bleibt der Ausführungszustand sichtbar |
-| GUI-90 | Der Stift auf einem Objekt- oder Collection-Feld im Inspektor öffnet ein leeres Eingabefeld (Platzhalter „expression“) statt des Anzeigetexts `Hund()` bzw. `[…] (size n)`; Enter auf einem leeren Feld bricht ohne Zuweisung ab, es entsteht also kein neues Objekt. Einfache Werte bleiben vorbelegt. Solange ein Feld bearbeitet wird, fügt ein Klick auf ein Objekt der Objektbank dessen Namen an der Cursorposition ein, statt es auszuwählen; ein Doppelklick fügt ihn einmal ein und öffnet keinen Inspektor. Danach wählt ein Klick wieder aus | Chromium-Test GUI-90: leeres Feld mit Platzhalter, Enter ohne Eingabe lässt `hund1.freund === hund2`, Collection-Feld leer, `Int`-Feld vorbelegt, Klick und Doppelklick auf `hund3` setzen `hund3` ein (Fokus bleibt, keine Auswahl, kein zweiter Inspektor), Enter ergibt `hund1.freund === hund3`, danach wählt ein Klick wieder aus | Automatisiert abgesichert; visuelle Abnahme offen |
+| GUI-90 | Der Stift auf einem Objekt-, Collection- oder Pair-Feld im Inspektor öffnet ein leeres Eingabefeld (Platzhalter „expression“) statt des Anzeigetexts `Hund()`, `[…] (size n)` bzw. `(1, a)` (RT-52); Enter auf einem leeren Feld bricht ohne Zuweisung ab, es entsteht also kein neues Objekt. Einfache Werte bleiben vorbelegt. Solange ein Feld bearbeitet wird, fügt ein Klick auf ein Objekt der Objektbank dessen Namen an der Cursorposition ein, statt es auszuwählen; ein Doppelklick fügt ihn einmal ein und öffnet keinen Inspektor. Danach wählt ein Klick wieder aus | Chromium-Test GUI-90: leeres Feld mit Platzhalter, Enter ohne Eingabe lässt `hund1.freund === hund2`, Collection-Feld leer, `Int`-Feld vorbelegt, Klick und Doppelklick auf `hund3` setzen `hund3` ein (Fokus bleibt, keine Auswahl, kein zweiter Inspektor), Enter ergibt `hund1.freund === hund3`, danach wählt ein Klick wieder aus | Automatisiert abgesichert; visuelle Abnahme offen |
 | RT-31 | Eine fehlende Grafik meldet einen klaren Laufzeitfehler statt eines unsichtbaren 30x30-Platzhalters: `Image("duckk.png")` ergibt `IllegalArgumentException: Image file not found: duckk.png (expected e.g. in the folder 'images/')` mit den verfügbaren Namen; gilt ebenso für `setImage` und `setBackground` | `smoke-blueplay-browser` (Image, Hintergrund, Namensliste) und Chromium-GUI-Test GUI-69 | Abgesichert |
 | RT-15 | `private fun` in Klassen: intern aufrufbar, von außen Compilefehler, Manifest `visibility: private` | `smoke-curriculum-kotlin` | Abgesichert |
 | RT-16 | String-Templates enden am ersten Nicht-Bezeichnerzeichen (`"│$rang│"`, `"$name's"`); einzelnes `$` bleibt Text | `smoke-curriculum-kotlin` | Abgesichert |
@@ -196,6 +196,18 @@ bei Verweisen die Beschreibung mitnennen.
 
 | RT-50 | Eine nullable Sammlung als `for`-Subjekt ergibt „Non-nullable value required to call 'iterator()' method in a for-loop.“; die Position zeigt auf den Ausdruck nach `in`, bei Safe Calls auf den Empfänger. Elvis, `!!`, Smart Casts und Iterator-Erweiterungen auf nullable Empfängern bleiben gültig. Fehler im Subjekt und gewöhnliche unsafe Calls behalten ihre Meldung | RT-50 in `smoke-kotlite-browser.mjs`: echte Bundle-Analyse, Datei/Zeile/Spalte, List/Range/String/Safe Call und gültige Gegenfälle; Chromium RT-50 prüft `world?.getObjects<Ente>()`, Markierung von `world` und Korrektur mit Elvis | Echte Bundle-Tests und drei Chromium-Tests grün; Ergebnisse im RT-50-Prüfprotokoll |
 | RT-51 | Welten erkennen ihre Actors an der Identität: zwei per überschriebenem `equals` gleiche Actors sind getrennte Mitglieder (`numberOfObjects` 2), finden einander bei Kollisionsabfragen und werden einzeln entfernt. Ein nur über seine Welt erreichbarer Actor behält seinen Inspektor-Handle, bis er die Welt verlässt | 2026-10-02, Probe gegen das Bundle aus 92e89a2: `numberOfObjects` 1, `getOneIntersecting<Coin>()` ergab `null`, `removeObject(second)` entfernte `first` aus der Liste (Library-Liste per `equals`, native Liste per Identität). RT-51-Block in `smoke-blueplay-browser.mjs` mit dem neuen Bundle grün; `smoke-references` prüft das Halten durch die Welt | Runtime-Tests mit echtem Bundle; kein GUI-Test |
+| RT-52 | `List`, `Set`, `Map` und `Pair` vergleichen, hashen und drucken wie in Kotlin: `listOf(1, 2) == listOf(1, 2)`, `setOf(1, 2) == setOf(2, 1)`, `Pair(1, 2) == Pair(1, 2)` und `Pair(1, 2).equals(Pair(1, 2))` ergeben `true`; `setOf(1 to 2, 1 to 2).size` ist 1, `mapOf((1 to 2) to "x")[1 to 2]` findet `x`, `indexOf`/`contains`/`remove` finden gleiche Pairs und Listen; `Pair(1, "a")`, `zip` und `partition` zeigen `(1, a)`; `listOf(p).toString()` nutzt das eigene `toString()` der Elemente. Vergleiche mit `null` oder anderen Typen ergeben `false`; Iteratoren bleiben bei Identität. Der Inspektor zeigt Pair-Felder passiv als `(1, Leaf())` | 2026-10-02 beim Prüfen bekannter Lücken gefunden: mit dem Bundle aus f379d8e ergaben alle Vergleiche `false`, `setOf(…).size` 2, Pairs `Pair()`, `listOf(Hq(1)).toString()` `[Hq()]`. Ein erster Korrekturversuch ließ `Pair(1, 2) == null` endlos rekursiv enden (`StackOverflowError`); behoben, siehe `PATCH.md`. RT-52-Block in `smoke-curriculum-kotlin.mjs` (41 Fälle) scheitert mit dem alten Bundle beim ersten Fall und ist mit dem neuen grün; `test:runtime-state` prüft Inspektortext und `summary` gespeicherter und berechneter Pair-Felder; GUI-90 prüft Anzeige und leeres Eingabefeld | Runtime-Tests mit echtem Bundle und Chromium-Test GUI-90 |
+| RT-53 | `super.equals()`, `super.hashCode()` und `super.toString()`, die bei `Any` ankommen, arbeiten mit dem ganzen Objekt: mit `override fun equals(other: Any?) = super.equals(other)` ist ein Objekt sich selbst gleich (`==`, `equals`, `setOf(e, e).size` 1, `contains`), anderen Objekten nicht; `super.hashCode()` gleicht `hashCode()`; `super.toString()` ergibt `Eigen()` statt `Any()`. Gilt mit und ohne eigene Oberklasse, auch geerbt; `super.toString()` einer Schüler-Oberklasse bleibt unverändert | 2026-10-02 beim Prüfen von RT-52 gefunden; mit dem Bundle aus f379d8e ergab `e == e` `false`, `super.toString()` `Any()`. Ursache: `super` ist ein Teilobjekt (der `Any`-Teil); ohne eigene Oberklasse landet der Aufruf bei BlueKs `Any?`-Erweiterung statt bei `Any`. RT-53-Block in `smoke-curriculum-kotlin.mjs` (10 Fälle) scheitert mit dem alten Bundle beim ersten Fall (`false false false false`) und ist mit dem neuen grün | Runtime-Test mit echtem Bundle; kein GUI-Test |
+| RT-54 | Exceptions verhalten sich wie Kotlin-Objekte: `toString()` und String-Templates zeigen `MyEx: x` bzw. ohne Meldung `LeerEx` (auch `IllegalStateException("x").toString()` und `super.toString()` in einer Exception-Unterklasse); `catch` erhält das geworfene Objekt selbst (`e === geworfen`, Felder wie `e.betrag` einer eigenen `KontoException`); `message`, `cause` und `printStackTrace()` funktionieren auch außerhalb von `catch`; eigene Exceptions und Standard-Exceptions sind als `cause` möglich; eine nicht gefangene Exception ohne Meldung erscheint als `LeerEx` | 2026-10-02 beim Prüfen bekannter Lücken gefunden; mit dem Bundle aus f379d8e: `IllegalStateException("x").toString()` brach mit `memberFunctionsForSA not initialized` ab, Templates zeigten `MyEx()`, `MyEx("x").message` ergab `ClassCastException`, `catch (e: KontoException) { e.betrag }` eine `NullPointerException`, `Exception("a", IllegalStateException("b"))` einen Typfehler. RT-54-Block in `smoke-curriculum-kotlin.mjs` (20 Ausdrücke, `printStackTrace`, zwei ungefangene Fälle) scheitert mit dem alten Bundle beim ersten Fall und ist mit dem neuen grün | Runtime-Test mit echtem Bundle; kein GUI-Test. `null!!` behoben mit RT-61. Korrektur 2026-10-03: `stackTraceToString()` ist nur auf oberster Ebene im Codepad leer (kein Funktionsaufruf), bei eigenen wie bei Standard-Exceptions; innerhalb von Funktionen enthält er die Aufrufe. Offen: Die Positionen beziehen sich auf den zusammengesetzten Projekttext (`<BlueK project>:14:11`), nicht auf Datei und Zeile |
+| RT-55 | `break` und `continue` funktionieren in `for`-Schleifen über Ranges, `until`, `downTo`, Listen und Strings, auch verschachtelt, in `when`-Zweigen und in Funktionen wie `main()`; danach läuft das Programm normal weiter | 2026-10-02 beim Arbeiten an RT-56 gefunden: mit allen eingecheckten Bundles seit dfb7fe0 (also auch auf `main`) endete jedes `break`/`continue` in `for` mit `NormalBreakException: Break` bzw. `NormalContinueException: Continue`; `while` war nicht betroffen. Der vorhandene Curriculum-Fall mit `continue` erreichte es nie (keine `null` in der Liste). RT-55-Block in `smoke-curriculum-kotlin.mjs` scheitert mit dem Bundle aus c65f27d beim ersten Fall und ist mit dem neuen grün | Runtime-Test mit echtem Bundle; kein GUI-Test |
+| RT-56 | `when` ohne `else` ist als Anweisung erlaubt und tut nichts, wenn kein Zweig passt; als Wert (Initialisierung, Zuweisung, `return`, Argument, Ausdruckskörper) ist es erlaubt, wenn es alle Enum-Werte bzw. `true` und `false` abdeckt (bei nullable Subjekt auch `null`), sonst Compilefehler „'when' expression must be exhaustive. Add an 'else' branch.“ wie in Kotlin | 2026-10-02 auf Wunsch des Nutzers; mit dem Bundle aus c65f27d verlangte jedes `when` ein `else` („Currently, `when` expression must be used with an `else` branch“). RT-56-Block in `smoke-curriculum-kotlin.mjs` (7 Werte, Anweisungen mit Ausgabe, 7 abgelehnte Formen, `else` nicht zuletzt) scheitert mit dem alten Bundle beim Projekt und ist mit dem neuen grün | Runtime-Test mit echtem Bundle; kein GUI-Test. Nicht geprüft werden andere Wertpositionen (z. B. Operanden); dort führt `Unit` meist zu einem Typfehler |
+| RT-57 | `override fun toString() = "…"`, `override fun equals(other: Any?) = …` und `override fun hashCode() = …` ohne Rückgabetyp compilieren und wirken wie mit Rückgabetyp (Templates, `==`, Sets, Listen, `super.toString()` einer Schüler-Oberklasse); ein unpassender Rumpf wie `override fun toString() = 5` ergibt wie in Kotlin einen Typfehler | 2026-10-02 auf Wunsch des Nutzers; mit dem Bundle aus 011b5c2 brach das Laden mit „Cannot infer return type of function equals“ ab. RT-57-Block in `smoke-curriculum-kotlin.mjs` (6 Ausdrücke, 2 abgelehnte Rümpfe) scheitert mit dem alten Bundle beim Projekt und ist mit dem neuen grün | Runtime-Test mit echtem Bundle; kein GUI-Test. Bekannte, nicht geänderte Grenze: Überschreibungen brauchen denselben Rückgabetyp wie die überschriebene Funktion (README) |
+| RT-58 | `map.entries` liefert die Einträge als Set; Einträge erscheinen wie in Kotlin als `a=1` (auch aus `for (e in map)`, `forEach { }`, `maxByOrNull { }`) und sind gleich, wenn Schlüssel und Wert gleich sind; `entries` bleibt nach Änderungen der Map lesbar (Momentaufnahme). `map.forEach { k, v -> }` bleibt eine dokumentierte Lücke | 2026-10-02 auf Wunsch des Nutzers; mit dem Bundle aus 6b0669e war `entries` unbekannt und Einträge zeigten `MapEntry()`. Ein erster Ansatz mit zweiparametrigem `forEach` scheiterte beim Laden („The function `Map/forEach` has been declared repeatedly“) und wurde verworfen; ein zweiter ließ `entries` nach einer Änderung der Map mit `ConcurrentModificationException` scheitern und nutzt nun Kopien der Einträge. RT-58-Block in `smoke-curriculum-kotlin.mjs` und fünf `entries`-Ausdrücke in `smoke-kotlin-surface.mjs` scheitern mit dem alten Bundle und sind mit dem neuen grün | Runtime-Tests mit echtem Bundle; kein GUI-Test |
+| RT-59 | Kleine Stdlib-Ergänzungen wie in Kotlin: `Double.MAX_VALUE`/`MIN_VALUE`/`POSITIVE_INFINITY`/`NEGATIVE_INFINITY`/`NaN`, `Char.MIN_VALUE`/`MAX_VALUE`, `map.containsKey`, `map.getOrDefault`, `String.lines()`, `String.zip(String)`, `String.count { }`, Zeichenbereiche (`for (c in 'a'..'z')`, `toList()`, `count()`), `chunked`/`windowed` für Listen und Ranges. `"abc".chunked(2)` bleibt eine dokumentierte Lücke, deren Hinweis nur noch für Strings gilt (vorher erschien er fälschlich auch für Listen) | 2026-10-03 beim Durchgehen bekannter Lücken; mit dem Bundle aus 1cd9a81 fehlten alle 20 neuen Ausdrücke in `smoke-kotlin-surface.mjs`, mit dem neuen Bundle grün (95 unterstützt, 12 bekannte Lücken, 22 Meldungen) | Runtime-Test mit echtem Bundle; kein GUI-Test. `Double.MAX_VALUE` wurde dabei noch im JavaScript-Format ausgegeben (behoben mit RT-60) |
+| RT-60 | Doubles erscheinen wie in Kotlin auf der JVM: normal zwischen 10⁻³ und unter 10⁷ (`6.0`, `0.001`, `1234567.0`), sonst mit Exponent (`1.2345678E7`, `1.0E-4`, `1.0E20`, `1.7976931348623157E308`); gilt für Ausgaben, Templates, Listen und das Codepad | 2026-10-03 beim Prüfen von `Double.MAX_VALUE` gefunden; mit dem Bundle aus 4b29b27 ergaben `12345678.0` `12345678.0`, `10.0.pow(20)` `100000000000000000000.0` und `10.0.pow(-7)` `1e-7`. RT-60-Block in `smoke-curriculum-kotlin.mjs` (16 Fälle) scheitert mit dem alten Bundle und ist mit dem neuen grün | Runtime-Test mit echtem Bundle; kein GUI-Test. Abweichungen: `Double.MIN_VALUE` erscheint als `5.0E-324` (JVM: `4.9E-324`), das Literal `-0.0` als `0.0` |
+| RT-61 | `null!!` wirft eine `NullPointerException` ohne Meldung wie in Kotlin: `e.message` ist `null`, Text und nicht gefangene Meldung lauten `NullPointerException`; eine eigene Meldung (`NullPointerException("eigen")`) bleibt | 2026-10-03, Rest aus RT-54; mit dem Bundle aus 9a020fa trug die NPE den Text `"null"` (`NullPointerException: null`). RT-61-Block in `smoke-curriculum-kotlin.mjs` scheitert mit dem alten Bundle und ist mit dem neuen grün | Runtime-Test mit echtem Bundle; kein GUI-Test |
+| RT-62 | `Triple` (`first`/`second`/`third`, Ausgabe `(a, b, c)`, Inhaltsvergleich), `StringBuilder` (`append`, `appendLine`, `insert`, `reverse`, `clear`, `isEmpty`, `length`, `sb[i]`, Ausgabe des Inhalts), `buildString { append(…) }` auch mit `readln()` sowie `Random.nextInt`/`nextDouble`/`nextBoolean` wie in Kotlin | 2026-10-03 beim Durchgehen bekannter Lücken. Erster Ansatz mit `StringBuilder`-Erweiterungsfunktionen scheiterte in `buildString { append("a") }` („No matching function … `append`“): Kotlite findet über den impliziten Empfänger keine Bibliotheks-Erweiterungen (auch `mutableListOf(1).apply { add(2) }` scheitert, README); die Funktionen sind deshalb Methoden der Klasse. Mit dem Bundle aus 4594330 fehlen die 15 neuen Ausdrücke in `smoke-kotlin-surface.mjs`, und der RT-62-Eingabefall in `smoke-kotlite-browser.mjs` scheitert; mit dem neuen Bundle grün (110 unterstützt) | Runtime-Tests mit echtem Bundle; kein GUI-Test. Offen: `Random(seed)`, weitere `StringBuilder`-Funktionen; die allgemeine Lücke mit dem impliziten Empfänger ist mit RT-63 behoben |
+| RT-63 | Über den impliziten Empfänger werden Erweiterungsfunktionen gefunden: `liste.apply { add(1) }`, `with(liste) { add(2); size }`, `"abc".run { uppercase() }`, `with("abc") { substring(1) }`, `liste.run { map { … } }`, eigene Erweiterungen wie `gruss()` für `fun Hund.gruss()` in einer `Hund`-Methode oder einer anderen `Hund`-Erweiterung; ebenso Erweiterungs-Properties eines Obertyps (`size` für `MutableList`). Unbekannte Namen und falsche Argumenttypen behalten ihre Meldung | 2026-10-03 auf Wunsch des Nutzers (beim Bau von RT-62 gefunden). Mit dem Bundle aus 2a8429b scheiterte schon das Laden des Testprojekts („`gruss` is unknown“), `mutableListOf(1).run { size }` war auch dort schon unbekannt. Ein erster Ansatz für die Obertyp-Properties ließ das Laden der Stdlib mit „Unknown type T“ scheitern; generische Typen werden dort nun übersprungen. RT-63-Block in `smoke-curriculum-kotlin.mjs` (12 Ausdrücke, 2 Fehlermeldungen) scheitert mit dem alten Bundle und ist mit dem neuen grün | Runtime-Test mit echtem Bundle; kein GUI-Test. Abweichung: Eine passende gleichnamige Top-Level-Funktion gewinnt gegen die Funktion des Empfängers; nur der innerste Empfänger wird versucht (README, `PATCH.md`) |
 
 | GUI-93 | Objekt-Kontextmenüs und geerbte Methoden-Untermenüs liegen über offenen Inspektoren und bleiben anklickbar; Parameterdialoge liegen weiterhin darüber | Chromium GUI-93 erzeugt tatsächliche Überlappungen mit einem verschobenen Inspektor, prüft den vordersten DOM-Treffer, öffnet den Parameterdialog und ruft eine geerbte Methode auf. Vor der Korrektur rot, nachher grün; GUI-49/82/85/87 ebenfalls grün | Automatisch im echten Browser abgesichert; keine separate visuelle Benutzerabnahme |
 | GUI-94 | Reset erhält den maximierten bzw. wiederhergestellten Zustand des BluePlay-Weltfensters | Chromium GUI-94 wechselt die angezeigte Welt, maximiert und setzt zurück; prüft die erneut erzeugte ursprüngliche Welt und unveränderte Fenstergrenzen, danach Reset bei normaler Fenstergröße | Vor der Korrektur rot, danach grün; GUI-57 und beide RT-25-BluePlay-Reset-Tests ebenfalls grün; keine gesonderte visuelle Benutzerabnahme |
@@ -2162,3 +2174,263 @@ Tatsächliche Prüfungen mit dem neu gebauten Bundle (`npm run build:kotlite`):
 - `git diff --check` ohne Befund.
 - Nicht automatisiert: Durchsatzgrenzen (PERF-04, zeitbasiert), Firefox,
   echtes Safari und die visuelle Benutzerabnahme bei vielen Actors.
+
+### RT-52: Inhaltsgleichheit von Pair, List, Set und Map (2026-10-02)
+
+Beim Prüfen bekannter Lücken gegen das Bundle aus f379d8e fiel auf, dass
+`Pair(1, "a")` als `Pair()` erschien und `Pair`, `List`, `Set` und `Map` nur nach
+Identität verglichen wurden (`listOf(1, 2) == listOf(1, 2)` war `false`,
+`setOf(1 to 2, 1 to 2).size` 2). `listOf(x).toString()` ignorierte das eigene
+`toString()` der Elemente. Korrektur in `DelegatedValue` und `AnyClass`
+(`PATCH.md`), passive Pair-Anzeige im Inspektor in `KotliteSession`.
+
+Tatsächliche Prüfungen mit dem neu gebauten Bundle (`npm run build:kotlite`):
+
+- Erster Korrekturversuch: `Pair(1, 2) == null` endete in einem
+  `StackOverflowError`, weil `Any.equals` für Bibliothekswerte wieder über
+  `ClassInstance` zurückverzweigte. Behoben; der Fall steht im RT-52-Block.
+- `smoke-curriculum-kotlin.mjs` mit dem Bundle aus f379d8e: RT-52 scheitert
+  beim ersten Fall (`Pair(1, "a")`); mit dem neuen Bundle alle 41 Fälle grün.
+- `browser-smoke`, `test:references`, `test:kotlin-surface` (70 unterstützt,
+  13 bekannte Lücken), `test:generics` und `test:blueplay-demos` grün.
+- Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
+  alle Node-Suiten grün (darunter `test:runtime-state` mit den neuen
+  Pair-Feldern), `test:offline` 4/4, Chromium 140/140 grün, darunter das
+  erweiterte GUI-90; PERF-01 dabei 324 Frames, p95 15,2 ms, max. 19,5 ms.
+- `git diff --check` ohne Befund.
+- Nebenbei gefunden (schon mit f379d8e): Eine Klasse mit
+  `override fun equals(other: Any?) = super.equals(other)` ist nicht einmal sich
+  selbst gleich (`hs == hs` ergibt `false`). Behoben als RT-53.
+- Nicht geprüft: Firefox, echtes Safari, visuelle Benutzerabnahme der
+  Inspektoranzeige.
+
+### RT-53: `super.equals()`, `super.hashCode()` und `super.toString()` bis `Any` (2026-10-02)
+
+Beim Prüfen von RT-52 gefunden: `super` ist in Kotlite ein Teilobjekt. Bei
+Klassen ohne eigene Oberklasse löst `super.toString()` & Co. auf BlueKs
+`Any?`-Erweiterung auf, mit dem `Any`-Teil als Empfänger; mit Oberklasse kommt
+die `Any`-Methode an. Ein Debug-Bundle (`jsBrowserDevelopmentWebpack` mit
+vorübergehender Ausgabe, danach entfernt) zeigte beide Wege. Korrektur:
+`ClassInstance.wholeInstance()`, die `Any`-Semantik gebündelt in
+`AnyClass.anyEquals`/`anyHashCode`/`anyToString`, genutzt von den
+`Any`-Methoden und den `Any?`-Erweiterungen in `BlueKStdlibModule`.
+
+Tatsächliche Prüfungen mit dem neu gebauten Bundle:
+
+- RT-53-Block in `smoke-curriculum-kotlin.mjs` (10 Fälle) gegen das Bundle aus
+  f379d8e (Testkopie ohne RT-52-Block): scheitert beim ersten Fall mit
+  `false false false false`; mit dem neuen Bundle grün, RT-52 weiterhin grün.
+- `browser-smoke`, `test:generics` und `test:blueplay-demos` grün.
+- Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
+  alle Node-Suiten grün, `test:offline` 4/4, Chromium 140/140 grün; PERF-01
+  dabei 324 Frames, p95 15 ms, max. 18,3 ms.
+- `git diff --check` ohne Befund.
+- Nebenbei gefunden: eigene Exceptions zeigen mit `toString()` `MyEx()`
+  statt `MyEx: x`; `super.toString()` in einer Unterklasse von `Exception`
+  bricht mit `memberFunctionsForSA not initialized for type Exception` ab.
+  Behoben als RT-54.
+
+### RT-54: Exceptions als Objekte (2026-10-02)
+
+Beim Prüfen bekannter Lücken gefunden (Bundle aus f379d8e): Exception-Objekte
+hingen an der statischen, nie angebundenen Klassendefinition (Absturz von
+`toString()`, Typfehler bei `cause`), `throw` reichte eine Kopie mit Klasse und
+Meldung an `catch` weiter (eigene Felder fehlten), und `message` setzte außerhalb
+von `catch` einen `ThrowableValue` voraus. Korrektur in `ThrowableValue`,
+`ClassInstance` (`throwablePart`, Textform `MyEx: x`), `ThrowNode`/`TryNode`
+sowie `printStackTrace`, Inspektor-Fehlertext und Fehlermeldung in
+`KotliteSession` (`PATCH.md`).
+
+Tatsächliche Prüfungen mit dem neu gebauten Bundle:
+
+- RT-54-Block in `smoke-curriculum-kotlin.mjs` gegen das Bundle aus f379d8e
+  (Testkopie ohne RT-52/RT-53): scheitert beim ersten Fall mit
+  `memberFunctionsForSA not initialized for type IllegalStateException`; mit dem
+  neuen Bundle grün, ebenso RT-38 (Fangen nativer Ausnahmen nach Klasse,
+  `printStackTrace`, ungefangene Meldungen), RT-52 und RT-53.
+- `browser-smoke` (darunter `test:runtime-state` mit Getter-Fehlertext
+  `IllegalStateException: missing world`), `test:generics` und
+  `test:blueplay-demos` grün.
+- Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
+  alle Node-Suiten grün, `test:offline` 4/4, Chromium 140/140 grün; PERF-01
+  dabei 324 Frames, p95 15,2 ms, max. 26,9 ms.
+- `git diff --check` ohne Befund.
+- Offen: `stackTraceToString()` eigener Exceptions ist leer;
+  `null!!` meldet `NullPointerException: null`.
+
+### RT-55 und RT-56: `break`/`continue` in `for`, `when` ohne `else` (2026-10-02)
+
+RT-56 auf Wunsch des Nutzers; RT-55 dabei gefunden (`continue` in einem
+`when`-Zweig einer `for`-Schleife). Ein Rückgriff auf die eingecheckten Bundles
+von dfb7fe0 bis c65f27d zeigte RT-55 in allen Ständen, also auch auf `main`.
+Korrektur in `ForNode.eval` (RT-55) sowie `WhenNode.visit`/`eval` mit
+`isExhaustive` und `requireWhenValue` (RT-56), siehe `PATCH.md`; README
+„Aktuelle Grenzen“ angepasst.
+
+Tatsächliche Prüfungen mit dem neu gebauten Bundle:
+
+- RT-55- und RT-56-Block in `smoke-curriculum-kotlin.mjs` einzeln gegen das
+  Bundle aus c65f27d (Testkopien nur mit dem jeweiligen Block): RT-55 scheitert
+  beim ersten Fall (`NormalContinueException: Continue`), RT-56 beim Laden des
+  Projekts („Currently, `when` expression must be used with an `else`
+  branch“); mit dem neuen Bundle beide grün, ebenso alle übrigen Blöcke.
+- `browser-smoke`, `test:generics` und `test:blueplay-demos` grün.
+- Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
+  alle Node-Suiten grün, `test:offline` 4/4, Chromium 140/140 grün; PERF-01
+  dabei 322 Frames, p95 15,1 ms, max. 18,9 ms.
+- `git diff --check` ohne Befund.
+- Nicht geprüft: GUI-Ablauf mit `break`/`continue` (nur Runtime-Test);
+  `when` ohne `else` in anderen Wertpositionen (z. B. als Operand).
+
+### RT-57: Überschreibungen ohne Rückgabetyp (2026-10-02)
+
+Auf Wunsch des Nutzers. Korrektur in `ClassDefinition.attachToSemanticAnalyzer`
+(vorläufiger Rückgabetyp der überschriebenen Funktion) und
+`FunctionDeclarationNode.visit` (Prüfung des Ausdruckskörpers dagegen), siehe
+`PATCH.md`; README „Aktuelle Grenzen“ angepasst.
+
+Tatsächliche Prüfungen mit dem neu gebauten Bundle:
+
+- RT-57-Block in `smoke-curriculum-kotlin.mjs` gegen das Bundle aus 011b5c2
+  (Testkopie nur mit diesem Block): scheitert beim Laden mit „Cannot infer
+  return type of function equals“; mit dem neuen Bundle grün, ebenso alle
+  übrigen Blöcke.
+- `browser-smoke`, `test:generics` und `test:blueplay-demos` grün.
+- Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
+  alle Node-Suiten grün, `test:offline` 4/4, Chromium 140/140 grün; PERF-01
+  dabei 322 Frames, p95 15,2 ms, max. 26,8 ms.
+- `git diff --check` ohne Befund.
+- Dabei bestätigt, nicht geändert (schon mit c65f27d): Eine Überschreibung mit
+  spezielleren Rückgabetyp (`override fun f(): String` für `open fun f(): Any`)
+  meldet „Return type of function `f` `String` is not the same as the
+  overridden one `Any`“; im README dokumentiert.
+
+### RT-58: `map.entries` und Map-Einträge (2026-10-02)
+
+Auf Wunsch des Nutzers. `entries` in `BlueKStdlibModule` (mit Kopien der
+Einträge), Textform und Inhaltsvergleich von Map-Einträgen in `DelegatedValue`,
+passive Inspektoranzeige in `KotliteSession`; `map.forEach { k, v -> }` als
+Lücke in `docs/kotlin-surface.md` und im Oberflächentest.
+
+Tatsächliche Prüfungen mit dem neu gebauten Bundle:
+
+- RT-58-Block in `smoke-curriculum-kotlin.mjs` gegen das Bundle aus 6b0669e
+  (Testkopie nur mit diesem Block): scheitert beim ersten Fall (`MapEntry()`);
+  `smoke-kotlin-surface.mjs` gegen dasselbe Bundle: die fünf
+  `entries`-Ausdrücke fehlen. Mit dem neuen Bundle beide grün (75 unterstützt,
+  14 bekannte Lücken, 23 Meldungen).
+- `browser-smoke`, `test:generics` und `test:blueplay-demos` grün.
+- Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
+  alle Node-Suiten grün, `test:offline` 4/4, Chromium 140/140 grün; PERF-01
+  dabei 325 Frames, p95 15,1 ms, max. 19 ms.
+- `git diff --check` ohne Befund.
+- Verworfen: eine zweiparametrige `forEach`-Überladung (Kotlite meldet beim
+  Laden „The function `Map/forEach` has been declared repeatedly“).
+
+### RT-59: kleine Stdlib-Ergänzungen (2026-10-03)
+
+Ohne Rückmeldung des Nutzers, im vereinbarten Rahmen (kleine Lücken mit klarer
+Kotlin-Vorgabe). Native Funktionen in `BlueKStdlibModule`; in
+`KotlinSurfaceHints` entfallen die Hinweise auf fehlende Double-/Char-Grenzen,
+und der Hinweis zu `chunked`/`windowed` gilt nur noch für `String`.
+
+Tatsächliche Prüfungen mit dem neu gebauten Bundle:
+
+- `smoke-kotlin-surface.mjs` gegen das Bundle aus 1cd9a81: alle 20 neuen
+  Ausdrücke fehlen; mit dem neuen Bundle grün (95 unterstützt, 12 bekannte
+  Lücken, 22 Meldungen).
+- `browser-smoke`, `test:generics` und `test:blueplay-demos` grün.
+- Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
+  alle Node-Suiten grün, `test:offline` 4/4, Chromium 140/140 grün; PERF-01
+  dabei 324 Frames, p95 15 ms, max. 19,1 ms.
+- `git diff --check` ohne Befund.
+- Dabei gefunden, nicht geändert: Zahlliterale mit Exponent (`1.0e10`) kann
+  Kotlite nicht parsen.
+
+### RT-60: Double-Ausgabe wie auf der JVM (2026-10-03)
+
+Ohne Rückmeldung des Nutzers, im vereinbarten Rahmen. Korrektur in
+`DoubleValue.kotlinJvmText` (`PATCH.md`).
+
+Tatsächliche Prüfungen mit dem neu gebauten Bundle:
+
+- RT-60-Block in `smoke-curriculum-kotlin.mjs` gegen das Bundle aus 4b29b27
+  (Testkopie nur mit diesem Block): scheitert beim ersten Exponentenfall
+  (`12345678.0` statt `1.2345678E7`); mit dem neuen Bundle grün, ebenso alle
+  übrigen Blöcke.
+- `browser-smoke`, `test:generics` und `test:blueplay-demos` grün.
+- Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
+  alle Node-Suiten grün, `test:offline` 4/4, Chromium 140/140 grün; PERF-01
+  dabei 318 Frames, p95 15,2 ms, max. 27,6 ms.
+- `git diff --check` ohne Befund.
+- Bestätigte Abweichungen: `Double.MIN_VALUE` ergibt `5.0E-324`, das Literal
+  `-0.0` ergibt `0.0`.
+
+### RT-61: `null!!` ohne Meldung (2026-10-03)
+
+Ohne Rückmeldung des Nutzers, Rest aus RT-54. Standardmeldung von
+`NullPointerExceptionValue` ist `null` (`PATCH.md`). Die RT-54-Notiz zu leeren
+Stacktraces ist korrigiert (nur auf oberster Ebene im Codepad leer).
+
+Tatsächliche Prüfungen mit dem neu gebauten Bundle:
+
+- RT-61-Block in `smoke-curriculum-kotlin.mjs` gegen das Bundle aus 9a020fa
+  (Testkopie nur mit diesem Block): scheitert beim ersten Fall
+  (`false NullPointerException: null`); mit dem neuen Bundle grün, ebenso alle
+  übrigen Blöcke.
+- `browser-smoke`, `test:generics` und `test:blueplay-demos` grün.
+- Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
+  alle Node-Suiten grün, `test:offline` 4/4, Chromium 140/140 grün; PERF-01
+  dabei 320 Frames, p95 15,4 ms, max. 19,4 ms.
+- `git diff --check` ohne Befund.
+
+### RT-62: Triple, StringBuilder/buildString, Random (2026-10-03)
+
+Ohne Rückmeldung des Nutzers, im vereinbarten Rahmen. Klassen und Funktionen in
+`BlueKStdlibModule` (die `StringBuilder`-Funktionen als Klassenmethoden, siehe
+RT-62-Zeile), Ausgabe und Vergleich von `Triple` sowie Ausgabe von
+`StringBuilder` in `DelegatedValue`, passive Inspektoranzeige in
+`KotliteSession`. Die gefundene Lücke mit dem impliziten Empfänger steht im
+README.
+
+Tatsächliche Prüfungen mit dem neu gebauten Bundle:
+
+- `smoke-kotlin-surface.mjs` gegen das Bundle aus 4594330: die 15 neuen
+  Ausdrücke fehlen; der RT-62-Eingabefall in `smoke-kotlite-browser.mjs`
+  scheitert („buildString input: input was not requested“). Mit dem neuen
+  Bundle beide grün (110 unterstützt, 12 bekannte Lücken, 22 Meldungen).
+- `browser-smoke`, `test:generics` und `test:blueplay-demos` grün.
+- Erster vollständiger `npm run test:regression`: Typecheck 0 Fehler/0
+  Warnungen, alle Node-Suiten grün, `test:offline` 4/4, Chromium 139/140.
+  GUI-92 („detached Actor …“) scheiterte beim ersten Codepad-Schritt mit
+  Timeout (kein Eintrag nach 5 s). Der Rechner war stark ausgelastet
+  (Load ≈ 19–27, `fileproviderd`/iCloud bei 100 % CPU; der Lauf dauerte
+  10,7 statt etwa 3,6 Minuten). `references.spec.ts` einzeln: 7/7 grün;
+  vollständiger `npm run test:gui` erneut: 140/140 grün (GUI-92 21,9 s; PERF-01
+  323 Frames, p95 15,4 ms, max. 21,2 ms). Kein Zusammenhang mit der Änderung
+  erkennbar; GUI-92 ist unter Last zeitkritisch.
+- `git diff --check` ohne Befund.
+
+### RT-63: Erweiterungen über den impliziten Empfänger (2026-10-03)
+
+Auf Wunsch des Nutzers. `FunctionCallNode.visit` versucht einen sonst nicht
+auflösbaren unqualifizierten Aufruf als `this.f(...)`
+(`visitThroughImplicitReceiver`, Ausführung über `resolvedInvoke`);
+`copyReceiverIntoCurrentScope` deklariert auch Erweiterungs-Properties von
+Obertypen ohne Typparameter im Typ. README „Aktuelle Grenzen“ und `PATCH.md`
+nennen die Abweichungen.
+
+Tatsächliche Prüfungen mit dem neu gebauten Bundle:
+
+- RT-63-Block in `smoke-curriculum-kotlin.mjs` gegen das Bundle aus 2a8429b
+  (Testkopie nur mit diesem Block): scheitert beim Laden des Testprojekts
+  („`gruss` is unknown“); mit dem neuen Bundle grün, ebenso alle übrigen
+  Blöcke.
+- Zwischenstand: Der erste Ansatz für Obertyp-Properties brach schon das Laden
+  der Stdlib ab („Unknown type T“); behoben, bevor Tests liefen.
+- `browser-smoke`, `test:generics` (49 Grenzfälle) und `test:blueplay-demos`
+  grün.
+- Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
+  alle Node-Suiten grün (Oberfläche 110 unterstützt, 12 Lücken), `test:offline`
+  4/4, Chromium 140/140 grün; PERF-01 dabei 320 Frames, p95 15,2 ms, max. 27,1 ms.
+- `git diff --check` ohne Befund.

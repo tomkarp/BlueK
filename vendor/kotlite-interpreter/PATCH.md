@@ -448,3 +448,124 @@ Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (accepted forms and the
 rejected ones: after `||`, after the block, `var`/getter/open properties,
 assignments, lambdas, shadowing), `node scripts/smoke-kotlite-browser.mjs` (null
 checks).
+
+Content equality of library values (RT-52): `DelegatedValue` inherited identity
+equality from `ClassInstance`, so `listOf(1) == listOf(1)`, `Pair(1, 2) ==
+Pair(1, 2)` and `setOf(1 to 2, 1 to 2).size == 2` disagreed with Kotlin, and a
+pair printed as `Pair()`. `DelegatedValue.equals`/`hashCode` now delegate to
+the wrapped Kotlin `List`, `Set`, `Map` or `Pair` (whose elements compare with
+the interpreter's `equals`, including student overrides), and
+`convertToString` prints a pair as `(1, a)`. Other host values (iterators,
+opaque wrappers) keep identity. The `equals`/`hashCode`/`toString` members of
+`Any` call `DelegatedValue.anyEquals`/`anyHashCode`/`anyToString` instead of
+going through `ClassInstance`: library classes can have exactly these members
+as special functions, so dispatching back would recurse endlessly (first
+attempt: `Pair(1, 2) == null` ended in a `StackOverflowError`). Explicit
+`listOf(x).toString()` now also uses the elements' own `toString()`, as string
+templates already did. Coverage: `node scripts/smoke-curriculum-kotlin.mjs`
+(RT-52), `npm run test:runtime-state` (passive inspector text of pairs) and
+GUI-90 in `tests/gui/regressions.spec.ts`.
+
+`super` calls that reach `Any` (RT-53): an object consists of one
+`ClassInstance` part per class, linked by `parentInstance`, and `super`
+evaluates to a part. `Any.equals` compared that part with `other`, so a class
+with `override fun equals(other: Any?) = super.equals(other)` was not equal to
+itself; `super.hashCode()` differed from `hashCode()` and `super.toString()`
+gave `Any()`. A part now knows the part of its subclass (`childInstance`, set
+when the subclass part is created), and `ClassInstance.wholeInstance()` returns
+the object. `AnyClass.anyEquals`/`anyHashCode`/`anyToString` hold the `Any`
+semantics once (whole object, identity, `Name()` without calling a student
+override; content equality for `DelegatedValue`), used by the `Any` members and
+by hosts: in a class without superclass, `super.toString()` resolves to BlueK's
+`Any?` extension with the `Any` part as receiver, which then uses these
+functions. Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (RT-53).
+
+Exceptions as objects (RT-54): `ThrowableValue` attached the static
+`ProvidedClassDefinition`, which is never attached to an analyzer or
+interpreter, so `IllegalStateException("x").toString()` and `super.toString()`
+in an exception subclass failed with "memberFunctionsForSA not initialized",
+and `Exception("a", IllegalStateException("b"))` rejected the cause (the static
+definition knows no supertypes). It now uses the registered copy from the
+symbol table, as `DelegatedValue` does. `ClassInstance.throwablePart()` finds
+the `Throwable` part of an object, also of a student subclass; the `message`,
+`cause` and `name` properties, `stackTraceToString()` and the constructors'
+`cause` use it (`cause` returns the whole object). `ClassInstance.convertToString`
+prints an object with a `Throwable` part like Kotlin's `Throwable.toString()`
+without package (`MyEx: x`, `LeerEx`). `ThrowNode` used to throw a new
+`ThrowableValue` copy carrying only the class, message and stack trace, so in
+`catch (e: KontoException)` the student's fields were missing and `e` was not
+the thrown object; it now throws the object's own `Throwable` part, and
+`TryNode` matches and binds `wholeInstance()`. `CatchNode.eval` takes a
+`ClassInstance`. Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (RT-54)
+and the RT-38 cases there.
+
+`break`/`continue` in `for` (RT-55): `ForNode.eval` did not catch
+`NormalBreakException`/`NormalContinueException` (already upstream), so every
+`break` or `continue` in a `for` loop ended the program with
+"NormalContinueException: Continue"; `while` and `do-while` caught them. The
+loop now catches them like `while`, and the loop variables are undeclared after
+a `continue` as after a normal iteration. Coverage:
+`node scripts/smoke-curriculum-kotlin.mjs` (RT-55).
+
+`when` without `else` (RT-56): upstream required `else` in every `when`.
+`WhenNode.visit` now accepts a missing `else` and sets `isExhaustive`: true with
+`else` or when the regular conditions cover every value of the subject (all
+entries of an enum via `MemberType.Enum` navigation, `true` and `false`, plus
+`null` for a nullable subject). A non-exhaustive `when` has type `Unit`, and
+`WhenNode.eval` returns `Unit` when nothing matches. `requireWhenValue` rejects
+it, with Kotlin's message, where its value is used: property initializer,
+assignment, `return`, call argument and expression body. Other value positions
+(e.g. an operand) are not checked; there `Unit` usually causes a type error.
+Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (RT-56).
+
+Overrides without return type (RT-57): `override fun toString() = "…"` (also
+`equals`, `hashCode`) failed with "Cannot infer return type of function
+toString", because `ClassDefinition.attachToSemanticAnalyzer` looks up these
+special functions, which needs their return type, before the bodies are
+analyzed. An override without declared return type now gets the overridden
+function's resolved return type as `inferredReturnType` up front;
+`FunctionDeclarationNode.visit` then checks that the expression body fits it
+(`override fun toString() = 5` is a type mismatch, as in Kotlin) and replaces it
+with the body type. Coverage: `node scripts/smoke-curriculum-kotlin.mjs`
+(RT-57).
+
+Map entries (RT-58): the stdlib's `MapEntry` values are `DelegatedValue`s
+around a Kotlin `Map.Entry` and printed as `MapEntry()`. `DelegatedValue` now
+prints them as `a=1` and includes them in content equality (key and value), as
+for lists and pairs (RT-52). BlueK's `Map.entries` (`BlueKStdlibModule`) wraps
+copies of the entries, because an entry of Kotlin/JS's `LinkedHashMap` throws
+`ConcurrentModificationException` once the map changes. Coverage:
+`node scripts/smoke-curriculum-kotlin.mjs` (RT-58) and
+`node scripts/smoke-kotlin-surface.mjs`.
+
+Double output (RT-60): `DoubleValue.convertToString` printed Kotlin/JS's
+format (`100000000000000000000.0`, `1e-7`; whole numbers only got `.0`
+appended). `DoubleValue.kotlinJvmText` now follows Kotlin/JVM's
+`Double.toString()`: plain from 10^-3 up to below 10^7, otherwise
+`1.2345678E7` / `1.0E-4`, keeping JavaScript's shortest round-trip digits.
+Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (RT-60).
+
+`NullPointerExceptionValue` (RT-61): the default message was the text
+`"null"`, so `null!!` printed `NullPointerException: null` and `e.message`
+was the string "null". The default is now `null`, as in Kotlin. Coverage:
+`node scripts/smoke-curriculum-kotlin.mjs` (RT-61).
+
+`DelegatedValue` also prints a Kotlin `Triple` as `(1, a, b)` and compares it
+by content, and prints a `StringBuilder` as its content (RT-62). The classes
+themselves (`Triple`, `StringBuilder`, `Random`) and `buildString` are BlueK's
+(`BlueKStdlibModule`). Coverage: `node scripts/smoke-kotlin-surface.mjs` and
+`node scripts/smoke-kotlite-browser.mjs` (RT-62).
+
+Implicit receivers (RT-63): an unqualified call `f(...)` only searched callables
+without receiver and members of the implicit receiver, so `liste.apply { add(1) }`,
+`"abc".run { uppercase() }` and `gruss()` for `fun Hund.gruss()` inside `Hund`
+failed. When no such callable matches, `FunctionCallNode.visit` now analyzes the
+call again as `this.f(...)` (`visitThroughImplicitReceiver`) and runs it via
+`resolvedInvoke`, like `f.invoke(...)`; a failed attempt restores the scope and
+reports the original error. Calls that resolved before resolve the same; a
+matching top-level function therefore still wins over an extension of the
+receiver (Kotlin prefers the receiver). `copyReceiverIntoCurrentScope` also
+declares extension properties of the receiver's supertypes (`size` of `List` for
+a `MutableList`), closest first, but only those whose type uses none of their
+type parameters (otherwise "Unknown type T"). Only the innermost `this` is
+tried. Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (RT-63).

@@ -1,6 +1,8 @@
 import com.sunnychung.lib.multiplatform.kotlite.Interpreter
+import com.sunnychung.lib.multiplatform.kotlite.model.AnyClass
 import com.sunnychung.lib.multiplatform.kotlite.model.BooleanValue
 import com.sunnychung.lib.multiplatform.kotlite.model.CharValue
+import com.sunnychung.lib.multiplatform.kotlite.model.ClassInstance
 import com.sunnychung.lib.multiplatform.kotlite.model.CustomFunctionDefinition
 import com.sunnychung.lib.multiplatform.kotlite.model.CustomFunctionParameter
 import com.sunnychung.lib.multiplatform.kotlite.model.DataType
@@ -14,6 +16,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.IteratorValue
 import com.sunnychung.lib.multiplatform.kotlite.model.LambdaValue
 import com.sunnychung.lib.multiplatform.kotlite.model.LibraryModule
 import com.sunnychung.lib.multiplatform.kotlite.model.ListValue
+import com.sunnychung.lib.multiplatform.kotlite.model.PairValue
 import com.sunnychung.lib.multiplatform.kotlite.model.NullValue
 import com.sunnychung.lib.multiplatform.kotlite.model.ProvidedClassDefinition
 import com.sunnychung.lib.multiplatform.kotlite.model.RuntimeValue
@@ -21,6 +24,10 @@ import com.sunnychung.lib.multiplatform.kotlite.model.SourcePosition
 import com.sunnychung.lib.multiplatform.kotlite.model.StringValue
 import com.sunnychung.lib.multiplatform.kotlite.model.SymbolTable
 import com.sunnychung.lib.multiplatform.kotlite.model.TypeParameter
+import com.sunnychung.lib.multiplatform.kotlite.stdlib.collections.SetValue
+import com.sunnychung.lib.multiplatform.kotlite.stdlib.collections.MapEntryValue
+import com.sunnychung.lib.multiplatform.kotlite.model.TypeNode
+import kotlin.random.Random
 
 /**
  * Kotlin standard library surface that Kotlite 1.1.0 does not provide, but
@@ -180,7 +187,18 @@ object BlueKStdlibModule : LibraryModule("bluek-stdlib") {
             type = "Int",
             getter = { interpreter, _, _ -> IntValue(Int.MIN_VALUE, interpreter.symbolTable()) },
         ),
+        // Double and Char limits as in Kotlin (RT-59); `Double.MIN_VALUE` is the smallest positive value.
+        constant("Double.Companion", "MAX_VALUE", "Double") { DoubleValue(Double.MAX_VALUE, it) },
+        constant("Double.Companion", "MIN_VALUE", "Double") { DoubleValue(Double.MIN_VALUE, it) },
+        constant("Double.Companion", "POSITIVE_INFINITY", "Double") { DoubleValue(Double.POSITIVE_INFINITY, it) },
+        constant("Double.Companion", "NEGATIVE_INFINITY", "Double") { DoubleValue(Double.NEGATIVE_INFINITY, it) },
+        constant("Double.Companion", "NaN", "Double") { DoubleValue(Double.NaN, it) },
+        constant("Char.Companion", "MIN_VALUE", "Char") { CharValue(Char.MIN_VALUE, it) },
+        constant("Char.Companion", "MAX_VALUE", "Char") { CharValue(Char.MAX_VALUE, it) },
     )
+
+    private fun constant(receiver: String, name: String, type: String, value: (SymbolTable) -> RuntimeValue) =
+        ExtensionProperty(declaredName = name, receiver = receiver, type = type, getter = { interpreter, _, _ -> value(interpreter.symbolTable()) })
 
     // ---- C: list aggregates ------------------------------------------------
 
@@ -231,7 +249,29 @@ object BlueKStdlibModule : LibraryModule("bluek-stdlib") {
             val values = elements(receiver).map { elementAsDouble(it) }
             DoubleValue(if (values.isEmpty()) Double.NaN else values.sum() / values.size, interpreter.symbolTable())
         },
+        // RT-59; Kotlin's own functions also check the sizes (IllegalArgumentException).
+        function("Iterable<T>", "chunked", "List<List<T>>", listOf(parameter("size", "Int")), listOf(TypeParameter("T", null))) { interpreter, receiver, args, typeArgs ->
+            val symbolTable = interpreter.symbolTable()
+            lists(elements(receiver).map { asRuntimeValue(it, symbolTable) }.chunked(ints(args[0])), typeArgs, symbolTable)
+        },
+        function(
+            "Iterable<T>", "windowed", "List<List<T>>",
+            listOf(parameter("size", "Int"), CustomFunctionParameter("step", "Int", "1"), CustomFunctionParameter("partialWindows", "Boolean", "false")),
+            listOf(TypeParameter("T", null)),
+        ) { interpreter, receiver, args, typeArgs ->
+            val symbolTable = interpreter.symbolTable()
+            val windows = elements(receiver).map { asRuntimeValue(it, symbolTable) }
+                .windowed(ints(args[0]), ints(args[1]), (args[2] as BooleanValue).value)
+            lists(windows, typeArgs, symbolTable)
+        },
     )
+
+    /** A `List<List<T>>` value from Kotlin lists of runtime values. */
+    private fun lists(lists: List<List<RuntimeValue>>, typeArgs: Map<String, DataType>, symbolTable: SymbolTable): RuntimeValue {
+        val elementType = typeArgs["T"] ?: symbolTable.IntType
+        val listType = symbolTable.assertToDataType(TypeNode(BUILTIN, "List", listOf(elementType.toTypeNode()), false))
+        return ListValue(lists.map { ListValue(it, elementType, symbolTable) }, listType, symbolTable)
+    }
 
     /** `List.lastIndex` already exists in the Kotlite stdlib; extension property names are global. */
     private val listProperties = listOf(
@@ -281,7 +321,46 @@ object BlueKStdlibModule : LibraryModule("bluek-stdlib") {
             val symbolTable = interpreter.symbolTable()
             ListValue(text(receiver).map { CharValue(it, symbolTable) }, symbolTable.CharType, symbolTable)
         },
+        // RT-59
+        function("String", "lines", "List<String>") { interpreter, receiver, _, _ ->
+            val symbolTable = interpreter.symbolTable()
+            ListValue(text(receiver).lines().map { StringValue(it, symbolTable) }, symbolTable.StringType, symbolTable)
+        },
+        function("String", "zip", "List<Pair<Char, Char>>", listOf(parameter("other", "String"))) { interpreter, receiver, args, _ ->
+            val symbolTable = interpreter.symbolTable()
+            val pairType = symbolTable.assertToDataType(TypeNode(BUILTIN, "Pair", listOf(TypeNode(BUILTIN, "Char", null, false), TypeNode(BUILTIN, "Char", null, false)), false))
+            val pairs = text(receiver).zip(text(args[0])).map { (a, b) ->
+                PairValue(Pair(CharValue(a, symbolTable), CharValue(b, symbolTable)), symbolTable.CharType, symbolTable.CharType, symbolTable)
+            }
+            ListValue(pairs, pairType, symbolTable)
+        },
+        suspendFunction("String", "count", "Int", listOf(parameter("predicate", "(Char) -> Boolean"))) { interpreter, receiver, args, _ ->
+            val predicate = args[0] as LambdaValue
+            val symbolTable = interpreter.symbolTable()
+            var count = 0
+            for (c in text(receiver)) {
+                if ((predicate.executeSuspended(arrayOf(CharValue(c, symbolTable))) as BooleanValue).value) count++
+            }
+            IntValue(count, symbolTable)
+        },
+        // `'a'..'z'` is a `ClosedRange<Char>`: iterable and countable as in Kotlin (RT-59).
+        function("ClosedRange<Char>", "iterator", "Iterator<Char>") { interpreter, receiver, _, _ ->
+            val symbolTable = interpreter.symbolTable()
+            IteratorValue(chars(receiver, symbolTable).iterator(), symbolTable.CharType, symbolTable)
+        },
+        function("ClosedRange<Char>", "toList", "List<Char>") { interpreter, receiver, _, _ ->
+            val symbolTable = interpreter.symbolTable()
+            ListValue(chars(receiver, symbolTable), symbolTable.CharType, symbolTable)
+        },
+        function("ClosedRange<Char>", "count", "Int") { interpreter, receiver, _, _ ->
+            IntValue(chars(receiver, interpreter.symbolTable()).size, interpreter.symbolTable())
+        },
     )
+
+    private fun chars(receiver: RuntimeValue?, symbolTable: SymbolTable): List<RuntimeValue> {
+        val range = (receiver as DelegatedValue<*>).value as ClosedRange<*>
+        return ((range.start as CharValue).value..(range.endInclusive as CharValue).value).map { CharValue(it, symbolTable) }
+    }
 
     private val stringProperties = listOf(
         ExtensionProperty(
@@ -303,6 +382,172 @@ object BlueKStdlibModule : LibraryModule("bluek-stdlib") {
         ),
     )
 
+    // ---- maps ----------------------------------------------------------------
+
+    /**
+     * `map.entries`, a snapshot rather than a live view (RT-58). The JVM's
+     * two-parameter `map.forEach { key, value -> }` cannot be added: builtin
+     * overloads that differ only in the lambda's parameter count collide.
+     */
+    private val mapFunctions = listOf(
+        // RT-59; `key in map` already worked.
+        function("Map<K, V>", "containsKey", "Boolean", listOf(parameter("key", "K")), listOf(TypeParameter("K", null), TypeParameter("V", null))) { interpreter, receiver, args, _ ->
+            BooleanValue(map(receiver).containsKey(args[0]), interpreter.symbolTable())
+        },
+        function(
+            "Map<K, V>", "getOrDefault", "V",
+            listOf(parameter("key", "K"), parameter("defaultValue", "V")),
+            listOf(TypeParameter("K", null), TypeParameter("V", null)),
+        ) { _, receiver, args, _ ->
+            val map = map(receiver)
+            if (map.containsKey(args[0])) map.getValue(args[0]) else args[1]
+        },
+    )
+
+    @Suppress("UNCHECKED_CAST")
+    private fun map(receiver: RuntimeValue?): Map<RuntimeValue, RuntimeValue> =
+        (receiver as DelegatedValue<*>).value as Map<RuntimeValue, RuntimeValue>
+
+    private val mapProperties = listOf(
+        ExtensionProperty(
+            declaredName = "entries",
+            typeParameters = listOf(TypeParameter("K", null), TypeParameter("V", null)),
+            receiver = "Map<K, V>",
+            type = "Set<MapEntry<K, V>>",
+            getter = { interpreter, receiver, typeArgs ->
+                val symbolTable = interpreter.symbolTable()
+                val keyType = typeArgs.getValue("K")
+                val valueType = typeArgs.getValue("V")
+                val entryType = symbolTable.assertToDataType(
+                    TypeNode(BUILTIN, "MapEntry", listOf(keyType.toTypeNode(), valueType.toTypeNode()), false)
+                )
+                @Suppress("UNCHECKED_CAST")
+                val map = (receiver as DelegatedValue<*>).value as Map<RuntimeValue, RuntimeValue>
+                SetValue(map.entries.mapTo(LinkedHashSet()) { MapEntryValue(EntrySnapshot(it.key, it.value), keyType, valueType, symbolTable) }, entryType, symbolTable)
+            },
+        ),
+    )
+
+    /**
+     * An entry that stays readable after the map changes, as on Kotlin/JVM; an
+     * entry of Kotlin/JS's `LinkedHashMap` then throws `ConcurrentModificationException`.
+     */
+    private class EntrySnapshot(override val key: RuntimeValue, override val value: RuntimeValue) : Map.Entry<RuntimeValue, RuntimeValue> {
+        override fun equals(other: Any?): Boolean = other is Map.Entry<*, *> && other.key == key && other.value == value
+        override fun hashCode(): Int = key.hashCode() xor value.hashCode()
+    }
+
+    // ---- Triple, StringBuilder, Random (RT-62) -------------------------------
+
+    private val tripleClass = ProvidedClassDefinition(
+        position = BUILTIN,
+        fullQualifiedName = "Triple",
+        typeParameters = listOf(TypeParameter("A", null), TypeParameter("B", null), TypeParameter("C", null)),
+        isInstanceCreationAllowed = true,
+        primaryConstructorParameters = listOf(parameter("first", "A"), parameter("second", "B"), parameter("third", "C")),
+        constructInstance = { interpreter, args, _ ->
+            DelegatedValue(Triple(args[0], args[1], args[2]), "Triple", typeArguments = args.map { it.type() }, symbolTable = interpreter.symbolTable())
+        },
+    )
+
+    private fun tripleProperty(name: String, type: String, part: (Triple<*, *, *>) -> Any?) = ExtensionProperty(
+        declaredName = name,
+        typeParameters = listOf(TypeParameter("A", null), TypeParameter("B", null), TypeParameter("C", null)),
+        receiver = "Triple<A, B, C>",
+        type = type,
+        getter = { _, receiver, _ -> part((receiver as DelegatedValue<*>).value as Triple<*, *, *>) as RuntimeValue },
+    )
+
+    /** Members of the class, as in Kotlin; `buildString { append(…) }` reaches them through the implicit receiver. */
+    private val stringBuilderMembers: List<CustomFunctionDefinition> = listOf(
+        function(null, "append", "StringBuilder", listOf(parameter("value", "Any?"))) { _, receiver, args, _ ->
+            builder(receiver).append(appendText(args[0])); receiver!!
+        },
+        function(null, "appendLine", "StringBuilder", listOf(CustomFunctionParameter("value", "Any?", "\"\""))) { _, receiver, args, _ ->
+            builder(receiver).append(appendText(args[0])).append('\n'); receiver!!
+        },
+        function(null, "insert", "StringBuilder", listOf(parameter("index", "Int"), parameter("value", "Any?"))) { _, receiver, args, _ ->
+            builder(receiver).insert(ints(args[0]), appendText(args[1])); receiver!!
+        },
+        function(null, "reverse", "StringBuilder") { _, receiver, _, _ -> builder(receiver).reverse(); receiver!! },
+        function(null, "clear", "StringBuilder") { _, receiver, _, _ -> builder(receiver).clear(); receiver!! },
+        function(null, "isEmpty", "Boolean") { interpreter, receiver, _, _ -> BooleanValue(builder(receiver).isEmpty(), interpreter.symbolTable()) },
+        function(null, "get", "Char", listOf(parameter("index", "Int")), modifiers = setOf(FunctionModifier.operator)) { interpreter, receiver, args, _ ->
+            CharValue(builder(receiver)[ints(args[0])], interpreter.symbolTable())
+        },
+    )
+
+    /** Kotlin's `StringBuilder`, wrapping the host's; it prints its content (see `DelegatedValue`). */
+    private val stringBuilderClass = ProvidedClassDefinition(
+        position = BUILTIN,
+        fullQualifiedName = "StringBuilder",
+        typeParameters = emptyList(),
+        isInstanceCreationAllowed = true,
+        primaryConstructorParameters = listOf(CustomFunctionParameter("content", "String", "\"\"")),
+        constructInstance = { interpreter, args, _ -> stringBuilder(StringBuilder((args[0] as StringValue).value), interpreter.symbolTable()) },
+        functions = stringBuilderMembers,
+    )
+
+    private fun stringBuilder(builder: StringBuilder, symbolTable: SymbolTable) =
+        DelegatedValue(builder, "StringBuilder", symbolTable = symbolTable)
+
+    private fun builder(receiver: RuntimeValue?): StringBuilder = (receiver as DelegatedValue<*>).value as StringBuilder
+
+    /** Text of an appended value; like Kotlin, objects use their own `toString()`. */
+    private fun appendText(value: RuntimeValue): String = if (value === NullValue) "null" else value.convertToString()
+
+    /** `Random` without `object` support: a class whose companion carries the functions, as `Int.MAX_VALUE` does. */
+    private val randomClass = ProvidedClassDefinition(
+        position = BUILTIN,
+        fullQualifiedName = "Random",
+        typeParameters = emptyList(),
+        isInstanceCreationAllowed = false,
+        primaryConstructorParameters = emptyList(),
+        constructInstance = { _, _, _ -> throw UnsupportedOperationException("Use Random.nextInt(...) instead of Random(...).") },
+    )
+
+    private val tripleProperties = listOf(
+        tripleProperty("first", "A") { it.first },
+        tripleProperty("second", "B") { it.second },
+        tripleProperty("third", "C") { it.third },
+    )
+
+    private val stringBuilderProperties = listOf(
+        ExtensionProperty(
+            declaredName = "length",
+            receiver = "StringBuilder",
+            type = "Int",
+            getter = { interpreter, receiver, _ -> IntValue(builder(receiver).length, interpreter.symbolTable()) },
+        ),
+    )
+
+    private val builderFunctions = listOf(
+        suspendFunction(null, "buildString", "String", listOf(parameter("builderAction", "StringBuilder.() -> Unit"))) { interpreter, _, args, _ ->
+            val symbolTable = interpreter.symbolTable()
+            val result = StringBuilder()
+            (args[0] as LambdaValue).executeSuspended(emptyArray(), stringBuilder(result, symbolTable))
+            StringValue(result.toString(), symbolTable)
+        },
+    )
+
+    private val randomFunctions = listOf(
+        function("Random.Companion", "nextInt", "Int") { interpreter, _, _, _ -> IntValue(Random.nextInt(), interpreter.symbolTable()) },
+        function("Random.Companion", "nextInt", "Int", listOf(parameter("until", "Int"))) { interpreter, _, args, _ ->
+            IntValue(Random.nextInt(ints(args[0])), interpreter.symbolTable())
+        },
+        function("Random.Companion", "nextInt", "Int", listOf(parameter("from", "Int"), parameter("until", "Int"))) { interpreter, _, args, _ ->
+            IntValue(Random.nextInt(ints(args[0]), ints(args[1])), interpreter.symbolTable())
+        },
+        function("Random.Companion", "nextDouble", "Double") { interpreter, _, _, _ -> DoubleValue(Random.nextDouble(), interpreter.symbolTable()) },
+        function("Random.Companion", "nextDouble", "Double", listOf(parameter("until", "Double"))) { interpreter, _, args, _ ->
+            DoubleValue(Random.nextDouble((args[0] as DoubleValue).value), interpreter.symbolTable())
+        },
+        function("Random.Companion", "nextDouble", "Double", listOf(parameter("from", "Double"), parameter("until", "Double"))) { interpreter, _, args, _ ->
+            DoubleValue(Random.nextDouble((args[0] as DoubleValue).value, (args[1] as DoubleValue).value), interpreter.symbolTable())
+        },
+        function("Random.Companion", "nextBoolean", "Boolean") { interpreter, _, _, _ -> BooleanValue(Random.nextBoolean(), interpreter.symbolTable()) },
+    )
+
     // ---- nullable receivers ------------------------------------------------
 
     /**
@@ -310,22 +555,40 @@ object BlueKStdlibModule : LibraryModule("bluek-stdlib") {
      * receiver (`Any?.toString()` and friends). Kotlite only has them as
      * members of `Any`, so `x.toString()` with `x: Int?` was rejected as an
      * unsafe call. A non-null receiver still resolves to the member.
+     *
+     * `super.toString()` in a class without superclass also resolves here, with
+     * the object's `Any` part as receiver. That part then acts like `Any`
+     * (whole object, no student override), RT-53.
      */
     private val nullableFunctions = listOf(
         function("Any?", "toString", "String") { interpreter, receiver, _, _ ->
-            StringValue(if (receiver == null || receiver === NullValue) "null" else receiver.convertToString(), interpreter.symbolTable())
+            StringValue(when {
+                receiver == null || receiver === NullValue -> "null"
+                receiver.isInheritancePart() -> AnyClass.anyToString(receiver)
+                else -> receiver.convertToString()
+            }, interpreter.symbolTable())
         },
         function("Any?", "equals", "Boolean", listOf(parameter("other", "Any?"))) { interpreter, receiver, args, _ ->
-            val isNull = receiver == null || receiver === NullValue
-            BooleanValue(if (isNull) args[0] === NullValue else receiver == args[0], interpreter.symbolTable())
+            BooleanValue(when {
+                receiver == null || receiver === NullValue -> args[0] === NullValue
+                receiver.isInheritancePart() -> AnyClass.anyEquals(receiver, args[0])
+                else -> receiver == args[0]
+            }, interpreter.symbolTable())
         },
         function("Any?", "hashCode", "Int") { interpreter, receiver, _, _ ->
-            IntValue(if (receiver == null || receiver === NullValue) 0 else receiver.hashCode(), interpreter.symbolTable())
+            IntValue(when {
+                receiver == null || receiver === NullValue -> 0
+                receiver.isInheritancePart() -> AnyClass.anyHashCode(receiver)
+                else -> receiver.hashCode()
+            }, interpreter.symbolTable())
         },
     )
 
-    override val classes: List<ProvidedClassDefinition> = emptyList()
-    override val properties: List<ExtensionProperty> = numberProperties + listProperties + stringProperties
+    /** A part of a larger object, as `super` evaluates to it; not a value of its own. */
+    private fun RuntimeValue.isInheritancePart() = this is ClassInstance && wholeInstance() !== this
+
+    override val classes: List<ProvidedClassDefinition> = listOf(tripleClass, stringBuilderClass, randomClass)
+    override val properties: List<ExtensionProperty> = numberProperties + listProperties + stringProperties + mapProperties + tripleProperties + stringBuilderProperties
     override val globalProperties: List<GlobalProperty> = emptyList()
-    override val functions: List<CustomFunctionDefinition> = numberFunctions + listFunctions + stringFunctions + nullableFunctions
+    override val functions: List<CustomFunctionDefinition> = numberFunctions + listFunctions + stringFunctions + mapFunctions + builderFunctions + randomFunctions + nullableFunctions
 }

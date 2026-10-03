@@ -1128,6 +1128,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         }
 
         value.visit(modifier = modifier)
+        requireWhenValue(value)
         val valueType = value.type().toDataType()
 
         val preAssignOperator = operator.removeSuffix("=")
@@ -1258,6 +1259,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             }
             if (declaredType != null && initialValue is FunctionCallNode) initialValue.expectedReturnType = declaredType
             initialValue?.visit(modifier = modifier)
+            requireWhenValue(initialValue)
         }
         if (currentScope.hasProperty(name = name, isThisScopeOnly = true)) {
             throw SemanticException(position, "Property `$name` has already been declared")
@@ -1602,6 +1604,14 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
             val valueType = body.type().toDataType()
             if (declaredReturnType == null && body.format == FunctionBodyFormat.Expression) {
+                // An override got the overridden return type up front (ClassDefinition); like Kotlin,
+                // its body may only narrow it: `override fun toString() = 5` is an error (RT-57).
+                inferredReturnType?.let { overridden ->
+                    val overriddenType = overridden.resolveGenericParameterType(typeParameters).toDataType()
+                    if (valueType !is NothingType && !overriddenType.isAssignableFrom(valueType)) {
+                        throw TypeMismatchException(position, overriddenType.nameWithNullable, valueType.nameWithNullable)
+                    }
+                }
                 inferredReturnType = body.type()
                 variantsOfThis.forEach { it.inferredReturnType = inferredReturnType }
             } else {
@@ -1685,7 +1695,22 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 )
             }
         }
-        currentScope.findExtensionPropertyByReceiver(typeNode.resolveGenericParameterTypeToUpperBound(clazz.typeParameters))
+        // Extension properties of the receiver and of its supertypes, the closest first: `size` is
+        // declared for `List`, and `mutableListOf(1).run { size }` must find it as well (RT-63). Of a
+        // supertype only properties whose type needs none of their type parameters (`size: Int`),
+        // which are not declared in this scope.
+        val receiverForExtensions = typeNode.resolveGenericParameterTypeToUpperBound(clazz.typeParameters)
+        val declaredExtensionProperties = mutableSetOf<String>()
+        clazz.selfAndSuperTypeNames()
+            .flatMap { name ->
+                if (name == receiverForExtensions.name) {
+                    currentScope.findExtensionPropertyByReceiver(receiverForExtensions)
+                } else {
+                    currentScope.findExtensionPropertyByReceiver(TypeNode(position, name, null, receiverForExtensions.isNullable))
+                        .filter { property -> !property.second.typeNode!!.mentionsAny(property.second.typeParameters.map { it.name }.toSet()) }
+                }
+            }
+            .filter { declaredExtensionProperties.add(it.second.declaredName) }
             .forEach {
                 currentScope.declareProperty(
                     position = position,
@@ -1705,6 +1730,50 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     extensionPropertyRef = it.first,
                 )
             }
+    }
+
+    private fun TypeNode.mentionsAny(names: Set<String>): Boolean =
+        name in names || arguments.orEmpty().any { it.mentionsAny(names) }
+
+    /** This class and its superclasses and interfaces, breadth-first (closest first). */
+    private fun ClassDefinition.selfAndSuperTypeNames(): List<String> {
+        val names = mutableListOf<String>()
+        val queue = ArrayDeque(listOf(this))
+        while (queue.isNotEmpty()) {
+            val clazz = queue.removeFirst()
+            if (clazz.fullQualifiedName in names) continue
+            names += clazz.fullQualifiedName
+            clazz.superClass?.let { queue += it }
+            queue += clazz.superInterfaces
+        }
+        return names
+    }
+
+    /**
+     * Like Kotlin, an unqualified `f(...)` also finds extension functions of the implicit receiver
+     * (`liste.apply { add(1) }`, `gruss()` for `fun Hund.gruss()` inside `Hund`), RT-63. It is tried
+     * only when no other callable matches, so every call that resolved before resolves the same.
+     * The call is analyzed again as `this.f(...)`, which the interpreter runs via `resolvedInvoke`.
+     */
+    private fun FunctionCallNode.visitThroughImplicitReceiver(functionName: String, modifier: Modifier): FunctionCallNode? {
+        if (function !is VariableReferenceNode || !currentScope.hasProperty("this")) return null
+        val viaReceiver = copy(
+            function = NavigationNode(
+                position = function.position,
+                subject = VariableReferenceNode(function.position, "this"),
+                operator = ".",
+                member = ClassMemberReferenceNode(function.position, functionName),
+            ),
+            resolvedInvoke = null,
+        )
+        val scope = currentScope
+        return try {
+            viaReceiver.visit(modifier)
+            viaReceiver
+        } catch (_: SemanticException) {
+            currentScope = scope // the failed attempt may leave its call scope open
+            null
+        }
     }
 
     private fun FunctionCallNode.describeArgumentTypes(): String = arguments.joinToString(", ") { argument ->
@@ -1766,8 +1835,16 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 if (resolutions.size > 1) {
                     throw SemanticException(position, "Ambiguous function call for `${functionName}`. ${resolutions.size} candidates match:\n${resolutions.joinToString("") { "- ${it.toDisplayableSignature()}\n" }}")
                 }
-                val resolution = resolutions.firstOrNull()
-                    ?: throw SemanticException(position, "No matching function or constructor `${functionName}` found for the argument types (${describeArgumentTypes()})")
+                val resolution = resolutions.firstOrNull() ?: run {
+                    visitThroughImplicitReceiver(functionName, modifier)?.let { viaReceiver ->
+                        resolvedInvoke = viaReceiver
+                        returnType = viaReceiver.returnType
+                        popScope()
+                        evaluateAndRegisterReturnType(this)
+                        return
+                    }
+                    throw SemanticException(position, "No matching function or constructor `${functionName}` found for the argument types (${describeArgumentTypes()})")
+                }
                 if (function is VariableReferenceNode) {
                     function.ownerRef = resolution.owner?.let { PropertyOwnerInfo(it) }
                 }
@@ -2381,6 +2458,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
     fun FunctionCallArgumentNode.visit(modifier: Modifier = Modifier()) {
         value.visit(modifier = modifier)
+        requireWhenValue(value)
     }
 
     fun BlockNode.visit(modifier: Modifier = Modifier()) {
@@ -2398,6 +2476,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 }
                 it.visit(modifier = modifier)
             }
+            if (format == FunctionBodyFormat.Expression) requireWhenValue(statements.singleOrNull())
 
             returnType = type()
         }
@@ -2430,6 +2509,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         }
 
         value?.visit(modifier = modifier)
+        requireWhenValue(value)
         val valueType = value?.type()?.toDataType() ?: UnitType()
         if (declaredReturnType != null && valueType !is NothingType && !declaredReturnType.isAssignableFrom(valueType)) {
             throw TypeMismatchException(position, declaredReturnType.descriptiveName, valueType.descriptiveName)
@@ -3368,14 +3448,11 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         subject?.visit(modifier = modifier)
 
         val numOfElse = entries.count { it.isElseCondition() }
-        if (numOfElse < 1) {
-            throw SemanticException(position, "Currently, `when` expression must be used with an `else` branch")
-        }
         if (numOfElse > 1) {
             throw SemanticException(position, "`when` expression can only contain one `else` branch")
         }
         val elseIndex = entries.indexOfFirst { it.isElseCondition() }
-        if (elseIndex != entries.lastIndex) {
+        if (numOfElse == 1 && elseIndex != entries.lastIndex) {
             throw SemanticException(entries[elseIndex].position, "`else` branch must be the last branch of a `when` expression")
         }
 
@@ -3384,10 +3461,44 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             smartCastsFromEarlierEntries += it.visit(modifier = modifier, subject = subject, smartCastsFromEarlierEntries = smartCastsFromEarlierEntries)
         }
 
-        // there is at least 1 else branch, so there is at least 1 branch
-        type = superTypeOf(*entries.map { it.bodyType }.toTypedArray())
+        // Like Kotlin, `else` is only needed when the value is used and the entries do not cover every
+        // value (see requireWhenValue). Otherwise the `when` is a statement whose value is `Unit`.
+        isExhaustive = numOfElse == 1 || coversAllSubjectValues()
+        type = if (isExhaustive && entries.isNotEmpty()) {
+            superTypeOf(*entries.map { it.bodyType }.toTypedArray())
+        } else {
+            typeRegistry["Unit"]!!
+        }
 
         popScope()
+    }
+
+    /** All entries of an enum, or `true` and `false`; and `null` for a nullable subject. */
+    private fun WhenNode.coversAllSubjectValues(): Boolean {
+        val subjectType = subject?.type ?: return false
+        val values = entries.flatMap { it.conditions }
+            .filter { it.testType == WhenConditionNode.TestType.Regular && !it.isNegateResult }
+            .map { it.expression }
+        if (subjectType.isNullable && values.none { it is NullNode }) return false
+        if (subjectType.name == "Boolean") {
+            return values.any { it is BooleanNode && it.value } && values.any { it is BooleanNode && !it.value }
+        }
+        val enumClass = currentScope.findClass(subjectType.name)?.first
+            ?.takeIf { ClassModifier.enum in it.modifiers && it.enumValues.isNotEmpty() }
+            ?: return false
+        val covered = values.mapNotNull { value ->
+            (value as? NavigationNode)
+                ?.takeIf { it.memberType == NavigationNode.MemberType.Enum && (it.subject as? VariableReferenceNode)?.variableName == enumClass.fullQualifiedName }
+                ?.member?.name
+        }.toSet()
+        return covered.containsAll(enumClass.enumValues.keys)
+    }
+
+    /** Kotlin rejects a `when` without `else` whose value is used, unless it covers every value. */
+    private fun requireWhenValue(node: ASTNode?) {
+        if (node is WhenNode && !node.isExhaustive) {
+            throw SemanticException(node.position, "'when' expression must be exhaustive. Add an 'else' branch.")
+        }
     }
 
     fun EnumEntryNode.visit(modifier: Modifier = Modifier(), className: String = "") {

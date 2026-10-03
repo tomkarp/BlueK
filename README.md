@@ -153,6 +153,8 @@ Konstruktor), eigene Getter/Setter mit `field`, `private` (auch `private set`),
 Default- und Named-Arguments, `vararg`, `try`/`catch`/`finally` mit
 Standardausnahmen, `Long`, `Float` (als `Double`), Nullability mit `?.`/`?:`,
 Smart Casts nach `is` und Null-Prüfungen,
+`when` ohne `else` als Anweisung oder wenn alle Enum-Werte bzw. `true` und
+`false` abgedeckt sind (RT-56), `break`/`continue` in allen Schleifen (RT-55),
 List/Map/Set und Ranges.
 
 Nicht unterstützt sind derzeit:
@@ -175,9 +177,17 @@ Nicht unterstützt sind derzeit:
   nötig
 - Arrays (`arrayOf`, `IntArray`), `Short`, Hex-/Binär-/`_`-Zahlliterale,
   Bit-Operationen, `Triple`
-- `enum`-`values()` (`entries` funktioniert); `when` verlangt immer einen
-  `else`-Zweig
-- `override fun toString()`/`equals()` ohne expliziten Rückgabetyp
+- `enum`-`values()` (`entries` funktioniert)
+- Über einen impliziten Empfänger (`liste.apply { add(1) }`,
+  `with(text) { uppercase() }`, `gruss()` für `fun Hund.gruss()` in einer
+  `Hund`-Methode) gewinnt eine gleichnamige eigene Top-Level-Funktion, die zu
+  den Argumenten passt (Kotlin: die Funktion des Empfängers, RT-63);
+  Erweiterungs-Properties eines Obertyps werden dort nur gefunden, wenn ihr Typ
+  keinen Typparameter enthält (`size`, `lastIndex`)
+- Eine überschreibende Funktion braucht denselben Rückgabetyp wie die
+  überschriebene; Kotlin erlaubt auch einen spezielleren (`override fun f():
+  String` für `open fun f(): Any`). Ohne angegebenen Rückgabetyp übernimmt sie
+  den überschriebenen, z. B. `override fun toString() = "…"` (RT-57)
 - Top-Level-Properties bei Bedarf initialisieren: BlueK initialisiert sie
   beim Laden in Dateireihenfolge. Liest ein Initialisierer eine später
   stehende Property direkt (`val a = b + 1` vor `val b = 2`), ist das ein

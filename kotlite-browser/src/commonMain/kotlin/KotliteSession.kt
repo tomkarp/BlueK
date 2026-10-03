@@ -172,9 +172,8 @@ class KotliteSession {
             returnType = "Nothing?",
             parameterTypes = listOf(CustomFunctionParameter("error", "Throwable")),
             executable = { _, _, args, _ ->
-                val thrown = args[0] as ThrowableValue
-                inspectionFailure = (thrown.externalExceptionClassName ?: thrown.type().name) +
-                    (thrown.message?.let { ": $it" } ?: "")
+                // `MyEx: x` as Kotlin prints it, without running a student `toString()`.
+                inspectionFailure = (args[0] as ClassInstance).convertToString(isCallCustomFunction = false)
                 NullValue
             },
         ))
@@ -185,9 +184,9 @@ class KotliteSession {
             returnType = "Unit",
             parameterTypes = emptyList(),
             executable = { _, receiver, _, _ ->
-                val error = receiver as ThrowableValue
+                val error = (receiver as ClassInstance).throwablePart()!!
                 appendOutput(buildString {
-                    append(error.externalExceptionClassName ?: error.type().name)
+                    append(error.externalExceptionClassName ?: receiver.type().name)
                     error.message?.let { append(": "); append(it) }
                     append('\n')
                     error.stacktrace.forEach { append("    at "); append(it); append('\n') }
@@ -873,8 +872,7 @@ class KotliteSession {
                 val member = value.readBackingPropertyByDeclaredName(name)
                 val display = member?.let(::inspectorDisplay) ?: "<uninitialized>"
                 val reference = member is ClassInstance && member !is DelegatedValue<*>
-                // Collections are shown as a summary that is no Kotlin expression.
-                val summary = (member as? DelegatedValue<*>)?.value.let { it is Collection<*> || it is Map<*, *> }
+                val summary = isInspectorSummary(member)
                 "{\"name\":\"${escape(name)}\",\"value\":\"${escape(display)}\",\"type\":${member?.let { jsonType(it.type().toTypeNode()) } ?: "null"},\"setterPrivate\":$setterPrivate,\"reference\":$reference,\"summary\":$summary}"
             }
         }
@@ -898,7 +896,8 @@ class KotliteSession {
 
     /**
      * Passive text for an inspected field: never runs a student `toString()`,
-     * and shows the size and first elements of collections instead of `MutableList()`.
+     * and shows the size and first elements of collections instead of `MutableList()`
+     * pairs as `(1, a)`, triples as `(1, a, b)` and map entries as `a=1`.
      */
     private fun inspectorDisplay(value: RuntimeValue): String {
         val content = (value as? DelegatedValue<*>)?.value
@@ -907,8 +906,18 @@ class KotliteSession {
             return "[$shown${if (content.size > 5) ", …" else ""}] (size ${content.size})"
         }
         if (content is Map<*, *>) return "{…} (size ${content.size})"
+        if (content is Pair<*, *>) return listOf(content.first, content.second)
+            .joinToString(", ", "(", ")") { (it as? RuntimeValue)?.let(::inspectorDisplay) ?: it.toString() }
+        if (content is Map.Entry<*, *>) return listOf(content.key, content.value)
+            .joinToString("=") { (it as? RuntimeValue)?.let(::inspectorDisplay) ?: it.toString() }
+        if (content is Triple<*, *, *>) return listOf(content.first, content.second, content.third)
+            .joinToString(", ", "(", ")") { (it as? RuntimeValue)?.let(::inspectorDisplay) ?: it.toString() }
         return if (value is ClassInstance && value !is DelegatedValue<*>) value.convertToString(isCallCustomFunction = false) else value.convertToString()
     }
+
+    /** Collections, pairs, triples, map entries and StringBuilders are shown as a summary that is no Kotlin expression. */
+    private fun isInspectorSummary(value: RuntimeValue?): Boolean =
+        (value as? DelegatedValue<*>)?.value.let { it is Collection<*> || it is Map<*, *> || it is Map.Entry<*, *> || it is Pair<*, *> || it is Triple<*, *, *> || it is StringBuilder }
 
     /** Explicit property access may run a getter; passive inspection never does. */
     fun get(objectId: String, propertyName: String): String {
@@ -939,8 +948,7 @@ class KotliteSession {
         val setterPrivate = propertyName in privateSetterNames[owner.type().name].orEmpty()
         val value = inspectedPropertyValue
         inspectedPropertyValue = null
-        val content = (value as? DelegatedValue<*>)?.value
-        val summary = content is Collection<*> || content is Map<*, *>
+        val summary = isInspectorSummary(value)
         val reference = value is ClassInstance && value !is DelegatedValue<*> && parsed.kind != "error"
         val field = "{\"name\":\"${escape(propertyName)}\",\"value\":\"${escape(parsed.display as? String ?: "<uninitialized>")}\",\"type\":${JSON.stringify(parsed.type ?: null)},\"computed\":$computed,\"setterPrivate\":$setterPrivate,\"reference\":$reference,\"summary\":$summary" +
             (if (reference) ",\"objectId\":\"${escape(parsed.objectId as String)}\"" else "") +
@@ -1057,16 +1065,15 @@ class KotliteSession {
         // Deep recursion inside a synchronous callback (e.g. `toString`) can still exhaust the host stack.
         if (thrown == null && error.isHostStackOverflow)
             return errorMessage("StackOverflowError: ${StandardExceptionValue.stackOverflowMessage(null)}", phase, fatal)
-        val name = thrown?.let { it.externalExceptionClassName ?: it.type().name } ?: error.fullClassName
-        val message = thrown?.message ?: error.message ?: "Kotlite evaluation failed."
+        // `MyEx: x`, or `MyEx` without message, for the thrown object (also a student subclass).
+        if (thrown != null) return errorMessage(thrown.wholeInstance().convertToString(isCallCustomFunction = false), phase, fatal)
+        val message = error.message ?: "Kotlite evaluation failed."
         // A missing name is reported by Kotlite as an ordinary analysis error.
         // BlueK says instead which side the gap is on; the exception class name
         // would only add noise there.
-        if (thrown == null) {
-            KotlinSurfaceHints.rewrite(message, knownNames, declaredNames())
-                ?.let { return errorMessage(it, phase, fatal) }
-        }
-        return errorMessage("$name: $message", phase, fatal)
+        KotlinSurfaceHints.rewrite(message, knownNames, declaredNames())
+            ?.let { return errorMessage(it, phase, fatal) }
+        return errorMessage("${error.fullClassName}: $message", phase, fatal)
     }
     /**
      * Names the student declared in the analyzed source. Kotlite reports a

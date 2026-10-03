@@ -32,8 +32,6 @@ object KotlinSurfaceHints {
         "toIntArray" to ARRAYS,
         "toTypedArray" to ARRAYS,
         "toCharArray" to TEXT_AS_LIST,
-        "chunked" to TEXT_AS_LIST,
-        "windowed" to TEXT_AS_LIST,
         "format" to "BlueK cannot format numbers with a format string yet. Build the text yourself, e.g. \"\$betrag Euro\".",
         "withIndex" to "`withIndex()` is not available in BlueK. Use `indices` and read the element with `liste[i]`.",
         "Math" to "`Math` belongs to Java and is not available in BlueK. Kotlin writes `abs(x)`, `sqrt(x)` and `PI` directly.",
@@ -46,10 +44,8 @@ object KotlinSurfaceHints {
         ("String" to "map") to TEXT_AS_LIST,
         ("String" to "filterIndexed") to TEXT_AS_LIST,
         ("String" to "toMutableList") to TEXT_AS_LIST,
-        ("Double.Companion" to "MAX_VALUE") to "BlueK provides `Int.MAX_VALUE` and `Int.MIN_VALUE`, but no Double or Char limits.",
-        ("Double.Companion" to "MIN_VALUE") to "BlueK provides `Int.MAX_VALUE` and `Int.MIN_VALUE`, but no Double or Char limits.",
-        ("Char.Companion" to "MAX_VALUE") to "BlueK provides `Int.MAX_VALUE` and `Int.MIN_VALUE`, but no Double or Char limits.",
-        ("Char.Companion" to "MIN_VALUE") to "BlueK provides `Int.MAX_VALUE` and `Int.MIN_VALUE`, but no Double or Char limits.",
+        ("String" to "chunked") to TEXT_AS_LIST,
+        ("String" to "windowed") to TEXT_AS_LIST,
     )
 
     /** Kotlin's own wording for `.` on a nullable receiver; already the message BlueK wants to show. */
