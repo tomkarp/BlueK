@@ -569,3 +569,98 @@ declares extension properties of the receiver's supertypes (`size` of `List` for
 a `MutableList`), closest first, but only those whose type uses none of their
 type parameters (otherwise "Unknown type T"). Only the innermost `this` is
 tried. Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (RT-63).
+
+`data class` (RT-64): `ClassModifier.data`; `data` is a modifier only directly
+before `class` (`Parser.isDataClassModifier`, used by `modifiers()`,
+`declaration()` and `statement()`), so `val data = ...` stays valid.
+`Parser.dataClassMembers` checks Kotlin's rules (at least one primary
+constructor parameter, only `val`/`var` parameters, no `open`/`abstract`/`enum`)
+and appends the generated members as Kotlin source parsed with a sub-parser:
+`toString()` (`Punkt(x=1, y=2)`), `equals()` (`this === other`, `is Name<*>`,
+property `==`), `hashCode()` (`31 * result + p.hashCode()`), `componentN()`
+(without `operator`, which Kotlite rejects for these names) and
+`copy(p = this.p, ...)`. Members the class declares itself are not generated.
+The source starts on the class's line so messages point there.
+`FunctionDeclarationNode.isGenerated` marks them; BlueK's manifest hides them.
+Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (RT-64) and the RT-64
+browser test in `tests/gui/regressions.spec.ts`.
+
+Destructuring (RT-65): the parser rewrites destructuring into plain nodes.
+`val (a, _, c: Int) = e` (also `var`, in `statement()`) becomes a hidden
+property `<destructuring line:col>` holding `e` and `val a = <hidden>.component1()`
+per named component, wrapped in a parse-only `DestructuringDeclarationNode` that
+`statements()`, `script()` and `controlStructureBody()` flatten (the analyzer,
+interpreter and code generator reject it if it ever arrives). The hidden name
+contains `<` (no Kotlin name does) and the position, so Codepad inputs do not
+collide. `for ((k, v) in e)` and lambda parameters `{ (k, v) -> }` get a hidden
+loop variable or parameter and the component properties at the start of the
+body; a lambda starting with a parenthesized expression still falls back to no
+parameters. `propertyDeclaration` (class members) rejects destructuring as
+Kotlin does. `DelegatedValue` prints and compares Kotlin's `IndexedValue`;
+`componentN` for built-in types and `withIndex()` are BlueK's
+(`BlueKStdlibModule`). Coverage: `node scripts/smoke-curriculum-kotlin.mjs`
+(RT-65) and `node scripts/smoke-kotlin-surface.mjs`.
+
+`vararg` in extension functions (RT-66): an extension function is registered as
+a copy (`FunctionDeclarationNode.copy`, `CustomFunctionDeclarationNode.copy`),
+and the copy lost `isVararg`, so `fun String.f(vararg a: Int)` and library
+extensions such as BlueK's `String.format` accepted exactly one argument. Both
+copies keep `isVararg` (and `isGenerated`). Coverage:
+`node scripts/smoke-curriculum-kotlin.mjs` (RT-66) and
+`node scripts/smoke-kotlin-surface.mjs` (`format`).
+
+Objects and companion objects (RT-67): the parser reads `object Name [: …] { … }`
+and `companion object [: …] { … }` into a `ClassDeclarationNode` with
+`isObject`; the companion becomes `companionObject` of its class, named
+`<Class>.Companion` like the implicit companion class Kotlite already declared
+for enums and `fun X.Companion.f()` (which a class with a declared companion and
+an object no longer get). `ClassDefinition.isObjectDeclaration` forbids `Name()`;
+the interpreter creates the single instance on first use through
+`evalCreateClassInstance` and keeps it in `ClassDefinition.objectInstance`, set as
+soon as construction starts and cleared again if it throws. Code refers to it as
+`object/<Class>` (`OBJECT_REF_PREFIX`): the analyzer sets that as
+`transformedRefName` of an object's name and as owner of companion members, and
+`VariableReferenceNode.eval` resolves it; lambdas do not capture it. Inside a
+class (and its subclasses) companion members are found by plain name through a
+scope that `declareClassesAhead` puts around the class scopes; it is filled from
+the analyzed companion class scope (`SymbolTable.declareObjectMembersFrom`) when
+code of the class first looks up one of the companion's names (new hook
+`SemanticAnalyzerSymbolTable.beforePropertyLookup`, plus `beforeFunctionLookup`).
+A qualified access before the class is analyzed analyzes the class first. For a
+class with a companion, constructor properties get their declared types before
+default arguments are analyzed. Private members are shared between a class and
+its companion (`canAccessPrivateMembersOf`). Objects print as their name.
+`const` is accepted (`PropertyModifier.const`) and checked like Kotlin (top
+level, object or companion; `val`; primitive or `String`; constant initializer).
+A class name alone evaluates to its companion; `X.Companion` parses as a type
+(for Codepad result bindings). Unrelated fix found on the way: calls on the
+companion of a generic class (`Box.von(5)`) converted `Class<Box>` without type
+arguments and failed; the call analysis now unboxes the companion type.
+Rejected with own messages: named companions, nested objects/classes, local
+objects and object expressions. Coverage: `node scripts/smoke-curriculum-kotlin.mjs`
+(RT-67) and the RT-67 browser test in `tests/gui/regressions.spec.ts`.
+
+Member functions without return type (RT-68): `FunctionDeclarationNode.returnType`
+threw `CannotInferTypeException` until the function's own body was analyzed, so
+`fun a() = b(); fun b() = 1` in a class, a property initializer calling a later
+method, or another class/companion calling it during the class's analysis failed.
+After `attachToSemanticAnalyzer`, `visitClassBody` gives every such member function
+of a class declared ahead a `returnTypeInference` hook; the `returnType` getter
+runs it once, which analyzes the function in the class's member scope via
+`analyzeAtTopLevel`, and the member function loop skips it afterwards. Function
+owners are declared before the hooks (they were declared after the property
+loop), so a method analyzed early is still called through `this`. A function
+whose type depends on itself fails with "…, because it depends on itself"
+(`isInferringReturnType`); an error in an early analyzed body is rethrown in the
+function's turn, even if the code that needed it caught it. Coverage:
+`node scripts/smoke-curriculum-kotlin.mjs` (RT-67, RT-68).
+
+Implicit `this` calls in lambdas (RT-69): an unqualified call of a member function
+that `findAllMatchingCallables` found through the implicit receiver (and not in
+the class scope, e.g. because it is declared further down or inherited) had no
+owner, so the interpreter read `this` at call time. In a lambda run by a library
+function (`listOf(1).map { f() }`) the dynamic scope chain yields that function's
+receiver (the list) and the call failed with "Function `f` not found on implicit
+receiver". The analyzer now gives such a call the owner `this/<Class>` of the
+enclosing class and records it for the lambda's captures, like member property
+accesses. Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (RT-69).

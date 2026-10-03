@@ -251,6 +251,8 @@ open class ClassInstance(
             val name = (this as? ThrowableValue)?.externalExceptionClassName ?: clazz!!.fullQualifiedName
             return name + (throwable.message?.let { ": $it" } ?: "")
         }
+        // An object has no constructor call to show: `Hund`, `Karte.Companion` (RT-67).
+        if (clazz!!.isObjectDeclaration) return clazz!!.fullQualifiedName
         return "${clazz!!.fullQualifiedName}()"
     }
 

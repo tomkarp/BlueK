@@ -89,6 +89,11 @@ object BlueKStdlibModule : LibraryModule("bluek-stdlib") {
         return values
     }
 
+    /** The values of a `vararg` parameter; unlike [varargValues] none is fine. */
+    @Suppress("UNCHECKED_CAST")
+    private fun varargList(arguments: List<RuntimeValue>): List<RuntimeValue> =
+        (arguments.firstOrNull() as? DelegatedValue<*>)?.value as? List<RuntimeValue> ?: emptyList()
+
     private fun ints(value: RuntimeValue): Int = (value as IntValue).value
     private fun doubles(value: RuntimeValue): Double = (value as DoubleValue).value
 
@@ -321,6 +326,16 @@ object BlueKStdlibModule : LibraryModule("bluek-stdlib") {
             val symbolTable = interpreter.symbolTable()
             ListValue(text(receiver).map { CharValue(it, symbolTable) }, symbolTable.CharType, symbolTable)
         },
+        // RT-66: Java's format specifiers, see KotlinFormat. Kotlite allows `vararg` only as the
+        // sole parameter, so `String.format(pattern, …)` takes the pattern as its first value.
+        function("String", "format", "String", listOf(parameter("args", "Any?", setOf("vararg")))) { interpreter, receiver, args, _ ->
+            StringValue(KotlinFormat.format(text(receiver), varargList(args)), interpreter.symbolTable())
+        },
+        function("String.Companion", "format", "String", listOf(parameter("args", "Any?", setOf("vararg")))) { interpreter, _, args, _ ->
+            val values = varargList(args)
+            val pattern = values.firstOrNull() as? StringValue ?: throw IllegalArgumentException("String.format needs a format string first")
+            StringValue(KotlinFormat.format(pattern.value, values.drop(1)), interpreter.symbolTable())
+        },
         // RT-59
         function("String", "lines", "List<String>") { interpreter, receiver, _, _ ->
             val symbolTable = interpreter.symbolTable()
@@ -548,6 +563,63 @@ object BlueKStdlibModule : LibraryModule("bluek-stdlib") {
         function("Random.Companion", "nextBoolean", "Boolean") { interpreter, _, _, _ -> BooleanValue(Random.nextBoolean(), interpreter.symbolTable()) },
     )
 
+    // ---- componentN and withIndex for destructuring (RT-65) -----------------
+
+    private val ab = listOf(TypeParameter("A", null), TypeParameter("B", null))
+    private val abc = ab + TypeParameter("C", null)
+    private val kv = listOf(TypeParameter("K", null), TypeParameter("V", null))
+    private val t = listOf(TypeParameter("T", null))
+
+    private fun component(receiver: String, index: Int, type: String, typeParameters: List<TypeParameter>, part: (Any) -> Any?) =
+        function(receiver, "component$index", type, typeParameters = typeParameters) { interpreter, value, _, _ ->
+            asRuntimeValue(part((value as DelegatedValue<*>).value), interpreter.symbolTable())
+        }
+
+    private val indexedValueClass = ProvidedClassDefinition(
+        position = BUILTIN,
+        fullQualifiedName = "IndexedValue",
+        typeParameters = t,
+        isInstanceCreationAllowed = true,
+        primaryConstructorParameters = listOf(parameter("index", "Int"), parameter("value", "T")),
+        constructInstance = { interpreter, args, _ ->
+            DelegatedValue(IndexedValue(ints(args[0]), args[1]), "IndexedValue", typeArguments = listOf(args[1].type()), symbolTable = interpreter.symbolTable())
+        },
+    )
+
+    private val indexedValueProperties = listOf(
+        ExtensionProperty(
+            declaredName = "index", typeParameters = t, receiver = "IndexedValue<T>", type = "Int",
+            getter = { interpreter, receiver, _ -> IntValue(((receiver as DelegatedValue<*>).value as IndexedValue<*>).index, interpreter.symbolTable()) },
+        ),
+        ExtensionProperty(
+            declaredName = "value", typeParameters = t, receiver = "IndexedValue<T>", type = "T",
+            getter = { _, receiver, _ -> ((receiver as DelegatedValue<*>).value as IndexedValue<*>).value as RuntimeValue },
+        ),
+    )
+
+    private val componentFunctions = listOf(
+        component("Pair<A, B>", 1, "A", ab) { (it as Pair<*, *>).first },
+        component("Pair<A, B>", 2, "B", ab) { (it as Pair<*, *>).second },
+        component("Triple<A, B, C>", 1, "A", abc) { (it as Triple<*, *, *>).first },
+        component("Triple<A, B, C>", 2, "B", abc) { (it as Triple<*, *, *>).second },
+        component("Triple<A, B, C>", 3, "C", abc) { (it as Triple<*, *, *>).third },
+        component("MapEntry<K, V>", 1, "K", kv) { (it as Map.Entry<*, *>).key },
+        component("MapEntry<K, V>", 2, "V", kv) { (it as Map.Entry<*, *>).value },
+        component("IndexedValue<T>", 1, "Int", t) { (it as IndexedValue<*>).index },
+        component("IndexedValue<T>", 2, "T", t) { (it as IndexedValue<*>).value },
+    ) + (1..5).map { index ->
+        // Like Kotlin, a list too short for the component throws IndexOutOfBoundsException.
+        component("List<T>", index, "T", t) { (it as List<*>)[index - 1] }
+    } + function("Iterable<T>", "withIndex", "List<IndexedValue<T>>", typeParameters = t) { interpreter, receiver, _, typeArgs ->
+        val symbolTable = interpreter.symbolTable()
+        val elementType = typeArgs["T"] ?: symbolTable.IntType
+        val indexedType = symbolTable.assertToDataType(TypeNode(BUILTIN, "IndexedValue", listOf(elementType.toTypeNode()), false))
+        val indexed = elements(receiver).mapIndexed { index, element ->
+            DelegatedValue(IndexedValue(index, asRuntimeValue(element, symbolTable)), "IndexedValue", typeArguments = listOf(elementType), symbolTable = symbolTable)
+        }
+        ListValue(indexed, indexedType, symbolTable)
+    }
+
     // ---- nullable receivers ------------------------------------------------
 
     /**
@@ -587,8 +659,8 @@ object BlueKStdlibModule : LibraryModule("bluek-stdlib") {
     /** A part of a larger object, as `super` evaluates to it; not a value of its own. */
     private fun RuntimeValue.isInheritancePart() = this is ClassInstance && wholeInstance() !== this
 
-    override val classes: List<ProvidedClassDefinition> = listOf(tripleClass, stringBuilderClass, randomClass)
-    override val properties: List<ExtensionProperty> = numberProperties + listProperties + stringProperties + mapProperties + tripleProperties + stringBuilderProperties
+    override val classes: List<ProvidedClassDefinition> = listOf(tripleClass, stringBuilderClass, randomClass, indexedValueClass)
+    override val properties: List<ExtensionProperty> = numberProperties + listProperties + stringProperties + mapProperties + tripleProperties + stringBuilderProperties + indexedValueProperties
     override val globalProperties: List<GlobalProperty> = emptyList()
-    override val functions: List<CustomFunctionDefinition> = numberFunctions + listFunctions + stringFunctions + mapFunctions + builderFunctions + randomFunctions + nullableFunctions
+    override val functions: List<CustomFunctionDefinition> = numberFunctions + listFunctions + stringFunctions + mapFunctions + builderFunctions + randomFunctions + componentFunctions + nullableFunctions
 }

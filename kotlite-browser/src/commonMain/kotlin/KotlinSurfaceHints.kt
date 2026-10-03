@@ -32,8 +32,6 @@ object KotlinSurfaceHints {
         "toIntArray" to ARRAYS,
         "toTypedArray" to ARRAYS,
         "toCharArray" to TEXT_AS_LIST,
-        "format" to "BlueK cannot format numbers with a format string yet. Build the text yourself, e.g. \"\$betrag Euro\".",
-        "withIndex" to "`withIndex()` is not available in BlueK. Use `indices` and read the element with `liste[i]`.",
         "Math" to "`Math` belongs to Java and is not available in BlueK. Kotlin writes `abs(x)`, `sqrt(x)` and `PI` directly.",
         "java" to "Java libraries are not available in BlueK. Use the Kotlin standard library instead.",
         "kotlin" to "BlueK does not support fully qualified calls such as `kotlin.math.abs(x)`. Write `import kotlin.math.abs` at the top of the file and then `abs(x)`.",
@@ -96,16 +94,25 @@ object KotlinSurfaceHints {
         }
         noMemberFunction.find(body)?.let { match ->
             val (name, receiver) = match.groupValues[1] to match.groupValues[2]
+            destructuringHint(receiver, name)?.let { return it }
             definiteMemberHint(receiver, name)?.let { return it }
             if (exists(name)) return null
             return memberHint(receiver, name, knownNames)
         }
         noMember.find(body)?.let { match ->
             val (receiver, name) = match.groupValues[1] to match.groupValues[2]
+            destructuringHint(receiver, name)?.let { return it }
             // Unambiguous: the receiver type has no such member at all.
             return memberHint(receiver, name, knownNames)
         }
         return null
+    }
+
+    /** `val (a, b) = 5` asks for `component1()`: Kotlin's wording instead of a spelling suggestion (RT-65). */
+    private fun destructuringHint(receiver: String, name: String): String? {
+        if (!Regex("component[1-9][0-9]*").matches(name)) return null
+        return "Destructuring declaration initializer of type ${receiver.removeSuffix("?")} must have a '$name()' function. " +
+            "BlueK destructures data classes, Pair, Triple, lists, map entries and withIndex()."
     }
 
     /** A documented gap for this receiver and name, if there is one. */

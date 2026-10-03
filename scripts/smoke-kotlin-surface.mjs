@@ -148,6 +148,28 @@ const supported = [
   ['Random.nextDouble() < 1.0 && Random.nextDouble(2.0, 3.0) >= 2.0', 'true'],
   ['Random.nextBoolean() || true', 'true'],
 
+  // RT-65: componentN and withIndex for destructuring.
+  ['Pair(1, 2).component2()', '2'],
+  ['Triple(1, 2, 3).component3()', '3'],
+  ['listOf(4, 5, 6).component3()', '6'],
+  ['mapOf("a" to 1).entries.first().component1()', 'a'],
+  ['listOf("a", "b").withIndex()', '[IndexedValue(index=0, value=a), IndexedValue(index=1, value=b)]'],
+  ['listOf("a", "b").withIndex().map { it.index * 10 + it.value.length }', '[1, 11]'],
+
+  // RT-66: format strings like java.util.Formatter, always with `.` as decimal point.
+  ['"%.2f".format(3.14159)', '3.14'],
+  ['"%.1f".format(0.15)', '0.2'],
+  ['"%.2f".format(9.995)', '10.00'],
+  ['"%,.2f".format(1234567.891)', '1,234,567.89'],
+  ['"%8.2f|%-8.2f|".format(3.5, 3.5)', '    3.50|3.50    |'],
+  ['"%+d %05d %,d".format(5, 42, 1234567)', '+5 00042 1,234,567'],
+  ['"%s und %s".format("a", 1)', 'a und 1'],
+  ['"%10s|%-6s|%.3s".format("x", "y", "Hallo")', '         x|y     |Hal'],
+  ['"%x %X %o %c %b".format(255, 255, 8, \'A\', true)', 'ff FF 10 A true'],
+  ['"100%%".format()', '100%'],
+  ['String.format("%d Euro", 5)', '5 Euro'],
+  ['String.format("%.2f", 1.0 / 3)', '0.33'],
+
   // A whole school-style routine, to prove the pieces combine.
   ['fun quersumme(wort: String): Int { var s = 0; for (c in wort) if (c.isDigit()) s += c.digitToInt(); return s }; quersumme("a1b22")', '5'],
 ];
@@ -157,9 +179,6 @@ const gaps = [
   'arrayOf(1, 2)',              // arrays are absent as a language feature
   'IntArray(3)',
   'Array(3) { 0 }',
-  '"%.2f".format(3.14159)',     // needs a format-string implementation
-  'String.format("%d", 5)',
-  'listOf(1, 2).withIndex()',   // needs an IndexedValue class
   '"abc".map { it }',           // String is not an Iterable
   '"abc".toCharArray()',
   '"abc".chunked(2)',
@@ -177,8 +196,7 @@ const messages = [
   ['Math.abs(-1)', /`Math` belongs to Java and is not available in BlueK/],
   ['kotlin.math.abs(-5)', /does not support fully qualified calls.*import kotlin\.math\.abs/],
   ['"abc".map { it }', /a String is not a full character sequence/],
-  ['listOf(1, 2).withIndex()', /`withIndex\(\)` is not available in BlueK/],
-  ['"%.2f".format(3.14159)', /cannot format numbers with a format string/],
+  ['val (d1, d2) = 5', /Destructuring declaration initializer of type Int must have a 'component1\(\)' function/],
   // 2. close to a name BlueK has -> suggestion
   ['minOff(1, 2)', /`minOff` is not available in BlueK\. Did you mean `minOf`\?/],
   ['pritnln("a")', /Did you mean `println`\?/],

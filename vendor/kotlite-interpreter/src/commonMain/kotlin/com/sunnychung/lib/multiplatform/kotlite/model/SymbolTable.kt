@@ -1103,6 +1103,27 @@ open class SymbolTable(
     }
 
     /**
+     * Only use in SemanticAnalyzer: declares the members of an object, analyzed in its class scope
+     * [other], as members of the object instance [ownerRefName] (`object/<Class>`), so that plain
+     * names reach them, e.g. the members of a companion object inside its class (RT-67).
+     */
+    internal fun declareObjectMembersFrom(other: SymbolTable, ownerRefName: String) {
+        other.propertyDeclarationsStore?.forEach { (name, type) ->
+            if (name == "this" || name == "super" || name.startsWith("this/")) return@forEach
+            val transformedName = other.transformedSymbolsByDeclaredNameStore?.get(IdentifierClassifier.Property to name) ?: return@forEach
+            propertyDeclarations[name] = type
+            // initialized: a `val` cannot be assigned
+            assign(name, SemanticDummyRuntimeValue(type.type))
+            registerTransformedSymbol(SourcePosition.NONE, IdentifierClassifier.Property, transformedName, name)
+            propertyOwners[transformedName] = PropertyOwnerInfo(ownerRefName = ownerRefName)
+        }
+        other.functionDeclarationsStore?.forEach { (signature, function) ->
+            functionDeclarations[signature] = function
+            functionOwners[functionNameTransform(function.name, function)] = ownerRefName
+        }
+    }
+
+    /**
      * The returned new symbol table is not added to the Call Stack.
      */
     private fun createTempSymbolTable(): SymbolTable {

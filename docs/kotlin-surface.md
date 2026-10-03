@@ -60,6 +60,20 @@ bzw. `StringBuilder("text")` mit `append`, `appendLine`, `insert`, `reverse`,
 `nextInt(von, bis)`, `nextDouble()` (auch mit Grenzen) und `nextBoolean()`,
 mit oder ohne `import kotlin.random.Random`.
 
+**Formatierung (RT-66).** `"%.2f".format(x)` und `String.format("%d", n)` wie
+`java.util.Formatter` mit `%d %x %X %o %f %s %S %c %b %% %n`, Breite,
+Genauigkeit, Argumentindex (`%2$s`, im Kotlin-Quelltext `%2\$s`) und den Flags
+`- 0 + , Leerzeichen`. `%f` rundet wie Java kaufmännisch auf der kürzesten
+Dezimaldarstellung (`"%.1f".format(0.15)` ist `0.2`). Falsche Typen
+(`"%d".format(1.5)`) und fehlende Argumente werfen `IllegalArgumentException`.
+
+**Destrukturierung (RT-65).** `component1()` … für `Pair`, `Triple`,
+Map-Einträge, Listen (`component1` bis `component5`) und `IndexedValue`;
+`withIndex()` liefert eine Liste von `IndexedValue` mit `index` und `value`
+(Ausgabe `IndexedValue(index=0, value=a)`). Ohne `componentN` meldet BlueK
+Kotlins „Destructuring declaration initializer … must have a 'component1()'
+function“.
+
 **Nullable Empfänger.** `toString()`, `equals()` und `hashCode()` auf `T?`
 (`Any?.toString()` liefert `"null"`, `hashCode()` von `null` ist `0`). Eigene
 Überschreibungen in der Klasse werden auch über einen nullable Empfänger
@@ -72,6 +86,9 @@ Zug, und der Aufruf ist nicht mehrdeutig (RT-44).
 - `minOf(vararg values: Int)` statt Kotlins `minOf(a, vararg other)`. Kotlite
   erlaubt `vararg` nur als einzigen Parameter. Folge: `minOf()` ohne Argumente
   wird von der Analyse akzeptiert und scheitert erst zur Laufzeit.
+- Formatierung nutzt immer `.` als Dezimalpunkt und `,` als Tausendertrenner
+  (Kotlin/JVM: Sprache des Rechners, auf deutschen Systemen `3,14`). `%e`, `%g`,
+  `%t` und das Flag `(` fehlen.
 - `Random(seed)` für reproduzierbare Zufallszahlen fehlt; `Random` ist nur als
   `Random.nextInt(...)` usw. nutzbar. `StringBuilder` hat nur die oben
   gelisteten Funktionen.
@@ -100,12 +117,10 @@ Zug, und der Aufruf ist nicht mehrdeutig (RT-44).
 | Lücke | Stand |
 | --- | --- |
 | Arrays (`arrayOf`, `IntArray`, `Array(n) { }`) | Fehlt vollständig; eigenes Sprachfeature, bewusst offen. Der Lehrgang arbeitet mit `List`/`MutableList` |
-| `"%.2f".format(x)`, `String.format` | Braucht eine eigene Formatstring-Implementierung |
-| `withIndex()` | Braucht eine `IndexedValue`-Klasse |
 | `"abc".map { }`, `toCharArray()`, `"abc".chunked(2)`, `"abc".windowed(2)` | `String` ist kein `Iterable`; nur die oben gelisteten Zugänge sind nachgerüstet. Für Listen gibt es `chunked`/`windowed` |
 | `kotlin.math.abs(-5)` als qualifizierter Aufruf | `import kotlin.math.abs` und dann `abs(-5)` funktioniert |
 | `Math.abs`, `java.*` | Java, bewusst nicht verfügbar |
-| `map.forEach { k, v -> }` | Java-Form mit zwei Parametern; eingebaute Überladungen, die sich nur in der Parameterzahl des Lambdas unterscheiden, kollidieren in Kotlite. `map.forEach { it.key … it.value }` funktioniert |
+| `map.forEach { k, v -> }` | Java-Form mit zwei Parametern; eingebaute Überladungen, die sich nur in der Parameterzahl des Lambdas unterscheiden, kollidieren in Kotlite. `map.forEach { (k, v) -> }` (RT-65) und `map.forEach { it.key … it.value }` funktionieren |
 
 Außerhalb dieser Tabelle fehlen weitere Funktionen der Kotlin-Bibliothek. Sie
 sind nicht Teil der Lückenliste im Test; BlueK meldet sie mit den allgemeinen

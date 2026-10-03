@@ -149,7 +149,12 @@ Datei, RT-45),
 Vererbung (`open`, `abstract`, `override`, `super`), Interfaces mit abstrakten
 Methoden, Generics einschließlich `inline`/`reified`, Extension-Funktionen,
 Operator-Überladung, Lambdas und Scope-Funktionen, `enum class` (auch mit
-Konstruktor), eigene Getter/Setter mit `field`, `private` (auch `private set`),
+Konstruktor), `data class` mit `toString`, `equals`/`hashCode`, `copy` und
+`componentN` (RT-64), `object` und `companion object` (deren Mitglieder
+in der Klasse und ihren Unterklassen auch ohne Klassennamen) sowie
+`const val` (RT-67), Destrukturierung mit `val (a, b) = …`,
+`for ((k, v) in map)`, `for ((i, x) in liste.withIndex())` und Lambda-Parametern
+wie `{ (k, v) -> }` (RT-65), eigene Getter/Setter mit `field`, `private` (auch `private set`),
 Default- und Named-Arguments, `vararg`, `try`/`catch`/`finally` mit
 Standardausnahmen, `Long`, `Float` (als `Double`), Nullability mit `?.`/`?:`,
 Smart Casts nach `is` und Null-Prüfungen,
@@ -159,15 +164,23 @@ List/Map/Set und Ranges.
 
 Nicht unterstützt sind derzeit:
 
-- `data class`, `object`, `companion object`, `sealed`, verschachtelte und
-  innere Klassen, anonyme Objekte, `fun interface`, `typealias`
+- `sealed`, verschachtelte und innere Klassen und Objekte, Objekt-Ausdrücke
+  (`object : Typ { … }`), benannte Companion-Objekte
+  (`companion object Fabrik`), `fun interface`, `typealias`
 - sekundäre Konstruktoren zusammen mit einem Primärkonstruktor oder mit
   `this`-/`super`-Delegation (mit eigener Fehlermeldung), `protected`,
-  `internal`, `lateinit`, `const`
+  `internal`, `lateinit`
+- Braucht eine Klasse ihr Companion schon in Default-Argumenten des
+  Konstruktors (`class Konto(val stand: Int = START)`), sieht das Companion
+  von der Klasse nur die Konstruktor-Properties; in Initialisierern auch ihre
+  Methoden und die Properties darüber (RT-67)
 - Default-Methoden und Properties in Interfaces, abstrakte Properties,
   Extension-Properties mit Getter
-- Destrukturierung (auch `for ((k, v) in map)`), Funktionsreferenzen (`::f`),
-  Labels an Schleifen (`break@outer`)
+- Funktionsreferenzen (`::f`), Labels an Schleifen (`break@outer`)
+- Destrukturierung ist auch auf oberster Ebene einer Projektdatei erlaubt
+  (Kotlin: nur lokal); `componentN` lässt sich nicht als `operator`
+  deklarieren, eigene Klassen werden über ihre `componentN()`-Funktionen
+  dennoch zerlegt
 - Smart Casts nach `is` und Null-Prüfungen wirken nur auf einfache Namen
   (nicht auf `objekt.eigenschaft` oder `this.eigenschaft`) und, wie in Kotlin,
   bei `is` nur auf lokale Variablen, Parameter und `val`-Properties ohne eigenen
@@ -176,7 +189,7 @@ Nicht unterstützt sind derzeit:
   Schleifendurchlauf werden nicht berücksichtigt; dort ist ein explizites `as`
   nötig
 - Arrays (`arrayOf`, `IntArray`), `Short`, Hex-/Binär-/`_`-Zahlliterale,
-  Bit-Operationen, `Triple`
+  Bit-Operationen
 - `enum`-`values()` (`entries` funktioniert)
 - Über einen impliziten Empfänger (`liste.apply { add(1) }`,
   `with(text) { uppercase() }`, `gruss()` für `fun Hund.gruss()` in einer
@@ -195,11 +208,12 @@ Nicht unterstützt sind derzeit:
   `val maximum = 3`, das `Hund` liest) ein Laufzeitfehler „… is used before
   it is initialized“. Kotlin/JVM würde die spätere Datei vorher
   initialisieren.
-- Aufrufe einer Funktion mit Ausdruckskörper ohne Rückgabetyp
-  (`fun b() = 1`), deren Typ Kotlite an dieser Stelle noch nicht kennt: weiter
-  oben in derselben Klasse (`fun a() = b()`) oder bei gegenseitiger
-  Rekursion (`fun a() = b()` mit `fun b(): Int = a()`); ein expliziter
-  Rückgabetyp (`fun b(): Int = 1`) behebt das
+- Gegenseitige Rekursion von Top-Level-Funktionen (`fun a() = b()` mit
+  `fun b(): Int = a()`) braucht einen Rückgabetyp an der zuerst analysierten
+  Funktion (Kotlin: an einer der beiden). Methoden ohne Rückgabetyp dürfen
+  dagegen wie in Kotlin vor ihrer Deklaration benutzt werden
+  (`fun a() = b(); fun b() = 1`, RT-68); nur eine Methode, deren Typ von ihr
+  selbst abhängt, braucht wie in Kotlin einen Rückgabetyp
 
 **Standardbibliothek.** Grundlage ist `kotlite-stdlib` 1.1.0, ergänzt durch
 BlueK. Was zugesagt ist und welche Lücken bekannt sind (u. a.

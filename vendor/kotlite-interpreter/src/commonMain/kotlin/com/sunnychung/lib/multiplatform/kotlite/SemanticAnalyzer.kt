@@ -11,6 +11,7 @@ import com.sunnychung.lib.multiplatform.kotlite.extension.resolveGenericParamete
 import com.sunnychung.lib.multiplatform.kotlite.extension.resolveGenericParameterTypeToUpperBound
 import com.sunnychung.lib.multiplatform.kotlite.extension.unboxRepeatedType
 import com.sunnychung.lib.multiplatform.kotlite.extension.unboxTypeParameterType
+import com.sunnychung.lib.multiplatform.kotlite.model.DestructuringDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ASTNode
 import com.sunnychung.lib.multiplatform.kotlite.model.AnyType
 import com.sunnychung.lib.multiplatform.kotlite.model.CallableNode
@@ -72,6 +73,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.PrimitiveTypeName
 import com.sunnychung.lib.multiplatform.kotlite.model.PropertyAccessorsNode
 import com.sunnychung.lib.multiplatform.kotlite.model.PropertyDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.model.PropertyModifier
+import com.sunnychung.lib.multiplatform.kotlite.model.OBJECT_REF_PREFIX
 import com.sunnychung.lib.multiplatform.kotlite.model.PropertyOwnerInfo
 import com.sunnychung.lib.multiplatform.kotlite.model.RepeatedType
 import com.sunnychung.lib.multiplatform.kotlite.model.ReturnNode
@@ -148,11 +150,16 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     private class DeclaredClass(
         val node: ClassDeclarationNode,
         val definition: ClassDefinition,
-        val companion: ClassDefinition,
+        // the implicit `<Class>.Companion` of a class without `companion object` (null for objects)
+        val companion: ClassDefinition?,
         // type parameter, superclass and class scope of `visitClassBody`
         val scopes: List<SemanticAnalyzerSymbolTable>,
+        // around `scopes`: the members of the declared `companion object`, see `provideCompanionMembers`
+        val companionScope: SemanticAnalyzerSymbolTable?,
     ) {
         var state = ClassAnalysisState.Declared
+        var companionDeclared: DeclaredClass? = null
+        var areCompanionMembersProvided = false
     }
     private enum class ClassAnalysisState { Declared, AnalyzingSupertypes, Analyzing, Analyzed }
     private val declaredClasses = mutableMapOf<SourcePosition, DeclaredClass>()
@@ -598,6 +605,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             is LabelNode -> TODO()
             is EnumEntryNode -> this.visit(modifier = modifier)
             is ForNode -> this.visit(modifier = modifier)
+            is DestructuringDeclarationNode -> throw IllegalStateException("Statement lists flatten destructuring declarations")
             is ValueParameterDeclarationNode -> this.visit(modifier = modifier)
         }
     }
@@ -611,6 +619,12 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             scope = scope.parentScope!!
         }
         return scope.scopeLevel
+    }
+
+    /** Like Kotlin, a class and its companion object share their private members (RT-67). */
+    private fun canAccessPrivateMembersOf(ownerName: String?): Boolean {
+        val current = currentClassName() ?: return false
+        return current == ownerName || current == "$ownerName.Companion" || "$current.Companion" == ownerName
     }
 
     fun currentClassName(): String? {
@@ -894,15 +908,20 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 isNullable = false,
             )
             symbolTable.declareClass(node.position, nullableClassDefinition(node).also { it.attachToSemanticAnalyzer(this@SemanticAnalyzer) })
-            val companion = companionClassDefinition(node, classType)
-            symbolTable.declareClass(node.position, companion)
+            // A declared companion object is a class of its own (declared below); an object has none.
+            val companion = if (node.isObject || node.companionObject != null) null else companionClassDefinition(node, classType)
+            companion?.let { symbolTable.declareClass(node.position, it) }
 
             val superClassInvocation = if (node.isInterface) null else node.superInvocations?.filterIsInstance<FunctionCallNode>()?.firstOrNull()
             val superClass = (superClassInvocation?.function as? TypeNode)?.let { symbolTable.findClass(it.name)?.first }
             val interfaceTypes = node.superInvocations?.filterIsInstance<TypeNode>() ?: emptyList()
-            val typeParameterScope = SemanticAnalyzerSymbolTable(symbolTable.scopeLevel + 1, name, ScopeType.Class, parentScope = symbolTable)
-            val superClassScope = SemanticAnalyzerSymbolTable(symbolTable.scopeLevel + 2, name, ScopeType.Class, parentScope = typeParameterScope)
-            val classScope = SemanticAnalyzerSymbolTable(symbolTable.scopeLevel + 3, name, ScopeType.Class, parentScope = superClassScope)
+            val companionScope = node.companionObject?.let {
+                SemanticAnalyzerSymbolTable(symbolTable.scopeLevel + 1, it.name, ScopeType.ExtraWrap, parentScope = symbolTable)
+            }
+            val level = symbolTable.scopeLevel + if (companionScope != null) 1 else 0
+            val typeParameterScope = SemanticAnalyzerSymbolTable(level + 1, name, ScopeType.Class, parentScope = companionScope ?: symbolTable)
+            val superClassScope = SemanticAnalyzerSymbolTable(level + 2, name, ScopeType.Class, parentScope = typeParameterScope)
+            val classScope = SemanticAnalyzerSymbolTable(level + 3, name, ScopeType.Class, parentScope = superClassScope)
             val definition = ClassDefinition(
                 currentScope = classScope,
                 name = name,
@@ -922,19 +941,54 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 superClass = superClass,
                 superInterfaceTypes = interfaceTypes,
                 superInterfaces = interfaceTypes.mapNotNull { symbolTable.findClass(it.name)?.first },
+                isObjectDeclaration = node.isObject,
             )
             // The hierarchy is needed to resolve (generic) types before the analysis.
             if (superClass != null) definition.superClassInvocation = superClassInvocation
             definition.isDeclaredAhead = true
             symbolTable.declareClass(node.position, definition)
             declaring.removeLast()
-            val declared = DeclaredClass(node, definition, companion, listOf(typeParameterScope, superClassScope, classScope))
+            val declared = DeclaredClass(node, definition, companion, listOf(typeParameterScope, superClassScope, classScope), companionScope)
             declaredClasses[node.position] = declared
             val analyze = { analyzeDeclaredClass(declared, isOnDemand = true) }
             definition.pendingAnalysis = analyze
-            companion.pendingAnalysis = analyze
+            companion?.pendingAnalysis = analyze
+            node.companionObject?.let { companionNode ->
+                topLevelIndexByPosition[companionNode.position] = topLevelIndexByPosition.getValue(node.position)
+                declare(companionNode)
+                val companionDeclared = declaredClasses.getValue(companionNode.position)
+                declared.companionDeclared = companionDeclared
+                // Its class starts first, so the companion sees the members of the class it uses.
+                companionDeclared.definition.pendingAnalysis = {
+                    analyzeDeclaredClass(declared, isOnDemand = true)
+                    analyzeDeclaredClass(companionDeclared, isOnDemand = true)
+                }
+                val provide = { name: String -> provideCompanionMembers(declared, name) }
+                companionScope!!.beforeFunctionLookup = provide
+                companionScope.beforePropertyLookup = provide
+            }
         }
         classes.forEach { if (byName[it.name] === it) declare(it) }
+    }
+
+    /**
+     * Inside a class, the members of its `companion object` are used by their plain names, like in
+     * Kotlin: after the class's own members and before top-level declarations (RT-67). The companion
+     * is analyzed when its class first uses such a name, or after its class, so that it can use the
+     * members of the class analyzed so far.
+     */
+    private fun provideCompanionMembers(declared: DeclaredClass, name: String) {
+        if (declared.areCompanionMembersProvided) return
+        val companion = declared.companionDeclared ?: return
+        val isMember = companion.node.declarations.any {
+            (it is PropertyDeclarationNode && it.name == name) || (it is FunctionDeclarationNode && it.name == name)
+        }
+        if (!isMember) return
+        analyzeDeclaredClass(companion, isOnDemand = true)
+        // Not yet when the companion itself (through its class) asks for one of its members.
+        if (companion.state != ClassAnalysisState.Analyzed) return
+        declared.areCompanionMembersProvided = true
+        declared.companionScope!!.declareObjectMembersFrom(companion.scopes[2], OBJECT_REF_PREFIX + companion.node.fullQualifiedName)
     }
 
     private fun analyzeDeclaredClass(declared: DeclaredClass, isOnDemand: Boolean) {
@@ -955,7 +1009,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         }
         declared.state = ClassAnalysisState.Analyzing
         declared.definition.pendingAnalysis = null
-        declared.companion.pendingAnalysis = null
+        declared.companion?.pendingAnalysis = null
         // An on-demand analysis interrupts another declaration: analyze the
         // class at top level and give the interrupted one its state back.
         analyzeAtTopLevel(topLevelIndexByPosition.getValue(declared.node.position)) { declared.node.visit() }
@@ -1260,6 +1314,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             if (declaredType != null && initialValue is FunctionCallNode) initialValue.expectedReturnType = declaredType
             initialValue?.visit(modifier = modifier)
             requireWhenValue(initialValue)
+            if (PropertyModifier.const in modifiers) checkConstProperty(this, isClassProperty)
         }
         if (currentScope.hasProperty(name = name, isThisScopeOnly = true)) {
             throw SemanticException(position, "Property `$name` has already been declared")
@@ -1298,8 +1353,36 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 //        transformedRefName = "$name/${scopeLevel}"
         transformedRefName = "$name/${++variableDefIndex}"
         currentScope.registerTransformedSymbol(position, IdentifierClassifier.Property, transformedRefName!!, name)
+        if (PropertyModifier.const in modifiers) constProperties += transformedRefName!!
 
         evaluateAndRegisterReturnType(this)
+    }
+
+    // Transformed names of `const val` properties, whose values may form another constant.
+    private val constProperties = mutableSetOf<String>()
+
+    /** `const val` (RT-67): like Kotlin, a top-level or object property with a constant primitive or String value. */
+    private fun checkConstProperty(property: PropertyDeclarationNode, isClassProperty: Boolean) {
+        val position = property.position
+        if (!isClassProperty && currentScope !== symbolTable) throw SemanticException(position, "Modifier 'const' is not applicable to local variables")
+        if (property.isMutable) throw SemanticException(position, "Modifier 'const' is not applicable to 'var'")
+        if (property.accessors != null) throw SemanticException(position, "Const 'val' should not have a getter")
+        val initialValue = property.initialValue ?: throw SemanticException(position, "Const 'val' must be initialized")
+        val type = property.declaredType ?: initialValue.type()
+        if (type.isNullable || type.name !in setOf("Int", "Long", "Double", "Float", "Byte", "Char", "Boolean", "String")) {
+            throw SemanticException(position, "Const 'val' has type '${type.descriptiveName()}'. Only primitives and String are allowed")
+        }
+        fun isConstant(node: ASTNode?): Boolean = when (node) {
+            is IntegerNode, is LongNode, is DoubleNode, is BooleanNode, is CharNode, is StringLiteralNode -> true
+            is StringNode -> node.nodes.all { isConstant(it) }
+            is UnaryOpNode -> isConstant(node.node)
+            is BinaryOpNode -> isConstant(node.node1) && isConstant(node.node2)
+            is VariableReferenceNode -> node.transformedRefName in constProperties
+            // e.g. `Karte.MAX`; whether the member is `const` is not checked
+            is NavigationNode -> node.operator == "."
+            else -> false
+        }
+        if (!isConstant(initialValue)) throw SemanticException(initialValue.position, "Const 'val' initializer should be a constant value")
     }
 
     private fun isDeclaredBelowScript(name: String): Boolean {
@@ -1311,13 +1394,31 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         return false
     }
 
+    /** Lets enclosing scopes declare [name] before it is looked up, see [SemanticAnalyzerSymbolTable.beforePropertyLookup]. */
+    private fun runBeforePropertyLookup(name: String) {
+        var scope: SymbolTable? = currentScope
+        while (scope != null) {
+            (scope as? SemanticAnalyzerSymbolTable)?.beforePropertyLookup?.invoke(name)
+            scope = scope.parentScope
+        }
+    }
+
     fun VariableReferenceNode.visit(modifier: Modifier = Modifier()) {
+        runBeforePropertyLookup(variableName)
         // A top-level property later in this unit, unless a local or member shadows it.
         if (variableName in pendingTopLevel && !isDeclaredBelowScript(variableName)) {
             analyzeTopLevelAhead(variableName)
         }
         if (!currentScope.hasProperty(variableName)) {
-            if (currentScope.findClass(variableName) != null) {
+            currentScope.findClass(variableName)?.let { (clazz, _) ->
+                // The name of an object is its single instance (RT-67).
+                if (clazz.isObjectDeclaration) {
+                    transformedRefName = OBJECT_REF_PREFIX + clazz.fullQualifiedName
+                    type = TypeNode(position, clazz.fullQualifiedName, null, false)
+                } else {
+                    // A class name alone stands for its companion object.
+                    type()
+                }
                 return
             }
             if (variableName in initializingTopLevel) {
@@ -1846,7 +1947,14 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     throw SemanticException(position, "No matching function or constructor `${functionName}` found for the argument types (${describeArgumentTypes()})")
                 }
                 if (function is VariableReferenceNode) {
-                    function.ownerRef = resolution.owner?.let { PropertyOwnerInfo(it) }
+                    // A method found through the implicit `this` has no owner yet. Inside a lambda that a
+                    // library function runs, `this` would be that function's receiver (`map { f() }`), so
+                    // it is called through `this/<Class>` like the members of the class scope (RT-69).
+                    val implicitOwner = if (resolution.owner == null && resolution.type == CallableType.ClassMemberFunction) {
+                        currentClassName()?.let { "this/" + (currentScope.findClass(it)?.first?.fullQualifiedName ?: it) }
+                    } else null
+                    function.ownerRef = (resolution.owner ?: implicitOwner)?.let { PropertyOwnerInfo(it) }
+                    if (implicitOwner != null && symbolRecorders.isNotEmpty()) symbolRecorders.last().properties += implicitOwner
                 }
                 functionRefName = resolution.transformedName
                 callableType = resolution.type
@@ -1860,6 +1968,9 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 if (callableType == CallableType.Constructor) {
                     val clazz = resolution.definition as ClassDefinition
                     if (!isSkipConstructionSecurityCheck) {
+                        if (clazz.isObjectDeclaration) {
+                            throw SemanticException(position, "`${clazz.name}` is an object: it has exactly one instance, which you use by its name `${clazz.name}`, without a constructor call")
+                        }
                         if ((isSuperClassInvocation && !clazz.isInstanceCreationAllowed) || (!isSuperClassInvocation && !clazz.isInstanceCreationByUserAllowed())) {
                             throw SemanticException(
                                 position,
@@ -1962,7 +2073,8 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     } else {
                         it
                     }
-                    val subjectType = function.subject.type().toDataType()
+                    // `Box.f()` calls the companion object of the generic class `Box` (RT-67)
+                    val subjectType = function.subject.type().unboxClassTypeAsCompanion().toDataType()
                     log.v { "functionRefName=$functionRefName; subjectType=${subjectType::class.simpleName} ${subjectType.descriptiveName}; receiverType = ${receiverType.descriptiveName}" }
                     if (subjectType is ObjectType) {
                         // use the subject value to resolve type parameters of the subject type
@@ -2250,6 +2362,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     val parameterType = functionArgumentAndReturnTypeDeclarations.receiverType
                     val argumentType =
                         (function as NavigationNode).subject.type(ResolveTypeModifier(isSkipGenerics = isSkipGenerics))
+                            .unboxClassTypeAsCompanion()
                             .let {
                                 if (function.operator == "?.") {
                                     it.copy(isNullable = false)
@@ -2604,7 +2717,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 .first
             if (lookupType == IdentifierClassifier.Property) {
                 clazz.findMemberPropertyWithoutAccessor(memberName)?.let { property ->
-                    if (clazz.isPrivateMemberProperty(memberName) && currentClassName() != clazz.findMemberPropertyOwnerName(memberName)) {
+                    if (clazz.isPrivateMemberProperty(memberName) && !canAccessPrivateMembersOf(clazz.findMemberPropertyOwnerName(memberName))) {
                         throw SemanticException(position, "Private property `$memberName` cannot be accessed here")
                     }
                     if (isCheckWriteAccess && !property.isMutable) {
@@ -2614,14 +2727,14 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     return subjectType
                 }
                 clazz.findMemberPropertyCustomAccessor(memberName)?.let { accessor ->
-                    if (clazz.isPrivateMemberProperty(memberName) && currentClassName() != clazz.findMemberPropertyOwnerName(memberName)) {
+                    if (clazz.isPrivateMemberProperty(memberName) && !canAccessPrivateMembersOf(clazz.findMemberPropertyOwnerName(memberName))) {
                         throw SemanticException(position, "Private property `$memberName` cannot be accessed here")
                     }
                     if (isCheckWriteAccess && clazz.findMemberProperty(memberName)?.isMutable == false) {
                         throw SemanticException(position, "val `$memberName` cannot be reassigned")
                     }
                     if (isCheckWriteAccess) {
-                        if (accessor.setterIsPrivate && currentClassName() != clazz.findMemberPropertyOwnerName(memberName)) {
+                        if (accessor.setterIsPrivate && !canAccessPrivateMembersOf(clazz.findMemberPropertyOwnerName(memberName))) {
                             throw SemanticException(position, "Private setter for `$memberName` cannot be accessed here")
                         }
                         if (accessor.setter == null && accessor.getter == null) {
@@ -2666,7 +2779,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 val functions = clazz.findMemberFunctionsWithEnclosingTypeNameByDeclaredName(memberName)
                 if (functions.isNotEmpty()) {
                     // A private member function is only callable from code of its own class.
-                    if (functions.values.all { (function, owner) -> FunctionModifier.private in function.modifiers && owner != currentClassName() }) {
+                    if (functions.values.all { (function, owner) -> FunctionModifier.private in function.modifiers && !canAccessPrivateMembersOf(owner) }) {
                         throw SemanticException(position, "Private function `$memberName` cannot be accessed here")
                     }
                     memberType = NavigationNode.MemberType.Direct
@@ -2793,10 +2906,18 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
         val declared = declaredClasses[position]?.takeIf { it.node === this }
         if (declared == null) {
+            // Objects keep their single instance in their class definition, which a local declaration recreates.
+            if (isObject) throw SemanticException(position, "An object can only be declared at the top level of a file")
+            companionObject?.let { throw SemanticException(it.position, "A companion object is only allowed in a class declared at the top level of a file") }
             declarationScope.declareClass(position, nullableClassDefinition(this).also { it.attachToSemanticAnalyzer(this@SemanticAnalyzer) })
             declarationScope.declareClass(position, companionClassDefinition(this, classType).also { it.attachToSemanticAnalyzer(this@SemanticAnalyzer) })
         } else {
-            declared.companion.attachToSemanticAnalyzer(this@SemanticAnalyzer)
+            declared.companion?.attachToSemanticAnalyzer(this@SemanticAnalyzer)
+        }
+        if (!isObject) {
+            declarations.firstOrNull { it is PropertyDeclarationNode && PropertyModifier.const in it.modifiers }?.let {
+                throw SemanticException(it.position, "Const 'val' are only allowed on top level, in objects or in companion objects")
+            }
         }
         // A class declared ahead reuses the scopes its definition was created with.
         fun pushClassScope(index: Int) {
@@ -2821,6 +2942,16 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             }
         }
 
+        // Plain names reach the companion members of this class and then of its superclasses (RT-67).
+        val companionScopes = buildList {
+            var superClass = declared?.definition?.superClass
+            while (superClass != null) {
+                declaredClasses.values.firstOrNull { it.definition === superClass }?.companionScope?.let { add(0, it) }
+                superClass = superClass.superClass
+            }
+            declared?.companionScope?.let { add(it) }
+        }
+        companionScopes.forEach { pushScope(it) }
         pushClassScope(0)
         // copy this class's type parameter to superclass scope, so that
         // generic types in superclass can be resolved when it returns to this class.
@@ -2889,6 +3020,22 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
             typeParameters.forEach {
                 currentScope.declareTypeAlias(it.position, it.name, it.typeUpperBound)
+            }
+            // A default argument may use the companion (`= START`), whose code may use the constructor
+            // properties: they get their declared types before (RT-67), their names below.
+            if (declared?.companionDeclared != null) {
+                primaryConstructor?.parameters?.filter { it.isProperty }?.forEach {
+                    declared.definition.addProperty(currentScope, PropertyDeclarationNode(
+                        position = it.parameter.position,
+                        name = it.parameter.name,
+                        declaredModifiers = it.modifiers,
+                        typeParameters = emptyList(),
+                        receiver = classType,
+                        declaredType = it.parameter.declaredType,
+                        isMutable = it.isMutable,
+                        initialValue = null,
+                    ))
+                }
             }
             primaryConstructor?.visit(modifier = modifier)
             superClassInvocation?.visit(modifier = modifier, isSuperClassInvocation = true)
@@ -3018,6 +3165,36 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 ?.filter { it.isProperty }
                 ?.map { it.parameter }
                 ?.forEach { currentScope.declarePropertyOwner(it.transformedRefName!!, "this/$fullQualifiedClassName") }
+            declarations.filterIsInstance<FunctionDeclarationNode>()
+                .forEach { currentScope.declareFunctionOwner(it.name, it, "this/$fullQualifiedClassName") }
+            // A member function without return type is analyzed as soon as other code needs its type,
+            // like in Kotlin `fun a() = b(); fun b() = 1` (RT-68); the loop below then skips it.
+            val analyzedFunctions = mutableSetOf<FunctionDeclarationNode>()
+            val failedFunctions = mutableMapOf<FunctionDeclarationNode, Throwable>()
+            val memberScope = currentScope
+            declared?.let { topLevelIndexByPosition[it.node.position] }?.let { classIndex ->
+                declarations.filterIsInstance<FunctionDeclarationNode>()
+                    .filter { it.declaredReturnType == null && it.inferredReturnType == null && it.body != null }
+                    .forEach { function ->
+                        function.returnTypeInference = {
+                            if (analyzedFunctions.add(function)) analyzeAtTopLevel(classIndex) {
+                                currentScope = memberScope
+                                typeParameters.forEach { activeReifiedTypeParameters[it.name] = false }
+                                try {
+                                    function.isInferringReturnType = true
+                                    function.visit(modifier = modifier, isClassMemberFunction = true)
+                                } catch (e: Throwable) {
+                                    // reported again in its turn, even if the code that needed it catches it
+                                    failedFunctions[function] = e
+                                    throw e
+                                } finally {
+                                    function.isInferringReturnType = false
+                                }
+                            }
+                        }
+                    }
+            }
+
             // Like Kotlin: a property needs a value unless an init block assigns it
             // (the latter is checked at runtime) or a getter computes it.
             if (declarations.none { it is ClassInstanceInitializerNode }) {
@@ -3051,15 +3228,6 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     }
                 }
 
-            declarations.filterIsInstance<FunctionDeclarationNode>()
-                .forEach {
-//                    it.transformedRefName = "${it.name}/${++functionDefIndex}"
-//                    if (it.transformedRefName == null) {
-//                        it.transformedRefName = it.toSignature(currentScope)
-//                    }
-                    currentScope.declareFunctionOwner(it.name, it, "this/$fullQualifiedClassName")
-                }
-
             // Like member functions, accessors may use every property and
             // function of the class, including those declared further below.
             declarations.filterIsInstance<PropertyDeclarationNode>().forEach { property ->
@@ -3085,7 +3253,16 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                             }
                     }.values
 
-                    thisFunc.visit(modifier = modifier, isClassMemberFunction = true)
+                    thisFunc.returnTypeInference = null
+                    failedFunctions[thisFunc]?.let { throw it }
+                    if (analyzedFunctions.add(thisFunc)) {
+                        thisFunc.isInferringReturnType = true
+                        try {
+                            thisFunc.visit(modifier = modifier, isClassMemberFunction = true)
+                        } finally {
+                            thisFunc.isInferringReturnType = false
+                        }
+                    }
 
                     // check type after type inference
                     identicalSuperClassFunctions.forEach { superFunc ->
@@ -3116,10 +3293,12 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         popScope()
         popScope()
         popScope()
+        companionScopes.forEach { _ -> popScope() }
 
         if (currentScope !== declarationScope) {
             throw RuntimeException("Original scope is not restored")
         }
+        declared?.companionDeclared?.let { analyzeDeclaredClass(it, isOnDemand = true) }
     }
 
     fun ClassPrimaryConstructorNode.visit(modifier: Modifier = Modifier()) {
@@ -3643,6 +3822,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             is LabelNode -> TODO()
             is EnumEntryNode -> TODO()
             is ForNode -> typeRegistry["Unit"]!!
+            is DestructuringDeclarationNode -> throw IllegalStateException("Statement lists flatten destructuring declarations")
             is ValueParameterDeclarationNode -> TODO()
     }
 
@@ -3771,7 +3951,10 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             // available as standard-library functions.
             currentScope.getPropertyTypeOrNull(variableName)?.first?.type?.toTypeNode()
                 ?: currentScope.findFunctionsByOriginalName(variableName).firstOrNull()?.let { FunctionTypeNode(position = it.first.position, parameterTypes = null, returnType = null, isNullable = false) }
-                ?: currentScope.findClass(variableName)?.let { ClassTypeNode(TypeNode(position, variableName, null, false)) }
+                ?: currentScope.findClass(variableName)?.let { (clazz, _) ->
+                    if (clazz.isObjectDeclaration) TypeNode(position, clazz.fullQualifiedName, null, false)
+                    else ClassTypeNode(TypeNode(position, variableName, null, false))
+                }
                 ?: error("Unable to resolve variable `$variableName`")
             ).let { resolvedType ->
                 activeSmartCast(smartCastKey(this))?.type ?: resolvedType

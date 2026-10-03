@@ -8,6 +8,13 @@ import com.sunnychung.lib.multiplatform.kotlite.extension.mergeIfNotExists
 import com.sunnychung.lib.multiplatform.kotlite.util.ClassMemberResolver
 
 /**
+ * The name under which code refers to the single instance of an object declaration or companion
+ * object, e.g. `object/Zaehler` or `object/Karte.Companion` (RT-67). The interpreter resolves it to
+ * [ClassDefinition.objectInstance], so it never names a variable.
+ */
+internal const val OBJECT_REF_PREFIX = "object/"
+
+/**
  * This class is stateful and may not survive after Semantic Analyzer.
  */
 open class ClassDefinition(
@@ -44,7 +51,12 @@ open class ClassDefinition(
     superClassInvocation: FunctionCallNode? = null,
     var superClass: ClassDefinition? = null,
     var superInterfaces: List<ClassDefinition> = emptyList(),
+    /** `object` or `companion object`: only the interpreter creates its single instance, on first use. */
+    val isObjectDeclaration: Boolean = false,
 ) {
+    /** Interpreter only: the instance of an object declaration, set as soon as its construction starts. */
+    internal var objectInstance: ClassInstance? = null
+
     val secondaryConstructors: List<ClassSecondaryConstructorNode>
         get() = declarations.filterIsInstance<ClassSecondaryConstructorNode>()
 
@@ -261,6 +273,7 @@ open class ClassDefinition(
         superClass = superClass,
         superInterfaceTypes = superInterfaceTypes,
         superInterfaces = superInterfaces,
+        isObjectDeclaration = isObjectDeclaration,
     ).also {
         it.memberFunctionsForSA = emptyMap()
         it.superClassInvocation = it.declaredSuperClassInvocation
@@ -516,7 +529,7 @@ open class ClassDefinition(
         }
     }
 
-    fun isInstanceCreationByUserAllowed() = isInstanceCreationAllowed && ClassModifier.abstract !in modifiers
+    fun isInstanceCreationByUserAllowed() = isInstanceCreationAllowed && ClassModifier.abstract !in modifiers && !isObjectDeclaration
 
     /**
      * Only for SemanticAnalyzer use during parsing class declarations.

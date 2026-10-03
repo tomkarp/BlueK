@@ -31,6 +31,9 @@ class SemanticAnalyzerSymbolTable(
      */
     internal var beforeFunctionLookup: ((String) -> Unit)? = null
 
+    /** Like [beforeFunctionLookup], for a property name (called by `SemanticAnalyzer`, see `runBeforePropertyLookup`). */
+    internal var beforePropertyLookup: ((String) -> Unit)? = null
+
     fun TypeNode.toClass(): ClassDefinition {
         return (findClass(name) ?: throw RuntimeException("Could not find class `$name`"))
             .first

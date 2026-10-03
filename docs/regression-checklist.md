@@ -208,6 +208,12 @@ bei Verweisen die Beschreibung mitnennen.
 | RT-61 | `null!!` wirft eine `NullPointerException` ohne Meldung wie in Kotlin: `e.message` ist `null`, Text und nicht gefangene Meldung lauten `NullPointerException`; eine eigene Meldung (`NullPointerException("eigen")`) bleibt | 2026-10-03, Rest aus RT-54; mit dem Bundle aus 9a020fa trug die NPE den Text `"null"` (`NullPointerException: null`). RT-61-Block in `smoke-curriculum-kotlin.mjs` scheitert mit dem alten Bundle und ist mit dem neuen grün | Runtime-Test mit echtem Bundle; kein GUI-Test |
 | RT-62 | `Triple` (`first`/`second`/`third`, Ausgabe `(a, b, c)`, Inhaltsvergleich), `StringBuilder` (`append`, `appendLine`, `insert`, `reverse`, `clear`, `isEmpty`, `length`, `sb[i]`, Ausgabe des Inhalts), `buildString { append(…) }` auch mit `readln()` sowie `Random.nextInt`/`nextDouble`/`nextBoolean` wie in Kotlin | 2026-10-03 beim Durchgehen bekannter Lücken. Erster Ansatz mit `StringBuilder`-Erweiterungsfunktionen scheiterte in `buildString { append("a") }` („No matching function … `append`“): Kotlite findet über den impliziten Empfänger keine Bibliotheks-Erweiterungen (auch `mutableListOf(1).apply { add(2) }` scheitert, README); die Funktionen sind deshalb Methoden der Klasse. Mit dem Bundle aus 4594330 fehlen die 15 neuen Ausdrücke in `smoke-kotlin-surface.mjs`, und der RT-62-Eingabefall in `smoke-kotlite-browser.mjs` scheitert; mit dem neuen Bundle grün (110 unterstützt) | Runtime-Tests mit echtem Bundle; kein GUI-Test. Offen: `Random(seed)`, weitere `StringBuilder`-Funktionen; die allgemeine Lücke mit dem impliziten Empfänger ist mit RT-63 behoben |
 | RT-63 | Über den impliziten Empfänger werden Erweiterungsfunktionen gefunden: `liste.apply { add(1) }`, `with(liste) { add(2); size }`, `"abc".run { uppercase() }`, `with("abc") { substring(1) }`, `liste.run { map { … } }`, eigene Erweiterungen wie `gruss()` für `fun Hund.gruss()` in einer `Hund`-Methode oder einer anderen `Hund`-Erweiterung; ebenso Erweiterungs-Properties eines Obertyps (`size` für `MutableList`). Unbekannte Namen und falsche Argumenttypen behalten ihre Meldung | 2026-10-03 auf Wunsch des Nutzers (beim Bau von RT-62 gefunden). Mit dem Bundle aus 2a8429b scheiterte schon das Laden des Testprojekts („`gruss` is unknown“), `mutableListOf(1).run { size }` war auch dort schon unbekannt. Ein erster Ansatz für die Obertyp-Properties ließ das Laden der Stdlib mit „Unknown type T“ scheitern; generische Typen werden dort nun übersprungen. RT-63-Block in `smoke-curriculum-kotlin.mjs` (12 Ausdrücke, 2 Fehlermeldungen) scheitert mit dem alten Bundle und ist mit dem neuen grün | Runtime-Test mit echtem Bundle; kein GUI-Test. Abweichung: Eine passende gleichnamige Top-Level-Funktion gewinnt gegen die Funktion des Empfängers; nur der innerste Empfänger wird versucht (README, `PATCH.md`) |
+| RT-64 | `data class` wie in Kotlin: `toString()` (`Punkt(x=1, y=2)`), `equals`/`hashCode` über die Konstruktor-Properties (`==`, Sets, Map-Schlüssel), `copy(…)` mit den aktuellen Werten als Vorgabe, `componentN()`; selbst deklarierte Funktionen haben Vorrang; auch generisch und im Codepad. Fehlermeldungen wie in Kotlin für keine Parameter, Nicht-Property-Parameter und `open`/`abstract`/`enum` mit Datei und Zeile. Die erzeugten Funktionen erscheinen nicht im Methodenmenü; die Vorlage „Data Class“ im Dialog „New File“ funktioniert; `data` bleibt als Name nutzbar | 2026-10-03 auf Wunsch des Nutzers. Mit dem Bundle aus 7e19b32 lehnte BlueK jede `data class` ab („A BlueK project file may contain one class …“ bzw. „`data` is unknown“), auch die vorhandene Vorlage des Dialogs. Zwischenstände: erzeugter Code begann mit Zeilenumbrüchen vor `{` („Expected token Symbol `{`“), `data` wurde am Dateianfang noch als Ausdruck gelesen. RT-64-Block in `smoke-curriculum-kotlin.mjs` und Chromium-Test RT-64 in `regressions.spec.ts` scheitern mit dem alten Bundle und sind mit dem neuen grün | Runtime-Test mit echtem Bundle und echter Browsertest. Destrukturierung seit RT-65; `componentN` ohne `operator` |
+| RT-65 | Destrukturierung wie in Kotlin: `val (a, b) = …` (auch `var`, `_`, Typangaben), `for ((k, v) in map)`, `for ((i, x) in liste.withIndex())`, Lambda-Parameter `{ (k, v) -> }` in `forEach`/`map`; für `data class`, `Pair`, `Triple`, Listen (zu kurze werfen `IndexOutOfBoundsException`), Map-Einträge und `IndexedValue`; mehrere Codepad-Eingaben nacheinander; Kotlins Meldungen ohne `componentN` und im Klassenrumpf; `{ (it + 1) * 2 }` bleibt ein Ausdruck | 2026-10-03 auf Wunsch des Nutzers. Mit dem Bundle aus 62d4016 war jede Form ein Parse-Fehler („Expected token Operator `)`“), `componentN` und `withIndex` fehlten. Erst mehrdeutige Meldung bei `val (e, f) = 5` („Did you mean `component2`?“), jetzt Kotlins Wortlaut. RT-65-Block in `smoke-curriculum-kotlin.mjs` und sechs Ausdrücke in `smoke-kotlin-surface.mjs` scheitern mit dem alten Bundle und sind mit dem neuen grün | Runtime-Tests mit echtem Bundle; kein GUI-Test. Abweichung: auf oberster Ebene einer Projektdatei erlaubt (README) |
+| RT-66 | `"%.2f".format(x)` und `String.format(…)` wie `java.util.Formatter` (`%d %x %X %o %f %s %S %c %b %% %n`, Breite, Genauigkeit, `%2$s`, Flags `- 0 + ,` und Leerzeichen; Rundung wie Java), immer mit `.` als Dezimalpunkt; falsche Typen und fehlende Argumente werfen `IllegalArgumentException`. Dazu: Erweiterungsfunktionen mit `vararg` nehmen beliebig viele Argumente (`fun String.f(vararg a: Int)`, vorher nur genau eines) | 2026-10-03 nach „mache erst mal weiter“ des Nutzers; Dezimalpunkt statt Sprache des Rechners als eigene, dokumentierte Entscheidung. Beim Einbau von `format` gefunden: Erweiterungen verloren `vararg`, weil sie als Kopie registriert werden. Mit dem Bundle aus 2c81dd6 fehlen die 12 neuen Ausdrücke in `smoke-kotlin-surface.mjs`, und der RT-66-Block in `smoke-curriculum-kotlin.mjs` scheitert am ersten Fall; mit dem neuen Bundle grün (128 unterstützt, 9 bekannte Lücken) | Runtime-Tests mit echtem Bundle; kein GUI-Test. Offen: `%e`, `%g`, Datumsformate, Formatierung nach Sprache |
+| RT-67 | `object Name { … }` und `companion object { … }` wie in Kotlin: genau eine Instanz, beim ersten Zugriff erzeugt (`init` läuft einmal), über den Namen benutzt (`Zaehler.erhoehe()`, `Karte.MAX`, `listOf<Tier>(Hund)`, `when` mit `Hund ->`), auch mit Interfaces und Oberklasse; Companion-Mitglieder in der Klasse und in Unterklassen auch ohne Klassennamen (Zähler `init { anzahl++ }`, Default-Argument `= START`, Getter, Lambdas), vor gleichnamigen Top-Level-Deklarationen; Klasse und Companion teilen `private`; `Box.von(5)` für generische Klassen; `const val` auf oberster Ebene, in Objekten und Companions. Klassenmenü: Objekt ohne Konstruktor, Methoden von Objekt und Companion werden als `Name.f(…)` aufgerufen; der Titel des Aufrufdialogs lautet `Hund.neu()` (vorher `Hund..neu()`, bei Top-Level-Funktionen `.summe()`). Eigene Meldungen für `Name()`, benannte und doppelte Companions, verschachtelte Objekte, Objekt-Ausdrücke und falsches `const`; Parsermeldungen markieren ihre Zeile statt der ersten Dateizeile | 2026-10-03 nach „dann weiter“ des Nutzers. Vorher waren `object`, `companion object` und `const` Parse- bzw. Top-Level-Fehler. Beim Einbau gefunden: Aufrufe auf dem Companion generischer Klassen (`Box.f()`, auch `fun Box.Companion.f()`) scheiterten schon vorher an „Number of type arguments“; ein Klassenname allein (`Karte`) brachte die Laufzeit zum Absturz. Mit dem Bundle aus 891dd9a scheitert der RT-67-Block in `smoke-curriculum-kotlin.mjs` beim Laden des Projekts, alle früheren Blöcke laufen durch | Runtime-Tests mit echtem Bundle und Browser-Test RT-67 in `tests/gui/regressions.spec.ts`. Offen: Objekt-Ausdrücke, benannte Companions, verschachtelte Klassen; ein Companion, das seine Klasse schon während deren Analyse braucht, sieht nur deren bis dahin analysierte Member |
+| RT-68 | Methoden ohne Rückgabetyp dürfen vor ihrer Deklaration benutzt werden wie in Kotlin: `fun a() = b(); fun b() = 1` in einer Klasse, ein Property-Initialisierer mit einer späteren Methode (`val start = doppelt(1)`), `override fun toString() = bericht()`, Objekte, die einander aufrufen (`A.f()` → `B.g()` → `A.h()`), ein Companion, das während `init { anzahl++ }` eine Methode seiner Klasse aufruft; auch im Codepad. Nur ein Typ, der von sich selbst abhängt (`fun a() = b(); fun b() = a()`), braucht einen Rückgabetyp: „Cannot infer return type of function a, because it depends on itself“ | 2026-10-03 nach „dann los“ des Nutzers; Vorschlag aus RT-67. Vorher „Cannot infer return type of function b. Please specify types manually“. Mit dem Bundle aus 7aa917b scheitert `smoke-curriculum-kotlin.mjs` am RT-67-Block, der jetzt `fun geheim() = wert + 1` ohne Rückgabetyp enthält | Runtime-Tests mit echtem Bundle; kein GUI-Test (reine Analyse). Offen: gegenseitige Rekursion von Top-Level-Funktionen braucht einen Rückgabetyp an der zuerst analysierten; Properties einer Klasse in Analyse nur, soweit analysiert |
+| RT-69 | Eine Methode der eigenen Klasse lässt sich ohne `this.` in Lambdas aufrufen, die eine Bibliotheksfunktion ausführt: `map { laut() + it }` (auch überschrieben in einer Unterklasse), `filter { gerade(it) }`, verschachtelte Lambdas, `apply { add(gross()) }`, `sortedBy { … }` in einem Property-Initialisierer, `forEach { s += mal10(it) }` mit `private`-Methode, zurückgegebene Lambdas, geerbte Methoden, in Companions und Objekten | 2026-10-03 beim Prüfen von RT-68 gefunden. Vorher scheiterte der Aufruf zur Laufzeit mit „Function `…` not found on implicit receiver“, auch mit dem Bundle aus 891dd9a; mit dem Bundle aus 1724af8 scheitert der RT-69-Block in `smoke-curriculum-kotlin.mjs` am ersten Fall | Runtime-Tests mit echtem Bundle; kein GUI-Test. Daneben gefunden, offen: eine Property vom Funktionstyp lässt sich nicht als `objekt.f()` aufrufen (`val f = objekt.f; f()` geht) |
 
 | GUI-93 | Objekt-Kontextmenüs und geerbte Methoden-Untermenüs liegen über offenen Inspektoren und bleiben anklickbar; Parameterdialoge liegen weiterhin darüber | Chromium GUI-93 erzeugt tatsächliche Überlappungen mit einem verschobenen Inspektor, prüft den vordersten DOM-Treffer, öffnet den Parameterdialog und ruft eine geerbte Methode auf. Vor der Korrektur rot, nachher grün; GUI-49/82/85/87 ebenfalls grün | Automatisch im echten Browser abgesichert; keine separate visuelle Benutzerabnahme |
 | GUI-94 | Reset erhält den maximierten bzw. wiederhergestellten Zustand des BluePlay-Weltfensters | Chromium GUI-94 wechselt die angezeigte Welt, maximiert und setzt zurück; prüft die erneut erzeugte ursprüngliche Welt und unveränderte Fenstergrenzen, danach Reset bei normaler Fenstergröße | Vor der Korrektur rot, danach grün; GUI-57 und beide RT-25-BluePlay-Reset-Tests ebenfalls grün; keine gesonderte visuelle Benutzerabnahme |
@@ -2433,4 +2439,152 @@ Tatsächliche Prüfungen mit dem neu gebauten Bundle:
 - Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
   alle Node-Suiten grün (Oberfläche 110 unterstützt, 12 Lücken), `test:offline`
   4/4, Chromium 140/140 grün; PERF-01 dabei 320 Frames, p95 15,2 ms, max. 27,1 ms.
+- `git diff --check` ohne Befund.
+
+### RT-64: `data class` (2026-10-03)
+
+Auf Wunsch des Nutzers. `ClassModifier.data` und Erzeugung der Funktionen im
+Parser (`Parser.dataClassMembers`), Kennzeichnung `isGenerated`, Filter im
+Manifest von `KotliteSession`; README „Aktuelle Grenzen“ angepasst.
+
+Tatsächliche Prüfungen mit dem neu gebauten Bundle:
+
+- RT-64-Block in `smoke-curriculum-kotlin.mjs` gegen das Bundle aus 7e19b32
+  (Testkopie nur mit diesem Block): scheitert beim Laden („A BlueK project
+  file may contain one class …“); mit dem neuen Bundle grün, ebenso alle
+  übrigen Blöcke.
+- Chromium-Test RT-64 mit dem Bundle aus 7e19b32 (vorübergehend eingesetzt,
+  danach das neue wiederhergestellt, Prüfsumme gleich): scheitert beim ersten
+  Codepad-Schritt; mit dem neuen Bundle grün. Ein erster Testentwurf prüfte
+  die Objekt-Ausgabe über `.codepad-result-value`, die es für Objekte nicht
+  gibt; korrigiert auf ein String-Template.
+- `browser-smoke`, `test:generics` und `test:blueplay-demos` grün.
+- Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
+  alle Node-Suiten grün, `test:offline` 4/4, Chromium 141/141 grün (mit RT-64);
+  PERF-01 dabei 319 Frames, p95 15,2 ms, max. 18,9 ms.
+- `git diff --check` ohne Befund.
+
+### RT-65: Destrukturierung (2026-10-03)
+
+Auf Wunsch des Nutzers. Umschreiben im Parser (`destructuringDeclaration`,
+`destructuringComponents`, `componentDeclarations`,
+`DestructuringDeclarationNode`), `componentN` und `withIndex` in
+`BlueKStdlibModule`, `IndexedValue` in `DelegatedValue`, Kotlins Meldung bei
+fehlendem `componentN` in `KotlinSurfaceHints`; README, `kotlin-surface.md`
+und `PATCH.md` angepasst.
+
+Tatsächliche Prüfungen mit dem neu gebauten Bundle:
+
+- RT-65-Block in `smoke-curriculum-kotlin.mjs` gegen das Bundle aus 62d4016
+  (Testkopie nur mit diesem Block): scheitert beim Laden („Expected token
+  Operator `)`“); `smoke-kotlin-surface.mjs` gegen dasselbe Bundle: die neuen
+  `componentN`-/`withIndex`-Ausdrücke fehlen. Mit dem neuen Bundle beide grün
+  (116 unterstützt, 11 bekannte Lücken, 22 Meldungen).
+- Zwischenstand: Der Build scheiterte zunächst an vier `when`-Ausdrücken über
+  das versiegelte `ASTNode`; dort steht jetzt ein Zweig mit internem Fehler.
+- Zusätzlich geprüft: Destrukturierung auf oberster Ebene einer Projektdatei
+  und mit einer eigenen `component1()` ohne `operator` (wie im README).
+- `browser-smoke`, `test:generics` und `test:blueplay-demos` grün.
+- Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
+  alle Node-Suiten grün, `test:offline` 4/4, Chromium 141/141 grün; PERF-01
+  dabei 324 Frames, p95 15,1 ms, max. 26,8 ms.
+- `git diff --check` ohne Befund.
+
+### RT-66: Formatierung und `vararg` in Erweiterungen (2026-10-03)
+
+Nach „mache erst mal weiter“ des Nutzers. Neuer Formatierer `KotlinFormat`
+(`kotlite-browser`), `String.format` und `String.Companion.format` in
+`BlueKStdlibModule`, Hinweis auf fehlende Formatierung in `KotlinSurfaceHints`
+entfernt; `isVararg` bleibt beim Kopieren von Funktionsknoten erhalten
+(`PATCH.md`). Dezimalpunkt statt Sprache des Rechners ist in
+`docs/kotlin-surface.md` dokumentiert.
+
+Tatsächliche Prüfungen mit dem neu gebauten Bundle:
+
+- Zwischenstand: `"%s %s".format("a", 1)` fand zunächst keine passende
+  Funktion; Ursache war der Verlust von `vararg` beim Registrieren von
+  Erweiterungen, auch für eigene Erweiterungen in Schülercode.
+- `smoke-kotlin-surface.mjs` gegen das Bundle aus 2c81dd6: die 12 neuen
+  Ausdrücke fehlen; RT-66-Block in `smoke-curriculum-kotlin.mjs` gegen dasselbe
+  Bundle scheitert beim ersten Fall. Mit dem neuen Bundle beide grün
+  (128 unterstützt, 9 bekannte Lücken, 21 Meldungen).
+- `browser-smoke`, `test:generics` und `test:blueplay-demos` grün.
+- Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
+  alle Node-Suiten grün, `test:offline` 4/4, Chromium 141/141 grün; PERF-01
+  dabei 325 Frames, p95 15,1 ms, max. 19,1 ms.
+- `git diff --check` ohne Befund.
+
+### RT-67: `object`, `companion object` und `const val` (2026-10-03)
+
+Nach „dann weiter“ des Nutzers. Parser, Analyzer und Interpreter im Vendor
+(`PATCH.md`), Manifest (`kind: "object"`, `companionMethods`) und
+Parser-Meldungspositionen in `KotliteSession`, Titel des Aufrufdialogs in
+`CallDialogs.svelte`. Die Oberfläche kannte Objekte und Companion-Methoden
+schon; erst jetzt liefert die Laufzeit sie.
+
+Tatsächliche Prüfungen mit dem neu gebauten Bundle:
+
+- Zwischenstände: Ein Default-Argument mit Companion-Konstante
+  (`class Konto(val stand: Int = START)`) analysierte das Companion, bevor die
+  Konstruktor-Properties bekannt waren; sie werden dafür jetzt vorab
+  eingetragen. Ruft das Companion eine Methode ohne Rückgabetyp auf, während
+  die Klasse noch analysiert wird (`init { anzahl++ }`), gilt die bekannte
+  Grenze aus RT-40 (Rückgabetyp nötig); dokumentiert in README und
+  `docs/kotlite.md`.
+- Nebenbefunde: `Box.von(5)` auf dem Companion einer generischen Klasse
+  scheiterte schon mit dem Bundle aus 891dd9a („Number of type arguments“,
+  auch `fun Box.Companion.f()`); ein Klassenname allein (`Katze`) brachte die
+  Laufzeit dort zum Absturz. Beides behoben.
+- `smoke-curriculum-kotlin.mjs` gegen das Bundle aus 891dd9a: alle früheren
+  Blöcke grün, der RT-67-Block scheitert beim Laden des Projekts. Mit dem
+  neuen Bundle grün.
+- Browser-Test RT-67 einzeln grün (Objektmethoden zweimal über das
+  Klassenmenü, Companion-Methode mit Argument, Dialogtitel `Hund.neu()`).
+- `browser-smoke`, `test:generics` und `test:blueplay-demos` grün.
+- Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
+  alle Node-Suiten grün, `test:offline` 4/4, Chromium 142/142 grün; PERF-01
+  dabei 320 Frames, p95 15,2 ms, max. 17,3 ms.
+- `git diff --check` ohne Befund.
+
+### RT-68: Methoden ohne Rückgabetyp vor ihrer Deklaration (2026-10-03)
+
+Nach „dann los“ des Nutzers. Analyse bei Bedarf über
+`FunctionDeclarationNode.returnTypeInference` (`PATCH.md`); README „Aktuelle
+Grenzen“ und `docs/kotlite.md` angepasst.
+
+Tatsächliche Prüfungen mit dem neu gebauten Bundle:
+
+- Vorher (Bundle aus 7aa917b): `fun a() = b(); fun b() = 1` in einer Klasse,
+  `val start = doppelt(1)` vor `fun doppelt(…)`, einander aufrufende Objekte
+  und ein Companion, das während `init` `fun geheim() = wert + 1` aufruft,
+  scheiterten mit „Cannot infer return type …“. `smoke-curriculum-kotlin.mjs`
+  gegen dieses Bundle scheitert am RT-67-Block (jetzt ohne `: Int` an
+  `geheim`); mit dem neuen Bundle grün, einschließlich RT-68-Block.
+- Beim Prüfen gefunden, getrennt als RT-69: Ein Methodenaufruf im Lambda einer
+  Bibliotheksfunktion (`listOf(1).map { it + groesse() }`) scheitert zur
+  Laufzeit schon mit dem Bundle aus 891dd9a.
+- `browser-smoke`, `test:generics` und `test:blueplay-demos` grün.
+- Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
+  alle Node-Suiten grün, `test:offline` 4/4, Chromium 142/142 grün; PERF-01
+  dabei 322 Frames, p95 15,0 ms, max. 19,6 ms.
+- `git diff --check` ohne Befund.
+
+### RT-69: Methodenaufrufe ohne `this.` in Lambdas (2026-10-03)
+
+Beim Prüfen von RT-68 gefunden. Der Analyzer gibt einem Aufruf über den
+impliziten Empfänger den Eigentümer `this/<Klasse>` (`PATCH.md`).
+
+Tatsächliche Prüfungen mit dem neu gebauten Bundle:
+
+- Vorher (Bundle aus 891dd9a und 1724af8): `listOf(1, 2, 3).map { it +
+  groesse() }` in einer Methode scheiterte zur Laufzeit mit „Function
+  `groesse` not found on implicit receiver“, mit und ohne Rückgabetyp an
+  `groesse`. Der RT-69-Block in `smoke-curriculum-kotlin.mjs` scheitert mit
+  dem Bundle aus 1724af8 am ersten Fall; mit dem neuen Bundle grün.
+- Daneben gefunden, offen: `K(4).f()` für `val f: () -> Int` meldet „`f` is
+  unknown for K“; `val g = K(4).f; g()` funktioniert.
+- `browser-smoke`, `test:generics` und `test:blueplay-demos` grün.
+- Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
+  alle Node-Suiten grün, `test:offline` 4/4, Chromium 142/142 grün; PERF-01
+  dabei 322 Frames, p95 15,0 ms, max. 17,7 ms.
 - `git diff --check` ohne Befund.

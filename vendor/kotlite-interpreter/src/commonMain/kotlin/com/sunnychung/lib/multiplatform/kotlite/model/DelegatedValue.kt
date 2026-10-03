@@ -16,13 +16,14 @@ open class DelegatedValue<T : Any>(override val value: T, fullClassName: String,
             is Map.Entry<*, *> -> "${element(content.key)}=${element(content.value)}"
             is Triple<*, *, *> -> "(${element(content.first)}, ${element(content.second)}, ${element(content.third)})"
             is StringBuilder -> content.toString()
+            is IndexedValue<*> -> "IndexedValue(index=${content.index}, value=${element(content.value)})"
             else -> super.convertToString(isCallCustomFunction)
         }
     }
 
     /** Lists, sets, maps, map entries, pairs and triples compare by content like in Kotlin; other host values by identity. */
     private val hasContentEquality: Boolean
-        get() = value.let { it is List<*> || it is Set<*> || it is Map<*, *> || it is Map.Entry<*, *> || it is Pair<*, *> || it is Triple<*, *, *> }
+        get() = value.let { it is List<*> || it is Set<*> || it is Map<*, *> || it is Map.Entry<*, *> || it is Pair<*, *> || it is Triple<*, *, *> || it is IndexedValue<*> }
 
     // Kotlin's own equals: a list never equals a set; elements compare with their `equals`.
     private fun contentEquals(other: Any?) = other is DelegatedValue<*> && other.hasContentEquality && value == other.value
@@ -41,7 +42,7 @@ open class DelegatedValue<T : Any>(override val value: T, fullClassName: String,
     internal fun anyHashCode(): Int = if (hasContentEquality) value.hashCode() else originalHashCode()
     // Elements of a list or pair use their own `toString()`, as in string templates.
     internal fun anyToString(): String =
-        convertToString(isCallCustomFunction = value.let { it is Collection<*> || it is Map<*, *> || it is Map.Entry<*, *> || it is Pair<*, *> || it is Triple<*, *, *> })
+        convertToString(isCallCustomFunction = value.let { it is Collection<*> || it is Map<*, *> || it is Map.Entry<*, *> || it is Pair<*, *> || it is Triple<*, *, *> || it is IndexedValue<*> })
 
     constructor(value: T, clazz: ClassDefinition, typeArguments: List<DataType> = emptyList(), symbolTable: SymbolTable) : this(
         value = value,

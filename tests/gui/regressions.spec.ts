@@ -536,6 +536,64 @@ test('GUI-95 method menus show the return type after the parameters', async ({ p
   await expect(popup.getByRole('button', { name: 'summe(a: Int, b: Int): Int', exact: true })).toBeVisible();
 });
 
+test('RT-64 a Data Class from the New File dialog compiles, compares by value and hides its generated methods', async ({ page }) => {
+  await project(page);
+  await page.getByRole('button', { name: 'New File', exact: true }).click();
+  const newFile = page.getByRole('dialog', { name: 'Create New Kotlin File' });
+  await newFile.getByLabel('Name').fill('Punkt');
+  await newFile.getByRole('radio', { name: 'Data Class' }).check();
+  await newFile.getByRole('button', { name: 'Create', exact: true }).click();
+  // The template `data class Punkt(val value: Any?)` used to fail with "`data` is unknown".
+  await expect((await evaluate(page, 'Punkt(1) == Punkt(1)')).locator('.codepad-result-value')).toHaveText('true');
+  await expect((await evaluate(page, '"${Punkt("a").copy(value = 2)}"')).locator('.codepad-result-value')).toHaveText('"Punkt(value=2)"');
+  const entry = await evaluate(page, 'Punkt(3)');
+  await entry.getByRole('button').click();
+  await page.getByLabel('Name of instance').fill('punkt1');
+  await page.getByRole('button', { name: 'OK', exact: true }).click();
+  await page.locator('.bench .object').click({ button: 'right' });
+  const popup = page.locator('.popup');
+  await expect(popup).toBeVisible();
+  for (const generated of ['copy', 'component1', 'toString', 'equals', 'hashCode']) {
+    await expect(popup.getByRole('button', { name: new RegExp(`^${generated}\\(`) })).toHaveCount(0);
+  }
+});
+
+test('RT-67 the class menu calls methods of an object and of a companion object', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, files: [
+    { fileName: 'Zaehler.kt', kind: 'class', source: 'object Zaehler {\n    var stand = 0\n    fun erhoehe(): Int { stand++; return stand }\n}' },
+    { fileName: 'Hund.kt', kind: 'class', source: 'class Hund(val name: String) {\n    init { anzahl++ }\n    companion object {\n        var anzahl = 0\n        fun neu(name: String): Hund = Hund(name)\n    }\n}' },
+  ] };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  await page.getByRole('button', { name: 'Compile', exact: true }).click();
+  await expect(page.getByLabel('Ready', { exact: true })).toBeVisible();
+  const popup = page.locator('.popup');
+  const result = page.locator('.result-dialog');
+
+  // An object has no constructor; its methods are called on its single instance.
+  await page.locator('.classcard[aria-label="Zaehler"]').click({ button: 'right' });
+  await expect(popup.locator('.constructor-menu-item')).toHaveCount(0);
+  await popup.getByRole('button', { name: 'erhoehe(): Int', exact: true }).click();
+  await expect(result.locator('.result-value')).toHaveText('1 : Int');
+  await result.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.locator('.classcard[aria-label="Zaehler"]').click({ button: 'right' });
+  await popup.getByRole('button', { name: 'erhoehe(): Int', exact: true }).click();
+  await expect(result.locator('.result-value')).toHaveText('2 : Int');
+  await result.getByRole('button', { name: 'Close', exact: true }).click();
+
+  // A class menu offers the constructor and the companion's methods (`Hund.neu(…)`).
+  await page.locator('.classcard[aria-label="Hund"]').click({ button: 'right' });
+  await expect(popup.locator('.constructor-menu-item')).toHaveText('Hund(name: String)');
+  await popup.getByRole('button', { name: 'neu(name: String): Hund', exact: true }).click();
+  const invoke = page.locator('.method-dialog');
+  await expect(invoke.locator('h3')).toHaveText('Hund.neu()');
+  await invoke.getByLabel('name: String').fill('"Rex"');
+  await invoke.getByRole('button', { name: 'Invoke', exact: true }).click();
+  await expect(result.locator('.result-value')).toContainText('Hund');
+  await result.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect((await evaluate(page, 'Hund.anzahl')).locator('.codepad-result-value')).toHaveText('1');
+  await expect((await evaluate(page, 'Zaehler.stand')).locator('.codepad-result-value')).toHaveText('2');
+});
+
 test('GUI-31 additional editor files open in tabs by default', async ({ page }) => {
   const payload = { format: 'bluek-project', version: 1, files: [
     { fileName: 'Hund.kt', kind: 'class', source: 'class Hund {}' },

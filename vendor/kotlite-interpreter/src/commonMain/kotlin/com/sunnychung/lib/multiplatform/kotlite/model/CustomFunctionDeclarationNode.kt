@@ -84,6 +84,10 @@ class CustomFunctionDeclarationNode(
             modifiers = modifiers,
             body = body,
             transformedRefName = transformedRefName
-        )
+        ).also {
+            // As in FunctionDeclarationNode.copy: the registered extension copy keeps `vararg` (RT-66).
+            it.isVararg = isVararg
+            it.isGenerated = isGenerated
+        }
     }
 }

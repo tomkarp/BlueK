@@ -12,6 +12,7 @@ import com.sunnychung.lib.multiplatform.kotlite.extension.fullClassName
 import com.sunnychung.lib.multiplatform.kotlite.extension.isValidIntegerLiteralAssignToByte
 import com.sunnychung.lib.multiplatform.kotlite.extension.resolveGenericParameterTypeArguments
 import com.sunnychung.lib.multiplatform.kotlite.extension.resolveGenericParameterTypeToUpperBound
+import com.sunnychung.lib.multiplatform.kotlite.model.DestructuringDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ASTNode
 import com.sunnychung.lib.multiplatform.kotlite.model.AbandonedNativeCall
 import com.sunnychung.lib.multiplatform.kotlite.model.ArgumentValues
@@ -35,6 +36,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.ClassSecondaryConstructorN
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassDefinition
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassInstance
+import com.sunnychung.lib.multiplatform.kotlite.model.OBJECT_REF_PREFIX
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassInstanceInitializerNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassMemberReferenceNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassModifier
@@ -292,6 +294,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             is LabelNode -> TODO()
             is EnumEntryNode -> TODO()
             is ForNode -> this.eval()
+            is DestructuringDeclarationNode -> throw IllegalStateException("Statement lists flatten destructuring declarations")
             is ValueParameterDeclarationNode -> TODO()
         }
     }
@@ -588,20 +591,46 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
     suspend fun VariableReferenceNode.eval(): RuntimeValue {
         // usual variable -> transformedRefName
         // class constructor -> variableName? TODO
+        (transformedRefName ?: variableName).let { name ->
+            if (name.startsWith(OBJECT_REF_PREFIX)) return objectInstance(name.removePrefix(OBJECT_REF_PREFIX))
+        }
         if (ownerRef != null) {
             return ownerAccess().eval()
         }
         if (type is ClassTypeNode) {
-            // TODO return singleton
             val companionClassName = "${(type as ClassTypeNode).clazz.name}.Companion"
+            val companion = symbolTable().findClass(companionClassName)!!.first
+            if (companion.isObjectDeclaration) return objectInstance(companionClassName)
             return ClassInstance(
                 symbolTable(),
                 companionClassName,
-                symbolTable().findClass(companionClassName)!!.first,
+                companion,
                 emptyList(),
             )
         }
         return accessTopLevelProperty(this) { callStack.currentSymbolTable().read(it) }
+    }
+
+    /**
+     * The single instance of the object declaration or companion object [className] (RT-67). Like in
+     * Kotlin it is created on first use; code that its initialization runs already gets it.
+     */
+    private suspend fun ASTNode.objectInstance(className: String): ClassInstance {
+        val clazz = symbolTable().findClass(className)?.first ?: throw RuntimeException("Object `$className` not found")
+        clazz.objectInstance?.let { return it }
+        val creation = FunctionCallNode(
+            function = VariableReferenceNode(position, className),
+            arguments = emptyList(),
+            declaredTypeArguments = emptyList(),
+            position = position,
+        )
+        return try {
+            creation.evalCreateClassInstance(clazz, emptyList())
+        } catch (e: Throwable) {
+            // Like a failed class initialization: the next use tries again.
+            clazz.objectInstance = null
+            throw e
+        }
     }
 
     /** A member reference through an implicit owner (e.g. `y` for `this.y`), built once per node. */
@@ -1214,6 +1243,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
 
         val symbolTable = callStack.currentSymbolTable()
         val instance = ClassInstance(symbolTable, clazz.fullQualifiedName, clazz, typeArguments.toList(), parentInstance = parentInstance)
+        if (clazz.isObjectDeclaration) clazz.objectInstance = instance
         val properties = clazz.primaryConstructor?.parameters?.filter { it.isProperty }?.map { it.parameter.transformedRefName!! }?.toMutableSet() ?: mutableSetOf()
 
         val nonPropertyArguments = mutableMapOf<String, Pair<ClassParameterNode, RuntimeValue>>()
@@ -1557,6 +1587,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                     }
                     clazz
                 },
+                isObjectDeclaration = isObject,
             ).also {
                 clazz = it
                 // Property types may name classes declared later (e.g. two
@@ -1589,8 +1620,10 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             callStack.pop(ScopeType.Class)
         }
 
-        // companion object
-        // TODO create only if a companion object is declared
+        // companion object: the declared one, else an implicit one (e.g. for enum `valueOf`);
+        // an object has none
+        companionObject?.let { it.eval(); return }
+        if (isObject) return
         callStack.currentSymbolTable().declareClass(position, ClassDefinition(
             currentScope = callStack.currentSymbolTable(),
             name = "$name.Companion",
@@ -1743,6 +1776,8 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 ?: throw InterpreterStateException("Missing lexical return target: $id"))
         }
         refs.properties.forEach {
+            // an object instance is no variable to capture
+            if (it.startsWith(OBJECT_REF_PREFIX)) return@forEach
             runtimeRefs.putPropertyHolder(it, false /* TODO review */, currentSymbolTable.getPropertyHolder(it))
         }
         refs.functions.forEach {

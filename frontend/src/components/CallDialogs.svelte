@@ -107,8 +107,9 @@
       use:containClicks
     >
       <h3 id="invoke-method-title">
-        {invokeDialog.object?.name || invokeDialog.receiver || ""}.{invokeDialog
-          .method.name}()
+        {invokeDialog.object
+          ? invokeDialog.object.name + "."
+          : invokeDialog.receiver || ""}{invokeDialog.method.name}()
       </h3>
       {#each invokeDialog.method.typeParameters || [] as typeParameter, index}<label
           >Type argument {typeParameter}<input

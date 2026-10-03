@@ -408,6 +408,7 @@ class KotliteSession {
             } catch (error: Throwable) {
                 // Kotlite parser exceptions expose their location in the message.
                 val location = Regex("line (\\d+) col (\\d+)").find(error.message.orEmpty())
+                    ?: Regex(":(\\d+):(\\d+)\\]$").find(error.message.orEmpty()) // SemanticException of the parser
                 return projectError(filename, location?.groupValues?.get(1)?.toIntOrNull() ?: 1,
                     location?.groupValues?.get(2)?.toIntOrNull() ?: 1, error.message ?: "Invalid Kotlin source.")
             }
@@ -486,6 +487,7 @@ class KotliteSession {
         if (result.startsWith("{\"kind\":\"error\"")) return result
         val warnings = analyzedScript?.nodes.orEmpty()
             .filterIsInstance<ClassDeclarationNode>()
+            .flatMap { listOfNotNull(it, it.companionObject) }
             .flatMap { it.declarations.filterIsInstance<PropertyDeclarationNode>() }
             .flatMap { property ->
                 listOfNotNull(
@@ -533,7 +535,7 @@ class KotliteSession {
         val classes = script.nodes.filterIsInstance<ClassDeclarationNode>()
         val functions = script.nodes.filterIsInstance<FunctionDeclarationNode>()
         val classJson = classes.joinToString(",", "[", "]") { declaration ->
-            val constructors = if (declaration.isInterface) "[]" else {
+            val constructors = if (declaration.isInterface || declaration.isObject) "[]" else {
                 val secondary = declaration.declarations.filterIsInstance<ClassSecondaryConstructorNode>()
                 val parameterSets = if (secondary.isEmpty()) listOf(declaration.primaryConstructor?.parameters.orEmpty().map { it.parameter })
                     else secondary.map { it.valueParameters }
@@ -548,11 +550,15 @@ class KotliteSession {
                 jsonProperty(declaration.name, property.name, property.type, property.isMutable, property.modifiers.any { it.name == "private" }, property.accessors?.getter != null, property.accessors?.setter != null, property.accessors?.setterIsPrivate == true)
             }
             val properties = (primaryProperties + bodyProperties).filterNot { bluePlayEnabled && declaration.name in setOf("World", "Actor", "Image") && it.contains("\"visibility\":\"private\"") }.distinctBy { it.substringBefore("\",\"name\":") }.joinToString(",", "[", "]")
-            val methods = declaration.declarations.filterIsInstance<FunctionDeclarationNode>().filterNot { it is ClassSecondaryConstructorNode || (bluePlayEnabled && declaration.name in setOf("World", "Actor", "Image") && it.modifiers.any { modifier -> modifier.name == "private" }) }.mapIndexed { index, function -> jsonFunction(declaration.name, function, index) }.joinToString(",", "[", "]")
+            val methods = declaration.declarations.filterIsInstance<FunctionDeclarationNode>().filterNot { it is ClassSecondaryConstructorNode || it.isGenerated || (bluePlayEnabled && declaration.name in setOf("World", "Actor", "Image") && it.modifiers.any { modifier -> modifier.name == "private" }) }.mapIndexed { index, function -> jsonFunction(declaration.name, function, index) }.joinToString(",", "[", "]")
             val supers = declaration.superInvocations.orEmpty().mapNotNull(::superName).joinToString(",", "[", "]") { jsonTypeName(it) }
-            val kind = if (declaration.isInterface) "interface" else if (declaration.modifiers.any { it.name == "abstract" }) "abstract" else "class"
+            val kind = if (declaration.isInterface) "interface" else if (declaration.isObject) "object" else if (declaration.modifiers.any { it.name == "abstract" }) "abstract" else "class"
+            // Called as `Klasse.f()` from the class menu, like the methods of an object.
+            val companionMethods = declaration.companionObject?.declarations.orEmpty().filterIsInstance<FunctionDeclarationNode>()
+                .filterNot { it.modifiers.any { modifier -> modifier.name == "private" } }
+                .mapIndexed { index, function -> jsonFunction("${declaration.name}.Companion", function, index) }
             val typeParameters = declaration.typeParameters.joinToString(",", "[", "]") { parameter -> "\"${escape(parameter.name)}\"" }
-            "{\"id\":\"${escape(declaration.name)}\",\"name\":\"${escape(declaration.name)}\",\"kind\":\"$kind\",\"modifiers\":${declaration.modifiers.joinToString(",", "[", "]") { modifier -> "\"${modifier.name}\"" }},\"typeParameters\":$typeParameters,\"supertypes\":$supers,\"constructors\":$constructors,\"properties\":$properties,\"methods\":$methods${if (bluePlayEnabled && declaration.name in setOf("World", "Actor", "Image")) ",\"builtin\":true" else ""}}"
+            "{\"id\":\"${escape(declaration.name)}\",\"name\":\"${escape(declaration.name)}\",\"kind\":\"$kind\",\"modifiers\":${declaration.modifiers.joinToString(",", "[", "]") { modifier -> "\"${modifier.name}\"" }},\"typeParameters\":$typeParameters,\"supertypes\":$supers,\"constructors\":$constructors,\"properties\":$properties,\"methods\":$methods${if (companionMethods.isEmpty()) "" else ",\"companionMethods\":${companionMethods.joinToString(",", "[", "]")}"}${if (bluePlayEnabled && declaration.name in setOf("World", "Actor", "Image")) ",\"builtin\":true" else ""}}"
         }
         val functionJson = functions.mapIndexed { index, function ->
             val sourceFile = projectFunctionRanges.firstOrNull { function.position.lineNum in it.second..it.third }?.first
@@ -740,7 +746,7 @@ class KotliteSession {
     }
 
     private fun recordPropertyNames() {
-        val declarations = analyzedScript?.nodes?.filterIsInstance<ClassDeclarationNode>().orEmpty()
+        val declarations = analyzedScript?.nodes?.filterIsInstance<ClassDeclarationNode>().orEmpty().flatMap { listOfNotNull(it, it.companionObject) }
         val byName = declarations.associateBy { it.name }
         fun record(declaration: ClassDeclarationNode, visiting: MutableSet<String>) {
             if (!visiting.add(declaration.name)) return

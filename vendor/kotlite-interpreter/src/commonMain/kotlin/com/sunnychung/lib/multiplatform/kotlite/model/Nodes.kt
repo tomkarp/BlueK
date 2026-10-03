@@ -234,11 +234,11 @@ enum class FunctionValueParameterModifier {
 }
 
 enum class ClassModifier {
-    open, enum, abstract
+    open, enum, abstract, data
 }
 
 enum class PropertyModifier {
-    open, override, private
+    open, override, private, const
 }
 
 data class FunctionValueParameterNode(override val position: SourcePosition, val name: String, val declaredType: TypeNode?, val defaultValue: ASTNode?, val modifiers: Set<FunctionValueParameterModifier>, @ModifyByAnalyzer var transformedRefName: String? = null) : ASTNode {
@@ -309,9 +309,28 @@ open class FunctionDeclarationNode(
     @ModifyByAnalyzer val inferredModifiers: MutableSet<FunctionModifier> = mutableSetOf(),
 ) : ASTNode, CallableNode {
     override val returnType: TypeNode
-        get() = declaredReturnType ?: inferredReturnType ?: throw CannotInferTypeException(position, "return type of function $name")
+        get() = declaredReturnType ?: inferredReturnType ?: inferReturnTypeOnDemand()
+            ?: throw CannotInferTypeException(position, "return type of function $name" + if (isInferringReturnType) ", because it depends on itself" else "")
     val modifiers: Set<FunctionModifier>
         get() = declaredModifiers + inferredModifiers
+
+    /**
+     * Semantic analysis only: analyzes a member function without declared return type whose type
+     * is needed before its turn, e.g. `fun a() = b(); fun b() = 1` (RT-68). Null while it is analyzed.
+     */
+    @ModifyByAnalyzer internal var returnTypeInference: (() -> Unit)? = null
+    /** Semantic analysis only: its body is being analyzed, so asking for its inferred type is a cycle. */
+    @ModifyByAnalyzer internal var isInferringReturnType = false
+
+    private fun inferReturnTypeOnDemand(): TypeNode? {
+        val infer = returnTypeInference ?: return null
+        returnTypeInference = null
+        infer()
+        return inferredReturnType
+    }
+
+    /** Written by the parser, e.g. `toString()` of a `data class`; hosts may hide it (RT-64). */
+    var isGenerated: Boolean = false
 
     override val receiverType: TypeNode?
         get() = receiver
@@ -363,7 +382,9 @@ open class FunctionDeclarationNode(
             body = body,
             transformedRefName = transformedRefName,
             inferredReturnType = inferredReturnType,
-        )
+            // An extension function is registered as a copy; without this, `vararg` only took one argument (RT-66).
+            isVararg = isVararg,
+        ).also { it.isGenerated = isGenerated }
     }
 
 
@@ -521,6 +542,12 @@ data class ClassDeclarationNode(
     val declarations: List<ASTNode>,
     val enumEntries: List<EnumEntryNode> = emptyList(),
     @ModifyByAnalyzer var fullQualifiedName: String = name,
+    /** `object Name { … }` or a companion object: a class with exactly one instance, created on first use. */
+    val isObject: Boolean = false,
+    /** Parser only: the class body's `companion object`, before it becomes [companionObject] of its class. */
+    val isCompanion: Boolean = false,
+    /** The `companion object` of this class, an object named `<Class>.Companion`. */
+    val companionObject: ClassDeclarationNode? = null,
 ) : ASTNode {
     @ModifyByAnalyzer val inferredModifiers: MutableSet<ClassModifier> = mutableSetOf()
     val modifiers: Set<ClassModifier>
@@ -907,6 +934,15 @@ data class ValueParameterDeclarationNode(
             "\n$self--type-->${it.toMermaid()}"
         }
     }
+}
+
+/**
+ * `val (a, b) = expression` as parsed (RT-65): a hidden property for the value and one property per
+ * named component (`val a = <hidden>.component1()`). Statement lists replace it by [statements], so
+ * the analyzer and interpreter never see this node.
+ */
+data class DestructuringDeclarationNode(override val position: SourcePosition, val statements: List<ASTNode>) : ASTNode {
+    override fun toMermaid(): String = statements.joinToString("\n") { it.toMermaid() }
 }
 
 data class ForNode(

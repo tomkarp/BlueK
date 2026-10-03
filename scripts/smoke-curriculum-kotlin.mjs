@@ -758,4 +758,221 @@ fails((await project({ 'Anzeige.kt': 'class Anzeige {\n    fun zeige(text: Strin
   fails(p.evaluate('mutableListOf(1).apply { add("x") }'), 'RT-63 wrong argument', /No matching function or constructor `add` found for the argument types \(String\)/);
 }
 
+// `data class` (RT-64): toString, equals/hashCode over the primary constructor properties,
+// componentN and copy, generated unless the class declares them; Kotlin's checks; `data` stays
+// usable as a name. It used to fail with "`data` is unknown".
+{
+  const p = await project({
+    'Punkt.kt': 'data class Punkt(val x: Int, val y: Int)',
+    'Person.kt': 'data class Person(val name: String, var alter: Int) {\n    val kategorie: String = "egal"\n    fun aelter(): Person = copy(alter = alter + 1)\n}',
+    'Box.kt': 'data class Box<T>(val inhalt: T)',
+    'Eigen.kt': 'data class Eigen(val n: Int) {\n    override fun toString(): String = "Eigen#$n"\n}',
+    'Main.kt': 'fun main() {\n    val data = mutableListOf(1)\n    data.add(2)\n    println(data)\n}',
+  });
+  ok(p.result, 'RT-64 project');
+  const cases = [
+    ['Punkt(1, 2).toString()', 'Punkt(x=1, y=2)'],
+    ['Punkt(1, 2) == Punkt(1, 2)', 'true'],
+    ['Punkt(1, 2) == Punkt(2, 1)', 'false'],
+    ['setOf(Punkt(1, 2), Punkt(1, 2)).size', '1'],
+    ['mapOf(Punkt(1, 1) to "a")[Punkt(1, 1)]', 'a'],
+    ['Punkt(1, 2).copy(y = 5).toString()', 'Punkt(x=1, y=5)'],
+    ['Punkt(3, 4).component2()', '4'],
+    ['"${Person("Rex", 3).aelter()}"', 'Person(name=Rex, alter=4)'],
+    ['Person("A", 1) == Person("A", 1)', 'true'],
+    ['val geaendert = Person("A", 1); geaendert.alter = 9; "$geaendert"', 'Person(name=A, alter=9)'],
+    ['Box("x") == Box("x")', 'true'],
+    ['Box(listOf(1)).copy(inhalt = listOf(2)).toString()', 'Box(inhalt=[2])'],
+    ['"${Eigen(5)} ${Eigen(5) == Eigen(5)}"', 'Eigen#5 true'],
+    ['listOf(Punkt(1, 2), Punkt(0, 0)).sortedBy { it.x }.toString()', '[Punkt(x=0, y=0), Punkt(x=1, y=2)]'],
+    ['val data = 3; data + 1', '4'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-64 ${source}`).display, expected, `RT-64 ${source}`);
+  ok(p.evaluate('main()'), 'RT-64 data as a name');
+  assert.equal(p.output(), '[1, 2]\n', 'RT-64 data as a name output');
+  assert.equal(ok(p.evaluate('data class Q(val a: Int)\nQ(1) == Q(1)'), 'RT-64 codepad').display, 'true');
+  // The class menu shows only declared methods.
+  const person = JSON.parse(p.session.manifest()).classes.find(item => item.name === 'Person');
+  assert.deepEqual(person.methods.map(method => method.name), ['aelter']);
+  const rejected = [
+    [{ 'Leer.kt': '\n\ndata class Leer()' }, /^Data class must have at least one primary constructor parameter at \[Leer\.kt:3:6\]/],
+    [{ 'P.kt': 'data class P(val a: Int, b: Int)' }, /^Data class primary constructor must only have property \(val \/ var\) parameters/],
+    [{ 'P.kt': 'open data class P(val a: Int)' }, /^Modifier 'data' is incompatible with 'open'/],
+  ];
+  for (const [files, pattern] of rejected) fails((await project(files)).result, `RT-64 ${Object.values(files)[0].trim()}`, pattern);
+}
+
+// Destructuring (RT-65): `val (a, b) = …` (also `var`, `_`, types), `for ((k, v) in …)`, lambda
+// parameters `{ (k, v) -> }` and componentN for data classes, Pair, Triple, lists, map entries and
+// withIndex(). All of it used to be a parse error ("Expected token Identifier").
+{
+  const p = await project({
+    'Punkt.kt': 'data class Punkt(val x: Int, val y: Int)',
+    'Main.kt': 'fun summe(p: Punkt): Int {\n    val (a, b) = p\n    return a + b\n}\nfun paare(): String {\n    var s = ""\n    for ((k, v) in mapOf("a" to 1, "b" to 2)) s += "$k$v "\n    return s\n}',
+  });
+  ok(p.result, 'RT-65 project');
+  const cases = [
+    ['summe(Punkt(2, 3))', '5'],
+    ['paare()', 'a1 b2 '],
+    ['val (a, b) = Pair(1, "x"); "$a$b"', '1x'],
+    ['val (x, _, z) = Triple(1, 2, 3); x + z', '4'],
+    ['val (p1, q1: Int) = Punkt(5, 6); p1 * q1', '30'],
+    ['var (m, n) = listOf(1, 2); m = 10; m + n', '12'],
+    ['val (r, s2) = mapOf(1 to 2).entries.first(); r + s2', '3'],
+    ['var w = ""; for ((i, wort) in listOf("a", "b").withIndex()) w += "$i$wort"; w', '0a1b'],
+    ['listOf("a").withIndex().toString()', '[IndexedValue(index=0, value=a)]'],
+    ['var t = 0; mapOf(1 to 2, 3 to 4).forEach { (k, v) -> t += k * v }; t', '14'],
+    ['listOf(Pair(1, 2), Pair(3, 4)).map { (a, b) -> a + b }.toString()', '[3, 7]'],
+    ['listOf(Punkt(1, 2)).map { (x, y) -> x * 10 + y }.toString()', '[12]'],
+    ['mapOf("a" to 1).map { (k, _) -> k }.toString()', '[a]'],
+    ['var pf = ""; for ((a, b) in listOf(Punkt(1, 2), Punkt(3, 4))) pf += "$a$b "; pf', '12 34 '],
+    // A parenthesized expression at the start of a lambda is no destructuring.
+    ['listOf(1, 2).map { (it + 1) * 2 }.toString()', '[4, 6]'],
+    ['val data = 3; data', '3'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-65 ${source}`).display, expected, `RT-65 ${source}`);
+  // Two Codepad inputs may destructure one after the other.
+  ok(p.evaluate('val (c1, d1) = Pair(3, 4)'), 'RT-65 codepad 1');
+  ok(p.evaluate('val (c2, d2) = Pair(5, 6)'), 'RT-65 codepad 2');
+  assert.equal(ok(p.evaluate('c1 + d1 + c2 + d2'), 'RT-65 codepad sum').display, '18');
+  fails(p.evaluate('val (e, f) = 5'), 'RT-65 no componentN', /^Destructuring declaration initializer of type Int must have a 'component1\(\)' function/);
+  fails(p.evaluate('class InKlasse { val (g, h) = Pair(1, 2) }'), 'RT-65 class body', /Destructuring declarations are only allowed for local variables\/values/);
+  fails((await project({ 'Main.kt': 'fun main() {}' })).evaluate('val (e1, e2) = listOf(1)'), 'RT-65 short list', /^IndexOutOfBoundsException/);
+}
+
+// Format strings (RT-66) and `vararg` in extension functions, which took only one argument because
+// an extension is registered as a copy that lost the `vararg` flag.
+{
+  const p = await project({ 'Text.kt': 'fun String.zaehle(vararg teile: Any?): Int = teile.size' });
+  ok(p.result, 'RT-66 project');
+  const cases = [
+    ['"x".zaehle(1, "b", null)', '3'],
+    ['"x".zaehle()', '0'],
+    ['val preis = 3.5; "Preis: %.2f Euro".format(preis)', 'Preis: 3.50 Euro'],
+    ['"%2\\$s %1\\$s".format("a", "b")', 'b a'],
+    ['try { "%d".format(1.5) } catch (e: IllegalArgumentException) { e.message }', 'd != Double'],
+    ['try { "%s %s".format("a") } catch (e: IllegalArgumentException) { "fehlt" }', 'fehlt'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-66 ${source}`).display, expected, `RT-66 ${source}`);
+  fails(p.evaluate('"%e".format(1.0)'), 'RT-66 unsupported conversion', /Conversion = 'e' is not supported in BlueK/);
+}
+
+// `object`, `companion object` and `const val` (RT-67): all three used to be parse errors.
+{
+  const p = await project({
+    // Main.kt comes first: `main()` reaches the companion before its class is analyzed.
+    'Main.kt': 'fun main() {\n    val k = Karte.zufall()\n    println("${k.wert} ${Karte.anzahl}")\n}\nfun info() = "top"\nconst val GRENZE = 10\nconst val DOPPELT = GRENZE * 2',
+    'Tier.kt': 'interface Tier { fun laut(): String }',
+    'Hund.kt': 'object Hund : Tier {\n    init { println("Hund erzeugt") }\n    var gebellt = 0\n    override fun laut(): String { gebellt++; return "Wau" }\n}',
+    'Karte.kt': 'open class Karte(val wert: Int) {\n    init { anzahl++ }\n    val doppelt: Int get() = wert * FAKTOR\n    fun liste() = listOf(1, 2).map { it * FAKTOR }\n    fun text() = info() + " " + Karte.FAKTOR\n    private fun geheim() = wert + 1\n    companion object {\n        const val START = 3\n        private const val FAKTOR = 2\n        var anzahl = 0\n        fun zufall(): Karte = Karte(13)\n        fun info() = "companion"\n        fun summe(a: Karte, b: Karte) = a.wert + b.geheim()\n    }\n}',
+    'Trumpf.kt': 'class Trumpf : Karte(1) {\n    fun grenze() = START * 10\n}',
+    'Box.kt': 'class Box<T>(val wert: T) {\n    companion object {\n        fun <T> von(x: T): Box<T> = Box(x)\n    }\n}',
+    // A default argument needs the companion while its class is analyzed: it sees the constructor properties.
+    'Konto.kt': 'class Konto(val stand: Int = START) {\n    companion object {\n        const val START = 5\n        fun vergleiche(a: Konto, b: Konto) = a.stand - b.stand\n    }\n}',
+  });
+  ok(p.result, 'RT-67 project');
+  ok(p.evaluate('main()'), 'RT-67 main');
+  assert.equal(p.output(), '13 1\n', 'RT-67 companion used before its class');
+  const cases = [
+    // An object is created on first use; its name is the instance.
+    ['Hund.gebellt', '0'],
+    ['listOf<Tier>(Hund).map { it.laut() } + Hund.laut()', '[Wau, Wau]'],
+    ['Hund.gebellt', '2'],
+    ['val h: Tier = Hund; h === Hund', 'true'],
+    ['"$Hund"', 'Hund'],
+    ['when (Hund as Tier) {\n    Hund -> "hund"\n    else -> "?"\n}', 'hund'],
+    // Companion members: qualified, by plain name in the class (also in getters, default
+    // arguments, lambdas and subclasses) and before top-level declarations of the same name.
+    ['Konto().stand', '5'],
+    ['Konto.vergleiche(Konto(), Konto(2))', '3'],
+    ['Karte(4).doppelt', '8'],
+    ['Karte(1).liste()', '[2, 4]'],
+    ['Karte(1).text()', 'companion 2'],
+    ['Trumpf().grenze()', '30'],
+    ['Karte.anzahl = 0; Karte(1); Karte.zufall(); Karte.anzahl', '2'],
+    ['Karte.summe(Karte(1), Karte(2))', '4'],
+    ['Karte.START + DOPPELT', '23'],
+    ['Box.von("x").wert', 'x'],
+    ['Karte', 'Karte.Companion'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-67 ${source}`).display, expected, `RT-67 ${source}`);
+  assert.equal(p.output(), 'Hund erzeugt\n', 'RT-67 object initialized once');
+  fails(p.evaluate('Hund()'), 'RT-67 object constructor', /`Hund` is an object: it has exactly one instance/);
+  fails(p.evaluate('Karte.FAKTOR'), 'RT-67 private companion member', /Private property `FAKTOR` cannot be accessed here/);
+  fails(p.evaluate('fun f() { const val q = 1 }'), 'RT-67 local const', /Modifier 'const' is not applicable to local variables/);
+  fails(p.evaluate('val t = object : Tier { override fun laut() = "x" }'), 'RT-67 object expression', /Object expressions .* are not supported in BlueK/);
+  assert.equal(ok(p.evaluate('object Codepad { val a = 1 }\nCodepad.a'), 'RT-67 codepad object').display, '1');
+
+  // The class menu calls object methods and companion methods; an object has no constructor.
+  const manifest = JSON.parse(p.session.manifest()).classes;
+  const hund = manifest.find(item => item.name === 'Hund');
+  assert.equal(hund.kind, 'object');
+  assert.deepEqual(hund.constructors, []);
+  assert.deepEqual(hund.methods.map(method => method.name), ['laut']);
+  assert.deepEqual(manifest.find(item => item.name === 'Karte').companionMethods.map(method => method.name), ['zufall', 'info', 'summe']);
+
+  const rejected = [
+    [{ 'K.kt': 'class K { const val A = 1 }' }, /Const 'val' are only allowed on top level, in objects or in companion objects/],
+    [{ 'K.kt': 'const var A = 1' }, /Modifier 'const' is not applicable to 'var'/],
+    [{ 'K.kt': 'const val A = listOf(1)' }, /Only primitives and String are allowed/],
+    [{ 'K.kt': 'const val A = readln()' }, /Const 'val' initializer should be a constant value/],
+    [{ 'K.kt': 'class K {\n    companion object Fabrik {}\n}' }, /^Named companion objects are not supported in BlueK/],
+    [{ 'K.kt': 'class K {\n    companion object {}\n    companion object {}\n}' }, /^Only one companion object is allowed per class/],
+    [{ 'K.kt': 'class K {\n    object Innen {}\n}' }, /^Nested objects are not supported in BlueK/],
+  ];
+  for (const [files, pattern] of rejected) fails((await project(files)).result, `RT-67 ${Object.values(files)[0]}`, pattern);
+  // A parser message now marks its own line instead of the file's first line.
+  const named = (await project({ 'K.kt': 'class K {\n    companion object Fabrik {}\n}' })).result;
+  assert.deepEqual([named.diagnostics[0].line, named.diagnostics[0].column], [2, 22]);
+}
+
+// Member functions without return type are analyzed when another member needs their type first
+// (RT-68): `fun a() = b()` before `fun b() = 1` failed with "Cannot infer return type of function b".
+{
+  const p = await project({
+    'Konto.kt': 'open class Konto(val stand: Int) {\n    val start = doppelt(1)\n    fun bericht() = "Stand: " + text() + zins()\n    fun text() = "$stand Euro"\n    open fun zins() = 0\n    private fun intern() = 2\n    fun doppelt(n: Int) = n * intern()\n    override fun toString() = bericht()\n}',
+    'Spar.kt': 'class Spar : Konto(5) {\n    override fun zins() = satz() * 2\n    fun satz() = 3\n}',
+    'A.kt': 'object A {\n    fun f() = B.g() + 1\n    fun h() = 10\n}',
+    'B.kt': 'object B {\n    fun g() = A.h() * 2\n}',
+  });
+  ok(p.result, 'RT-68 project');
+  const cases = [
+    ['Konto(3).bericht()', 'Stand: 3 Euro0'],
+    ['Konto(3).start', '2'],
+    ['"${Spar()}"', 'Stand: 5 Euro6'],
+    ['A.f()', '21'],
+    ['class Z { fun a() = b() + 1; fun b() = 4 }\nZ().a()', '5'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-68 ${source}`).display, expected, `RT-68 ${source}`);
+  // A real cycle needs a declared type, as in Kotlin.
+  fails((await project({ 'K.kt': 'class K {\n    fun a() = b()\n    fun b() = a()\n}' })).result, 'RT-68 cycle', /Cannot infer return type of function a, because it depends on itself/);
+  fails((await project({ 'K.kt': 'class K {\n    fun a() = b() + 1\n    fun b() = unbekannt()\n}' })).result, 'RT-68 error in a function analyzed early', /`unbekannt` is unknown/);
+}
+
+// A method called by plain name inside a lambda that a library function runs (`map { f() }`) failed
+// at runtime with "Function `f` not found on implicit receiver": `this` was the list (RT-69).
+{
+  const p = await project({
+    'Tier.kt': 'open class Tier(val name: String) {\n    open fun laut() = "?"\n    fun alle(n: Int) = (1..n).map { laut() + it }\n    fun gefiltert() = listOf(1, 2, 3, 4).filter { gerade(it) }\n    fun gerade(x: Int) = x % 2 == 0\n    fun verschachtelt() = listOf(1, 2).map { a -> listOf(10).map { b -> plus(a, b) } }\n    fun plus(a: Int, b: Int) = a + b\n    fun mitApply() = mutableListOf<String>().apply { add(gross()) }\n    fun gross() = name.uppercase()\n    fun spaeter(): () -> String = { gross() + "!" }\n    val sortiert = listOf(3, 1, 2).sortedBy { schluessel(it) }\n    fun schluessel(x: Int) = -x\n    fun summe(): Int { var s = 0; listOf(1, 2).forEach { s += mal10(it) }; return s }\n    private fun mal10(x: Int) = x * 10\n}',
+    'Hund.kt': 'class Hund : Tier("rex") {\n    override fun laut() = "wau"\n    fun geerbt() = listOf(2).map { gerade(it) }\n}',
+    'K.kt': 'class K {\n    companion object {\n        fun eins() = 1\n        fun liste() = listOf(1, 2).map { it + eins() }\n    }\n}',
+    'O.kt': 'object O {\n    fun a() = listOf(1).map { b() }\n    fun b() = 2\n}',
+  });
+  ok(p.result, 'RT-69 project');
+  const cases = [
+    ['Tier("a").alle(2)', '[?1, ?2]'],
+    ['Hund().alle(2)', '[wau1, wau2]'],
+    ['Tier("a").gefiltert()', '[2, 4]'],
+    ['Tier("a").verschachtelt()', '[[11], [12]]'],
+    ['Tier("a").mitApply()', '[A]'],
+    ['Tier("a").spaeter()()', 'A!'],
+    ['Tier("a").sortiert', '[3, 2, 1]'],
+    ['Tier("a").summe()', '30'],
+    ['Hund().geerbt()', '[true]'],
+    ['K.liste()', '[2, 3]'],
+    ['O.a()', '[2]'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-69 ${source}`).display, expected, `RT-69 ${source}`);
+}
+
 console.log('Curriculum Kotlin smoke test passed.');

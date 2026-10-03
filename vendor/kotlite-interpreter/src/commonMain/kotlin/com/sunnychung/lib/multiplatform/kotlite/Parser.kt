@@ -2,6 +2,7 @@ package com.sunnychung.lib.multiplatform.kotlite
 
 import com.sunnychung.lib.multiplatform.kotlite.error.ExpectTokenMismatchException
 import com.sunnychung.lib.multiplatform.kotlite.error.ParseException
+import com.sunnychung.lib.multiplatform.kotlite.error.SemanticException
 import com.sunnychung.lib.multiplatform.kotlite.error.UnexpectedTokenException
 import com.sunnychung.lib.multiplatform.kotlite.extension.removeAfterIndex
 import com.sunnychung.lib.multiplatform.kotlite.lexer.Lexer
@@ -19,6 +20,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.ClassDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassInstanceInitializerNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassMemberReferenceNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassModifier
+import com.sunnychung.lib.multiplatform.kotlite.model.DestructuringDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassParameterNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassSecondaryConstructorNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassPrimaryConstructorNode
@@ -71,7 +73,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.WhenSubjectNode
 import com.sunnychung.lib.multiplatform.kotlite.model.WhileNode
 
 val ACCEPTED_MODIFIERS = setOf(
-    "open", "override", "private", "operator", "vararg", "enum", "abstract", "infix", "nullaware", "inline", "noinline", "crossinline"
+    "open", "override", "private", "operator", "vararg", "enum", "abstract", "infix", "nullaware", "inline", "noinline", "crossinline", "const"
 )
 
 /**
@@ -749,6 +751,7 @@ open class Parser(protected val lexer: Lexer) {
      */
     fun lambdaLiteral(label: LabelNode? = null): LambdaLiteralNode {
         val parameters = mutableListOf<FunctionValueParameterNode>()
+        val destructuredParameters = mutableListOf<Triple<SourcePosition, String, List<Pair<String, TypeNode?>?>>>()
 
         val position = eat(TokenType.Symbol, "{").position
         repeatedNL()
@@ -762,7 +765,10 @@ open class Parser(protected val lexer: Lexer) {
                     throw ExpectTokenMismatchException(",", currentToken.position)
                 }
                 val t = currentToken
-                val (name, type) = variableDeclaration()
+                // `{ (key, value) -> }`: a hidden parameter, destructured at the start of the body (RT-65).
+                val components = if (isCurrentToken(TokenType.Operator, "(")) destructuringComponents() else null
+                val (name, type) = if (components != null) destructuringName(t.position) to null else variableDeclaration()
+                if (components != null) destructuredParameters += Triple(t.position, name, components)
                 parameters += FunctionValueParameterNode(
                     position = t.position,
                     name = name,
@@ -783,9 +789,12 @@ open class Parser(protected val lexer: Lexer) {
             resetTokenToIndex(originalIndex)
             lexer.mode.removeAfterIndex(modeStackLastIndex)
             parameters.clear()
+            destructuredParameters.clear()
         }
 
-        val statements = statements()
+        val statements = destructuredParameters.flatMap { (position, name, components) ->
+            componentDeclarations(position, name, components, isMutable = false)
+        } + statements()
 
         repeatedNL()
         eat(TokenType.Symbol, "}")
@@ -1108,6 +1117,7 @@ open class Parser(protected val lexer: Lexer) {
                     "true" -> { eat(TokenType.Identifier); return BooleanNode(currentToken.position, true) }
                     "false" -> { eat(TokenType.Identifier); return BooleanNode(currentToken.position, false) }
                     "null" -> { eat(TokenType.Identifier); return NullNode }
+                    "object" -> throw SemanticException(currentToken.position, "Object expressions (`object : Typ { … }`) are not supported in BlueK. Declare a class and create an instance of it instead.")
                 }
 
                 val t = eat(TokenType.Identifier)
@@ -1418,7 +1428,7 @@ open class Parser(protected val lexer: Lexer) {
             block(type)
         } else {
             val position = currentToken.position
-            BlockNode(listOf(statement()), position, type, FunctionBodyFormat.Statement)
+            BlockNode(statement().flattened(), position, type, FunctionBodyFormat.Statement)
         }
     }
 
@@ -1539,6 +1549,11 @@ open class Parser(protected val lexer: Lexer) {
         val nameB = StringBuilder()
         val t = eat(TokenType.Identifier)
         nameB.append(t.value as String)
+        // The type of a companion object (RT-67), e.g. of a Codepad result `Karte`.
+        if (!isParseDottedIdentifiers && isCurrentToken(TokenType.Operator, ".") && peekNextToken().let { it.type == TokenType.Identifier && it.value == "Companion" }) {
+            eat(TokenType.Operator, ".")
+            nameB.append(".").append(eat(TokenType.Identifier).value as String)
+        }
         while (isParseDottedIdentifiers && isCurrentTokenExcludingNL(TokenType.Operator, ".")) {
             cursorPosBeforeLastDot = tokenIndex
             repeatedNL()
@@ -1715,6 +1730,7 @@ open class Parser(protected val lexer: Lexer) {
             "open" -> PropertyModifier.open
             "override" -> PropertyModifier.override
             "private" -> PropertyModifier.private
+            "const" -> PropertyModifier.const
             else -> throw ParseException("Modifier `$it` cannot be applied to properties")
         }
     }.toSet()
@@ -1745,6 +1761,10 @@ open class Parser(protected val lexer: Lexer) {
             }
         }
         repeatedNL()
+        // Local destructuring is handled by statement(); here, e.g. in a class body, Kotlin rejects it.
+        if (currentToken.type == TokenType.Operator && currentToken.value == "(") {
+            throw SemanticException(t.position, "Destructuring declarations are only allowed for local variables/values")
+        }
         val typeParameters = if (currentToken.type == TokenType.Operator && currentToken.value == "<") {
             typeParameters()
         } else emptyList()
@@ -2252,6 +2272,9 @@ open class Parser(protected val lexer: Lexer) {
                     throw UnsupportedOperationException("Secondary constructor delegation (this/super) is not supported by this Kotlite build.")
                 }
                 ClassSecondaryConstructorNode(t.position, parameters, block(ScopeType.Function))
+            } else if (isCurrentToken(TokenType.Identifier, "companion") && peekNextToken().let { it.type == TokenType.Identifier && it.value == "object" }) {
+                val t = eat(TokenType.Identifier, "companion")
+                objectDeclaration(emptySet(), companionPosition = t.position)
             } else if (isCurrentToken(TokenType.Identifier, "init")) {
                 val t = eat(TokenType.Identifier, "init")
                 repeatedNL()
@@ -2342,7 +2365,7 @@ open class Parser(protected val lexer: Lexer) {
      */
     fun modifiers(): Set<String> {
         val modifiers = mutableSetOf<String>()
-        while (currentToken.type == TokenType.Identifier && currentToken.value in ACCEPTED_MODIFIERS) {
+        while (currentToken.type == TokenType.Identifier && (currentToken.value in ACCEPTED_MODIFIERS || isDataClassModifier())) {
             modifiers += currentToken.value as String
             eat(TokenType.Identifier)
             repeatedNL()
@@ -2350,11 +2373,16 @@ open class Parser(protected val lexer: Lexer) {
         return modifiers
     }
 
+    /** `data` is a modifier only before `class`; elsewhere it stays a name (`val data = …`, RT-64). */
+    private fun isDataClassModifier(): Boolean =
+        currentToken.value == "data" && peekNextToken().let { it.type == TokenType.Identifier && it.value == "class" }
+
     fun Set<String>.toClassModifiers() = this.map {
         when (it) {
             "open" -> ClassModifier.open
             "enum" -> ClassModifier.enum
             "abstract" -> ClassModifier.abstract
+            "data" -> ClassModifier.data
             else -> throw ParseException("Modifier `$it` cannot be applied to class")
         }
     }.toSet()
@@ -2465,6 +2493,11 @@ open class Parser(protected val lexer: Lexer) {
         if (declarations.any { it is ClassSecondaryConstructorNode } && primaryConstructor != null) {
             throw UnsupportedOperationException("Secondary constructors alongside a primary constructor are not supported by this Kotlite build.")
         }
+        val (companionObject, otherDeclarations) = companionObjectOf(name, declarations)
+        declarations = otherDeclarations
+        if (ClassModifier.data in modifiers) {
+            declarations = declarations + dataClassMembers(t.position, name, modifiers, typeParameters, primaryConstructor, declarations)
+        }
         return ClassDeclarationNode(
             position = t.position,
             name = name,
@@ -2475,7 +2508,142 @@ open class Parser(protected val lexer: Lexer) {
             superInvocations = superInvocations,
             declarations = declarations,
             enumEntries = enumEntries,
+            companionObject = companionObject,
         )
+    }
+
+    /**
+     * objectDeclaration:
+     *     [modifiers] 'object' {NL} simpleIdentifier [{NL} ':' {NL} delegationSpecifiers] [{NL} classBody]
+     *
+     * companionObject:
+     *     [modifiers] 'companion' {NL} 'object' [{NL} simpleIdentifier] [{NL} ':' {NL} delegationSpecifiers] [{NL} classBody]
+     *
+     * An object is a class without constructor parameters that has exactly one instance (RT-67).
+     * A companion object is named `<Class>.Companion` by [companionObjectOf].
+     */
+    fun objectDeclaration(modifiers: Set<String>, companionPosition: SourcePosition? = null): ClassDeclarationNode {
+        val isCompanion = companionPosition != null
+        repeatedNL()
+        val t = eat(TokenType.Identifier, "object")
+        modifiers.firstOrNull()?.let {
+            throw SemanticException(t.position, "Modifier `$it` cannot be applied to an object in BlueK")
+        }
+        val name = if (isCompanion) {
+            if (currentToken.type == TokenType.Identifier) {
+                throw SemanticException(currentToken.position, "Named companion objects are not supported in BlueK. Write `companion object` without a name.")
+            }
+            "Companion"
+        } else {
+            repeatedNL()
+            userDefinedIdentifier()
+        }
+        val superInvocations = if (isCurrentTokenExcludingNL(TokenType.Symbol, ":")) {
+            repeatedNL()
+            eat(TokenType.Symbol, ":")
+            repeatedNL()
+            delegationSpecifiers()
+        } else null
+        val declarations = if (isCurrentTokenExcludingNL(TokenType.Symbol, "{")) {
+            repeatedNL()
+            classBody(isInterface = false)
+        } else emptyList()
+        declarations.firstOrNull { it is ClassSecondaryConstructorNode }?.let {
+            throw SemanticException(it.position, "Objects cannot have constructors")
+        }
+        declarations.firstOrNull { it is ClassDeclarationNode && it.isCompanion }?.let {
+            throw SemanticException(it.position, "A companion object is only allowed inside a class")
+        }
+        return ClassDeclarationNode(
+            position = companionPosition ?: t.position,
+            name = name,
+            isInterface = false,
+            declaredModifiers = emptySet(),
+            typeParameters = emptyList(),
+            primaryConstructor = null,
+            superInvocations = superInvocations,
+            declarations = declarations,
+            isObject = true,
+            isCompanion = isCompanion,
+        )
+    }
+
+    /** Separates the companion object from the other members of class [className]. */
+    private fun companionObjectOf(className: String, declarations: List<ASTNode>): Pair<ClassDeclarationNode?, List<ASTNode>> {
+        val nested = declarations.filterIsInstance<ClassDeclarationNode>()
+        nested.firstOrNull { !it.isCompanion }?.let {
+            throw SemanticException(it.position, if (it.isObject) {
+                "Nested objects are not supported in BlueK. Declare `object ${it.name}` in its own file or use a `companion object`."
+            } else {
+                "Nested classes are not supported in BlueK. Declare `${it.name}` in its own file."
+            })
+        }
+        val companions = nested.filter { it.isCompanion }
+        if (companions.size > 1) throw SemanticException(companions[1].position, "Only one companion object is allowed per class")
+        val companion = companions.firstOrNull()?.let {
+            it.copy(name = "$className.Companion", fullQualifiedName = "$className.Companion")
+        }
+        return companion to declarations.filterNot { it is ClassDeclarationNode }
+    }
+
+    /**
+     * The members Kotlin generates for a `data class` (RT-64), as Kotlin source parsed into this class:
+     * `toString()` (`Punkt(x=1, y=2)`), `equals()`/`hashCode()` over the primary constructor properties,
+     * `componentN()` and `copy(...)`. A member the class declares itself is not generated. The source
+     * starts on the class's line, so a message about it points there.
+     */
+    private fun dataClassMembers(
+        position: SourcePosition,
+        name: String,
+        modifiers: Set<ClassModifier>,
+        typeParameters: List<TypeParameterNode>,
+        primaryConstructor: ClassPrimaryConstructorNode?,
+        declarations: List<ASTNode>,
+    ): List<ASTNode> {
+        modifiers.firstOrNull { it != ClassModifier.data }?.let {
+            throw SemanticException(position, "Modifier 'data' is incompatible with '${it.name}'")
+        }
+        val parameters = primaryConstructor?.parameters.orEmpty()
+        if (parameters.isEmpty()) throw SemanticException(position, "Data class must have at least one primary constructor parameter")
+        if (parameters.any { !it.isProperty }) {
+            throw SemanticException(position, "Data class primary constructor must only have property (val / var) parameters")
+        }
+        val properties = parameters.map { it.parameter.name to it.parameter.declaredType!!.descriptiveName() }
+        val declared = declarations.filterIsInstance<FunctionDeclarationNode>().map { it.name to it.valueParameters.size }.toSet()
+        fun missing(function: String, parameterCount: Int) = (function to parameterCount) !in declared
+        val classType = name + if (typeParameters.isEmpty()) "" else typeParameters.joinToString(", ", "<", ">") { it.name }
+        val anyType = name + if (typeParameters.isEmpty()) "" else typeParameters.joinToString(", ", "<", ">") { "*" }
+        val source = buildString {
+            append("{")
+            append("\n".repeat(position.lineNum - 1))
+            append("\n")
+            if (missing("toString", 0)) {
+                append("override fun toString(): String = \"$name(")
+                append(properties.joinToString(", ") { (property, _) -> "$property=\${$property}" })
+                append(")\"\n")
+            }
+            if (missing("equals", 1)) {
+                append("override fun equals(other: Any?): Boolean {\nif (this === other) return true\nif (other !is $anyType) return false\nreturn ")
+                append(properties.joinToString(" && ") { (property, _) -> "$property == other.$property" })
+                append("\n}\n")
+            }
+            if (missing("hashCode", 0)) {
+                append("override fun hashCode(): Int {\nvar result = ${properties.first().first}.hashCode()\n")
+                properties.drop(1).forEach { (property, _) -> append("result = 31 * result + $property.hashCode()\n") }
+                append("return result\n}\n")
+            }
+            properties.forEachIndexed { index, (property, type) ->
+                if (missing("component${index + 1}", 0)) append("fun component${index + 1}(): $type = $property\n")
+            }
+            if (missing("copy", properties.size)) {
+                append("fun copy(")
+                append(properties.joinToString(", ") { (property, type) -> "$property: $type = this.$property" })
+                append("): $classType = $name(${properties.joinToString(", ") { it.first }})\n")
+            }
+            append("}")
+        }
+        return Parser(Lexer(position.filename, source)).classBody(isInterface = false)
+            .onEach { (it as? FunctionDeclarationNode)?.isGenerated = true }
     }
 
     /**
@@ -2497,11 +2665,12 @@ open class Parser(protected val lexer: Lexer) {
                 "val", "var" -> return propertyDeclaration(modifiers ?: emptySet())
                 "fun" -> return functionDeclaration(modifiers ?: emptySet(), isProcessBody = !isInterface)
                 "class", "interface" -> return classDeclaration(modifiers ?: emptySet())
+                "object" -> return objectDeclaration(modifiers ?: emptySet())
                 "constructor" -> throw UnsupportedOperationException(
                     "Secondary constructors are not supported by this Kotlite build."
                 )
-                in ACCEPTED_MODIFIERS -> {
-                    if (modifiers == null) {
+                in ACCEPTED_MODIFIERS, "data" -> {
+                    if (modifiers == null && (currentToken.value != "data" || isDataClassModifier())) {
                         modifiers = modifiers()
                     } else {
                         throw UnexpectedTokenException(currentToken)
@@ -2611,7 +2780,9 @@ open class Parser(protected val lexer: Lexer) {
         repeatedNL()
         eat(TokenType.Operator, "(")
         val varToken = currentToken
-        val (varName, varType) = variableDeclaration() // TODO support multiVariableDeclaration
+        // `for ((a, b) in pairs)`: a hidden loop variable, destructured at the start of the body (RT-65).
+        val components = if (isCurrentToken(TokenType.Operator, "(")) destructuringComponents() else null
+        val (varName, varType) = if (components != null) destructuringName(varToken.position) to null else variableDeclaration()
         eat(TokenType.Identifier, "in")
         val expr = expression()
         eat(TokenType.Operator, ")")
@@ -2621,7 +2792,10 @@ open class Parser(protected val lexer: Lexer) {
             position = t.position,
             variables = listOf(ValueParameterDeclarationNode(varToken.position, varName, varType)),
             subject = expr,
-            body = loopBody,
+            body = if (components == null) loopBody else loopBody.copy(
+                statements = componentDeclarations(varToken.position, varName, components, isMutable = false) + loopBody.statements,
+                format = FunctionBodyFormat.Block,
+            ),
         )
     }
 
@@ -2642,6 +2816,72 @@ open class Parser(protected val lexer: Lexer) {
     }
 
     /**
+     * `val (a, _, c: Int) = expression` (RT-65): a hidden property holding the value, then
+     * `val a = <hidden>.component1()` for each named component. Also `var`.
+     */
+    private fun destructuringDeclaration(): DestructuringDeclarationNode {
+        val t = currentToken
+        val isMutable = eat(TokenType.Identifier).value == "var"
+        repeatedNL()
+        val components = destructuringComponents()
+        repeatedNL()
+        eat(TokenType.Symbol, "=")
+        repeatedNL()
+        val value = expression()
+        val hidden = destructuringName(t.position)
+        return DestructuringDeclarationNode(
+            position = t.position,
+            statements = listOf(
+                PropertyDeclarationNode(
+                    position = t.position, name = hidden, declaredModifiers = emptySet(), typeParameters = emptyList(),
+                    receiver = null, declaredType = null, isMutable = false, initialValue = value,
+                )
+            ) + componentDeclarations(t.position, hidden, components, isMutable),
+        )
+    }
+
+    /** `(a, _, c: Int)`; `_` skips a component and yields null. */
+    private fun destructuringComponents(): List<Pair<String, TypeNode?>?> {
+        eat(TokenType.Operator, "(")
+        repeatedNL()
+        val components = mutableListOf<Pair<String, TypeNode?>?>()
+        while (true) {
+            components += variableDeclaration().takeIf { it.first != "_" }
+            repeatedNL()
+            if (!isCurrentToken(TokenType.Symbol, ",")) break
+            eat(TokenType.Symbol, ",")
+            repeatedNL()
+        }
+        eat(TokenType.Operator, ")")
+        return components
+    }
+
+    /** No Kotlin name contains `<`, and the position keeps it unique within a session. */
+    private fun destructuringName(position: SourcePosition) = "<destructuring ${position.lineNum}:${position.col}>"
+
+    private fun componentDeclarations(
+        position: SourcePosition,
+        source: String,
+        components: List<Pair<String, TypeNode?>?>,
+        isMutable: Boolean,
+    ): List<PropertyDeclarationNode> = components.mapIndexedNotNull { index, component ->
+        component?.let { (name, type) ->
+            PropertyDeclarationNode(
+                position = position, name = name, declaredModifiers = emptySet(), typeParameters = emptyList(),
+                receiver = null, declaredType = type, isMutable = isMutable,
+                initialValue = FunctionCallNode(
+                    function = NavigationNode(position, VariableReferenceNode(position, source), ".", ClassMemberReferenceNode(position, "component${index + 1}")),
+                    arguments = emptyList(),
+                    declaredTypeArguments = emptyList(),
+                    position = position,
+                ),
+            )
+        }
+    }
+
+    private fun ASTNode.flattened(): List<ASTNode> = (this as? DestructuringDeclarationNode)?.statements ?: listOf(this)
+
+    /**
      * statement:
      *     {label | annotation} (declaration | assignment | loopStatement | expression)
      */
@@ -2649,7 +2889,14 @@ open class Parser(protected val lexer: Lexer) {
         if (currentToken.type == TokenType.Identifier) {
             when (currentToken.value) {
                 "interface" -> return declaration(isInterface = true)
-                "val", "var", "fun", "class", in ACCEPTED_MODIFIERS -> return declaration(isInterface = false)
+                "val", "var" -> return if (peekNextToken().let { it.type == TokenType.Operator && it.value == "(" }) {
+                    destructuringDeclaration()
+                } else {
+                    declaration(isInterface = false)
+                }
+                "fun", "class", in ACCEPTED_MODIFIERS -> return declaration(isInterface = false)
+                "data" -> if (isDataClassModifier()) return declaration(isInterface = false)
+                "object" -> if (peekNextToken().type == TokenType.Identifier) return declaration(isInterface = false)
                 "for", "while", "do" -> return loopStatement()
             }
         }
@@ -2676,7 +2923,7 @@ open class Parser(protected val lexer: Lexer) {
                     throw UnexpectedTokenException(currentToken)
                 }
             }
-            result += statement()
+            result += statement().flattened()
             isLastTokenSemi = false
             while (currentToken.type in setOf(TokenType.Semicolon, TokenType.NewLine)) {
                 semis()
@@ -2716,7 +2963,7 @@ open class Parser(protected val lexer: Lexer) {
             if (isCurrentToken(TokenType.Identifier, "import") && peekNextToken().type == TokenType.Identifier) {
                 imports += importDirective()
             } else {
-                nodes += statement()
+                nodes += statement().flattened()
             }
             if (currentToken.type in setOf(TokenType.Semicolon, TokenType.NewLine)) {
                 semi()

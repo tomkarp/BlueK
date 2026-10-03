@@ -1,6 +1,7 @@
 package com.sunnychung.lib.multiplatform.kotlite
 
 import com.sunnychung.lib.multiplatform.kotlite.extension.emptyToNull
+import com.sunnychung.lib.multiplatform.kotlite.model.DestructuringDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ASTNode
 import com.sunnychung.lib.multiplatform.kotlite.model.AsOpNode
 import com.sunnychung.lib.multiplatform.kotlite.model.AssignmentNode
@@ -123,6 +124,7 @@ open class CodeGenerator(protected val node: ASTNode, val isPrintDebugInfo: Bool
             is LabelNode -> this.generate()
             is EnumEntryNode -> this.generate()
             is ForNode -> this.generate()
+            is DestructuringDeclarationNode -> throw IllegalStateException("Statement lists flatten destructuring declarations")
             is ValueParameterDeclarationNode -> this.generate()
     }
 

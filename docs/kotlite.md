@@ -120,7 +120,7 @@ BluePlay-Klassen werden interpretiert.
 | Dauerhafte Sitzung (REPL) | `ReplAnalyzer` als Analyse-Einstieg für wachsenden Sitzungsquelltext; Namensfreigabe an historischen Grenzen im `SemanticAnalyzer`; eingebaute Erweiterungsfunktionen bleiben über wiederholte Analysen auflösbar; neue Knoten in Auswertungsreihenfolge (Klassen, dann Funktionen); Quelltexteinheiten (`unitStarts`) |
 | Suspendierbare Ausführung | `eval` aller Knoten als `suspend`; `CustomFunctionDefinition.suspendExecutable`; `checkpointHook` in Schleifen (synchrone Abfrage `isDue`, nur bei Bedarf `yield`); `runImmediately` als synchrone Kompatibilitätsgrenze; Wiederholung von Stdlib-Aufrufen mit suspendiertem Callback (`isReplayable`, `callReplayable`, `StdlibReplayMetadata`), `canSuspend`; `Thread.sleep` mit injiziertem `sleepHandler`; Aufruftiefe `maxCallDepth` und `stackResetHook` für tiefe Rekursion |
 | Inspektion und Lebensdauer | `ClassInstance.readBackingPropertyByDeclaredName` (Feld lesen ohne Getter); `reachableRuntimeValues` und `retainedRuntimeValues` für die Erreichbarkeit |
-| Sprache | Smart Casts nach `is`/`!is` und Null-Prüfungen (`&&`, `||`, `if`, `when`, `while`, frühes `return`; RT-46), Klassen in beliebiger Reihenfolge, auch gegenseitig (Deklaration aller Klassen vor der Analyse, siehe [unten](#klassen-in-beliebiger-reihenfolge)), Top-Level-Funktionen und -Properties vor ihrer Stelle (Analyse bei Bedarf, siehe [unten](#top-level-deklarationen-in-beliebiger-reihenfolge)), `StackOverflowError` (und `Error`) statt Absturz bei zu tiefer Rekursion; Warnung für Accessoren, die ihre eigene Property statt `field` benutzen; `private` Funktionen und Properties (inkl. `private set`), Backing-Feld `field` in eigenen Accessoren, geerbte Methoden über implizites `this`, `inline`/`reified`/`noinline`/`crossinline` mit nichtlokalen Returns, Kovarianz von `List`/`Collection`/`Iterable`, Imports (`ScriptNode.imports`), Standardausnahmen (auch aus nativen Funktionen nach Klasse fangbar), `ArithmeticException` bei Ganzzahldivision durch 0, `InterpreterStateException` für Interpreterfehler und Grenzen wie `readln()` in `toString()` (von keinem `catch` gefangen), `Float` als `Double` (auch `1.5f`), Typinferenz aus deklariertem Property-Typ, Compilefehler für Properties ohne Wert, sekundäre Konstruktoren ohne Primärkonstruktor und Delegation (RT-48; benannte/default Argumente, suspendierender Rumpf), eigene Meldungen für nicht unterstützte Konstruktorformen, `;` nach Membern, `when` ohne `else` als Anweisung oder bei vollständig abgedeckten Enum-/Boolean-Werten (RT-56), `break`/`continue` in `for`-Schleifen (RT-55), Überschreibungen ohne Rückgabetyp wie `override fun toString() = "…"` (übernehmen den überschriebenen Typ, RT-57), Erweiterungsfunktionen und Obertyp-Erweiterungs-Properties über den impliziten Empfänger (`liste.apply { add(1) }`, RT-63) |
+| Sprache | Smart Casts nach `is`/`!is` und Null-Prüfungen (`&&`, `||`, `if`, `when`, `while`, frühes `return`; RT-46), Klassen in beliebiger Reihenfolge, auch gegenseitig (Deklaration aller Klassen vor der Analyse, siehe [unten](#klassen-in-beliebiger-reihenfolge)), Top-Level-Funktionen und -Properties vor ihrer Stelle (Analyse bei Bedarf, siehe [unten](#top-level-deklarationen-in-beliebiger-reihenfolge)), `StackOverflowError` (und `Error`) statt Absturz bei zu tiefer Rekursion; Warnung für Accessoren, die ihre eigene Property statt `field` benutzen; `private` Funktionen und Properties (inkl. `private set`), Backing-Feld `field` in eigenen Accessoren, geerbte Methoden über implizites `this`, `inline`/`reified`/`noinline`/`crossinline` mit nichtlokalen Returns, Kovarianz von `List`/`Collection`/`Iterable`, Imports (`ScriptNode.imports`), Standardausnahmen (auch aus nativen Funktionen nach Klasse fangbar), `ArithmeticException` bei Ganzzahldivision durch 0, `InterpreterStateException` für Interpreterfehler und Grenzen wie `readln()` in `toString()` (von keinem `catch` gefangen), `Float` als `Double` (auch `1.5f`), Typinferenz aus deklariertem Property-Typ, Compilefehler für Properties ohne Wert, sekundäre Konstruktoren ohne Primärkonstruktor und Delegation (RT-48; benannte/default Argumente, suspendierender Rumpf), eigene Meldungen für nicht unterstützte Konstruktorformen, `;` nach Membern, `when` ohne `else` als Anweisung oder bei vollständig abgedeckten Enum-/Boolean-Werten (RT-56), `break`/`continue` in `for`-Schleifen (RT-55), Überschreibungen ohne Rückgabetyp wie `override fun toString() = "…"` (übernehmen den überschriebenen Typ, RT-57), Erweiterungsfunktionen und Obertyp-Erweiterungs-Properties über den impliziten Empfänger (`liste.apply { add(1) }`, RT-63), `data class` (der Parser erzeugt `toString`, `equals`/`hashCode`, `componentN` und `copy` als Kotlin-Quelltext, RT-64), Destrukturierung in Deklarationen, `for`-Schleifen und Lambda-Parametern (vom Parser in `componentN()`-Aufrufe umgeschrieben, RT-65), `vararg` in Erweiterungsfunktionen mit beliebig vielen Argumenten (RT-66), `object` und `companion object` mit genau einer, bei erster Verwendung erzeugten Instanz sowie `const val` (siehe [unten](#objekte-und-companion-objekte), RT-67), Methoden ohne Rückgabetyp vor ihrer Deklaration (Analyse bei Bedarf, RT-68), Methodenaufrufe ohne `this.` in Lambdas, die eine Bibliotheksfunktion ausführt (`map { f() }`, Aufruf über `this/<Klasse>`, RT-69) |
 | Ausgabe und Meldungen | Kotlin-Formate (`6.0`, `1.2345678E7`, `1.0E-4` wie auf der JVM, RT-60; `[1, 2]`, `(1, a)`, Map-Einträge als `a=1`, Exceptions als `MyEx: x`), Argumenttypen in „No matching function“ |
 | Exceptions | `throw` gibt das geworfene Objekt selbst an `catch` weiter (auch Felder eigener Exception-Klassen); `message`/`cause` funktionieren auch außerhalb von `catch`; Exception-Objekte nutzen die registrierte Klassendefinition (`toString()`, Unterklassen als `cause`) (RT-54) |
 | Gleichheit | `List`, `Set`, `Map`, Map-Einträge und `Pair` vergleichen und hashen nach Inhalt wie in Kotlin (`listOf(1) == listOf(1)`, Pairs als Map-Schlüssel); andere Bibliothekswerte nach Identität (RT-52); `super.equals()`/`hashCode()`/`toString()` bis `Any` arbeiten mit dem ganzen Objekt statt mit seinem `Any`-Teil (`ClassInstance.wholeInstance`, RT-53) |
@@ -183,12 +183,19 @@ Deklarationen dagegen strikt nacheinander.
   Enums entstehen, wenn es deklariert wird. Ein Enum, dessen Einträge andere Argumente als Literale haben
   (`EINS(basis)`), bleibt deshalb an seiner Stelle und kann vorher
   deklarierte Top-Level-Properties lesen.
-- **Grenzen:** Solange die Analyse einer Klasse läuft, kennt anderer Code nur
-  deren bis dahin analysierte Member. Eine Funktion mit Ausdruckskörper ohne
-  deklarierten Rückgabetyp (`fun bellen() = "Wuff"`) hat vor ihrer eigenen
-  Analyse keinen Typ; das betrifft einen Aufruf, der in diesem Zustand
-  analysiert wird (wie schon innerhalb einer Klasse, etwa
-  `fun a() = b(); fun b() = 1`). Ein expliziter Rückgabetyp behebt es. Ein
+- **Methoden ohne Rückgabetyp:** Eine Methode mit Ausdruckskörper ohne
+  deklarierten Rückgabetyp (`fun bellen() = "Wuff"`) bekommt ihren Typ erst
+  durch die Analyse ihres Rumpfs. Braucht anderer Code ihn früher (eine Methode
+  weiter oben, ein Property-Initialisierer, eine andere Klasse oder das
+  Companion), analysiert der Analyzer sie sofort in ihrem Klassen-Scope
+  (`FunctionDeclarationNode.returnTypeInference`, gesetzt nach
+  `attachToSemanticAnalyzer`; über `analyzeAtTopLevel`, RT-68); die
+  Schleife über die Methoden überspringt sie dann. Hängt ihr Typ von ihr
+  selbst ab (`fun a() = b(); fun b() = a()`), braucht sie wie in Kotlin einen
+  Rückgabetyp („… because it depends on itself“). Ein Fehler in ihrem Rumpf
+  wird auch dann gemeldet, wenn der Code, der sie brauchte, Fehler abfängt.
+- **Grenzen:** Solange die Analyse einer Klasse läuft, kennt anderer Code von
+  ihren Properties nur die bis dahin analysierten. Ein
   Zyklus in der Vererbung ist ein Compilefehler („There is a cycle in the
   inheritance hierarchy …“). Analysen bei Bedarf verschachteln sich: Braucht
   jede Klasse die Member der nächsten und stehen sie in umgekehrter
@@ -197,6 +204,60 @@ Deklarationen dagegen strikt nacheinander.
   (gemeldet als `StackOverflowError`); das gilt ebenso für Top-Level-
   Funktionen und -Properties, die einander bei Bedarf analysieren (siehe
   [nächster Abschnitt](#top-level-deklarationen-in-beliebiger-reihenfolge)).
+
+### Objekte und Companion-Objekte
+
+`object Name { … }` und `companion object { … }` (RT-67) sind Klassen mit
+`ClassDeclarationNode.isObject`; der Parser hängt das Companion als
+`companionObject` an seine Klasse und nennt es `<Klasse>.Companion`, wie die
+schon vorher vorhandene implizite Companion-Klasse (für `valueOf`, `entries`
+und Erweiterungen wie `fun Karte.Companion.f()`). Ein `object` hat kein
+Companion.
+
+- **Eine Instanz:** Der Name eines Objekts ist dessen Instanz. Der Analyzer
+  setzt `transformedRefName` auf `object/<Klasse>` (`OBJECT_REF_PREFIX`); der
+  Interpreter löst solche Namen über `ClassDefinition.objectInstance` auf und
+  erzeugt die Instanz wie Kotlin bei der ersten Verwendung
+  (`evalCreateClassInstance`, also mit `enterCall`/`leaveCall`).
+  `objectInstance` ist gesetzt, sobald die Instanz entsteht: Ihre eigene
+  Initialisierung sieht sie bereits (`object O { val a = 1; val b = O.a }`).
+  Wirft die Initialisierung, gilt das Objekt als nicht erzeugt und der nächste
+  Zugriff versucht es erneut (Kotlin/JVM: `ExceptionInInitializerError`).
+  `Name()` ist ein Compilefehler. Ohne eigenes `toString()` zeigt BlueK
+  `Hund` bzw. `Karte.Companion`, analog zu `Katze()` für Klasseninstanzen
+  (Kotlin: `Hund@1b6d3586`).
+- **Companion-Mitglieder ohne Klassennamen:** `declareClassesAhead` legt für
+  eine Klasse mit Companion einen eigenen Scope um ihre Klassen-Scopes an; in
+  einer Unterklasse liegen die Companion-Scopes ihrer Oberklassen außen
+  herum. Gesucht wird also wie in Kotlin erst lokal und in der Klasse, dann im
+  eigenen Companion, dann in denen der Oberklassen und zuletzt auf oberster
+  Ebene. Der Scope ist anfangs leer; fragt Code der Klasse nach einem Namen,
+  den das Companion deklariert (`beforeFunctionLookup`/
+  `beforePropertyLookup`), analysiert der Analyzer das Companion und trägt
+  dessen Member mit dem Eigentümer `object/<Klasse>.Companion` ein
+  (`SymbolTable.declareObjectMembersFrom`). Lesen, Schreiben und Aufrufe laufen
+  dann über denselben `ownerRef`-Weg wie `this`-Member. Klasse und Companion
+  sehen gegenseitig ihre `private` Member.
+- **Reihenfolge:** Braucht nichts in der Klasse das Companion, wird es nach
+  ihr analysiert; ein qualifizierter Zugriff vorher (`Karte.zufall()` in einem
+  früheren `main()`) analysiert zuerst die Klasse. Braucht die Klasse ihr
+  Companion schon während ihrer eigenen Analyse, sieht das Companion von ihr
+  nur, was bis dahin analysiert ist: In Default-Argumenten des Konstruktors
+  (`class Konto(val stand: Int = START)`) die Konstruktor-Properties (sie
+  werden dafür vorab mit ihrem deklarierten Typ eingetragen), in `init` und
+  Property-Initialisierern zusätzlich die Methoden und die Properties
+  darüber; Methoden ohne Rückgabetyp werden dafür bei Bedarf analysiert
+  (RT-68). In Default-Argumenten sind die Methoden noch nicht verfügbar.
+- **`const val`:** nur auf oberster Ebene, in Objekten und Companions, nicht
+  als `var`, mit Getter oder lokal; Typ ein primitiver Typ oder `String`, Wert
+  aus Literalen, Operatoren und anderen `const`-Properties. Ob ein
+  qualifizierter Name (`Karte.MAX`) `const` ist, prüft BlueK nicht.
+- **Nicht unterstützt** (mit eigener Meldung): benannte Companions
+  (`companion object Fabrik`), verschachtelte Objekte und Klassen, Objekte
+  innerhalb von Funktionen und Objekt-Ausdrücke (`object : Typ { … }`).
+- **GUI:** Das Manifest meldet ein Objekt mit `kind: "object"` ohne
+  Konstruktoren und die öffentlichen Companion-Funktionen einer Klasse als
+  `companionMethods`. Das Klassenmenü ruft beide als `Name.f(…)` auf.
 
 ### Top-Level-Deklarationen in beliebiger Reihenfolge
 
@@ -244,8 +305,8 @@ nach dem Aufruf nehmen an der Auflösung teil.
   `val h = Hund()` in `Main.kt` mit `class Hund { val m = maximum }` und
   `val maximum = 3` in einer späteren Datei `h.m == 3`, in BlueK den
   genannten Fehler. Abhilfe: die Property in eine frühere Datei verschieben.
-- **Grenzen:** Wie bei Klassen hat eine Funktion mit Ausdruckskörper ohne
-  Rückgabetyp keinen Typ, solange ihre eigene Analyse läuft. Ruft eine dabei
+- **Grenzen:** Eine Funktion mit Ausdruckskörper ohne Rückgabetyp hat keinen
+  Typ, solange ihre eigene Analyse läuft. Ruft eine dabei
   analysierte Funktion sie auf (gegenseitige Rekursion wie `fun a() = b()`
   mit `fun b(): Int = a()`), braucht die zuerst analysierte einen
   Rückgabetyp („Cannot infer return type …“); Kotlin verlangt das nur, wenn
@@ -357,10 +418,10 @@ BlueK zeigt diese Meldung ohne technischen Exception-Präfix.
   Klassen vor der Analyse und Analyse bei Bedarf (RT-40, siehe
   [oben](#klassen-in-beliebiger-reihenfolge)); das frühere Umordnen und
   erneute Analysieren nach Fehlermeldungen entfällt. Offen bleibt eine
-  vollständige Typinferenz über Klassengrenzen: Wer ein Member einer Klasse
+  vollständige Typinferenz über Klassengrenzen: Wer eine Property einer Klasse
   braucht, deren Analyse gerade läuft, sieht nur deren bis dahin analysierte
-  Member, und Rückgabetypen von Funktionen mit Ausdruckskörper sind erst
-  nach deren Analyse bekannt. Top-Level-Funktionen und -Properties werden bei
+  Properties; Methoden ohne Rückgabetyp werden bei Bedarf analysiert (RT-68).
+  Top-Level-Funktionen und -Properties werden bei
   Bedarf innerhalb ihrer Quelltexteinheit analysiert (RT-45, siehe
   [oben](#top-level-deklarationen-in-beliebiger-reihenfolge)); ihre
   Initialisierer laufen strikt in Dateireihenfolge.
