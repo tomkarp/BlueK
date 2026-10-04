@@ -554,6 +554,7 @@ open class Parser(protected val lexer: Lexer) {
         val name = if (peekNextToken().type == TokenType.Symbol && peekNextToken().value == "=") {
             val name = userDefinedIdentifier()
             eat(TokenType.Symbol, "=")
+            repeatedNL()
             name
         } else null
         repeatedNL()
@@ -1778,6 +1779,8 @@ open class Parser(protected val lexer: Lexer) {
 
         val initialValue = if (currentToken.type == TokenType.Symbol && currentToken.value == "=") {
             eat(TokenType.Symbol, "=")
+            // `val symbol =` with the value on the next line, as formatters write long values (RT-70)
+            repeatedNL()
             expression()
         } else {
             null

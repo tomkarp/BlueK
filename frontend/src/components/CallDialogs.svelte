@@ -138,7 +138,7 @@
       </div>
     </div>
   </div>{/if}
-{#if resultDialog}<div class="modal">
+{#if resultDialog}<div class="modal topmost-modal">
     <div
       class="dialog result-dialog"
       role="dialog"

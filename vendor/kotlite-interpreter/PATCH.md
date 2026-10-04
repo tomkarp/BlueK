@@ -664,3 +664,10 @@ receiver (the list) and the call failed with "Function `f` not found on implicit
 receiver". The analyzer now gives such a call the owner `this/<Class>` of the
 enclosing class and records it for the lambda's captures, like member property
 accesses. Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (RT-69).
+
+Line break after `=` (RT-70): `propertyDeclaration` and named value arguments did
+not skip newlines after `=`, unlike Kotlin's grammar (`'=' {NL} expression`), so
+`val symbol =` followed by the `when` on the next line (as BlueK's formatter
+writes long values) was "Unexpected token NewLine". Both now call `repeatedNL()`.
+Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (RT-70) and the RT-70
+browser test (format, then compile).

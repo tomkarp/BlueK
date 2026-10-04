@@ -8,7 +8,7 @@
   export let error: string;
 </script>
 
-{#if compilerDialog}<div class="modal" role="presentation">
+{#if compilerDialog}<div class="modal topmost-modal" role="presentation">
     <div
       class="dialog compiler-dialog"
       role="dialog"

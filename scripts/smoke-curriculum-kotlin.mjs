@@ -975,4 +975,21 @@ fails((await project({ 'Anzeige.kt': 'class Anzeige {\n    fun zeige(text: Strin
   for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-69 ${source}`).display, expected, `RT-69 ${source}`);
 }
 
+// Line breaks after `=` that BlueK's formatter writes for long values (RT-70): `val symbol =` with
+// the `when` on the next line was "Unexpected token NewLine"; named arguments likewise.
+{
+  const p = await project({
+    'Karte.kt': 'class Karte(val farbe: String) {\n    val kurz =\n        farbe.take(1)\n    fun symbol(): String {\n        val symbol =\n            when (farbe) {\n                "herz" -> "H"\n                else -> "?"\n            }\n        return symbol\n    }\n}',
+    'Main.kt': 'val start =\n    3\nfun minus(a: Int, b: Int) = a - b',
+  });
+  ok(p.result, 'RT-70 project');
+  const cases = [
+    ['Karte("herz").symbol() + Karte("pik").kurz', 'Hp'],
+    ['start', '3'],
+    ['minus(b =\n    1, a =\n    5)', '4'],
+    ['val lokal =\n    start * 2\nlokal', '6'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-70 ${source}`).display, expected, `RT-70 ${source}`);
+}
+
 console.log('Curriculum Kotlin smoke test passed.');

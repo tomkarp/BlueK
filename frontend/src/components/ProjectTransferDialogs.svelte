@@ -183,7 +183,7 @@
       </div>
     </div>
   </div>{/if}
-{#if shareLinkDialog}<div class="modal" role="presentation">
+{#if shareLinkDialog}<div class="modal topmost-modal" role="presentation">
     <div
       class="dialog share-link-dialog"
       role="dialog"

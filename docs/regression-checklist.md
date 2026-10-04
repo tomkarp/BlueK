@@ -214,10 +214,12 @@ bei Verweisen die Beschreibung mitnennen.
 | RT-67 | `object Name { … }` und `companion object { … }` wie in Kotlin: genau eine Instanz, beim ersten Zugriff erzeugt (`init` läuft einmal), über den Namen benutzt (`Zaehler.erhoehe()`, `Karte.MAX`, `listOf<Tier>(Hund)`, `when` mit `Hund ->`), auch mit Interfaces und Oberklasse; Companion-Mitglieder in der Klasse und in Unterklassen auch ohne Klassennamen (Zähler `init { anzahl++ }`, Default-Argument `= START`, Getter, Lambdas), vor gleichnamigen Top-Level-Deklarationen; Klasse und Companion teilen `private`; `Box.von(5)` für generische Klassen; `const val` auf oberster Ebene, in Objekten und Companions. Klassenmenü: Objekt ohne Konstruktor, Methoden von Objekt und Companion werden als `Name.f(…)` aufgerufen; der Titel des Aufrufdialogs lautet `Hund.neu()` (vorher `Hund..neu()`, bei Top-Level-Funktionen `.summe()`). Eigene Meldungen für `Name()`, benannte und doppelte Companions, verschachtelte Objekte, Objekt-Ausdrücke und falsches `const`; Parsermeldungen markieren ihre Zeile statt der ersten Dateizeile | 2026-10-03 nach „dann weiter“ des Nutzers. Vorher waren `object`, `companion object` und `const` Parse- bzw. Top-Level-Fehler. Beim Einbau gefunden: Aufrufe auf dem Companion generischer Klassen (`Box.f()`, auch `fun Box.Companion.f()`) scheiterten schon vorher an „Number of type arguments“; ein Klassenname allein (`Karte`) brachte die Laufzeit zum Absturz. Mit dem Bundle aus 891dd9a scheitert der RT-67-Block in `smoke-curriculum-kotlin.mjs` beim Laden des Projekts, alle früheren Blöcke laufen durch | Runtime-Tests mit echtem Bundle und Browser-Test RT-67 in `tests/gui/regressions.spec.ts`. Offen: Objekt-Ausdrücke, benannte Companions, verschachtelte Klassen; ein Companion, das seine Klasse schon während deren Analyse braucht, sieht nur deren bis dahin analysierte Member |
 | RT-68 | Methoden ohne Rückgabetyp dürfen vor ihrer Deklaration benutzt werden wie in Kotlin: `fun a() = b(); fun b() = 1` in einer Klasse, ein Property-Initialisierer mit einer späteren Methode (`val start = doppelt(1)`), `override fun toString() = bericht()`, Objekte, die einander aufrufen (`A.f()` → `B.g()` → `A.h()`), ein Companion, das während `init { anzahl++ }` eine Methode seiner Klasse aufruft; auch im Codepad. Nur ein Typ, der von sich selbst abhängt (`fun a() = b(); fun b() = a()`), braucht einen Rückgabetyp: „Cannot infer return type of function a, because it depends on itself“ | 2026-10-03 nach „dann los“ des Nutzers; Vorschlag aus RT-67. Vorher „Cannot infer return type of function b. Please specify types manually“. Mit dem Bundle aus 7aa917b scheitert `smoke-curriculum-kotlin.mjs` am RT-67-Block, der jetzt `fun geheim() = wert + 1` ohne Rückgabetyp enthält | Runtime-Tests mit echtem Bundle; kein GUI-Test (reine Analyse). Offen: gegenseitige Rekursion von Top-Level-Funktionen braucht einen Rückgabetyp an der zuerst analysierten; Properties einer Klasse in Analyse nur, soweit analysiert |
 | RT-69 | Eine Methode der eigenen Klasse lässt sich ohne `this.` in Lambdas aufrufen, die eine Bibliotheksfunktion ausführt: `map { laut() + it }` (auch überschrieben in einer Unterklasse), `filter { gerade(it) }`, verschachtelte Lambdas, `apply { add(gross()) }`, `sortedBy { … }` in einem Property-Initialisierer, `forEach { s += mal10(it) }` mit `private`-Methode, zurückgegebene Lambdas, geerbte Methoden, in Companions und Objekten | 2026-10-03 beim Prüfen von RT-68 gefunden. Vorher scheiterte der Aufruf zur Laufzeit mit „Function `…` not found on implicit receiver“, auch mit dem Bundle aus 891dd9a; mit dem Bundle aus 1724af8 scheitert der RT-69-Block in `smoke-curriculum-kotlin.mjs` am ersten Fall | Runtime-Tests mit echtem Bundle; kein GUI-Test. Daneben gefunden, offen: eine Property vom Funktionstyp lässt sich nicht als `objekt.f()` aufrufen (`val f = objekt.f; f()` geht) |
+| RT-70 | Eine Klasse bleibt nach „Format Kotlin file“ compilierbar: Zeilenumbruch nach `=` in Property-Deklarationen (`val symbol =` mit dem `when` in der nächsten Zeile, auch auf oberster Ebene und lokal) und bei benannten Argumenten (`f(a =` …) | 2026-10-04 vom Nutzer gemeldet: die Klasse `Karte` compilierte, nach dem Formatieren „Line 27: Unexpected token Token(type=NewLine …)“. Mit dem Bundle aus a09d104 zeigt der Browser-Test RT-70 genau diese Meldung (Zeile 23 der Testklasse), der RT-70-Block in `smoke-curriculum-kotlin.mjs` scheitert beim Laden; mit dem neuen Bundle beide grün. Weitere typische Umbrüche des Formatierers (Aufrufketten, `&&`/`+` am Zeilenende, `?:` am Zeilenanfang, mehrzeilige `when`-Bedingungen, nachgestellte Kommas) liefen schon vorher | Runtime-Test und Browser-Test RT-70 (formatieren, schließen, compilieren, aufrufen) |
 
 | GUI-93 | Objekt-Kontextmenüs und geerbte Methoden-Untermenüs liegen über offenen Inspektoren und bleiben anklickbar; Parameterdialoge liegen weiterhin darüber | Chromium GUI-93 erzeugt tatsächliche Überlappungen mit einem verschobenen Inspektor, prüft den vordersten DOM-Treffer, öffnet den Parameterdialog und ruft eine geerbte Methode auf. Vor der Korrektur rot, nachher grün; GUI-49/82/85/87 ebenfalls grün | Automatisch im echten Browser abgesichert; keine separate visuelle Benutzerabnahme |
 | GUI-94 | Reset erhält den maximierten bzw. wiederhergestellten Zustand des BluePlay-Weltfensters | Chromium GUI-94 wechselt die angezeigte Welt, maximiert und setzt zurück; prüft die erneut erzeugte ursprüngliche Welt und unveränderte Fenstergrenzen, danach Reset bei normaler Fenstergröße | Vor der Korrektur rot, danach grün; GUI-57 und beide RT-25-BluePlay-Reset-Tests ebenfalls grün; keine gesonderte visuelle Benutzerabnahme |
 | GUI-95 | Methodenmenüs zeigen den Rückgabetyp in Kotlin-Schreibweise hinter den Parametern (`give(): Int`, `first<T>(items: List<T>): T`), ohne `: Unit`; gilt für direkte und geerbte Objektmethoden sowie Funktionen im Dateimenü. Hinweise wie `[redefined in …]` folgen danach | 2026-10-02 auf Wunsch des Nutzers (vorher `Int give()`). Chromium GUI-95 prüft Objektmenü, Untermenü „inherited from Person“ und Dateimenü einer Funktionsdatei; mit der alten Beschriftung rot, danach grün; GUI-49 und GUI-93 ebenfalls grün | Echter Browsertest; visuelle Abnahme durch den Nutzer offen |
+| GUI-96 | Das Ergebnisfenster eines Methodenaufrufs („Method result“) liegt vor einem offenen Editor; ebenso die Compilerfehler- und die Share-Link-Meldung (alle `topmost-modal` wie die übrigen Dialoge) | 2026-10-04 vom Nutzer gemeldet (Screenshot auf bluek.de: Ergebnis hinter `Karte.kt`). Browser-Test GUI-96 grün; ohne `topmost-modal` am Ergebnisfenster rot (die Mitte des Ergebnisfensters gehört zum Editor) | Browser-Test GUI-96 (Methode am Objekt der Objektleiste bei offenem Editor); Compilerfehler- und Share-Link-Dialog nur per Code-Durchsicht, ohne eigenen Test |
 
 ## Prüfprotokoll
 
@@ -2588,3 +2590,37 @@ Tatsächliche Prüfungen mit dem neu gebauten Bundle:
   alle Node-Suiten grün, `test:offline` 4/4, Chromium 142/142 grün; PERF-01
   dabei 322 Frames, p95 15,0 ms, max. 17,7 ms.
 - `git diff --check` ohne Befund.
+
+### RT-70: Zeilenumbruch nach `=` nach dem Formatieren (2026-10-04)
+
+Vom Nutzer gemeldet: Die Klasse `Karte` compilierte, nach „Format Kotlin
+file“ meldete BlueK „Line 27: Unexpected token Token(type=NewLine …)“ bei
+`val symbol =` mit dem `when` in der nächsten Zeile. Ursache und Änderung in
+`PATCH.md`.
+
+Tatsächliche Prüfungen mit dem neu gebauten Bundle:
+
+- Die formatierte Klasse des Nutzers lädt und läuft (`Karte("Herz",
+  "Dame").berechneWert()` = 10, `druckeKarte()`, beide Fehlermeldungen); mit
+  dem Bundle aus a09d104 dieselbe Meldung wie im Screenshot.
+- Browser-Test RT-70 einzeln grün; mit dem Bundle aus a09d104 rot mit der
+  Meldung „Line 23: Unexpected token … NewLine“ im Editor.
+- RT-70-Block in `smoke-curriculum-kotlin.mjs` grün, mit dem Bundle aus
+  a09d104 rot beim Laden.
+- Vollständiger `npm run test:regression` (lief beim Commit a881b27 noch, der
+  auf Wunsch des Nutzers ohne Warten gepusht wurde): Typecheck 0 Fehler/0
+  Warnungen, alle Node-Suiten grün, `test:offline` 4/4, Chromium 143/143
+  grün; PERF-01 dabei 323 Frames, p95 15,2 ms, max. 19,5 ms. Während des
+  Laufs war kurz `main` ausgecheckt (Merge), ohne Auswirkung auf das
+  Ergebnis.
+- `git diff --check` ohne Befund.
+
+### GUI-96: Ergebnisfenster vor offenem Editor (2026-10-04)
+
+Vom Nutzer auf bluek.de gemeldet. Ergebnis-, Compilerfehler- und
+Share-Link-Dialog bekommen `topmost-modal`.
+
+- Browser-Test GUI-96 grün; ohne `topmost-modal` am Ergebnisfenster rot.
+- Vollständiger `npm run test:regression` nach dem Push von 0af139d:
+  Typecheck 0 Fehler/0 Warnungen, alle Node-Suiten grün, `test:offline` 4/4,
+  Chromium 144/144 grün; PERF-01 dabei 321 Frames, p95 15,1 ms, max. 16,8 ms.

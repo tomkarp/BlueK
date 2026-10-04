@@ -594,6 +594,46 @@ test('RT-67 the class menu calls methods of an object and of a companion object'
   await expect((await evaluate(page, 'Zaehler.stand')).locator('.codepad-result-value')).toHaveText('2');
 });
 
+test('RT-70 a class formatted by BlueK still compiles (`val symbol =` with the value on the next line)', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, files: [{ fileName: 'Karte.kt', kind: 'class', source: "class Karte(\n    farbe: String,   // \"Herz\", \"Karo\", \"Pik\", \"Kreuz\"\n    rang: String     // \"2\"-\"10\", \"B\", \"D\", \"K\", \"A\"\n    ) {\n    var rang: String = kuerzeRang(rang)\n        set(value) { field = kuerzeRang(value) }\n    var farbe: String = farbe.trim().lowercase()\n\n    fun berechneWert(): Int {\n        return when (rang) {\n            \"A\" -> 11\n            \"B\", \"D\", \"K\" -> 10\n            else -> rang.toInt()\n        }\n    }\n\n    fun symbol(): String {\n        val symbol = when (farbe) { \"herz\" -> \"\\u2665\"; \"karo\" -> \"\\u2666\"; \"pik\" -> \"\\u2660\"; \"kreuz\" -> \"\\u2663\"; else -> \"?\" }\n        return symbol\n    }\n\n    private fun kuerzeRang(roherRang: String): String {\n        val normalisiert = roherRang.trim().lowercase()\n        return when (normalisiert) {\n            \"a\", \"ass\" -> \"A\"\n            \"k\", \"koenig\" -> \"K\"\n            \"d\", \"dame\" -> \"D\"\n            \"b\", \"bube\" -> \"B\"\n            else -> {\n                val zahl = normalisiert.toIntOrNull() ?: throw IllegalArgumentException(\"Unbekannter Rang: $roherRang\")\n                if (zahl in 2..10) zahl.toString() else throw IllegalArgumentException(\"Rang ausserhalb des Bereichs: $roherRang\")\n            }\n        }\n    }\n}\n" }] };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  await expect(page.getByLabel('Codepad input')).toBeEnabled();
+  await page.locator('.classcard').dblclick();
+  const dialog = page.locator('.editor-dialog');
+  await dialog.getByRole('button', { name: 'Format Kotlin file' }).click();
+  // The formatter moves long `when` values to the next line; Kotlite rejected the line break after `=`.
+  await expect(dialog.locator('.cm-line').filter({ hasText: /^\s*val symbol =$/ })).toHaveCount(1);
+  await dialog.getByRole('button', { name: 'Close editor' }).click();
+  await page.getByRole('button', { name: 'Compile', exact: true }).click();
+  await expect(page.getByLabel('Ready', { exact: true })).toBeVisible();
+  // A compile error would reopen the editor with the message.
+  await expect(page.locator('.editor-dialog')).toHaveCount(0);
+  await expect((await evaluate(page, 'Karte("Herz", "Dame").berechneWert()')).locator('.codepad-result-value')).toHaveText('10');
+  await expect((await evaluate(page, 'Karte("pik", "7").symbol()')).locator('.codepad-result-value')).toHaveText('"\u2660"');
+});
+
+test('GUI-96 the method result appears in front of an open editor', async ({ page }) => {
+  await project(page, 'class Hund {\n    fun alter(): Int = 3\n}');
+  const entry = await evaluate(page, 'Hund()');
+  await entry.getByRole('button').click();
+  await page.getByLabel('Name of instance').fill('hund1');
+  await page.getByRole('button', { name: 'OK', exact: true }).click();
+  await page.locator('.classcard').dblclick();
+  const editor = page.locator('.editor-dialog');
+  await expect(editor).toBeVisible();
+  // The editor may cover the bench; open the object menu as a right click would.
+  await page.locator('.bench .object').dispatchEvent('contextmenu', { button: 2 });
+  await page.locator('.popup').getByRole('button', { name: 'alter(): Int', exact: true }).click();
+  const result = page.locator('.result-dialog');
+  await expect(result.locator('.result-value')).toHaveText('3 : Int');
+  // The result dialog was behind the editor window: check what is on top at its centre.
+  const box = (await result.boundingBox())!;
+  expect(await page.evaluate(({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest('.result-dialog')),
+    { x: box.x + box.width / 2, y: box.y + box.height / 2 })).toBe(true);
+  await result.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(editor).toBeVisible();
+});
+
 test('GUI-31 additional editor files open in tabs by default', async ({ page }) => {
   const payload = { format: 'bluek-project', version: 1, files: [
     { fileName: 'Hund.kt', kind: 'class', source: 'class Hund {}' },
