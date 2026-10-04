@@ -47,7 +47,8 @@ Build-Pipeline, Tests und Deployment stehen in [DEVELOPMENT.md](DEVELOPMENT.md).
 - **Terminal:** `print`/`println`, `readln`/`readLine`/`readlnOrNull` mit
   echter Wartestellung, EOF, Stop und BlueJ-artigem Löschen per Form Feed.
   Farben, Schriftstile, Löschen und Cursorbewegung über ANSI-Escape-Sequenzen
-  wie in anderen Terminals (`"\u001B[31m"` für rote Schrift); siehe
+  wie in anderen Terminals (`"\u001B[31m"` für rote Schrift), große und kleine
+  Schrift über das Protokoll von kitty (`"\u001B]66;s=2;Titel\u0007"`); siehe
   [docs/terminal.md](docs/terminal.md).
 - **BluePlay:** eingebaute Bibliothek mit `World`, `Actor`, `Image` und
   Hilfsfunktionen; Weltfenster mit Act, Run/Pause, Reset und Speed;
@@ -310,7 +311,7 @@ weder auf `addObject`/`removeObject` noch auf Kollisionsabfragen aus.
 | [docs/blueplay.md](docs/blueplay.md) | BluePlay-Bibliothek, Scheduler, Rendering, Kollision, Performance, API |
 | [docs/blueplay-api-audit.md](docs/blueplay-api-audit.md) | Abgleich mit der GitHub-API und dem BlueJ-Projekt; reproduzierte Abweichungen |
 | [docs/kotlin-surface.md](docs/kotlin-surface.md) | Zugesagte Standardbibliothek und bekannte Lücken |
-| [docs/terminal.md](docs/terminal.md) | Für Nutzer: Farben und Steuerzeichen im Terminal (ANSI-Escape-Sequenzen) |
+| [docs/terminal.md](docs/terminal.md) | Für Nutzer: Farben, Schriftgröße und Steuerzeichen im Terminal (ANSI-Escape-Sequenzen, kitty-Textgrößen) |
 | [docs/kotlite-generics.md](docs/kotlite-generics.md) | Generics, `reified`, Inline-Lambdas und Host-Funktionen |
 | [docs/regression-checklist.md](docs/regression-checklist.md) | Regressionsliste mit stabilen IDs und Prüfprotokoll |
 | [docs/deployment.md](docs/deployment.md) | GitHub Actions, Server, Caddy, Share-Dienst, Beta |

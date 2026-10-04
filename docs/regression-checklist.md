@@ -232,6 +232,8 @@ bei Verweisen die Beschreibung mitnennen.
 | GUI-95 | Methodenmenüs zeigen den Rückgabetyp in Kotlin-Schreibweise hinter den Parametern (`give(): Int`, `first<T>(items: List<T>): T`), ohne `: Unit`; gilt für direkte und geerbte Objektmethoden sowie Funktionen im Dateimenü. Hinweise wie `[redefined in …]` folgen danach | 2026-10-02 auf Wunsch des Nutzers (vorher `Int give()`). Chromium GUI-95 prüft Objektmenü, Untermenü „inherited from Person“ und Dateimenü einer Funktionsdatei; mit der alten Beschriftung rot, danach grün; GUI-49 und GUI-93 ebenfalls grün | Echter Browsertest; visuelle Abnahme durch den Nutzer offen |
 | GUI-96 | Das Ergebnisfenster eines Methodenaufrufs („Method result“) liegt vor einem offenen Editor; ebenso die Compilerfehler- und die Share-Link-Meldung (alle `topmost-modal` wie die übrigen Dialoge) | 2026-10-04 vom Nutzer gemeldet (Screenshot auf bluek.de: Ergebnis hinter `Karte.kt`). Browser-Test GUI-96 grün; ohne `topmost-modal` am Ergebnisfenster rot (die Mitte des Ergebnisfensters gehört zum Editor) | Browser-Test GUI-96 (Methode am Objekt der Objektleiste bei offenem Editor); Compilerfehler- und Share-Link-Dialog nur per Code-Durchsicht, ohne eigenen Test |
 | GUI-97 | Das Terminal wertet ANSI-Escape-Sequenzen und Steuerzeichen wie ein Terminal aus: Farben (16 Grundfarben, 256 Farben, RGB) für Schrift und Hintergrund, fett, blass, kursiv, unterstrichen, durchgestrichen, invertiert, verborgen; `ESC[2J`/`ESC[H` löschen, `ESC[K`/`ESC[J` löschen Zeilen- bzw. Bildschirmteile, Cursorbewegung (`H`, `A`–`G`, `s`/`u`), `\r` überschreibt die Zeile, `\b`, `\t` bis zum nächsten Tabulator; andere Sequenzen und Steuerzeichen werden verschluckt. Helles und dunkles Design mit eigener Palette (VS-Code-Farben). Nutzerdoku: `docs/terminal.md` | 2026-10-04 vom Nutzer gewünscht (Spielkarte mit roten Herzen). Browser-Test GUI-97 mit der Karte des Nutzers, `\r`, Löschen, fett und dunklem Design grün; mit der alten Terminaldarstellung rot (rohe ESC-Zeichen im Text). `smoke-ui-behavior.mjs` prüft Parser-Fälle | Browser-Test GUI-97, Node-Test in `smoke-ui-behavior.mjs`. Offen: kein fester Bildschirm (Zeile 1 = erste Zeile seit dem Löschen), kein Blinken |
+| GUI-98 | Große und kleine Schrift im Terminal über das Text-Sizing-Protokoll von kitty (`ESC]66;s=…:n=…:d=…:w=…:v=…:h=…;Text BEL` bzw. `ESC \`): der Text belegt `s` Zeilen und `s`×Zeichen bzw. `s`×`w` Zellen, überdeckt die Zeilen darunter, der Cursor bleibt rechts daneben in der obersten Zeile; Schreiben in oder Löschen einer seiner Zellen entfernt ihn ganz; ungültige Werte gelten als Standard; DEC-Zeilen doppelter Höhe (`ESC#3/#4/#6`) bewusst nicht. Gleiche Darstellung im exportierten Player (EXP-12). Nutzerdoku: `docs/terminal.md` | 2026-10-04 vom Nutzer gewünscht (Spielkarte als Unicode-Zeichen mehrere Zentimeter hoch); nach kurzer Recherche (DEC vs. kitty) für kitty OSC 66 entschieden. Browser-Test GUI-98 (Herz-Ass mit `s=7`: Block 7 Zeilen hoch, Text daneben und 7 Zeilen tiefer an der richtigen Stelle) grün, mit dem alten Parser rot; Player-Test EXP-12 (Größe) grün; Node-Fälle in `smoke-ui-behavior.mjs` grün, mit dem alten Parser rot | Browser-Tests GUI-98 und EXP-12, Node-Test in `smoke-ui-behavior.mjs`. Ungetestet: Darstellung in Safari/Firefox (`lh`-Einheit ab Safari 16.4/Firefox 120) |
+| GUI-99 | Der Anfasser zwischen BlueK und dem rechts angedockten Terminal liegt im Stapel des Terminalfensters: Ein Objektinspektor (oder jedes andere Fenster), der vor dem Terminal liegt, verdeckt ihn; ziehen am Anfasser aktiviert das Terminal nicht. Ersetzt die Einzelregeln für aktive Editoren (GUI-37) und das BluePlay-Weltfenster (GUI-73) | 2026-10-04 vom Nutzer gemeldet (Screenshot: Anfasser über dem Inspektor von `karte1`). Browser-Test GUI-99 grün, mit dem alten Stand rot; GUI-37, GUI-73 (prüft jetzt die Ebene des Terminals) und GUI-06 grün | Browser-Tests GUI-99, GUI-37, GUI-73, GUI-06 |
 
 ## Prüfprotokoll
 
@@ -2706,4 +2708,34 @@ Eigenständig während der Abwesenheit des Nutzers: `protected`/`internal`
 - Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
   alle Node-Suiten grün, `test:offline` 4/4, Chromium 146/146 grün; PERF-01
   dabei 321 Frames, p95 15,2 ms, max. 19,5 ms.
+- `git diff --check` ohne Befund; keine `* 2.*`-Dateien.
+
+### GUI-98: große Schrift im Terminal (kitty OSC 66) (2026-10-04)
+
+Auf Wunsch des Nutzers nach kurzer Recherche (DEC-Zeilen doppelter Höhe
+gegenüber kitty-Protokoll; Entscheidung des Nutzers: nur OSC 66).
+
+- `smoke-ui-behavior.mjs`: neue Parser-Fälle grün; mit dem Parser aus fc46946
+  rot (die Karte fehlt in der Ausgabe).
+- Browser-Test GUI-98 grün, mit dem alten Parser rot; GUI-97, EXP-12 und der
+  neue Player-Test EXP-12 (Größe) grün. Der Player-Test war zunächst rot, weil
+  die lokale Player-Vorlage veraltet war; nach `npm run build:player` grün.
+- Manuell im Dev-Server geprüft: Block 7 Zeilen hoch (115,5 px bei 16,5 px
+  Zeilenhöhe), Folgetext an der erwarteten Zeile.
+- Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
+  alle Node-Suiten grün, `test:offline` 4/4, Chromium 148/148 grün; PERF-01
+  dabei 323 Frames, p95 15,1 ms, max. 26,1 ms.
+- `git diff --check` ohne Befund; keine `* 2.*`-Dateien.
+
+### GUI-99: Terminal-Anfasser unter dem Objektinspektor (2026-10-04)
+
+Vom Nutzer gemeldet. Der Anfasser hatte einen festen Z-Index 35 über allen
+Fenstern außer Sonderfällen; jetzt liegt er im Stapel des Terminalfensters.
+
+- Browser-Test GUI-99 grün; mit dem vorigen Stand rot (an der Stelle des
+  Anfassers lag nicht der Inspektor). GUI-37, GUI-73 und GUI-06 grün; GUI-73
+  vergleicht jetzt die Ebene des Terminals mit dem Weltfenster.
+- Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
+  alle Node-Suiten grün, `test:offline` 4/4, Chromium 149/149 grün; PERF-01
+  dabei 323 Frames, p95 15,1 ms, max. 16,8 ms.
 - `git diff --check` ohne Befund; keine `* 2.*`-Dateien.

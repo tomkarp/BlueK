@@ -663,6 +663,48 @@ test('GUI-97 the terminal shows ANSI colours and handles control sequences like 
   await expect(output.locator('span', { hasText: 'fertig' })).toHaveCSS('font-weight', '700');
 });
 
+test('GUI-98 sized text (kitty OSC 66) overlays the following lines', async ({ page }) => {
+  await project(page, `class Karte {
+    fun gross() {
+        val karte = "" + 0xD83C.toChar() + 0xDCB1.toChar()
+        print("Karte: \\u001B[31m\\u001B]66;s=7;$karte\\u0007\\u001B[0m daneben")
+        print("\\n".repeat(7))
+        println("unten")
+    }
+  }`);
+  await evaluate(page, 'Karte().gross()');
+  const output = page.locator('.terminal-output pre');
+  await expect(output).toHaveText('Karte: \u{1F0B1} daneben\n\n\n\n\n\n\nunten\n');
+  const box = output.locator('.terminal-sized');
+  await expect(box).toHaveCount(1);
+  await expect(box.locator('span')).toHaveCSS('font-size', '98px');
+  await expect(box.locator('span')).toHaveCSS('color', 'rgb(205, 49, 49)');
+  const geometry = await output.evaluate((pre) => {
+    const range = document.createRange();
+    const lineTop = (text: string) => {
+      const walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const index = node.textContent!.indexOf(text);
+        if (index < 0) continue;
+        range.setStart(node, index);
+        range.setEnd(node, index + text.length);
+        return range.getBoundingClientRect().top;
+      }
+      return NaN;
+    };
+    const sized = pre.querySelector('.terminal-sized')!.getBoundingClientRect();
+    const cell = parseFloat(getComputedStyle(pre).fontSize);
+    return { cell, box: { top: sized.top, height: sized.height, width: sized.width }, karte: lineTop('Karte'), daneben: lineTop('daneben'), unten: lineTop('unten') };
+  });
+  // The block is seven lines high and seven cells wide, starts in the first line and leaves the
+  // following text where it would be without it: "daneben" beside it, "unten" seven lines lower.
+  const line = (geometry.unten - geometry.karte) / 7;
+  expect(line).toBeGreaterThan(geometry.cell);
+  expect(Math.abs(geometry.box.height - 7 * line)).toBeLessThan(1);
+  expect(Math.abs(geometry.box.top - geometry.karte)).toBeLessThan(line / 2);
+  expect(Math.abs(geometry.daneben - geometry.karte)).toBeLessThan(1);
+});
+
 test('GUI-31 additional editor files open in tabs by default', async ({ page }) => {
   const payload = { format: 'bluek-project', version: 1, files: [
     { fileName: 'Hund.kt', kind: 'class', source: 'class Hund {}' },
@@ -1364,6 +1406,39 @@ test('GUI-37 terminal splitter stays behind an active editor window', async ({ p
   const x = dividerBox.x + dividerBox.width / 2;
   const y = Math.max(editorBox.y + 20, Math.min(editorBox.y + editorBox.height - 20, dividerBox.y + 120));
   await expect.poll(() => page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('.editor-dialog') !== null, { x, y })).toBe(true);
+});
+
+test('GUI-99 an object inspector covers the terminal split handle', async ({ page }) => {
+  await project(page, 'class Karte(var farbe: String, var rang: String)');
+  await page.getByLabel('Show terminal', { exact: true }).click();
+  await page.getByLabel('Split terminal to the right').click();
+  const entry = await evaluate(page, 'Karte("kreuz", "8")');
+  await entry.getByRole('button').click();
+  await page.getByLabel('Name of instance').fill('karte1');
+  await page.getByRole('button', { name: 'OK', exact: true }).click();
+  await page.locator('.bench .object').dblclick();
+  const inspector = page.locator('.inspect-window');
+  const divider = (await page.locator('.terminal-split-divider').boundingBox())!;
+  const x = divider.x + divider.width / 2;
+  // Move the inspector over the handle, as in the user's screenshot.
+  const before = (await inspector.boundingBox())!;
+  await page.mouse.move(before.x + 16, before.y + 16);
+  await page.mouse.down();
+  await page.mouse.move(x - before.width / 2 + 16, divider.y + divider.height / 2 - before.height / 2 + 16, { steps: 5 });
+  await page.mouse.up();
+  const box = (await inspector.boundingBox())!;
+  expect(box.x).toBeLessThan(x - 20);
+  expect(box.x + box.width).toBeGreaterThan(x + 20);
+  const y = box.y + box.height / 2;
+  expect(await page.evaluate(({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest('.inspect-window')), { x, y })).toBe(true);
+  // The handle still resizes the split where no window covers it.
+  const terminalBefore = (await page.locator('.terminal-window').boundingBox())!;
+  await page.mouse.move(x, 30);
+  await page.mouse.down();
+  await page.mouse.move(x - 40, 30, { steps: 5 });
+  await page.mouse.up();
+  const terminalAfter = (await page.locator('.terminal-window').boundingBox())!;
+  expect(Math.abs(terminalAfter.width - terminalBefore.width - 40)).toBeLessThan(3);
 });
 
 test('GUI-08 GUI-10 editor renames files even after empty content', async ({ page }) => {

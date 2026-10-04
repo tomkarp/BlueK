@@ -21,6 +21,7 @@
   ) => void;
   export let toggleTerminalMaximized: () => void;
   export let toggleTerminalSplit: () => void;
+  export let beginTerminalSplitResize: (event: PointerEvent) => void;
   export let clearTerminal: () => void;
   export let resetRuntime: () => Promise<void>;
   export let sendInput: (event: KeyboardEvent) => Promise<void>;
@@ -103,10 +104,16 @@
         </div>
       </div>
       <div class="terminal-output">
-        {#key terminal}<pre>{#each terminalParts(terminal) as part}<span
-                class:terminal-input-echo={part.input}
-                style={part.style}>{part.text}</span
-              >{/each}</pre>{/key}
+        {#key terminal}<pre>{#each terminalParts(terminal) as part}{#if part.box}<span
+                  class="terminal-sized"
+                  style={part.box}><span
+                    class:terminal-input-echo={part.input}
+                    style={part.style}>{part.text}</span
+                  ></span
+                >{:else}<span
+                  class:terminal-input-echo={part.input}
+                  style={part.style}>{part.text}</span
+                >{/if}{/each}</pre>{/key}
         <button
           class="terminal-clear"
           on:click|stopPropagation={clearTerminal}
@@ -128,4 +135,12 @@
           on:pointerdown={(event) => beginTerminalResize(event, direction)}
         ></div>{/each}
     </div>
+    <!-- Inside the terminal's stacking layer: windows in front of the terminal also cover the
+      handle (GUI-37, GUI-73, GUI-99). Dragging it does not activate the terminal. -->
+    {#if terminalSplit}<div
+        class="terminal-split-divider"
+        role="separator"
+        aria-label="Resize BlueK and terminal"
+        on:pointerdown|stopPropagation={beginTerminalSplitResize}
+      ></div>{/if}
   </div>{/if}

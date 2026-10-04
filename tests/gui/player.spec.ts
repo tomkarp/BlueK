@@ -213,3 +213,14 @@ test('EXP-12 an exported console program shows ANSI colours like the IDE termina
   await expect(output).toHaveText('♥ Herz\n');
   await expect(output.locator('span', { hasText: '♥' })).toHaveCSS('color', 'rgb(205, 49, 49)');
 });
+
+test('EXP-12 an exported console program shows sized text (OSC 66) like the IDE terminal', async ({ page }, testInfo) => {
+  const files: Files = [{ fileName: 'App.kt', source: 'fun main() {\n    print("\\u001B]66;s=3;Titel\\u0007\\n\\n\\n")\n    println("normal")\n}\n' }];
+  await openPlayer(page, await exportFile(testInfo, 'sized', files, 'App.kt'));
+  const output = page.getByRole('region', { name: 'Terminal' }).locator('pre');
+  await expect(output).toHaveText('Titel\n\n\nnormal\n');
+  const box = output.locator('.player-sized');
+  await expect(box.locator('span')).toHaveCSS('font-size', '39px');
+  const lineHeight = await output.evaluate((pre) => parseFloat(getComputedStyle(pre).lineHeight));
+  expect(Math.abs((await box.boundingBox())!.height - 3 * lineHeight)).toBeLessThan(1);
+});

@@ -150,8 +150,10 @@ Der Worker hält genau eine `KotliteSession` mit genau einem lebenden
   Editor-Markierungen, README-Editor, UI-Hilfsfunktionen (Projektlinks,
   Terminal, Argumentlisten) und Kurzlink-API.
 - `terminalText.ts`: wertet die Terminalausgabe wie ein Terminal aus
-  (ANSI-Escape-Sequenzen, `\r`, `\b`, `\t`, Löschen) und liefert Textteile mit
-  Inline-Stil für das IDE-Terminal und den exportierten Player. Die Ausgabe
+  (ANSI-Escape-Sequenzen, `\r`, `\b`, `\t`, Löschen, Textgrößen nach kitty
+  OSC 66) und liefert Textteile mit Inline-Stil für das IDE-Terminal und den
+  exportierten Player; großer Text kommt als Block (`box`), der eine Zeile
+  belegt und die folgenden überdeckt. Die Ausgabe
   bleibt der rohe Text der Laufzeit; nur die Darstellung interpretiert ihn.
   Palettenfarben sind CSS-Variablen (`--ansi-0` … `--ansi-15`) mit hellen
   Standardwerten, das dunkle Design überschreibt sie (GUI-97).

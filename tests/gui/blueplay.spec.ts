@@ -184,9 +184,11 @@ test('GUI-73 the terminal split resize handle stays behind the BluePlay world wi
   await loadBluePlay(page);
   await page.getByLabel('Show terminal', { exact: true }).click();
   await page.getByLabel('Split terminal to the right').click();
-  const dividerZ = await page.locator('.terminal-split-divider').evaluate((el) => getComputedStyle(el).zIndex);
+  // The handle lives in the terminal's stacking layer (GUI-99), which is below the world window.
+  await expect(page.locator('.terminal-modal .terminal-split-divider')).toHaveCount(1);
+  const terminalZ = await page.locator('.terminal-modal').evaluate((el) => getComputedStyle(el).zIndex);
   const stageZ = await page.locator('.stage-window').evaluate((el) => getComputedStyle(el).zIndex);
-  expect(Number(dividerZ)).toBeLessThan(Number(stageZ));
+  expect(Number(terminalZ)).toBeLessThan(Number(stageZ));
 });
 
 test('GUI-82 inherited BluePlay methods are visible without scrolling the context menu', async ({ page }) => {

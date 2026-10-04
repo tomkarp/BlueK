@@ -3,7 +3,8 @@
 Das BlueK-Terminal versteht die ANSI-Escape-Sequenzen, die auch Terminals wie
 die macOS-Terminal-App, das Windows-Terminal oder das Terminal von IntelliJ
 verstehen. Damit lassen sich Schriftfarbe, Hintergrund und Schriftstil ändern,
-der Bildschirm löschen oder eine Zeile überschreiben. Dasselbe gilt für
+der Bildschirm löschen oder eine Zeile überschreiben. Außerdem gibt es große
+und kleine Schrift wie im Terminal kitty. Dasselbe gilt für
 Programme, die als HTML exportiert werden.
 
 Eine Escape-Sequenz beginnt mit dem Zeichen ESC (Code 27). In Kotlin schreibt
@@ -105,11 +106,66 @@ for (prozent in 0..100 step 10) {
 println()
 ```
 
+## Große und kleine Schrift (`ESC]66;…`)
+
+BlueK versteht das Text-Sizing-Protokoll des Terminals
+[kitty](https://sw.kovidgoyal.net/kitty/text-sizing-protocol/). Andere
+Terminals (macOS-Terminal, Windows Terminal, IntelliJ) kennen es nicht und
+lassen den Text dort ganz weg.
+
+```
+"\u001B]66;" + Optionen + ";" + Text + "\u0007"
+```
+
+Die Optionen werden mit `:` getrennt, z. B. `s=2:h=2`:
+
+| Option | Wirkung | Werte |
+|---|---|---|
+| `s` | Größe: Der Text ist *s*-mal so hoch und breit und belegt *s* Zeilen | 1–7, Standard 1 |
+| `n`, `d` | Schrift zusätzlich auf den Bruchteil *n*/*d* verkleinern, z. B. `n=1:d=2` für die halbe Größe | 0–15, *n* < *d* |
+| `w` | Breite in Zellen (mal *s*); 0 = so viele Zellen wie Zeichen | 0–7, Standard 0 |
+| `v` | senkrechte Lage im Block: 0 oben, 1 unten, 2 Mitte | Standard 0 |
+| `h` | waagerechte Lage im Block: 0 links, 1 rechts, 2 Mitte | Standard 0 |
+
+Wichtig: Der große Text belegt *s* Zeilen, der Cursor bleibt aber in der
+obersten davon rechts neben dem Text. Danach also *s* Zeilenumbrüche ausgeben,
+sonst schreibt die nächste Zeile in den großen Text hinein. Farben und
+Schriftstile (`…m`) gelten auch für großen Text.
+
+```kotlin
+// Spielkarte als Unicode-Zeichen, z. B. 🂱 (Herz-Ass)
+// rang: 1 = Ass, 2–10, 11 = Bube, 12 = Dame, 13 = König
+fun kartenZeichen(farbe: String, rang: Int): String {
+    val basis = when (farbe) {
+        "pik" -> 0xA0
+        "herz" -> 0xB0
+        "karo" -> 0xC0
+        else -> 0xD0          // kreuz
+    }
+    // Unicode hat zwischen Bube und Dame noch den „Ritter“, der wird übersprungen
+    val nummer = if (rang >= 12) rang + 1 else rang
+    return "" + 0xD83C.toChar() + (0xDC00 + basis + nummer).toChar()
+}
+
+fun druckeKarteGross(farbe: String, rang: Int) {
+    val textfarbe = if (farbe == "herz" || farbe == "karo") "\u001B[31m" else "\u001B[39m"
+    print(textfarbe + "\u001B]66;s=7;" + kartenZeichen(farbe, rang) + "\u0007" + "\u001B[0m")
+    print("\n".repeat(7))
+}
+```
+
+Mit `s=7` ist die Karte 7 Zeilen hoch, im BlueK-Terminal gut 3 cm; größer
+geht es nicht. Die Zeilen mit doppelter Höhe der alten DEC-Terminals
+(`ESC#3`, `ESC#4`, `ESC#6`) versteht BlueK nicht.
+
 ## Unterschiede zu einem echten Terminal
 
 - Der „Bildschirm“ ist die gesamte Ausgabe seit dem letzten Löschen; er hat
   keine feste Höhe. Zeile 1 für `…H` ist die erste Zeile nach dem Löschen.
 - `"\u001B[2J"` löscht und setzt den Cursor nach oben links.
+- Wird in eine Zelle von großem Text geschrieben oder sie gelöscht, verschwindet
+  der ganze große Text (wie in kitty). Text in den Zeilen darunter überdeckt
+  ihn dagegen nur.
 - Blinken (`5`, `6`), Fenstertitel und andere Sequenzen werden ignoriert,
   aber nicht angezeigt; andere Steuerzeichen wie die Glocke (`"\u0007"`)
   ebenfalls.

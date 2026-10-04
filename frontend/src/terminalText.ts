@@ -5,6 +5,9 @@
  * (one column back) and `\t` (next tab stop, every 8 columns). Unsupported sequences are
  * swallowed instead of shown. The screen is the output since the last clear; `ESC[2J` clears it
  * and moves the cursor home. BlueK's own markers `\u0001`…`\u0002` enclose echoed input.
+ * Larger and smaller text uses kitty's text sizing protocol `ESC]66;s=2;Text BEL` (GUI-98): the
+ * text becomes a block `s` lines high that overlays the following lines, and the cursor moves
+ * to its right in the top line.
  * Users' documentation: `docs/terminal.md`.
  */
 
@@ -13,6 +16,11 @@ export interface TerminalPart {
   input: boolean;
   /** Colours and text styles as CSS; palette colours are variables that themes may override. */
   style?: string;
+  /**
+   * Set for sized text (OSC 66): CSS of the block that holds `text`, as wide as its cells and as
+   * high as its lines; it takes one line in the layout and overlays the lines below.
+   */
+  box?: string;
 }
 
 interface Style {
@@ -28,9 +36,23 @@ interface Style {
   input: boolean;
 }
 
+/** Sized text (OSC 66) starting at a cell; the other cells it covers in its top line are "". */
+interface Box {
+  text: string;
+  style: number;
+  /** Cells in width and lines in height. */
+  width: number;
+  height: number;
+  /** Font size relative to normal text. */
+  scale: number;
+  vertical: number;
+  horizontal: number;
+}
+
 interface Line {
   chars: string[];
   styles: number[];
+  boxes: Map<number, Box>;
   /** Style of the line break after this line. */
   end: number;
 }
@@ -118,7 +140,7 @@ export function terminalParts(value: string): TerminalPart[] {
   let style = plain();
   let current = idOf(style);
   const blank = idOf(plain());
-  const newLine = (): Line => ({ chars: [], styles: [], end: blank });
+  const newLine = (): Line => ({ chars: [], styles: [], boxes: new Map(), end: blank });
   let lines: Line[] = [newLine()];
   let row = 0;
   let col = 0;
@@ -127,21 +149,75 @@ export function terminalParts(value: string): TerminalPart[] {
     while (lines.length <= index) lines.push(newLine());
     return lines[index];
   };
-  const put = (char: string) => {
-    const target = line(row);
-    while (target.chars.length < col) {
+  // Writing into or erasing any cell of sized text removes all of it, as in kitty.
+  const removeBoxes = (target: Line, from: number, to: number) => {
+    for (const [start, box] of target.boxes) {
+      if (start >= to || start + box.width <= from) continue;
+      target.boxes.delete(start);
+      for (let i = start; i < Math.min(start + box.width, target.chars.length); i++) {
+        target.chars[i] = " ";
+        target.styles[i] = blank;
+      }
+    }
+  };
+  const fill = (target: Line, to: number) => {
+    while (target.chars.length < to) {
       target.chars.push(" ");
       target.styles.push(blank);
     }
+  };
+  const put = (char: string) => {
+    const target = line(row);
+    removeBoxes(target, col, col + 1);
+    fill(target, col);
     target.chars[col] = char;
     target.styles[col] = current;
     col += 1;
   };
   const eraseInLine = (target: Line, from: number, to: number) => {
+    removeBoxes(target, from, to);
     for (let i = from; i < Math.min(to, target.chars.length); i++) {
       target.chars[i] = " ";
       target.styles[i] = blank;
     }
+  };
+  const truncate = (target: Line, length: number) => {
+    removeBoxes(target, length, Infinity);
+    target.chars.length = Math.min(target.chars.length, length);
+    target.styles.length = target.chars.length;
+  };
+  /** kitty's text sizing protocol: `66;s=2:w=0:n=0:d=0:v=0:h=0;text`. */
+  const putSized = (metadata: string, text: string) => {
+    const options = new Map<string, number>();
+    for (const entry of metadata.split(":")) {
+      const [key, raw] = entry.split("=");
+      if (/^\d+$/.test(raw ?? "")) options.set(key, Number(raw));
+    }
+    const option = (key: string, max: number, fallback: number) => {
+      const value = options.get(key);
+      return value !== undefined && value <= max ? value : fallback;
+    };
+    const scale = Math.max(1, option("s", 7, 1));
+    const fixedWidth = option("w", 7, 0);
+    const numerator = option("n", 15, 0);
+    const denominator = option("d", 15, 0);
+    const cells = Array.from(text).filter((char) => char >= " ");
+    if (cells.length === 0) return;
+    const width = scale * (fixedWidth || cells.length);
+    const target = line(row);
+    removeBoxes(target, col, col + width);
+    fill(target, col + width);
+    for (let i = col; i < col + width; i++) {
+      target.chars[i] = "";
+      target.styles[i] = blank;
+    }
+    target.boxes.set(col, {
+      text: cells.join(""), style: current, width, height: scale,
+      scale: scale * (numerator > 0 && denominator > numerator ? numerator / denominator : 1),
+      vertical: option("v", 2, 0), horizontal: option("h", 2, 0),
+    });
+    line(row + scale - 1); // the lines the text overlays
+    col += width;
   };
 
   const chars = Array.from(value);
@@ -172,9 +248,7 @@ export function terminalParts(value: string): TerminalPart[] {
               row = 0;
               col = 0;
             } else if (mode === 0) {
-              const target = line(row);
-              target.chars.length = Math.min(target.chars.length, col);
-              target.styles.length = target.chars.length;
+              truncate(line(row), col);
               lines.length = row + 1;
             } else if (mode === 1) {
               for (let r = 0; r < row; r++) lines[r] = { ...newLine(), end: lines[r].end };
@@ -185,14 +259,9 @@ export function terminalParts(value: string): TerminalPart[] {
           case "K": {
             const target = line(row);
             const mode = params[0] || 0;
-            if (mode === 0) {
-              target.chars.length = Math.min(target.chars.length, col);
-              target.styles.length = target.chars.length;
-            } else if (mode === 1) eraseInLine(target, 0, col + 1);
-            else if (mode === 2) {
-              target.chars = [];
-              target.styles = [];
-            }
+            if (mode === 0) truncate(target, col);
+            else if (mode === 1) eraseInLine(target, 0, col + 1);
+            else if (mode === 2) truncate(target, 0);
             break;
           }
           case "H":
@@ -216,10 +285,12 @@ export function terminalParts(value: string): TerminalPart[] {
         continue;
       }
       if (kind === "]") {
-        // OSC (e.g. a window title) up to BEL or ESC \
+        // OSC up to BEL or ESC \: sized text; others (e.g. a window title) are swallowed
         let end = i + 2;
         while (end < chars.length && chars[end] !== "\u0007" && !(chars[end] === ESC && chars[end + 1] === "\\")) end++;
         if (end >= chars.length) break;
+        const sized = /^66;([^;]*);([\s\S]*)$/.exec(chars.slice(i + 2, end).join(""));
+        if (sized) putSized(sized[1], sized[2]);
         i = chars[end] === ESC ? end + 1 : end;
         continue;
       }
@@ -268,7 +339,14 @@ export function terminalParts(value: string): TerminalPart[] {
     text += char;
   };
   lines.forEach((target, index) => {
-    target.chars.forEach((char, column) => append(char, target.styles[column]));
+    target.chars.forEach((char, column) => {
+      const box = target.boxes.get(column);
+      if (box) {
+        flush();
+        partStyle = -1;
+        parts.push(describeBox(styles[box.style], box));
+      } else append(char, target.styles[column]);
+    });
     if (index < lines.length - 1) append("\n", target.end);
   });
   flush();
@@ -281,6 +359,24 @@ const PALETTE = [
   "#000000", "#cd3131", "#00bc00", "#949800", "#0451a5", "#bc05bc", "#0598bc", "#555555",
   "#666666", "#cd3131", "#14ce14", "#b5ba00", "#0451a5", "#bc05bc", "#0598bc", "#a5a5a5",
 ];
+
+const ALIGN = ["flex-start", "flex-end", "center"];
+const round = (value: number) => Math.round(value * 10000) / 10000;
+
+function describeBox(style: Style, box: Box): TerminalPart {
+  const part = describe(style, box.text);
+  // One line high in the layout (negative margin), the full height overlays the lines below.
+  part.box = [
+    "display:inline-flex", "vertical-align:top", `width:${box.width}ch`, `height:${box.height}lh`,
+    ...(box.height > 1 ? [`margin-bottom:-${box.height - 1}lh`] : []),
+    `align-items:${ALIGN[box.vertical]}`, `justify-content:${ALIGN[box.horizontal]}`,
+  ].join(";");
+  // `lh` in line-height refers to the parent: the text's lines are `scale` normal lines high.
+  part.style = [
+    part.style, `font-size:${round(box.scale)}em`, `line-height:${round(box.scale)}lh`, "flex:none", "white-space:pre",
+  ].filter(Boolean).join(";");
+  return part;
+}
 
 function describe(style: Style, text: string): TerminalPart {
   const css: string[] = [];

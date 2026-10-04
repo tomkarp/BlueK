@@ -253,8 +253,7 @@ footer{flex:0 0 108px}
 .terminal-window.split .terminal-header button{width:46px;height:40px;padding:0;font-size:20px;line-height:1}
 .terminal-reopen{display:none}
 .terminal-window.split .terminal-header{cursor:default}
-.terminal-split-divider{position:fixed;inset:0 auto 0 auto;right:calc(var(--terminal-split-width,430px) - 9px);z-index:35;width:18px;pointer-events:auto;cursor:col-resize;background:transparent;touch-action:none}
-.bluek:has(.editor-modal.window-active) .terminal-split-divider,.bluek:has(.stage-window) .terminal-split-divider{z-index:25}
+.terminal-split-divider{position:fixed;inset:0 auto 0 auto;right:calc(var(--terminal-split-width,430px) - 9px);z-index:1;width:18px;pointer-events:auto;cursor:col-resize;background:transparent;touch-action:none}
 .terminal-split-divider::after{content:"";position:absolute;top:50%;left:5px;width:8px;height:100px;transform:translateY(-50%);border-left:1px solid #777;border-right:1px solid #777;background:repeating-linear-gradient(to bottom,#777 0 1px,transparent 1px 5px)}
 .terminal-split-divider:hover::after,.terminal-split-divider:focus-visible::after{background-color:#c4c4c4;outline:2px solid #168fbd;outline-offset:1px}
 

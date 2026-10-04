@@ -473,6 +473,7 @@
     beginTerminalResize={terminal.beginTerminalResize}
     toggleTerminalMaximized={terminal.toggleTerminalMaximized}
     toggleTerminalSplit={terminal.toggleTerminalSplit}
+    beginTerminalSplitResize={terminal.beginTerminalSplitResize}
     clearTerminal={terminal.clearTerminal}
     resetRuntime={session.resetRuntime}
     sendInput={terminal.sendInput}
@@ -642,10 +643,4 @@
     bind:codepadMenu={session.codepadMenu}
     bind:history={session.history}
   />
-  {#if terminal.terminalSplit}<div
-      class="terminal-split-divider"
-      role="separator"
-      aria-label="Resize BlueK and terminal"
-      onpointerdown={terminal.beginTerminalSplitResize}
-    ></div>{/if}
 </div>

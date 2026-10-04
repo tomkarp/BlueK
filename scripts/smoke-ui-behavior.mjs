@@ -52,6 +52,34 @@ assert.deepEqual(ui.terminalParts(`${ESC}[32m>\u0001ein\u0002\n`), [
   { text: '>', input: false, style: 'color:var(--ansi-2,#00bc00)' }, { text: 'ein', input: true, style: 'color:var(--ansi-2,#00bc00)' },
   { text: '\n', input: false, style: 'color:var(--ansi-2,#00bc00)' },
 ]);
+// Larger and smaller text with kitty's text sizing protocol OSC 66 (GUI-98).
+const sizedBox = (width, height, vertical = 'flex-start', horizontal = 'flex-start') => [
+  'display:inline-flex', 'vertical-align:top', `width:${width}ch`, `height:${height}lh`,
+  ...(height > 1 ? [`margin-bottom:-${height - 1}lh`] : []), `align-items:${vertical}`, `justify-content:${horizontal}`,
+].join(';');
+const sizedText = (scale, style) => [style, `font-size:${scale}em`, `line-height:${scale}lh`, 'flex:none', 'white-space:pre'].filter(Boolean).join(';');
+assert.deepEqual(ui.terminalParts(`Karte: ${ESC}[31m${ESC}]66;s=7;\u{1F0B1}\u0007${ESC}[0m daneben${'\n'.repeat(7)}unten`), [
+  { text: 'Karte: ', input: false },
+  { text: '\u{1F0B1}', input: false, box: sizedBox(7, 7), style: sizedText(7, 'color:var(--ansi-1,#cd3131)') },
+  { text: ' daneben\n\n\n\n\n\n\nunten', input: false },
+]);
+// The text overlays the lines below; they exist even without further output. ESC \ also ends it.
+assert.deepEqual(ui.terminalParts(`${ESC}]66;s=2;Titel${ESC}\\`), [
+  { text: 'Titel', input: false, box: sizedBox(10, 2), style: sizedText(2) }, { text: '\n', input: false },
+]);
+assert.deepEqual(ui.terminalParts(`${ESC}]66;n=1:d=2:w=1;Ha\u0007|${ESC}]66;s=3:w=1:v=2:h=1;Z\u0007`), [
+  { text: 'Ha', input: false, box: sizedBox(1, 1), style: sizedText(0.5) }, { text: '|', input: false },
+  { text: 'Z', input: false, box: sizedBox(3, 3, 'center', 'flex-end'), style: sizedText(3) }, { text: '\n\n', input: false },
+]);
+assert.deepEqual(ui.terminalParts(`${ESC}]66;s=2:n=1:d=2;ab\u0007`)[0].style, sizedText(1));
+// Invalid values fall back to the defaults; other OSC sequences stay swallowed.
+assert.deepEqual(ui.terminalParts(`${ESC}]66;s=9:v=7:x=1;A\u0007`), [{ text: 'A', input: false, box: sizedBox(1, 1), style: sizedText(1) }]);
+assert.deepEqual(ui.terminalParts(`${ESC}]66;s=2;\u0007ok${ESC}]0;Titel\u0007`), [{ text: 'ok', input: false }]);
+// Writing into or erasing a cell of sized text removes all of it, as in kitty.
+assert.equal(plainText(`${ESC}]66;s=2;AB\u0007\rX`), 'X   \n');
+assert.equal(plainText(`ab${ESC}]66;s=2;CD\u0007${ESC}[3D${ESC}[K`), 'ab \n');
+assert.equal(plainText(`ab${ESC}]66;s=2;CD\u0007${ESC}[2K`), '\n');
+assert.equal(plainText(`${ESC}]66;s=2;AB\u0007${ESC}[H${ESC}[2Jneu`), 'neu');
 assert.equal(ui.codepadResult({ kind: 'unit' }), undefined);
 assert.equal(ui.codepadResult({ kind: 'error' }), undefined);
 assert.equal(ui.codepadResult({ kind: 'scalar', type: { displayName: 'String' }, display: 'hello' }), '"hello" : String');
