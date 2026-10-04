@@ -127,9 +127,13 @@ class SemanticAnalyzerSymbolTable(
             }
             findClass(originalName, isThisScopeOnly = true)?.let { (clazz, _) ->
                 val secondary = clazz.secondaryConstructors
-                val parameterSets = if (secondary.isEmpty()) listOf(clazz.primaryConstructor?.parameters?.map { it.parameter }.orEmpty())
-                    else secondary.map { it.valueParameters }
-                parameterSets.forEachIndexed { index, parameters ->
+                // The primary constructor (index null) and the secondary ones (RT-83); a class
+                // without any has the implicit empty constructor.
+                val primary = clazz.primaryConstructor?.parameters?.map { it.parameter }
+                    ?: if (secondary.isEmpty()) emptyList() else null
+                val parameterSets = listOfNotNull(primary?.let { null to it }) +
+                    secondary.mapIndexed { index, constructor -> index to constructor.valueParameters }
+                parameterSets.forEach { (index, parameters) ->
                     thisScopeCandidates += FindCallableResult(
                         transformedName = clazz.fullQualifiedName,
                         originalName = clazz.name,
@@ -144,7 +148,7 @@ class SemanticAnalyzerSymbolTable(
                         signature = clazz.fullQualifiedName + "(" + parameters.joinToString(",") { it.type.descriptiveName() } + ")",
                         definition = clazz,
                         scope = this,
-                        secondaryConstructorIndex = if (secondary.isEmpty()) null else index,
+                        secondaryConstructorIndex = index,
                     )
                 }
             }
@@ -438,6 +442,10 @@ class SemanticAnalyzerSymbolTable(
                         isOtherMoreSpecific // return true if otherCallable is more specific than callable
                     }
                 }
+            }
+            .let { callables -> // like Kotlin, a candidate that needs no default values wins (RT-83)
+                val withoutDefaults = callables.filter { !it.isVararg && it.arguments.size == arguments.size }
+                if (withoutDefaults.isNotEmpty() && withoutDefaults.size < callables.size) withoutDefaults else callables
             }
             .distinctBy {
                 if (it.type == CallableType.ExtensionFunction) {

@@ -143,7 +143,10 @@ und Zeile abgewiesen. `package`-Deklarationen gibt es nicht.
 **Sprache.** BlueK unterstützt die Kotlite-Teilmenge von Kotlin plus die
 Erweiterungen des eigenen Forks (siehe [docs/kotlite.md](docs/kotlite.md)).
 Es funktionieren unter anderem Klassen mit Primärkonstruktor und `init`,
-sekundäre Konstruktoren ohne Primärkonstruktor und ohne Delegation,
+sekundäre Konstruktoren, auch neben einem Primärkonstruktor mit Delegation
+`constructor(name: String) : this(name, 0)` (RT-83), `sealed class` und
+`sealed interface` mit `when` ohne `else`, wenn alle Unterklassen abgedeckt
+sind (RT-86),
 Klassen, die einander in beliebiger Datei- und Deklarationsreihenfolge und
 auch gegenseitig verwenden (`Hund` mit `var herrchen: Mensch?`, `Mensch` mit
 `val hunde = mutableListOf<Hund>()`, RT-40), Top-Level-Funktionen und
@@ -170,13 +173,14 @@ List/Map/Set und Ranges.
 
 Nicht unterstützt sind derzeit:
 
-- `sealed`, verschachtelte und innere Klassen und Objekte, Objekt-Ausdrücke
+- verschachtelte und innere Klassen und Objekte, Objekt-Ausdrücke
   (`object : Typ { … }`), benannte Companion-Objekte
   (`companion object Fabrik`), `fun interface`, `typealias`
-- sekundäre Konstruktoren zusammen mit einem Primärkonstruktor oder mit
-  `this`-/`super`-Delegation (mit eigener Fehlermeldung); `lateinit` nur bei
-  Properties von Klassen (RT-81). `protected` und `internal` gehen, `internal`
-  wirkt wie `public`, weil ein BlueK-Projekt ein Modul ist (RT-80)
+- Delegation an die Oberklasse mit `constructor() : super(…)` (mit eigener
+  Fehlermeldung; `: this(…)` geht, RT-83). `lateinit var` geht für
+  Properties von Klassen (RT-81), lokale und Top-Level-Variablen (RT-88);
+  `protected` und `internal` gehen, `internal` wirkt wie `public`, weil ein
+  BlueK-Projekt ein Modul ist (RT-80)
 - Braucht eine Klasse ihr Companion schon in Default-Argumenten des
   Konstruktors (`class Konto(val stand: Int = START)`), sieht das Companion
   von der Klasse nur die Konstruktor-Properties; in Initialisierern auch ihre
@@ -184,7 +188,11 @@ Nicht unterstützt sind derzeit:
 - Extension-Properties mit Getter; Properties mit Getter oder Anfangswert in
   Interfaces (Interfaces dürfen Methoden mit Rumpf und abstrakte Properties
   haben, abstrakte Klassen abstrakte Properties, RT-79)
-- Funktionsreferenzen (`::f`), Labels an Schleifen (`break@outer`)
+- Funktionsreferenzen nur mit einem Namen vor `::` (`::f`, `String::length`,
+  `liste::add`, `::Karte`, RT-89), nicht mit einem Ausdruck
+  (`Rechner(10)::mal`); `::println` ohne erwarteten Funktionstyp ist
+  mehrdeutig (Kotlin: ebenso). Labels an Schleifen gehen (`aussen@ for`,
+  `break@aussen`, `continue@aussen`, RT-85)
 - Properties mit Funktionstyp lassen sich wie Methoden aufrufen (`objekt.f()`,
   `f()` in der Klasse, RT-75); `.invoke()` darauf nur über einen Namen
   (`k.f.invoke()`, nicht `K(4).f.invoke()`)
@@ -199,14 +207,15 @@ Nicht unterstützt sind derzeit:
   (Kotlin bildet Schnittmengen-Typen) und Zuweisungen in einem späteren
   Schleifendurchlauf werden nicht berücksichtigt; dort ist ein explizites `as`
   nötig
-- Arrays (`arrayOf`, `IntArray`), `Short`, Bit-Operationen; Zahlliterale gehen
-  wie in Kotlin mit Exponent (`1.5e3`), hexadezimal (`0xFF`), binär
-  (`0b1010`) und mit `_` (`1_000_000`, RT-74), nur `.5` ohne führende Ziffer
-  nicht
-- Bei Enums: Vergleiche mit `<` oder `compareTo` (Abhilfe:
-  `a.ordinal < b.ordinal`), Einträge mit eigenem Rumpf (`HERZ { … }`) und ein
+- Arrays (`arrayOf`, `IntArray`) und `Short`. Zahlliterale gehen wie in
+  Kotlin mit Exponent (`1.5e3`), hexadezimal (`0xFF`), binär (`0b1010`), mit
+  `_` (`1_000_000`, RT-74) und ohne führende Ziffer (`.5`); Bit-Operationen
+  `and`, `or`, `xor`, `shl`, `shr`, `ushr`, `inv()` für `Int` und `Long`
+  (RT-87)
+- Bei Enums: Einträge mit eigenem Rumpf (`HERZ { … }`) und ein
   `companion object` in der Enum-Klasse; `values()` liefert eine Liste, weil
-  BlueK keine Arrays hat
+  BlueK keine Arrays hat. Vergleiche nach der Reihenfolge (`<`, `compareTo`,
+  `sorted()`, `PIK..KARO`) und Interfaces gehen wie in Kotlin (RT-84)
 - Über einen impliziten Empfänger (`liste.apply { add(1) }`,
   `with(text) { uppercase() }`, `gruss()` für `fun Hund.gruss()` in einer
   `Hund`-Methode) gewinnt eine gleichnamige eigene Top-Level-Funktion, die zu
@@ -260,8 +269,9 @@ nennt BlueK eine verständliche Meldung statt Kotlites generischem Fehler.
   `at main(Main.kt:3)`); Bibliotheksfunktionen erscheinen als
   `at toInt(Kotlin library)`, im Codepad deklarierte Funktionen als
   `at g(Codepad)`, die Codepad-Zeile selbst gar nicht (RT-71). Ohne Paketnamen
-  und Spalte; eine nicht gefangene Ausnahme meldet BlueK nur mit Klasse und
-  Meldung.
+  und Spalte. Eine nicht gefangene Ausnahme zeigen Methodenaufrufe und Codepad
+  mit Klasse und Meldung; `main()` und `act()` schreiben sie mit Stacktrace
+  ins Terminal (RT-82).
 - `substring` prüft seine Grenzen wie Kotlin und wirft
   `IndexOutOfBoundsException` (RT-39).
 - Rekursion ist auf 1000 verschachtelte Aufrufe begrenzt; danach wirft BlueK
@@ -274,8 +284,12 @@ nennt BlueK eine verständliche Meldung statt Kotlites generischem Fehler.
 
 **Laufzeit.**
 
-- Nach einem Laufzeitfehler gibt es kein Rollback; Reset oder Compile ist
-  nötig. Analysefehler lassen die Sitzung dagegen unverändert benutzbar.
+- Eine nicht gefangene Exception beendet nur den Aufruf (Methode, Codepad,
+  `main()`, `act()`); Objekte und Variablen bleiben benutzbar, wie in BlueJ
+  (RT-82). Es gibt kein Rollback: Änderungen vor der Exception bleiben.
+  `main()` und `act()` schreiben die Exception wie Kotlin rot mit Stacktrace
+  ins Terminal; Run hält an. Nur Fehler des Interpreters selbst (etwa
+  `Thread.sleep` in einem `toString()`) erfordern Reset oder Compile.
 - Jede Codepad-/Objektbank-Aktion analysiert den gesamten bisherigen
   Sitzungsquelltext erneut. Sehr lange Sitzungen werden dadurch langsamer.
 - Nur Schleifen besitzen kooperative Checkpoints; sie geben nach etwa 10 ms

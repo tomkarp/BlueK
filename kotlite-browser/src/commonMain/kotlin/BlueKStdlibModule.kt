@@ -15,6 +15,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.IntValue
 import com.sunnychung.lib.multiplatform.kotlite.model.IteratorValue
 import com.sunnychung.lib.multiplatform.kotlite.model.LambdaValue
 import com.sunnychung.lib.multiplatform.kotlite.model.LibraryModule
+import com.sunnychung.lib.multiplatform.kotlite.model.LongValue
 import com.sunnychung.lib.multiplatform.kotlite.model.ListValue
 import com.sunnychung.lib.multiplatform.kotlite.model.PairValue
 import com.sunnychung.lib.multiplatform.kotlite.model.NullValue
@@ -152,6 +153,31 @@ object BlueKStdlibModule : LibraryModule("bluek-stdlib") {
         },
         function("Int", "coerceAtMost", "Int", listOf(parameter("maximumValue", "Int"))) { interpreter, receiver, args, _ ->
             IntValue(ints(receiver!!).coerceAtMost(ints(args[0])), interpreter.symbolTable())
+        },
+        // Bit operations like Kotlin's infix functions on Int and Long (RT-87)
+        *listOf<Pair<String, (Int, Int) -> Int>>(
+            "and" to Int::and, "or" to Int::or, "xor" to Int::xor,
+            "shl" to Int::shl, "shr" to Int::shr, "ushr" to Int::ushr,
+        ).map { (name, operation) ->
+            function("Int", name, "Int", listOf(parameter(if (name.startsWith("sh") || name == "ushr") "bitCount" else "other", "Int")), modifiers = setOf(FunctionModifier.infix)) { interpreter, receiver, args, _ ->
+                IntValue(operation(ints(receiver!!), ints(args[0])), interpreter.symbolTable())
+            }
+        }.toTypedArray(),
+        *listOf<Pair<String, (Long, Long) -> Long>>("and" to Long::and, "or" to Long::or, "xor" to Long::xor).map { (name, operation) ->
+            function("Long", name, "Long", listOf(parameter("other", "Long")), modifiers = setOf(FunctionModifier.infix)) { interpreter, receiver, args, _ ->
+                LongValue(operation((receiver as LongValue).value, (args[0] as LongValue).value), interpreter.symbolTable())
+            }
+        }.toTypedArray(),
+        *listOf<Pair<String, (Long, Int) -> Long>>("shl" to Long::shl, "shr" to Long::shr, "ushr" to Long::ushr).map { (name, operation) ->
+            function("Long", name, "Long", listOf(parameter("bitCount", "Int")), modifiers = setOf(FunctionModifier.infix)) { interpreter, receiver, args, _ ->
+                LongValue(operation((receiver as LongValue).value, ints(args[0])), interpreter.symbolTable())
+            }
+        }.toTypedArray(),
+        function("Int", "inv", "Int", emptyList()) { interpreter, receiver, _, _ ->
+            IntValue(ints(receiver!!).inv(), interpreter.symbolTable())
+        },
+        function("Long", "inv", "Long", emptyList()) { interpreter, receiver, _, _ ->
+            LongValue((receiver as LongValue).value.inv(), interpreter.symbolTable())
         },
         function("Double", "coerceIn", "Double", listOf(parameter("minimumValue", "Double"), parameter("maximumValue", "Double"))) { interpreter, receiver, args, _ ->
             val minimum = doubles(args[0])

@@ -61,6 +61,12 @@ const supported = [
   ['5.coerceAtLeast(7)', '7'],
   ['5.coerceAtMost(3)', '3'],
   ['2.5.coerceIn(0.0, 1.0)', '1.0'],
+  // Bit operations (RT-87); infix calls bind like Kotlin: after `+`, before `==`.
+  ['5 and 3', '1'], ['5 or 3', '7'], ['5 xor 1', '4'], ['1 shl 3', '8'], ['-16 shr 2', '-4'],
+  ['-16 ushr 28', '15'], ['5.inv()', '-6'], ['0xFF and 0x0F', '15'], ['5.and(3)', '1'],
+  ['5L and 3L', '1'], ['1L shl 40', '1099511627776'], ['(1L shl 40).inv()', '-1099511627777'],
+  ['1 + 2 shl 1', '6'], ['6 and 3 or 8', '10'], ['val bits = 5; bits and 1 == 1', 'true'],
+  ['.5 + 1', '1.5'], ['.25e2', '25.0'], ['(1..3).toList()', '[1, 2, 3]'],
   ['Int.MAX_VALUE', '2147483647'],
   ['Int.MIN_VALUE', '-2147483648'],
   ['97.toChar()', 'a'],

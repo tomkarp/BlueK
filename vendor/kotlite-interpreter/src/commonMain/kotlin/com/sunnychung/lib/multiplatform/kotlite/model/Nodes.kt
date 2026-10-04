@@ -234,7 +234,7 @@ enum class FunctionValueParameterModifier {
 }
 
 enum class ClassModifier {
-    open, enum, abstract, data
+    open, enum, abstract, data, sealed
 }
 
 enum class PropertyModifier {
@@ -467,6 +467,9 @@ data class IfNode(override val position: SourcePosition, val condition: ASTNode,
 }
 
 data class WhileNode(override val position: SourcePosition, val condition: ASTNode, val body: BlockNode?) : ASTNode {
+    /** `outer@ while (...)` (RT-85) */
+    var label: String? = null
+
     override fun toMermaid(): String {
         val self = "${generateId()}[\"While Node\"]"
         return "$self-- condition -->${condition.toMermaid()}\n" +
@@ -475,6 +478,9 @@ data class WhileNode(override val position: SourcePosition, val condition: ASTNo
 }
 
 data class DoWhileNode(override val position: SourcePosition, val condition: ASTNode, val body: BlockNode?) : ASTNode {
+    /** `outer@ do { ... } while (...)` (RT-85) */
+    var label: String? = null
+
     override fun toMermaid(): String {
         val self = "${generateId()}[\"Do-While Node\"]"
         return "$self-- condition -->${condition.toMermaid()}\n" +
@@ -508,6 +514,8 @@ class ClassSecondaryConstructorNode(
     position: SourcePosition,
     parameters: List<FunctionValueParameterNode>,
     body: BlockNode,
+    /** Arguments of the delegation `: this(...)`, or null without one (RT-83). */
+    val delegationArguments: List<FunctionCallArgumentNode>? = null,
 ) : FunctionDeclarationNode(
     position = position,
     name = "<constructor>",
@@ -515,7 +523,13 @@ class ClassSecondaryConstructorNode(
     valueParameters = parameters,
     body = body,
     declaredModifiers = setOf(FunctionModifier.private),
-)
+) {
+    /** `ClassName<T>(arguments)` for the delegation, built by the parser where the class name is known. */
+    var delegationCall: FunctionCallNode? = null
+
+    /** All secondary constructors of the class in order; the index of each is its constructor index. */
+    var siblingConstructors: List<ClassSecondaryConstructorNode> = emptyList()
+}
 
 data class ClassPrimaryConstructorNode(override val position: SourcePosition, val parameters: List<ClassParameterNode>) : ASTNode {
     override fun toMermaid(): String {
@@ -643,7 +657,12 @@ data class LambdaLiteralNode(
     @ModifyByAnalyzer var parameterTypesUpperBound: List<TypeNode>? = null,
     @ModifyByAnalyzer var returnTypeUpperBound: TypeNode? = null,
     @ModifyByAnalyzer override var receiverType: TypeNode? = null,
+    /** `::f` / `Typ::f` / `objekt::f` (RT-89): the lambda calls this; its body is built by the analyzer. */
+    val referenceReceiver: String? = null,
+    val referenceName: String? = null,
 ) : ASTNode, CallableNode {
+    /** The parameters of a function reference, from the expected function type (RT-89). */
+    @ModifyByAnalyzer var referenceParameters: List<FunctionValueParameterNode>? = null
     @ModifyByAnalyzer var permitsNonLocalReturn: Boolean = false
     @ModifyByAnalyzer var implicitLabel: String? = null
     @ModifyByAnalyzer var valueParameterIt: FunctionValueParameterNode? = null
@@ -653,7 +672,7 @@ data class LambdaLiteralNode(
 
     override val typeParameters: List<TypeParameterNode> = emptyList()
     override val valueParameters: List<FunctionValueParameterNode>
-        get() = if (declaredValueParameters.isEmpty() && parameterTypesUpperBound?.size == 1) {
+        get() = referenceParameters ?: if (declaredValueParameters.isEmpty() && parameterTypesUpperBound?.size == 1) {
             if (valueParameterIt == null) {
                 valueParameterIt = FunctionValueParameterNode(
                     position = position,
@@ -951,6 +970,9 @@ data class ForNode(
     val subject: ASTNode,
     val body: BlockNode,
 ) : ASTNode {
+    /** `outer@ for (...)` (RT-85) */
+    var label: String? = null
+
     // Interpreter only: the resolved iterator calls for the last runtime types seen here.
     internal var iteratorCallFor: DataType? = null
     internal var iteratorCall: FunctionCallNode? = null

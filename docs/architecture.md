@@ -256,15 +256,21 @@ verworfen; die UI schließt dazugehörige Dialoge und entwertet Objektverweise.
 | `ready` | Ein neuer Befehl ist möglich. |
 | `running` | Ein Befehl läuft; konkurrierende Benutzerbefehle werden abgewiesen. |
 | `waitingForInput` | Die laufende Ausführung ist an einer Eingabe suspendiert und wartet auf Zeile oder EOF. |
-| `faulted` | Laufzeit- oder Transportfehler: Reset oder Compile erforderlich. |
+| `faulted` | Interpreter- oder Transportfehler: Reset oder Compile erforderlich. |
 
 Analysefehler führen zu keiner Ausführung und lassen eine gültige Sitzung
 benutzbar; beim Compile bleibt die Laufzeit `uncompiled`, und
-Compile-on-demand darf das nicht umgehen. Laufzeitfehler können bereits
-Seiteneffekte verursacht haben und sperren die Sitzung (`faulted`). Das ist
-**kein Rollback**: Beobachtbare Backing-Felder lassen sich noch passiv
-inspizieren, der fehlgeschlagene Aufruf wird weder wiederholt noch anhand
-seiner Ausgabe repariert.
+Compile-on-demand darf das nicht umgehen. Eine Exception, die das Programm mit
+`catch (e: Throwable)` fangen könnte, beendet nur den Befehl (`fatal: false`,
+Phase `ready`, RT-82): Aufrufe räumen den Interpreter über `finally` auf, wie
+bei `try/catch` im Programm. Das ist **kein Rollback**: Seiteneffekte vor der
+Exception bleiben, der fehlgeschlagene Aufruf wird weder wiederholt noch
+anhand seiner Ausgabe repariert. `main()` (`startMain`) und BluePlays `main`
+und `act()` schreiben die Exception zusätzlich wie Kotlin ins Terminal
+(`Exception in thread "main" …` mit Stacktrace, rot); Run hält an. Nur
+Interpreterfehler (`InterpreterStateException`, Kontrollfluss außerhalb seines
+Ziels) sperren die Sitzung (`faulted`); beobachtbare Backing-Felder lassen sich
+dann noch passiv inspizieren.
 
 ### Protokoll
 
@@ -535,8 +541,8 @@ fragt `InspectorModel` alle Properties offener Inspektoren einzeln über
 eines `try/catch (Throwable)`; gewöhnliche Exceptions werden als Fehlertext
 an der betreffenden Property veröffentlicht. Weitere Properties werden
 weiter ausgewertet, die Laufzeit bleibt benutzbar. `get` im Programmkontext
-bleibt unverändert fatal bei unbehandelten Exceptions. Nicht fangbare
-Interpreterfehler bleiben auch bei `inspectGet` fatal.
+endet bei einer unbehandelten Exception mit dem Fehler, wie jeder Befehl
+(RT-82). Nicht fangbare Interpreterfehler bleiben auch bei `inspectGet` fatal.
 
 Alle Property-Ergebnisse und Fehler gehören zum Runtime-Snapshot. Die
 Oberfläche hält nur Fensterdaten und ausstehende Anfragen, keinen zweiten

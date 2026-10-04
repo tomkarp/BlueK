@@ -93,6 +93,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.ReplayableNativeCall
 import com.sunnychung.lib.multiplatform.kotlite.model.ReturnNode
 import com.sunnychung.lib.multiplatform.kotlite.model.RuntimeValue
 import com.sunnychung.lib.multiplatform.kotlite.model.RuntimeValueAccessor
+import com.sunnychung.lib.multiplatform.kotlite.model.PropertyModifier
 import com.sunnychung.lib.multiplatform.kotlite.model.ScopeType
 import com.sunnychung.lib.multiplatform.kotlite.model.ScriptNode
 import com.sunnychung.lib.multiplatform.kotlite.model.SourcePosition
@@ -198,6 +199,9 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         // Resumed callers continue on the fresh host stack.
         if (callDepth < hostStackBase) hostStackBase = callDepth
     }
+
+    /** Local and top-level `lateinit var`s by their transformed names (RT-88). */
+    private val lateinitRefNames = mutableSetOf<String>()
 
     private fun throwStackOverflow(position: SourcePosition): Nothing {
         val fullStacktrace = callStack.getStacktrace(position)
@@ -482,6 +486,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
     suspend fun PropertyDeclarationNode.eval() {
         val symbolTable = callStack.currentSymbolTable()
         val name = transformedRefName!!
+        if (PropertyModifier.lateinit in modifiers) lateinitRefNames += name
         if (initialValue != null) {
             var value = initialValue.eval()
             symbolTable.declareProperty(position, name, type, isMutable)
@@ -634,7 +639,15 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 emptyList(),
             )
         }
-        return accessTopLevelProperty(this) { callStack.currentSymbolTable().read(it) }
+        return try {
+            accessTopLevelProperty(this) { callStack.currentSymbolTable().read(it) }
+        } catch (e: UninitializedPropertyAccessException) {
+            // Kotlin's message for a local or top-level `lateinit var` read too early (RT-88)
+            if ((transformedRefName ?: variableName) in lateinitRefNames) {
+                throw UninitializedPropertyAccessException("lateinit property $variableName has not been initialized")
+            }
+            throw e
+        }
     }
 
     /**
@@ -915,7 +928,10 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             callArguments
         }
 
-        return evalFunctionCall(callArguments, callNode.typeArguments.toTypedArray(), callNode.position, functionNode, extraScopeParameters, extraTypeResolutions, extraSymbols, replaceArguments, subject, extraScopePropertyHolders)
+        // `replaceArguments` is indexed by argument here; the mapped `callArguments` already contain
+        // them, by parameter. Passing them on would put a trailing lambda on the wrong parameter
+        // (`joinToString(",") { … }`, RT-90). A vararg list keeps the argument indexes.
+        return evalFunctionCall(callArguments, callNode.typeArguments.toTypedArray(), callNode.position, functionNode, extraScopeParameters, extraTypeResolutions, extraSymbols, if (isVararg) replaceArguments else emptyMap(), subject, extraScopePropertyHolders)
     }
 
     /**
@@ -1240,8 +1256,28 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                     val index = argument.name?.let { name -> secondary.valueParameters.indexOfFirst { it.name == name } } ?: argument.index
                     values[index] = replaceArguments[index] ?: argument.value.eval() as RuntimeValue
                 }
-                val instance = clazz.construct(this@Interpreter, emptyArray(),
-                    typeArguments.map { symbolTable().assertToDataType(it) }.toTypedArray(), position)
+                val delegation = secondary.delegationCall
+                val instance = if (delegation != null) {
+                    // Like Kotlin: `: this(...)` creates the object first, with the parameters in scope;
+                    // the body of this constructor runs afterwards (RT-83).
+                    val typeArgumentByName = clazz.typeParameters.mapIndexed { index, tp -> tp.name to typeArguments[index] }.toMap()
+                    callStack.push(functionFullQualifiedName = null, scopeType = ScopeType.FunctionParameters, callPosition = position)
+                    try {
+                        val symbolTable = callStack.currentSymbolTable()
+                        secondary.valueParameters.forEachIndexed { index, parameter ->
+                            val value = values[index] ?: (evaluateNode(parameter.defaultValue!!) as RuntimeValue)
+                            values[index] = value
+                            symbolTable.declareProperty(parameter.position, parameter.transformedRefName!!, parameter.type.resolveGenericParameterTypeArguments(typeArgumentByName), false)
+                            symbolTable.assign(parameter.transformedRefName!!, value)
+                        }
+                        delegation.evalCreateClassInstance(clazz, typeArguments)
+                    } finally {
+                        callStack.pop(ScopeType.FunctionParameters)
+                    }
+                } else {
+                    clazz.construct(this@Interpreter, emptyArray(),
+                        typeArguments.map { symbolTable().assertToDataType(it) }.toTypedArray(), position)
+                }
                 evalClassMemberAnyFunctionCall(position, instance, secondary, values, typeArguments.toTypedArray())
                 return instance
             }
@@ -1419,10 +1455,11 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
     suspend fun FunctionCallNode.evalClassMemberAnyFunctionCall(subject: RuntimeValue, function: FunctionDeclarationNode, replaceArguments: Map<Int, RuntimeValue> = emptyMap(), extraScopePropertyHolders: Map<String, RuntimeValueAccessor> = emptyMap()): RuntimeValue {
         // Like Kotlin, evaluate arguments in the caller's scope, before `this`
         // becomes the subject: in `karten.add(neueKarte())` the implicit receiver
-        // of neueKarte() is the caller, not the list. Named, vararg and lambda
-        // arguments keep the original path (different index mapping / capture).
+        // of neueKarte() is the caller, not the list. Lambdas too, so that their
+        // `this` is the caller's (`liste.map { this.f(it) }`, RT-90). Named and
+        // vararg arguments keep the original path (different index mapping).
         val isVararg = function.valueParameters.firstOrNull()?.modifiers?.contains(FunctionValueParameterModifier.vararg) == true
-        val replaceArguments = if (replaceArguments.isEmpty() && arguments.isNotEmpty() && !isVararg && arguments.none { it.name != null || it.value is LambdaLiteralNode }) {
+        val replaceArguments = if (replaceArguments.isEmpty() && arguments.isNotEmpty() && !isVararg && arguments.none { it.name != null }) {
             val values = arrayOfNulls<RuntimeValue>(arguments.size)
             for (index in arguments.indices) values[index] = arguments[index].value.eval() as RuntimeValue
             ArgumentValues(values)
@@ -1539,12 +1576,15 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
     }
 
     suspend fun BreakNode.eval() {
-        throw NormalBreakException()
+        throw NormalBreakException(returnToLabel)
     }
 
     suspend fun ContinueNode.eval() {
-        throw NormalContinueException()
+        throw NormalContinueException(returnToLabel)
     }
+
+    /** Whether a `break`/`continue` with [jumpLabel] belongs to the loop labeled [loopLabel] (RT-85). */
+    private fun isOwnJump(jumpLabel: String, loopLabel: String?) = jumpLabel.isEmpty() || jumpLabel == loopLabel
 
     suspend fun IfNode.eval(): RuntimeValue {
         val conditionalValue = condition.eval() as BooleanValue
@@ -1567,9 +1607,13 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 checkpoint()
                 try {
                     body?.eval()
-                } catch (_: NormalContinueException) {}
+                } catch (e: NormalContinueException) {
+                    if (!isOwnJump(e.label, label)) throw e
+                }
             }
-        } catch (_: NormalBreakException) {}
+        } catch (e: NormalBreakException) {
+            if (!isOwnJump(e.label, label)) throw e
+        }
     }
 
     suspend fun DoWhileNode.eval() {
@@ -1578,9 +1622,13 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 checkpoint()
                 try {
                     body?.eval()
-                } catch (_: NormalContinueException) {}
+                } catch (e: NormalContinueException) {
+                    if (!isOwnJump(e.label, label)) throw e
+                }
             } while ((condition.eval() as BooleanValue).value)
-        } catch (_: NormalBreakException) {}
+        } catch (e: NormalBreakException) {
+            if (!isOwnJump(e.label, label)) throw e
+        }
     }
 
     suspend fun ClassDeclarationNode.eval() {
@@ -1892,6 +1940,12 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             if (it.startsWith(OBJECT_REF_PREFIX)) return@forEach
             runtimeRefs.putPropertyHolder(it, false /* TODO review */, currentSymbolTable.getPropertyHolder(it))
         }
+        // Like Kotlin, `this` in a lambda without receiver is the `this` where it is written, also
+        // for a nested lambda that uses it (`map { x -> listOf(1).map { this.f(x) } }`, RT-90).
+        if (receiverType == null && "this" !in refs.properties) {
+            runCatching { currentSymbolTable.getPropertyHolder("this") }.getOrNull()
+                ?.let { runtimeRefs.putPropertyHolder("this", false, it) }
+        }
         refs.functions.forEach {
             runtimeRefs.declareFunction(position, it, currentSymbolTable.findFunction(it)!!.first)
         }
@@ -2029,6 +2083,9 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
      * `catch (e: NumberFormatException)` and `catch (e: Exception)` match; anything else is a plain `Throwable`.
      */
     private fun Throwable.hostStacktrace(): List<String> = hostExceptionTrace?.takeIf { it.first === this }?.second ?: emptyList()
+
+    /** Stack trace of an exception that left the program, as `printStackTrace()` shows it; empty if unknown. */
+    fun stacktraceOf(e: Throwable): List<String> = (e as? EvaluateRuntimeException)?.error?.stacktrace ?: e.hostStacktrace()
 
     fun Throwable.toValue(): ThrowableValue {
         val cause = cause?.toValue()
@@ -2203,13 +2260,17 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
 
                     try {
                         body.eval()
-                    } catch (_: NormalContinueException) {}
+                    } catch (e: NormalContinueException) {
+                        if (!isOwnJump(e.label, label)) throw e
+                    }
 
                     variables.forEach {
                         symbolTable().undeclareProperty(it.transformedRefName!!)
                     }
                 }
-            } catch (_: NormalBreakException) {}
+            } catch (e: NormalBreakException) {
+                if (!isOwnJump(e.label, label)) throw e
+            }
         } finally {
             callStack.pop(ScopeType.For)
         }

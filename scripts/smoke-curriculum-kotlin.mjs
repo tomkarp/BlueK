@@ -1182,4 +1182,170 @@ fails((await project({ 'Anzeige.kt': 'class Anzeige {\n    fun zeige(text: Strin
   for (const [source, pattern] of rejected) fails((await project({ 'K.kt': source })).result, `RT-81 ${source}`, pattern);
 }
 
+// Secondary constructors with `: this(...)` (RT-83): were rejected alongside a primary
+// constructor. The delegation runs first (property initializers and init blocks of the
+// primary constructor), then the body; Kotlin's rules for missing delegation, cycles and
+// conflicting overloads apply. A candidate without default values wins, also for functions.
+{
+  const p = await project({
+    'Karte.kt': 'class Karte(val farbe: String, val rang: String) {\n    var log = ""\n    init { log += "init " }\n    constructor(farbe: String) : this(farbe, "A") { log += "sekundär" }\n    constructor() : this("herz")\n}',
+    'Punkt.kt': 'class Punkt(val x: Int, val y: Int) {\n    constructor(x: Int, abstand: Int = 2, name: String = "p") : this(x + abstand, name.length)\n}',
+    'Kette.kt': 'class Kette {\n    var s = ""\n    constructor(a: Int) { s += "a$a" }\n    constructor() : this(1) { s += "b" }\n}',
+    'Box.kt': 'class Box<T>(val v: T) {\n    constructor(a: T, b: T) : this(a)\n}',
+    'Paar.kt': 'data class Paar(val x: Int, val y: Int) {\n    constructor(x: Int) : this(x, x)\n}',
+    'Tier.kt': 'open class Tier(val name: String)',
+    'Hund.kt': 'class Hund(name: String, val alter: Int) : Tier(name) {\n    constructor(name: String) : this(name, 0)\n}',
+    'Form.kt': 'abstract class Form(val n: Int) {\n    constructor() : this(7)\n}',
+    'Quadrat.kt': 'class Quadrat : Form()',
+    'Util.kt': 'fun f(a: Int) = "eins"\nfun f(a: Int, b: Int = 2) = "zwei"',
+  });
+  ok(p.result, 'RT-83 project');
+  const cases = [
+    ['Karte("pik").rang', 'A'], ['Karte("pik").log', 'init sekundär'], ['Karte().farbe', 'herz'],
+    ['Karte().log', 'init sekundär'], ['Karte("kreuz", "7").log', 'init '],
+    ['Punkt(1).x', '3'], ['Punkt(1, name = "abc").y', '3'], ['Punkt(1, 2).y', '2'],
+    ['Kette().s', 'a1b'], ['Kette(5).s', 'a5'], ['Box(1, 2).v', '1'], ['Paar(3)', 'Paar(x=3, y=3)'],
+    ['Hund("Bello").name + Hund("Bello").alter', 'Bello0'], ['Quadrat().n', '7'], ['f(1)', 'eins'], ['f(1, 3)', 'zwei'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-83 ${source}`).display, expected, `RT-83 ${source}`);
+  const karte = JSON.parse(p.session.manifest()).classes.find(item => item.name === 'Karte');
+  assert.deepEqual(karte.constructors.map(c => c.parameters.map(parameter => parameter.name).join(',')), ['farbe,rang', 'farbe', '']);
+  fails((await project({ 'Z.kt': 'class Z(val n: Int) {\n    constructor(s: String) : this(s.toInt())\n}' })).evaluate('Z("x")'), 'RT-83 exception in delegation', /^NumberFormatException/);
+  const rejected = [
+    ['class K(val x: Int) {\n    constructor() { }\n}', /Primary constructor call expected/],
+    ['class K {\n    constructor(a: Int) : this()\n    constructor() : this(1)\n}', /There's a cycle in the delegation calls chain/],
+    ['class K(val x: Int) {\n    constructor(s: String) : this(s)\n}', /There's a cycle in the delegation calls chain/],
+    ['class K(val a: Int) {\n    constructor(b: Int) : this(b)\n}', /Conflicting overloads: constructor K\(Int\)/],
+    ['open class B\nclass K : B {\n    constructor() : super()\n}', /`super\(\.\.\.\)` is not supported/],
+  ];
+  for (const [source, pattern] of rejected) fails((await project({ 'K.kt': source })).result, `RT-83 ${source}`, pattern);
+}
+
+// Enum entries compare by their order like Kotlin's `Enum` (RT-84): `<`, `compareTo`,
+// `sorted()`, `maxOrNull()` and ranges; enum classes may implement interfaces, not extend classes.
+{
+  const p = await project({
+    'Rang.kt': 'enum class Rang(val wert: Int) : Bewertet {\n    ZWEI(2), DREI(3), BUBE(10), ASS(11);\n    override fun punkte() = wert\n    fun hoeher(other: Rang) = this > other\n}',
+    'Bewertet.kt': 'interface Bewertet {\n    fun punkte(): Int\n}',
+  });
+  ok(p.result, 'RT-84 project');
+  const cases = [
+    ['Rang.ZWEI < Rang.DREI', 'true'], ['Rang.ZWEI >= Rang.DREI', 'false'], ['Rang.ASS.hoeher(Rang.BUBE)', 'true'],
+    ['Rang.BUBE.compareTo(Rang.ZWEI)', '1'], ['Rang.BUBE.compareTo(Rang.BUBE)', '0'],
+    ['listOf(Rang.ASS, Rang.ZWEI, Rang.BUBE).sorted()', '[ZWEI, BUBE, ASS]'], ['Rang.entries.sortedDescending()', '[ASS, BUBE, DREI, ZWEI]'],
+    ['listOf(Rang.BUBE, Rang.ZWEI).minOrNull()', 'ZWEI'], ['Rang.entries.filter { it > Rang.DREI }', '[BUBE, ASS]'],
+    ['Rang.BUBE in Rang.DREI..Rang.ASS', 'true'], ['val b: Bewertet = Rang.ASS; b.punkte()', '11'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-84 ${source}`).display, expected, `RT-84 ${source}`);
+  const rang = JSON.parse(p.session.manifest()).classes.find(item => item.name === 'Rang');
+  assert.deepEqual(rang.supertypes.map(type => type.displayName), ['Bewertet'], 'the implicit Comparable is not shown');
+  assert.deepEqual(rang.methods.map(method => method.name), ['punkte', 'hoeher'], 'the generated compareTo is not shown');
+  fails((await project({ 'E.kt': 'enum class E {\n    A, B;\n    fun compareTo(other: E): Int = 0\n}' })).result, 'RT-84 final compareTo', /`compareTo` of an enum class is final/);
+  fails((await project({ 'E.kt': 'enum class E : Basis() { A }', 'Basis.kt': 'open class Basis' })).result, 'RT-84 superclass', /Enum class cannot inherit from classes/);
+}
+
+// Labeled loops (RT-85): `outer@ for`, `while` and `do`, with `break@outer` and
+// `continue@outer`; an unknown label is an analysis error.
+{
+  const p = await project({ 'Suche.kt': 'class Suche {\n    fun finde(ziel: Int): String {\n        var gefunden = ""\n        aussen@ for (i in 1..5) {\n            for (j in 1..5) {\n                if (i * j == ziel) {\n                    gefunden = "$i*$j"\n                    break@aussen\n                }\n            }\n        }\n        return gefunden\n    }\n}' });
+  ok(p.result, 'RT-85 project');
+  const cases = [
+    ['Suche().finde(12)', '3*4'],
+    ['var s = ""; outer@ for (i in 1..3) { for (j in 1..3) { if (j == 2) continue@outer; if (i == 3) break@outer; s += "$i$j " } }; s', '11 21 '],
+    ['var t = 0; loop@ while (true) { t++; if (t > 4) break@loop }; t', '5'],
+    ['var u = 0; var k = 0; aussen@ do { k++; var m = 0; while (m < 5) { m++; if (m == 2) continue@aussen; u++ } } while (k < 3); u', '3'],
+    ['var v = 0; for (i in 1..3) { innen@ for (j in 1..3) { if (j == 2) break@innen; v++ } }; v', '3'],
+    ['var w = ""; a@ for (i in 1..2) { b@ for (j in 1..2) { when (j) { 2 -> continue@a }; w += "$i$j " } }; w', '11 21 '],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-85 ${source}`).display, expected, `RT-85 ${source}`);
+  fails(p.evaluate('x@ for (i in 1..2) { break@y }'), 'RT-85 unknown label', /There is no loop with the label `y`/);
+}
+
+// `sealed class` and `sealed interface` (RT-86): abstract like in Kotlin; a `when` without
+// `else` is exhaustive when it covers every subclass (also objects and nested sealed classes).
+{
+  const p = await project({
+    'Form.kt': 'sealed class Form',
+    'Kreis.kt': 'class Kreis(val r: Double) : Form()',
+    'Rechteck.kt': 'class Rechteck(val a: Double, val b: Double) : Form()',
+    'Leer.kt': 'object Leer : Form()',
+    'Flaeche.kt': 'fun flaeche(f: Form): Double = when (f) {\n    is Kreis -> 3.0 * f.r * f.r\n    is Rechteck -> f.a * f.b\n    Leer -> 0.0\n}',
+    'Ergebnis.kt': 'sealed interface Ergebnis',
+    'Ok.kt': 'data class Ok(val wert: Int) : Ergebnis',
+    'Fehler.kt': 'sealed class Fehler : Ergebnis',
+    'Zeit.kt': 'object Zeit : Fehler()',
+    'Eingabe.kt': 'class Eingabe(val text: String) : Fehler()',
+    'Text.kt': 'fun text(e: Ergebnis): String = when (e) {\n    is Ok -> "ok ${e.wert}"\n    is Zeit -> "zeit"\n    is Eingabe -> "eingabe ${e.text}"\n}\nfun kurz(e: Ergebnis?): String = when (e) {\n    is Ok -> "ok"\n    is Fehler -> "fehler"\n    null -> "nichts"\n}',
+  });
+  ok(p.result, 'RT-86 project');
+  const cases = [
+    ['flaeche(Kreis(1.0))', '3.0'], ['flaeche(Rechteck(2.0, 3.0))', '6.0'], ['flaeche(Leer)', '0.0'],
+    ['text(Ok(3))', 'ok 3'], ['text(Zeit)', 'zeit'], ['text(Eingabe("x"))', 'eingabe x'], ['kurz(Zeit)', 'fehler'], ['kurz(null)', 'nichts'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-86 ${source}`).display, expected, `RT-86 ${source}`);
+  fails(p.evaluate('Form()'), 'RT-86 sealed is abstract', /cannot be created directly/);
+  assert.equal(JSON.parse(p.session.manifest()).classes.find(item => item.name === 'Form').kind, 'abstract');
+  fails((await project({ 'Form.kt': 'sealed class Form', 'Kreis.kt': 'class Kreis : Form()', 'Quadrat.kt': 'class Quadrat : Form()', 'F.kt': 'fun f(x: Form): Int = when (x) {\n    is Kreis -> 1\n}' })).result,
+    'RT-86 missing subclass', /'when' expression must be exhaustive/);
+}
+
+// `lateinit var` also for local and top-level variables (RT-88), with Kotlin's message.
+{
+  const p = await project({
+    'Global.kt': 'lateinit var global: String\nfun setze() { global = "g" }\nfun lies() = global',
+    'K.kt': 'class K {\n    fun f(): String {\n        lateinit var lokal: String\n        if (true) lokal = "x"\n        return lokal\n    }\n    fun g(): String {\n        lateinit var leer: String\n        return leer\n    }\n}',
+  });
+  ok(p.result, 'RT-88 project');
+  const cases = [
+    ['try { lies() } catch (e: UninitializedPropertyAccessException) { e.message }', 'lateinit property global has not been initialized'],
+    ['setze(); lies()', 'g'], ['K().f()', 'x'],
+    ['lateinit var s: String; s = "a"; s', 'a'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-88 ${source}`).display, expected, `RT-88 ${source}`);
+  fails(p.evaluate('K().g()'), 'RT-88 local', /^UninitializedPropertyAccessException: lateinit property leer has not been initialized$/);
+  ok(p.evaluate('lateinit var t: String'), 'RT-88 codepad declaration');
+  assert.equal(ok(p.evaluate('try { t } catch (e: Exception) { e.message }'), 'RT-88 codepad read').display, 'lateinit property t has not been initialized');
+  fails(p.evaluate('lateinit var n: Int'), 'RT-88 primitive', /not allowed on properties of primitive types/);
+}
+
+// Function references (RT-89): `::f`, `Typ::f`, `objekt::f` and `::Klasse`; the parameters come
+// from the expected function type, or from the only function `f`.
+{
+  const p = await project({
+    'Util.kt': 'fun quadrat(x: Int) = x * x\nfun istGerade(x: Int): Boolean = x % 2 == 0\nfun summe(a: Int, b: Int) = a + b\nfun gruss() = "hallo"',
+    'Karte.kt': 'class Karte(val wert: Int) {\n    fun doppelt() = wert * 2\n    fun mal(x: Int) = x * wert\n    fun alle(liste: List<Int>) = liste.map(this::mal)\n    fun quadrate(liste: List<Int>) = liste.map(::quadrat)\n    override fun toString() = "K$wert"\n}',
+  });
+  ok(p.result, 'RT-89 project');
+  const cases = [
+    ['listOf(1, 2, 3).map(::quadrat)', '[1, 4, 9]'], ['listOf(1, 2, 3, 4).filter(::istGerade)', '[2, 4]'],
+    ['listOf(1, 2, 3).reduce(::summe)', '6'], ['val f = ::quadrat; f(5)', '25'], ['val g = ::gruss; g()', 'hallo'],
+    ['val h: (Int) -> Int = ::quadrat; h(3)', '9'], ['listOf("ab", "c").map(String::length)', '[2, 1]'],
+    ['listOf("ab", "c").map(String::uppercase)', '[AB, C]'], ['listOf(Karte(3), Karte(1)).sortedBy(Karte::wert)', '[K1, K3]'],
+    ['listOf(Karte(3)).map(Karte::doppelt)', '[6]'], ['listOf(1, 2).map(::Karte)', '[K1, K2]'],
+    ['val liste = mutableListOf<Int>(); listOf(4, 5).forEach(liste::add); liste', '[4, 5]'],
+    ['Karte(3).alle(listOf(1, 2))', '[3, 6]'], ['Karte(1).quadrate(listOf(3))', '[9]'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-89 ${source}`).display, expected, `RT-89 ${source}`);
+  const printed = p.evaluate('listOf(1, 2).forEach(::println)');
+  ok(printed, 'RT-89 println');
+  assert.equal(p.session.takeOutput(), '1\n2\n');
+  fails(p.evaluate('val k = ::println'), 'RT-89 overloaded', /`::println` is ambiguous here/);
+  fails(p.evaluate('::nichts'), 'RT-89 unknown', /there is no function `nichts`/);
+}
+
+// `this` in a lambda is the object where the lambda is written (RT-90): in `liste.map { this.f(it) }`
+// it was the list, because lambda arguments were created after `this` became the receiver of `map`.
+{
+  const p = await project({ 'Rechner.kt': 'class Rechner(val faktor: Int) {\n    var summe = 0\n    fun mal(x: Int) = x * faktor\n    fun a(liste: List<Int>) = liste.map { this }\n    fun b(liste: List<Int>) = liste.map { this.faktor }\n    fun c(liste: List<Int>) { liste.forEach { this.summe += this.mal(it) } }\n    fun d(liste: List<Int>) = liste.filter { this.mal(it) > 3 }\n    fun e(liste: List<Int>) = liste.map { x -> listOf(1).map { this.mal(x) } }\n    fun g() = buildString { append("x"); append(this.length) }\n    fun h() = mutableListOf(1).apply { add(this.size) }\n    fun j(liste: List<Int>) = liste.joinToString(",") { "${this.faktor}$it" }\n    override fun toString() = "R"\n}' });
+  ok(p.result, 'RT-90 project');
+  const cases = [
+    ['Rechner(3).a(listOf(1, 2))', '[R, R]'], ['Rechner(3).b(listOf(1, 2))', '[3, 3]'],
+    ['val r = Rechner(3); r.c(listOf(1, 2)); r.summe', '9'], ['Rechner(3).d(listOf(1, 2))', '[2]'],
+    ['Rechner(2).e(listOf(1, 2))', '[[2], [4]]'], ['Rechner(1).g()', 'x1'], ['Rechner(1).h()', '[1, 1]'],
+    // a trailing lambda after an argument, with default parameters in between
+    ['Rechner(7).j(listOf(1, 2))', '71,72'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-90 ${source}`).display, expected, `RT-90 ${source}`);
+}
+
 console.log('Curriculum Kotlin smoke test passed.');

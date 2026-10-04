@@ -10,6 +10,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.ClassSecondaryConstructorN
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.error.EvaluateRuntimeException
 import com.sunnychung.lib.multiplatform.kotlite.error.InterpreterStateException
+import com.sunnychung.lib.multiplatform.kotlite.error.controlflow.NormalControlFlowException
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassInstance
 import com.sunnychung.lib.multiplatform.kotlite.model.StandardExceptionValue
 import com.sunnychung.lib.multiplatform.kotlite.model.FunctionCallNode
@@ -56,6 +57,8 @@ private data class BlueKReference(val symbol: String, val interactive: Boolean, 
 class KotliteSession {
 
     private val output = StringBuilder()
+    /** Whether the terminal output so far ends with a line break (or is empty). */
+    private var outputAtLineStart = true
     /** Every name a student can call; filled while the modules are installed. */
     private val knownNames: MutableSet<String> = mutableSetOf()
 
@@ -316,7 +319,8 @@ class KotliteSession {
                 val response = try {
                     result("unit", outcome.getOrThrow())
                 } catch (throwable: Throwable) {
-                    error(throwable, "runtime", true)
+                    reportUncaught(throwable)
+                    error(throwable, "runtime", throwable.isFatal)
                 }
                 executionCompleted?.invoke(response)
                 executionCompleted = null
@@ -341,7 +345,8 @@ class KotliteSession {
         bluePlay.beginBatch()
         restartRuntimeSlice()
         (suspend {
-            val call = FunctionCallNode(VariableReferenceNode(main.position, main.name), emptyList(), emptyList(), main.position)
+            // Called by BluePlay Reset: no frame of the student's source below main() in stack traces.
+            val call = FunctionCallNode(VariableReferenceNode(main.position, main.name), emptyList(), emptyList(), SourcePosition.BUILTIN)
             interpreter.evalFunctionCall(
                 callNode = call,
                 functionNode = main,
@@ -358,7 +363,8 @@ class KotliteSession {
                 val response = try {
                     result("unit", outcome.getOrThrow())
                 } catch (throwable: Throwable) {
-                    error(throwable, "runtime", true)
+                    reportUncaught(throwable)
+                    error(throwable, "runtime", throwable.isFatal)
                 }
                 executionCompleted?.invoke(response)
                 executionCompleted = null
@@ -377,7 +383,24 @@ class KotliteSession {
         } else {
             output.append(text)
         }
+        if (text.isNotEmpty()) outputAtLineStart = text.last() == '\n' || text.last() == '\u000C'
         outputUpdated?.invoke()
+    }
+
+    /**
+     * An exception that ends a program run (main, BluePlay) is printed to the terminal like Kotlin
+     * does, in red: `Exception in thread "main" IllegalStateException: x` and the stack trace.
+     */
+    private fun reportUncaught(error: Throwable) {
+        if (error.isFatal) return
+        appendOutput(buildString {
+            if (!outputAtLineStart) append('\n')
+            append("\u001B[31mException in thread \"main\" ")
+            append(errorText(error))
+            append('\n')
+            interpreter.stacktraceOf(error).forEach { append("    at "); append(it); append('\n') }
+            append("\u001B[0m")
+        })
     }
 
     fun setOutputCallback(callback: (() -> Unit)?) {
@@ -560,12 +583,15 @@ class KotliteSession {
         val classJson = classes.joinToString(",", "[", "]") { declaration ->
             val isEnum = declaration.modifiers.any { it.name == "enum" }
             val constructors = if (declaration.isInterface || declaration.isObject || isEnum) "[]" else {
+                // The primary constructor and the secondary ones (RT-83), as the analyzer offers them.
                 val secondary = declaration.declarations.filterIsInstance<ClassSecondaryConstructorNode>()
-                val parameterSets = if (secondary.isEmpty()) listOf(declaration.primaryConstructor?.parameters.orEmpty().map { it.parameter })
-                    else secondary.map { it.valueParameters }
-                parameterSets.mapIndexed { index, parameters ->
-                    "{\"id\":\"${escape(declaration.name)}.constructor${if (secondary.isEmpty()) "" else ".$index"}\",\"parameters\":${parameters.joinToString(",", "[", "]") { parameterJson(it) }}}"
-                }.joinToString(",", "[", "]")
+                val primary = declaration.primaryConstructor?.parameters?.map { it.parameter }
+                    ?: if (secondary.isEmpty()) emptyList() else null
+                val parameterSets = listOfNotNull(primary?.let { "" to it }) +
+                    secondary.mapIndexed { index, constructor -> ".$index" to constructor.valueParameters }
+                parameterSets.joinToString(",", "[", "]") { (suffix, parameters) ->
+                    "{\"id\":\"${escape(declaration.name)}.constructor$suffix\",\"parameters\":${parameters.joinToString(",", "[", "]") { parameterJson(it) }}}"
+                }
             }
             val primaryProperties = declaration.primaryConstructor?.parameters.orEmpty().filter { it.isProperty }.map { parameter ->
                 jsonProperty(declaration.name, parameter.parameter.name, parameter.parameter.type, parameter.isMutable, visibility(parameter.modifiers.toSet()), false, false, false)
@@ -575,7 +601,10 @@ class KotliteSession {
             }
             val properties = (primaryProperties + bodyProperties).filterNot { bluePlayEnabled && declaration.name in setOf("World", "Actor", "Image") && it.contains("\"visibility\":\"private\"") }.distinctBy { it.substringBefore("\",\"name\":") }.joinToString(",", "[", "]")
             val methods = declaration.declarations.filterIsInstance<FunctionDeclarationNode>().filterNot { it is ClassSecondaryConstructorNode || it.isGenerated || (bluePlayEnabled && declaration.name in setOf("World", "Actor", "Image") && it.modifiers.any { modifier -> modifier.name == "private" }) }.mapIndexed { index, function -> jsonFunction(declaration.name, function, index) }.joinToString(",", "[", "]")
-            val supers = declaration.superInvocations.orEmpty().mapNotNull(::superName).joinToString(",", "[", "]") { jsonTypeName(it) }
+            // Every enum class is `Comparable` (RT-84); like the generated members, that is not shown.
+            val supers = declaration.superInvocations.orEmpty().mapNotNull(::superName)
+                .filterNot { isEnum && it == "Comparable" }
+                .joinToString(",", "[", "]") { jsonTypeName(it) }
             val kind = if (declaration.isInterface) "interface" else if (declaration.isObject) "object" else if (isEnum) "enum" else if (declaration.modifiers.any { it.name == "abstract" }) "abstract" else "class"
             // Called as `Klasse.f()` from the class menu, like the methods of an object.
             val companionMethods = declaration.companionObject?.declarations.orEmpty().filterIsInstance<FunctionDeclarationNode>()
@@ -642,7 +671,7 @@ class KotliteSession {
     }
 
     /** [unitOffsets]: further source units inside [source], as offsets into it. */
-    private suspend fun evaluateSuspended(filename: String, source: String, interactiveNames: Set<String> = emptySet(), unitOffsets: List<Int> = emptyList(), inspection: Boolean = false): String {
+    private suspend fun evaluateSuspended(filename: String, source: String, interactiveNames: Set<String> = emptySet(), unitOffsets: List<Int> = emptyList(), inspection: Boolean = false, program: Boolean = false): String {
         if (faulted) return errorMessage("Runtime failed. Reset or compile before running more code.", "runtime", true)
         val boundary = analysisSource.length + 1
         val candidate = analysisSource + "\n" + source
@@ -680,8 +709,9 @@ class KotliteSession {
             if (objectId != null && objectId !in handles) objectId = registerExpressionValue(value)
             result("value", value, objectId, inspection = inspection)
         } catch (error: Throwable) {
-            faulted = true
-            error(error, "runtime", true)
+            faulted = error.isFatal
+            if (program) reportUncaught(error)
+            error(error, "runtime", faulted)
         }
     }
 
@@ -690,12 +720,17 @@ class KotliteSession {
         return startEvaluateInternal(filename, source, onInput, onComplete, emptySet())
     }
 
-    private fun startEvaluateInternal(filename: String, source: String, onInput: (Int) -> Unit, onComplete: (String) -> Unit, interactiveNames: Set<String>, unitOffsets: List<Int> = emptyList(), inspection: Boolean = false): String {
+    /** Runs the main() of [filename]; an uncaught exception also goes to the terminal (RT-82). */
+    fun startMain(filename: String, onInput: (Int) -> Unit, onComplete: (String) -> Unit): String {
+        return startEvaluateInternal(filename, "${mainFunctionName(filename)}()", onInput, onComplete, emptySet(), program = true)
+    }
+
+    private fun startEvaluateInternal(filename: String, source: String, onInput: (Int) -> Unit, onComplete: (String) -> Unit, interactiveNames: Set<String>, unitOffsets: List<Int> = emptyList(), inspection: Boolean = false, program: Boolean = false): String {
         if (executionCompleted != null) return errorMessage("Another runtime command is running.")
         inputRequested = onInput
         executionCompleted = onComplete
         restartRuntimeSlice()
-        (suspend { evaluateSuspended(filename, source, interactiveNames, unitOffsets, inspection) }).startCoroutine(object : Continuation<String> {
+        (suspend { evaluateSuspended(filename, source, interactiveNames, unitOffsets, inspection, program) }).startCoroutine(object : Continuation<String> {
             override val context = kotlin.coroutines.EmptyCoroutineContext
             override fun resumeWith(result: Result<String>) {
                 inputContinuation = null
@@ -1028,6 +1063,7 @@ class KotliteSession {
         projectFunctionRanges.clear()
         resetInterpreter()
         output.clear()
+        outputAtLineStart = true
         return result("reset", UnitValue)
     }
 
@@ -1088,22 +1124,33 @@ class KotliteSession {
             (name?.let { ",\"name\":\"${escape(it)}\"" } ?: "") + "}"
     }
 
-    private fun error(error: Throwable, phase: String = "analysis", fatal: Boolean = false): String {
+    /**
+     * Only interpreter errors lock the session (RT-82). An exception the program could catch with
+     * `catch (e: Throwable)` leaves the interpreter consistent, because calls unwind through
+     * `finally`: like in BlueJ, the call ends with the exception and the objects stay usable,
+     * including changes the call made before it failed.
+     */
+    private val Throwable.isFatal: Boolean
+        get() = this is InterpreterStateException || this is NormalControlFlowException
+
+    private fun error(error: Throwable, phase: String = "analysis", fatal: Boolean = false): String =
+        errorMessage(errorText(error), phase, fatal)
+
+    private fun errorText(error: Throwable): String {
         // A Kotlin exception thrown by student code is reported by its own class
         // name, e.g. `IllegalArgumentException: Unbekannte Farbe: Blau`.
         val thrown = (error as? EvaluateRuntimeException)?.error
         // Deep recursion inside a synchronous callback (e.g. `toString`) can still exhaust the host stack.
         if (thrown == null && error.isHostStackOverflow)
-            return errorMessage("StackOverflowError: ${StandardExceptionValue.stackOverflowMessage(null)}", phase, fatal)
+            return "StackOverflowError: ${StandardExceptionValue.stackOverflowMessage(null)}"
         // `MyEx: x`, or `MyEx` without message, for the thrown object (also a student subclass).
-        if (thrown != null) return errorMessage(thrown.wholeInstance().convertToString(isCallCustomFunction = false), phase, fatal)
+        if (thrown != null) return thrown.wholeInstance().convertToString(isCallCustomFunction = false)
         val message = error.message ?: "Kotlite evaluation failed."
         // A missing name is reported by Kotlite as an ordinary analysis error.
         // BlueK says instead which side the gap is on; the exception class name
         // would only add noise there.
-        KotlinSurfaceHints.rewrite(message, knownNames, declaredNames())
-            ?.let { return errorMessage(it, phase, fatal) }
-        return errorMessage("${error.fullClassName}: $message", phase, fatal)
+        return KotlinSurfaceHints.rewrite(message, knownNames, declaredNames())
+            ?: "${error.fullClassName}: $message"
     }
     /**
      * Names the student declared in the analyzed source. Kotlite reports a

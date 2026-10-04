@@ -226,6 +226,15 @@ bei Verweisen die Beschreibung mitnennen.
 | RT-79 | Interfaces mit Methoden mit Rumpf (`fun beschreibung() = "$name: ${flaeche()}"`, ruft überschriebene Methoden der Klasse) und abstrakten Properties (`val name: String`), abstrakte Properties in abstrakten Klassen (`abstract val laut: String`, von Methoden der abstrakten Klasse lesbar); implementiert auch als Konstruktor-Property (`class Hund(override val beine: Int)`); Zugriff über den Obertyp; fehlende Implementierungen, Anfangswerte bei abstrakten bzw. Interface-Properties sind Compilefehler; der Inspektor zeigt die implementierten Properties | 2026-10-04, offener Punkt der README (wichtig für den OOP-Unterricht). Vorher „Expected token Symbol `{`“, „Properties in interfaces are not supported“ bzw. „Modifier `abstract` cannot be applied to properties“; mit dem Bundle aus 06304ce scheitert der RT-79-Block beim Laden | Runtime-Test. Offen: Interface-Properties mit Getter, Extension-Properties mit Getter |
 | RT-80 | `protected` an Properties, Funktionen und Konstruktor-Properties: in der Klasse, in Unterklassen und deren Companions benutzbar, von außen ein Compilefehler („Protected property/function … cannot be accessed here“); `internal` an Klassen und Membern wirkt wie `public`. Manifest meldet `protected`; Objektmenüs zeigen `protected`-Methoden nicht, der Inspektor bearbeitet `protected`-Felder nicht | 2026-10-04, offener Punkt der README. Vorher Parsefehler; `smoke-kotlite-browser.mjs` erwartete ausdrücklich die Ablehnung von `protected` und prüft jetzt den Zugriffsfehler. Mit dem Bundle aus 17e430b scheitert der RT-80-Block beim Laden | Runtime-Tests; Objektmenü-Filter in `objectMenuMethods.ts` ohne eigenen Browser-Test |
 | RT-81 | `lateinit var` bei Klassen-Properties: Zuweisung später, Lesen vorher wirft `UninitializedPropertyAccessException: lateinit property x has not been initialized` (mit `catch` fangbar), der Inspektor zeigt `<uninitialized>`; Kotlins Regeln (nur `var`, ohne Anfangswert, nicht nullable, nicht primitiv) als Compilefehler | 2026-10-04, offener Punkt der README. Vorher Parsefehler; beim Einbau gefunden: ein nicht belegtes Feld brachte `inspect()` mit einer Host-Ausnahme zum Absturz. Mit dem Bundle aus 39b28cd scheitert der RT-81-Block beim Laden | Runtime-Test. Offen: `lateinit` auf oberster Ebene und lokal, `::x.isInitialized` |
+| RT-82 | Eine nicht gefangene Exception beendet nur den Aufruf; die Laufzeit bleibt ohne Reset benutzbar (Objektbank, Codepad, Variablen, `main()`, BluePlay), wie in BlueJ. Kein Rollback: Änderungen vor der Exception bleiben. Methodenaufruf und Konstruktor zeigen den Dialog „Exception“ („The call ended with an exception.“) statt „Compiler errors“; das Codepad zeigt sie im Eintrag. `main()`, BluePlay-`main` und `act()` schreiben sie wie Kotlin rot ins Terminal: `Exception in thread "main" IllegalArgumentException: …` mit `at Karte.wert(Karte.kt:6)` usw.; Run hält an. Fatal (Reset nötig) bleiben nur Interpreterfehler wie `InterpreterStateException` | 2026-10-04 vom Nutzer gemeldet (Screenshot: `karte1.wert()` mit Rang 70, danach „Execution stopped. Reset the runtime“, Dialogtitel „Compiler errors“); Codepad ausdrücklich gewünscht. Browser-Test RT-82 grün, mit dem alten Stand rot; BluePlay-Fall in `smoke-runtime-state.mjs` grün, mit altem Bundle und Host rot. Angepasst: `smoke-blueplay-api.mjs` (fehlende Welt war fatal), `smoke-runtime-state.mjs` (direkter Getter-Aufruf war fatal) und EXP-03 (der exportierte Player zeigt den Stacktrace jetzt auch im Terminal, zusätzlich zu „The program stopped“) | Browser-Test RT-82, `smoke-runtime-state.mjs`, `smoke-blueplay-api.mjs` |
+| RT-83 | Sekundäre Konstruktoren mit `: this(…)`, auch neben einem Primärkonstruktor: `class Hund(val name: String, val alter: Int) { constructor(name: String) : this(name, 1) }`. Die Delegation läuft zuerst (Property-Initialisierer und `init` des Primärkonstruktors), dann der Rumpf; Ketten über mehrere Konstruktoren, Standard- und benannte Argumente, generische und `data`-Klassen, Unterklassen und abstrakte Klassen. Rumpf optional. Wie Kotlin: „Primary constructor call expected“, „There's a cycle in the delegation calls chain“ (auch `this(s)` auf sich selbst), „Conflicting overloads“; `: super(…)` mit eigener Meldung. Die Klassenkarte bietet Primär- und Sekundärkonstruktoren an. Bei Überladungen gewinnt wie in Kotlin der Kandidat ohne Standardwerte (`Punkt(1, 2)`, `f(1)`) | 2026-10-04 offener Punkt der README, auf Wunsch des Nutzers bearbeitet. Testblock RT-83 in `smoke-curriculum-kotlin.mjs` grün, mit dem Bundle aus 80ca0d6 rot; Browser-Test RT-83 (Klassenmenü mit drei Konstruktoren, Erzeugen über zwei davon) grün, mit altem Bundle rot. `smoke-kotlite-browser.mjs` erwartete die alte Ablehnung und prüft jetzt die Delegation an einen fehlenden Konstruktor | `smoke-curriculum-kotlin.mjs`, `smoke-kotlite-browser.mjs`, Browser-Test RT-83 |
+| RT-84 | Enum-Einträge vergleichen sich wie in Kotlin nach ihrer Reihenfolge: `Rang.ZWEI < Rang.DREI`, `compareTo`, `sorted()`, `sortedDescending()`, `minOrNull()`, `filter { it > Rang.DREI }`, `Rang.DREI..Rang.ASS`; Enum-Klassen dürfen Interfaces implementieren (`enum class Rang(val wert: Int) : Bewertet`), aber keine Klasse erweitern; ein eigenes `compareTo` ist wie in Kotlin verboten. Klassenkarte und Menüs zeigen das implizite `Comparable` und das erzeugte `compareTo` nicht | 2026-10-04 offener Punkt der README. Testblock RT-84 in `smoke-curriculum-kotlin.mjs` grün, mit dem Bundle aus 067f8dd rot (Enum mit Interface abgelehnt, `<` unbekannt) | `smoke-curriculum-kotlin.mjs` |
+| RT-85 | Schleifen mit Label wie in Kotlin: `aussen@ for (…)`, `while`, `do … while`; `break@aussen` beendet, `continue@aussen` setzt die äußere Schleife fort, auch aus `when` und aus inneren Schleifen; in Methoden und im Codepad. Ein unbekanntes Label ist ein Analysefehler („There is no loop with the label `y`“) | 2026-10-04 offener Punkt der README. Testblock RT-85 in `smoke-curriculum-kotlin.mjs` grün, mit dem Bundle aus 91bc49c rot (Parsefehler) | `smoke-curriculum-kotlin.mjs` |
+| RT-86 | `sealed class` und `sealed interface`: die sealed Klasse ist abstrakt; ein `when` ohne `else` ist erschöpfend, wenn `is`-Zweige und `object`-Einträge alle Unterklassen abdecken, auch verschachtelt (`sealed interface Ergebnis` mit `data class Ok` und `sealed class Fehler` mit `object Zeit`) und mit `null` bei nullbarem Subjekt; fehlt eine Unterklasse, bleibt es ein Compilefehler. Unterklassen dürfen in jeder Datei stehen (ein Modul) | 2026-10-04 offener Punkt der README. Testblock RT-86 in `smoke-curriculum-kotlin.mjs` grün, mit dem Bundle aus 77cf4b6 rot (`sealed` unbekannt) | `smoke-curriculum-kotlin.mjs` |
+| RT-87 | Bit-Operationen wie in Kotlin für `Int` und `Long`: `and`, `or`, `xor`, `shl`, `shr`, `ushr` als Infix (auch `5.and(3)`) und `inv()`; Rangfolge wie Kotlin (`1 + 2 shl 1` ist `6`, `bits and 1 == 1` ist `(bits and 1) == 1`). Zahlliterale ohne führende Ziffer: `.5`, `.25e2`; `1..5` bleibt ein Bereich | 2026-10-04, offene Punkte der README und aus RT-74. Fälle in `smoke-kotlin-surface.mjs` grün, mit dem Bundle aus c9a3996 rot | `smoke-kotlin-surface.mjs` |
+| RT-88 | `lateinit var` auch für lokale Variablen in Funktionen, Top-Level-Variablen und im Codepad; Lesen vor der Zuweisung wirft wie Kotlin `UninitializedPropertyAccessException: lateinit property x has not been initialized` (fangbar); Kotlins Regeln (nur `var`, kein primitiver oder nullbarer Typ) gelten weiter | 2026-10-04 offener Punkt der README (Rest aus RT-81). Testblock RT-88 in `smoke-curriculum-kotlin.mjs` grün, mit dem Bundle aus c9a3996 rot („supported for class properties only“) | `smoke-curriculum-kotlin.mjs` |
+| RT-89 | Funktionsreferenzen wie in Kotlin: `liste.map(::quadrat)`, `filter(::istGerade)`, `reduce(::summe)`, `forEach(::println)`, `val f = ::quadrat`, `String::length`, `String::uppercase`, `sortedBy(Karte::wert)`, `Karte::doppelt`, `map(::Karte)`, `liste::add`, `this::mal`; die Parameter kommen aus dem erwarteten Funktionstyp. `::println` ohne Typ und unbekannte Namen geben eine verständliche Meldung. Nicht: Ausdrücke vor `::` (`Rechner(10)::mal`) | 2026-10-04 offener Punkt der README. Testblock RT-89 in `smoke-curriculum-kotlin.mjs` grün, mit dem Bundle aus c4bccad rot (Parsefehler) | `smoke-curriculum-kotlin.mjs` |
+| RT-90 | `this` in einem Lambda ist wie in Kotlin das Objekt, in dem das Lambda steht: `liste.map { this.f(it) }`, `forEach { this.summe += … }`, `filter { this.f(it) > 3 }`, auch verschachtelt; Lambdas mit Empfänger (`buildString { this.length }`, `apply { this.size }`) unverändert. Vorher war `this` die Liste („Class Function `mal` not found“, NullPointerException) | 2026-10-04 beim Prüfen von RT-89 (`this::mal`) gefunden. Testblock RT-90 in `smoke-curriculum-kotlin.mjs` grün, mit dem Bundle aus c4bccad rot | `smoke-curriculum-kotlin.mjs` |
 
 | GUI-93 | Objekt-Kontextmenüs und geerbte Methoden-Untermenüs liegen über offenen Inspektoren und bleiben anklickbar; Parameterdialoge liegen weiterhin darüber | Chromium GUI-93 erzeugt tatsächliche Überlappungen mit einem verschobenen Inspektor, prüft den vordersten DOM-Treffer, öffnet den Parameterdialog und ruft eine geerbte Methode auf. Vor der Korrektur rot, nachher grün; GUI-49/82/85/87 ebenfalls grün | Automatisch im echten Browser abgesichert; keine separate visuelle Benutzerabnahme |
 | GUI-94 | Reset erhält den maximierten bzw. wiederhergestellten Zustand des BluePlay-Weltfensters | Chromium GUI-94 wechselt die angezeigte Welt, maximiert und setzt zurück; prüft die erneut erzeugte ursprüngliche Welt und unveränderte Fenstergrenzen, danach Reset bei normaler Fenstergröße | Vor der Korrektur rot, danach grün; GUI-57 und beide RT-25-BluePlay-Reset-Tests ebenfalls grün; keine gesonderte visuelle Benutzerabnahme |
@@ -234,6 +243,7 @@ bei Verweisen die Beschreibung mitnennen.
 | GUI-97 | Das Terminal wertet ANSI-Escape-Sequenzen und Steuerzeichen wie ein Terminal aus: Farben (16 Grundfarben, 256 Farben, RGB) für Schrift und Hintergrund, fett, blass, kursiv, unterstrichen, durchgestrichen, invertiert, verborgen; `ESC[2J`/`ESC[H` löschen, `ESC[K`/`ESC[J` löschen Zeilen- bzw. Bildschirmteile, Cursorbewegung (`H`, `A`–`G`, `s`/`u`), `\r` überschreibt die Zeile, `\b`, `\t` bis zum nächsten Tabulator; andere Sequenzen und Steuerzeichen werden verschluckt. Helles und dunkles Design mit eigener Palette (VS-Code-Farben). Nutzerdoku: `docs/terminal.md` | 2026-10-04 vom Nutzer gewünscht (Spielkarte mit roten Herzen). Browser-Test GUI-97 mit der Karte des Nutzers, `\r`, Löschen, fett und dunklem Design grün; mit der alten Terminaldarstellung rot (rohe ESC-Zeichen im Text). `smoke-ui-behavior.mjs` prüft Parser-Fälle | Browser-Test GUI-97, Node-Test in `smoke-ui-behavior.mjs`. Offen: kein fester Bildschirm (Zeile 1 = erste Zeile seit dem Löschen), kein Blinken |
 | GUI-98 | Große und kleine Schrift im Terminal über das Text-Sizing-Protokoll von kitty (`ESC]66;s=…:n=…:d=…:w=…:v=…:h=…;Text BEL` bzw. `ESC \`): der Text belegt `s` Zeilen und `s`×Zeichen bzw. `s`×`w` Zellen, überdeckt die Zeilen darunter, der Cursor bleibt rechts daneben in der obersten Zeile; Schreiben in oder Löschen einer seiner Zellen entfernt ihn ganz; ungültige Werte gelten als Standard; DEC-Zeilen doppelter Höhe (`ESC#3/#4/#6`) bewusst nicht. Gleiche Darstellung im exportierten Player (EXP-12). Nutzerdoku: `docs/terminal.md` | 2026-10-04 vom Nutzer gewünscht (Spielkarte als Unicode-Zeichen mehrere Zentimeter hoch); nach kurzer Recherche (DEC vs. kitty) für kitty OSC 66 entschieden. Browser-Test GUI-98 (Herz-Ass mit `s=7`: Block 7 Zeilen hoch, Text daneben und 7 Zeilen tiefer an der richtigen Stelle) grün, mit dem alten Parser rot; Player-Test EXP-12 (Größe) grün; Node-Fälle in `smoke-ui-behavior.mjs` grün, mit dem alten Parser rot | Browser-Tests GUI-98 und EXP-12, Node-Test in `smoke-ui-behavior.mjs`. Ungetestet: Darstellung in Safari/Firefox (`lh`-Einheit ab Safari 16.4/Firefox 120) |
 | GUI-99 | Der Anfasser zwischen BlueK und dem rechts angedockten Terminal liegt im Stapel des Terminalfensters: Ein Objektinspektor (oder jedes andere Fenster), der vor dem Terminal liegt, verdeckt ihn; ziehen am Anfasser aktiviert das Terminal nicht. Ersetzt die Einzelregeln für aktive Editoren (GUI-37) und das BluePlay-Weltfenster (GUI-73) | 2026-10-04 vom Nutzer gemeldet (Screenshot: Anfasser über dem Inspektor von `karte1`). Browser-Test GUI-99 grün, mit dem alten Stand rot; GUI-37, GUI-73 (prüft jetzt die Ebene des Terminals) und GUI-06 grün | Browser-Tests GUI-99, GUI-37, GUI-73, GUI-06 |
+| GUI-100 | Konstruktor- und Methodendialog zeigen den Aufruf als Code wie BlueJ: `Karte(` und je Parameter ein Feld untereinander, getrennt mit `,` und abgeschlossen mit `)`; Name und Typ stehen als Platzhalter im Feld (`farbe: String`, mit Standardwert `bonus: Int = …`) und verschwinden beim Tippen; die Konstruktorauswahl steht in einer eigenen Zeile und wechselt die Felder; Methoden zeigen `karte1.wert(`. Labels der Dialoge im dunklen Design lesbar (vorher `#333` auf Dunkelgrau) | 2026-10-04 vom Nutzer gewünscht (Screenshot des BlueJ-Dialogs „new Karte( … )“). Browser-Test GUI-100 grün, mit dem alten Dialog rot; im Dev-Server hell und dunkel angesehen | Browser-Test GUI-100, GUI-47, RT-67, RT-83 |
 
 ## Prüfprotokoll
 
@@ -2738,4 +2748,143 @@ Fenstern außer Sonderfällen; jetzt liegt er im Stapel des Terminalfensters.
 - Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
   alle Node-Suiten grün, `test:offline` 4/4, Chromium 149/149 grün; PERF-01
   dabei 323 Frames, p95 15,1 ms, max. 16,8 ms.
+- `git diff --check` ohne Befund; keine `* 2.*`-Dateien.
+
+### RT-82: Weiterarbeiten nach einer Exception (2026-10-04)
+
+Vom Nutzer gemeldet, das Codepad ausdrücklich eingeschlossen. Vorher sperrte
+jede Laufzeit-Exception die Sitzung (`faulted`); eine Exception aus `main()`
+erschien dabei nirgends, nur „Execution stopped“ (im Dev-Server mit dem alten
+Bundle geprüft). Jetzt sperren nur noch Interpreterfehler.
+
+- Sonde gegen die Session: nach `IllegalArgumentException` in `wert()`,
+  `NumberFormatException`, `error()` und `StackOverflowError` (Rekursion)
+  bleiben Objekt, Codepad und Variablen benutzbar; mit dem Bundle aus 426a0e3
+  danach „Runtime failed. Reset or compile …“.
+- Browser-Test RT-82 grün; mit altem Bundle und alter Oberfläche rot (Dialog
+  „Exception“ fehlt). BluePlay-Fall in `smoke-runtime-state.mjs` grün; mit
+  altem Bundle und `runtimeHost.ts` rot (Simulation `faulted`).
+- Der künstliche Aufruf von `act()` und BluePlays `main` trägt jetzt die
+  Bibliotheksposition; vorher erschien `at <top-level>(Panne.kt:3)` im
+  Stacktrace.
+- Erster vollständiger Lauf: EXP-03 rot, weil der Player die Exception aus
+  `main()` jetzt auch ins Terminal schreibt; Erwartung angepasst (gewollt,
+  gleiches Verhalten wie das IDE-Terminal).
+- `browser-smoke`, `test:generics` und `test:blueplay-demos` grün.
+- Vollständiger `npm run test:regression` nach der Anpassung: Typecheck
+  0 Fehler/0 Warnungen, alle Node-Suiten grün, `test:offline` 4/4, Chromium
+  150/150 grün; PERF-01 dabei 323 Frames, p95 15,1 ms, max. 17,4 ms.
+- `git diff --check` ohne Befund; keine `* 2.*`-Dateien.
+
+### RT-83: sekundäre Konstruktoren mit `: this(…)` (2026-10-04)
+
+Auf Wunsch des Nutzers („weiter mit den sekundären Konstruktoren“).
+
+- Sonde: 17 Fälle wie in Kotlin (Reihenfolge init/Rumpf, Ketten, Standard-
+  und benannte Argumente, generisch, `data`, Unterklasse, abstrakt) sowie die
+  Fehlerfälle. Dabei gefunden: `Punkt(1, 2)` war mehrdeutig zwischen
+  Primärkonstruktor und einem sekundären mit Standardwerten; die
+  Überladungsauflösung bevorzugt jetzt wie Kotlin den Kandidaten ohne
+  Standardwerte (gilt auch für Funktionen).
+- Testblock RT-83 grün; mit dem Bundle aus 80ca0d6 rot („Secondary constructor
+  delegation (this/super) is not supported“). Browser-Test RT-83 grün, mit
+  altem Bundle rot.
+- `browser-smoke`, `test:generics`, `test:blueplay-demos`, `test:references`
+  und `test:inspector` grün.
+- Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
+  alle Node-Suiten grün, `test:offline` 4/4, Chromium 151/151 grün; PERF-01
+  dabei 322 Frames, p95 15,1 ms, max. 19,4 ms.
+- `git diff --check` ohne Befund; keine `* 2.*`-Dateien.
+
+### RT-84 und GUI-100: vergleichbare Enums, Aufrufdialog wie BlueJ (2026-10-04)
+
+RT-84 als nächster offener Punkt der README; GUI-100 auf Wunsch des Nutzers
+dazwischen.
+
+- RT-84: Testblock in `smoke-curriculum-kotlin.mjs` grün; mit dem Bundle aus
+  067f8dd rot (Enum mit Interface abgelehnt). Dabei: Kotlite verbot Enums
+  jedes Interface; jetzt nur noch Oberklassen, wie Kotlin.
+- GUI-100: Browser-Test grün; mit dem alten `CallDialogs.svelte` rot. Im
+  Dev-Server angesehen: Konstruktordialog hell und dunkel, Wechsel des
+  Konstruktors, Methodendialog mit optionalem Parameter. Dabei gefunden und
+  behoben: Labels im dunklen Design kaum lesbar, Konstruktorauswahl neben dem
+  Label gequetscht.
+- `browser-smoke`, `test:generics` und `test:blueplay-demos` grün.
+- Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
+  alle Node-Suiten grün, `test:offline` 4/4, Chromium 152/152 grün; PERF-01
+  dabei 327 Frames, p95 15,2 ms, max. 17,4 ms.
+- `git diff --check` ohne Befund; keine `* 2.*`-Dateien.
+
+### RT-85: Schleifen mit Label (2026-10-04)
+
+Offener Punkt der README.
+
+- Sonde: acht Fälle wie in Kotlin, darunter `continue@aussen` in `do … while`
+  (die Bedingung wird ausgewertet) und `break@innen` in einer inneren
+  Schleife; `return@forEach` unverändert.
+- Testblock RT-85 grün; mit dem Bundle aus 91bc49c rot („Unexpected token“).
+- `browser-smoke`, `test:generics` und `test:blueplay-demos` grün.
+- Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
+  alle Node-Suiten grün, `test:offline` 4/4, Chromium 152/152 grün; PERF-01
+  dabei 319 Frames, p95 15,2 ms, max. 51,5 ms (einzelner Ausreißer, Test
+  grün).
+- `git diff --check` ohne Befund; keine `* 2.*`-Dateien.
+
+### RT-86: sealed-Klassen (2026-10-04)
+
+Offener Punkt der README.
+
+- Sonde: Formen mit `is`-Zweigen und `object`, verschachteltes sealed
+  Interface, nullbares Subjekt, `when` als Anweisung ohne alle Zweige, fehlende
+  Unterklasse als Fehler. Dabei: Kotlite lehnte Modifier an Interfaces außer
+  `abstract`/`open` ab; `sealed interface` ist jetzt erlaubt.
+- Testblock RT-86 grün; mit dem Bundle aus 77cf4b6 rot.
+- `browser-smoke`, `test:generics` und `test:blueplay-demos` grün.
+- Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
+  alle Node-Suiten grün, `test:offline` 4/4, Chromium 152/152 grün; PERF-01
+  dabei 324 Frames, p95 15,2 ms, max. 26,6 ms.
+- `git diff --check` ohne Befund; keine `* 2.*`-Dateien.
+
+### RT-87 und RT-88: Bit-Operationen, `.5`, lateinit überall (2026-10-04)
+
+Offene Punkte der README; nach RT-86 eigenständig weitergeführt.
+
+- RT-87: Fälle in `smoke-kotlin-surface.mjs` grün; mit dem Bundle aus c9a3996
+  rot (`.5` Parsefehler, `and` unbekannt). Rangfolge der Infix-Aufrufe mit
+  Kotlin verglichen (`1 + 2 shl 1`, `6 and 3 or 8`, `bits and 1 == 1`).
+- RT-88: Testblock grün; mit dem Bundle aus c9a3996 rot. Dabei: Lesen einer
+  deklarierten, aber nicht zugewiesenen Variable meldete „The variable
+  `x/16` has not been declared“; jetzt `UninitializedPropertyAccessException`.
+- Arrays bleiben bewusst offen (docs/kotlin-surface.md: der Lehrgang arbeitet
+  mit Listen).
+- `browser-smoke`, `test:generics` und `test:blueplay-demos` grün.
+- Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
+  alle Node-Suiten grün, `test:offline` 4/4, Chromium 152/152 grün; PERF-01
+  dabei 322 Frames, p95 15,1 ms, max. 18,3 ms.
+- `git diff --check` ohne Befund; keine `* 2.*`-Dateien.
+
+### RT-89 und RT-90: Funktionsreferenzen, `this` in Lambdas (2026-10-04)
+
+RT-89 als offener Punkt der README; RT-90 dabei gefunden.
+
+- RT-89: Sonde mit 16 Fällen; Testblock grün, mit dem Bundle aus c4bccad rot.
+  Erweiterungs-Properties mit Getter zurückgestellt: sie bräuchten einen
+  Eingriff in die Vorab-Analyse von Top-Level-Deklarationen über Dateien.
+- RT-90: `this.f(it)` in Lambdas an `map`/`filter`/`forEach` scheiterte schon
+  vorher (mit dem alten Bundle nachgestellt). Ursache: Lambda-Argumente
+  entstanden erst im Gültigkeitsbereich des Empfängers. Testblock grün, mit
+  dem Bundle aus c4bccad rot.
+- Erster vollständiger Lauf rot in `smoke-blueplay-browser.mjs`:
+  `actors.joinToString(",") { it.label }` übergab das Lambda an `prefix`.
+  Vorab ausgewertete Argumente waren nach Argumentposition nummeriert und
+  wurden nach der Zuordnung noch einmal nach Parameterposition eingesetzt;
+  behoben und als Fall in RT-90 aufgenommen.
+- `smoke-kotlite-browser.mjs` schlug während der Arbeit zweimal fehl (einmal
+  schon vor der Änderung an der Laufzeit, beide Male an einem RT-42-Fall zu
+  tiefer Rekursion); danach in sieben Läufen grün, die RT-42-Fälle einzeln in
+  60 Wiederholungen stabil. Ursache nicht gefunden; beobachten.
+- `browser-smoke`, `test:generics` und `test:blueplay-demos` grün.
+- Vollständiger `npm run test:regression` nach der Korrektur: Typecheck
+  0 Fehler/0 Warnungen, alle Node-Suiten grün, `test:offline` 4/4, Chromium
+  152/152 grün; PERF-01 dabei 323 Frames, p95 15,2 ms, max. 19,4 ms.
 - `git diff --check` ohne Befund; keine `* 2.*`-Dateien.

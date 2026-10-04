@@ -35,6 +35,8 @@ Werte), `coerceIn` / `coerceAtLeast` / `coerceAtMost` für `Int` und `Double`,
 `Int.MAX_VALUE` / `Int.MIN_VALUE`, `Double.MAX_VALUE` / `MIN_VALUE` /
 `POSITIVE_INFINITY` / `NEGATIVE_INFINITY` / `NaN`, `Char.MIN_VALUE` /
 `MAX_VALUE` (RT-59), `Int.toChar()`, `Char.code`, `Char.digitToInt()`.
+Bit-Operationen `and`, `or`, `xor`, `shl`, `shr`, `ushr` (infix) und `inv()`
+für `Int` und `Long` (RT-87).
 
 **Listen und Ranges.** `sum()` (`Int`, `Double`), `average()`, `sumOf { }`,
 `reduce { }`, `flatten()`, `indices`, `chunked(n)`, `windowed(n, step,

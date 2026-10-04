@@ -613,8 +613,9 @@ const syntaxSession = api.bluekCreateKotliteSession();
 expectOk(JSON.parse(syntaxSession.load('<visibility>', 'class Protected { protected fun hidden() {} }')), 'protected fixture');
 const protectedError = JSON.parse(syntaxSession.evaluate('<visibility>', 'Protected().hidden()'));
 if (protectedError.kind !== 'error' || !protectedError.display.includes('Protected function `hidden` cannot be accessed here')) throw new Error('A protected function could be called from top-level code.');
+// Delegation `: this(...)` is supported (RT-83); one to a missing constructor is an analysis error.
 const secondaryConstructorError = JSON.parse(syntaxSession.evaluate('<visibility>', 'class Secondary { constructor(value: Int) : this() {} }'));
-if (secondaryConstructorError.kind !== 'error' || !secondaryConstructorError.display.includes('Secondary constructor delegation')) throw new Error('Secondary constructors did not produce a clear local error.');
+if (secondaryConstructorError.kind !== 'error' || !secondaryConstructorError.display.includes('No matching function or constructor `Secondary`')) throw new Error('Secondary constructor delegation to a missing constructor was not rejected: ' + secondaryConstructorError.display);
 
 // RT-48: overload resolution, caller evaluation and suspended constructor bodies.
 const ctorSession = api.bluekCreateKotliteSession();

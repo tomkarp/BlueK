@@ -85,7 +85,9 @@ test('EXP-03 compile errors, a missing main and runtime errors are shown instead
     { fileName: 'App.kt', source: 'fun main() {\n    println("before")\n    val items = listOf(1)\n    println(items[5])\n}\n' },
   ], 'App.kt'));
   await expect(page.getByRole('alert', { name: 'Error' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Terminal' }).locator('pre')).toHaveText('before\n');
+  // Like Kotlin, the uncaught exception also goes to the terminal (RT-82).
+  await expect(page.getByRole('region', { name: 'Terminal' }).locator('pre')).toHaveText(
+    'before\nException in thread "main" IndexOutOfBoundsException: index: 5, size: 1\n    at get(Kotlin library)\n    at main(App.kt:4)\n');
 });
 
 test('EXP-04 the project can be downloaded as .bluek.json and opened in BlueK by link', async ({ page, context, baseURL }, testInfo) => {

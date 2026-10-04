@@ -705,6 +705,123 @@ test('GUI-98 sized text (kitty OSC 66) overlays the following lines', async ({ p
   expect(Math.abs(geometry.daneben - geometry.karte)).toBeLessThan(1);
 });
 
+test('RT-82 an uncaught exception ends the call, the runtime stays usable', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, files: [
+    { fileName: 'Karte.kt', kind: 'class', source: 'class Karte(var rang: String) {\n    var aufrufe = 0\n    fun wert(): Int {\n        aufrufe++\n        val n = rang.toInt()\n        if (n !in 2..10) throw IllegalArgumentException("Rang außerhalb des Bereichs: $rang")\n        return n\n    }\n}\n' },
+    { fileName: 'Main.kt', kind: 'functions', source: 'fun main() {\n    println("vorher")\n    println(Karte("70").wert())\n}\n' },
+  ] };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  await page.getByRole('button', { name: 'Compile', exact: true }).click();
+  await expect(page.getByLabel('Ready', { exact: true })).toBeVisible();
+  const entry = await evaluate(page, 'Karte("70")');
+  await entry.getByRole('button').click();
+  await page.getByLabel('Name of instance').fill('karte1');
+  await page.getByRole('button', { name: 'OK', exact: true }).click();
+  const object = page.locator('.bench .object');
+  const popup = page.locator('.popup');
+
+  // The user's case: the method throws. The dialog names the exception, not a compile error.
+  await object.click({ button: 'right' });
+  await popup.getByRole('button', { name: 'wert(): Int', exact: true }).click();
+  const error = page.getByRole('dialog', { name: 'Exception', exact: true });
+  await expect(error).toContainText('The call ended with an exception.');
+  await expect(error.locator('pre')).toHaveText('IllegalArgumentException: Rang außerhalb des Bereichs: 70');
+  await error.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(page.locator('.terminal-notice')).toHaveCount(0);
+  await expect(page.getByLabel('Ready', { exact: true })).toBeVisible();
+
+  // The object stays on the bench with the change the call made before it failed.
+  await expect(await evaluate(page, 'karte1.aufrufe')).toContainText('1');
+  await evaluate(page, 'karte1.rang = "8"');
+  await object.click({ button: 'right' });
+  await popup.getByRole('button', { name: 'wert(): Int', exact: true }).click();
+  const result = page.locator('.result-dialog');
+  await expect(result.locator('.result-value')).toHaveText('8 : Int');
+  await result.getByRole('button', { name: 'Close', exact: true }).click();
+
+  // Codepad: the exception is shown in the entry, the next input runs.
+  const input = page.getByLabel('Codepad input');
+  await input.fill('"x".toInt()');
+  await input.press('Enter');
+  await expect(page.locator('.codepad-error').last()).toContainText('NumberFormatException');
+  await expect(await evaluate(page, 'karte1.aufrufe + 1')).toContainText('3');
+
+  // main(): the exception goes to the terminal like in Kotlin; main can run again.
+  await page.getByRole('button', { name: 'Start main', exact: true }).click();
+  const terminal = page.locator('.terminal-output pre');
+  await expect(terminal).toHaveText('vorher\nException in thread "main" IllegalArgumentException: Rang außerhalb des Bereichs: 70\n    at Karte.wert(Karte.kt:6)\n    at main(Main.kt:3)\n');
+  await expect(terminal.locator('span', { hasText: 'Exception in thread' })).toHaveCSS('color', 'rgb(205, 49, 49)');
+  await expect(page.locator('.terminal-notice')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Start main', exact: true })).toBeEnabled();
+  await expect(await evaluate(page, '2 + 3')).toContainText('5');
+});
+
+test('RT-83 the class menu offers primary and secondary constructors and creates with each', async ({ page }) => {
+  await project(page, 'class Hund(val name: String, val alter: Int) {\n    constructor(name: String) : this(name, 1)\n    constructor() : this("Bello")\n}');
+  await page.getByRole('button', { name: 'Compile', exact: true }).click();
+  await expect(page.getByLabel('Ready', { exact: true })).toBeVisible();
+  await page.locator('.classcard').click({ button: 'right' });
+  const items = page.locator('.constructor-menu-item');
+  await expect(items).toHaveText(['Hund(name: String, alter: Int)', 'Hund(name: String)', 'Hund()']);
+  await items.nth(1).click();
+  const dialog = page.locator('.create-object-dialog');
+  await dialog.getByLabel('name: String', { exact: true }).fill('"Rex"');
+  await dialog.getByRole('button', { name: 'Create', exact: true }).click();
+  await expect(page.locator('.bench .object')).toHaveCount(1);
+  await expect(await evaluate(page, 'hund1.name + hund1.alter')).toContainText('Rex1');
+  await page.locator('.classcard').click({ button: 'right' });
+  await items.nth(2).click();
+  await dialog.getByRole('button', { name: 'Create', exact: true }).click();
+  await expect(page.locator('.bench .object')).toHaveCount(2);
+  await expect(await evaluate(page, 'hund2.name + hund2.alter')).toContainText('Bello1');
+});
+
+test('GUI-100 constructor and method dialogs show the call as code like BlueJ', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, files: [
+    { fileName: 'Karte.kt', kind: 'class', source: 'class Karte(val farbe: String, val rang: String) {\n    constructor(farbe: String) : this(farbe, "A")\n    fun wert(faktor: Int, bonus: Int = 0): Int = faktor + bonus\n}' },
+  ] };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  await page.getByRole('button', { name: 'Compile', exact: true }).click();
+  await expect(page.getByLabel('Ready', { exact: true })).toBeVisible();
+  await page.locator('.classcard').click({ button: 'right' });
+  await page.locator('.constructor-menu-item').first().click();
+  const dialog = page.locator('.create-object-dialog');
+  const call = dialog.getByRole('group', { name: 'Call' });
+  // `Karte(` [farbe: String] `,` [rang: String] `)`: names and types are placeholders.
+  await expect(call.locator('.call-prefix')).toHaveText('Karte(');
+  await expect(call.locator('input')).toHaveCount(2);
+  await expect(call.locator('input').nth(0)).toHaveAttribute('placeholder', 'farbe: String');
+  await expect(call.locator('input').nth(1)).toHaveAttribute('placeholder', 'rang: String');
+  await expect(call.locator('.call-separator')).toHaveText([',', ')']);
+  await expect(call.locator('input').nth(0)).toBeFocused();
+  await call.getByLabel('farbe: String', { exact: true }).fill('"herz"');
+  await call.getByLabel('rang: String', { exact: true }).fill('"dame"');
+  // The fields line up under each other, after the prefix.
+  const first = (await call.locator('input').nth(0).boundingBox())!;
+  const second = (await call.locator('input').nth(1).boundingBox())!;
+  const prefix = (await call.locator('.call-prefix').boundingBox())!;
+  expect(Math.abs(first.x - second.x)).toBeLessThan(1);
+  expect(second.y).toBeGreaterThan(first.y + first.height - 1);
+  expect(first.x).toBeGreaterThanOrEqual(prefix.x + prefix.width);
+  // Choosing the secondary constructor shows its call.
+  await dialog.getByLabel('Constructor').selectOption({ label: 'Karte(farbe: String)' });
+  await expect(call.locator('input')).toHaveCount(1);
+  await expect(call.locator('.call-separator')).toHaveText([')']);
+  await call.getByLabel('farbe: String', { exact: true }).fill('"pik"');
+  await dialog.getByRole('button', { name: 'Create', exact: true }).click();
+  await expect(await evaluate(page, 'karte1.farbe + karte1.rang')).toContainText('pikA');
+
+  // Method calls look the same, with `= …` for a parameter with a default value.
+  await page.locator('.bench .object').click({ button: 'right' });
+  await page.locator('.popup').getByRole('button', { name: /^wert\(/ }).click();
+  const invoke = page.locator('.method-dialog').getByRole('group', { name: 'Call' });
+  await expect(invoke.locator('.call-prefix')).toHaveText('karte1.wert(');
+  await expect(invoke.locator('input').nth(1)).toHaveAttribute('placeholder', 'bonus: Int = …');
+  await invoke.getByLabel('faktor: Int', { exact: true }).fill('4');
+  await invoke.getByLabel('faktor: Int', { exact: true }).press('Enter');
+  await expect(page.locator('.result-dialog .result-value')).toHaveText('4 : Int');
+});
+
 test('GUI-31 additional editor files open in tabs by default', async ({ page }) => {
   const payload = { format: 'bluek-project', version: 1, files: [
     { fileName: 'Hund.kt', kind: 'class', source: 'class Hund {}' },

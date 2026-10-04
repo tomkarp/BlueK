@@ -348,6 +348,31 @@ projectClient.invalidate();
   assert.equal(replacedClasses, false, 'frames of a Run must not replace the class metadata');
   runner.invalidate();
 }
+// RT-82: an exception in act() stops Run and goes to the terminal like in Kotlin;
+// the world and the runtime stay usable.
+{
+  const runner = new LocalRuntimeClient(() => new TestWorker());
+  const files = [
+    { id: 'Panne', fileName: 'Panne.kt', kind: 'class', revision: 1, source: 'class Panne : Actor() {\n    var n = 0\n    override fun act() {\n        n += 1\n        if (n == 3) error("Panne bei $n")\n    }\n}' },
+    { id: 'Main', fileName: 'Main.kt', kind: 'functions', revision: 1, source: 'val panne = Panne()\nfun main() { val w = World(100, 10, 1); w.addObject(panne, 1, 1); w.show() }' },
+  ];
+  assert.deepEqual((await runner.compile(files, 1, { id: 'blueplay', version: 1 })).diagnostics, []);
+  assert.notEqual((await runner.execute({ op: 'main', fileName: 'Main.kt' })).kind, 'error');
+  const outputs = [];
+  const stopOutputs = runner.onResponse(value => { if (value.output) outputs.push(value.output); });
+  await runner.simulation('setSpeed', 100);
+  await runner.simulation('start');
+  const started = Date.now();
+  while (runner.getSnapshot().simulation === 'running' && Date.now() - started < 5000) await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(runner.getSnapshot().simulation, 'paused', 'an exception in act() stops Run');
+  assert.equal(runner.getSnapshot().phase, 'ready', 'an exception in act() does not lock the runtime');
+  assert.equal(outputs.join(''), '\u001B[31mException in thread "main" IllegalStateException: Panne bei 3\n    at error(Kotlin library)\n    at Panne.act(Panne.kt:5)\n\u001B[0m');
+  assert.equal((await runner.execute({ op: 'eval', code: 'panne.n' })).display, '3');
+  await runner.simulation('step');
+  assert.equal((await runner.execute({ op: 'eval', code: 'panne.n' })).display, '4', 'Act still works after the exception');
+  stopOutputs();
+  runner.invalidate();
+}
 
 // RT-47: a paused single step remains paused across input; an automatic Run
 // remains running across input. Public step() must use the owner's mode.
@@ -537,8 +562,11 @@ projectClient.invalidate();
   await inspectionClient.execute({ op: 'inspect', objectId: probe.objectId });
   assert.equal(model.view(probe.objectId).fields.find(f => f.name === 'reads').value, '1', 'Snapshot refresh never reruns getters');
   const failure = await inspectionClient.execute({ op: 'get', objectId: probe.objectId, property: 'bad' });
-  assert.equal(failure.fatal, true, 'A direct program getter call remains fatal when uncaught');
-  assert.equal(inspectionClient.getSnapshot().phase, 'faulted');
+  // An exception the program could catch ends the call; the runtime stays usable (RT-82).
+  assert.equal(failure.fatal, false, 'A direct program getter call ends with its exception');
+  assert.match(failure.display, /Exception/);
+  assert.equal(inspectionClient.getSnapshot().phase, 'ready');
+  assert.equal((await inspectionClient.execute({ op: 'eval', code: '1 + 1' })).display, '2');
   inspectionClient.invalidate();
 
   const boundary = new LocalRuntimeClient(() => new TestWorker());

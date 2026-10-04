@@ -10,6 +10,7 @@
     ResultDialog,
   } from "../uiTypes";
   import { missingRequired, missingTypeArgument } from "../uiParity";
+  import CallArguments from "./CallArguments.svelte";
   export let createDialog: CreateDialog | null;
   export let invokeDialog: InvokeDialog | null;
   export let resultDialog: ResultDialog | null;
@@ -77,14 +78,16 @@
             use:focusOnMount={index === 0}
             on:keydown={(event) => event.key === "Enter" && confirmCreate()}
           /></label
-        >{/each}{#each createDialog.parameters as parameter, index}<label
-          >{parameter.name}: {parameter.type?.displayName ||
-            "Any?"}{parameter.hasDefault ? " (optional)" : ""}<input
-            bind:value={createArgs[index]}
-            use:focusOnMount={index === 0}
-            on:keydown={(event) => event.key === "Enter" && confirmCreate()}
-          /></label
-        >{/each}{#if dialogError}<div class="dialog-error" role="alert">
+        >{/each}<CallArguments
+        prefix={createDialog.className +
+          (createDialog.typeParameters.length
+            ? `<${createTypeArgs.map((value) => value || "…").join(", ")}>`
+            : "")}
+        parameters={createDialog.parameters}
+        bind:values={createArgs}
+        focusFirst={!createDialog.typeParameters.length}
+        submit={confirmCreate}
+      />{#if dialogError}<div class="dialog-error" role="alert">
           {dialogError}
         </div>{/if}
       <div class="dialog-actions">
@@ -117,14 +120,19 @@
             use:focusOnMount={index === 0}
             on:keydown={(event) => event.key === "Enter" && confirmInvoke()}
           /></label
-        >{/each}{#each invokeDialog.method.parameters || [] as parameter, index}<label
-          >{parameter.name}: {parameter.type?.displayName ||
-            "Any?"}{parameter.hasDefault ? " (optional)" : ""}<input
-            bind:value={invokeArgs[index]}
-            use:focusOnMount={index === 0}
-            on:keydown={(event) => event.key === "Enter" && confirmInvoke()}
-          /></label
-        >{/each}{#if dialogError}<div class="dialog-error" role="alert">
+        >{/each}<CallArguments
+        prefix={(invokeDialog.object
+          ? invokeDialog.object.name + "."
+          : invokeDialog.receiver || "") +
+          invokeDialog.method.name +
+          (invokeDialog.method.typeParameters?.length
+            ? `<${invokeTypeArgs.map((value) => value || "…").join(", ")}>`
+            : "")}
+        parameters={invokeDialog.method.parameters || []}
+        bind:values={invokeArgs}
+        focusFirst={!invokeDialog.method.typeParameters?.length}
+        submit={confirmInvoke}
+      />{#if dialogError}<div class="dialog-error" role="alert">
           {dialogError}
         </div>{/if}
       <div class="dialog-actions">

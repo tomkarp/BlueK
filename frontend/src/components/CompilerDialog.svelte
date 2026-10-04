@@ -6,6 +6,8 @@
   export let compilerDialog: boolean;
   export let compilerDiagnostics: Diagnostic[];
   export let error: string;
+  /** An exception ended a call (RT-82); the runtime stays usable. */
+  export let exception = false;
 </script>
 
 {#if compilerDialog}<div class="modal topmost-modal" role="presentation">
@@ -16,8 +18,12 @@
       tabindex="-1"
       aria-labelledby="compiler-error-title"
     >
-      <h3 id="compiler-error-title">Compiler errors</h3>
-      <p>The project could not be compiled.</p>
+      {#if exception}<h3 id="compiler-error-title">Exception</h3>
+        <p>The call ended with an exception.</p>{:else}<h3
+          id="compiler-error-title">
+          Compiler errors
+        </h3>
+        <p>The project could not be compiled.</p>{/if}
       <!-- Errors inside a project file are marked in its editor; only errors
              without a source location, such as a failed call, land here. -->
       {#each compilerDiagnostics as diagnostic}<div

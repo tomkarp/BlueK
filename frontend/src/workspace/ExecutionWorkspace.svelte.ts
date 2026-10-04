@@ -65,6 +65,8 @@ export class ExecutionWorkspace {
   codepadOpen = $state(true);
   codepadMenu: { x: number; y: number; text?: string } | null = $state(null);
   compilerDialog = $state(false);
+  /** The dialog reports an exception of a call, not a compile error (RT-82). */
+  callException = $state(false);
   mainDialog: { action: MainAction; generationId: string } | null =
     $state(null);
   classes = $derived.by(() => {
@@ -132,6 +134,7 @@ export class ExecutionWorkspace {
           .join("\n") ||
         result.error ||
         "Compilation failed.";
+      this.callException = false;
       this.compilerDialog = !this.host
         .editor()
         .markDiagnostics(result.diagnostics, true);
@@ -224,6 +227,7 @@ export class ExecutionWorkspace {
           .join("\n") ||
         result.compile.error ||
         "Compilation failed.";
+      this.callException = false;
       this.compilerDialog = !this.host
         .editor()
         .markDiagnostics(result.compile.diagnostics, true);
@@ -320,6 +324,7 @@ export class ExecutionWorkspace {
               `${item.fileName || ""}:${item.line}:${item.column}: ${item.message}`,
           )
           .join("\n");
+        this.callException = false;
         this.compilerDialog = !this.host
           .editor()
           .markDiagnostics(diagnostics, true);
@@ -381,9 +386,10 @@ export class ExecutionWorkspace {
   requestExport = (generationId: string) => {
     this.mainDialog = { action: "export", generationId };
   };
-  reportCallError = (message: string) => {
+  reportCallError = (message: string, exception = false) => {
     this.host.ui().error = message;
     this.host.editor().markDiagnostics([]);
+    this.callException = exception;
     this.compilerDialog = true;
   };
 }

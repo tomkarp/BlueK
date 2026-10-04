@@ -12,7 +12,7 @@ export interface KotliteSessionBridge {
   evaluate(filename: string, source: string): string;
   startEvaluate(filename: string, source: string, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
   startLoadProject(filenames: string[], sources: string[], libraryId: string | null, libraryVersion: number, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
-  mainFunctionName(filename: string): string;
+  startMain(filename: string, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
   startCreate(className: string, argumentsSource: string, requestedName: string, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
   startInvoke(objectId: string, methodName: string, argumentsSource: string, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
   startSet(objectId: string, propertyName: string, valueSource: string, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
@@ -240,11 +240,9 @@ export class RuntimeHost {
       let filename = '<Codepad>', source = '';
       if (command.op === 'eval') { filename = command.filename || filename; source = command.code; }
       else if (command.op === 'main') {
+        // Each file may declare its own main(); the session knows its callable name.
         try { filename = resolveMainFile(this.snapshot.classes, command.fileName); }
         catch (error) { throw new RequestError((error as Error).message); }
-        // Each file may declare its own main(); the session knows its callable name.
-        const name = this.session.mainFunctionName(filename);
-        source = `${name}()`;
       }
       const executionId = id;
       this.active = { executionId }; this.snapshot.phase = 'running';
@@ -278,7 +276,9 @@ export class RuntimeHost {
               ? this.session.startInspectGet(command.objectId, command.property, onInput, onComplete)
             : command.op === 'get'
               ? this.session.startGet(command.objectId, command.property, onInput, onComplete)
-              : this.session.startEvaluate(filename, source, onInput, onComplete);
+              : command.op === 'main'
+                ? this.session.startMain(filename, onInput, onComplete)
+                : this.session.startEvaluate(filename, source, onInput, onComplete);
       const initial = JSON.parse(started) as RuntimeValue;
       if (initial.kind === 'error' && this.active?.executionId === executionId) { this.active = null; this.snapshot.phase = initial.fatal ? 'faulted' : 'ready'; emit(this.publish(id, initial)); }
       else if (command.op === 'inspectGet' && this.active?.executionId === executionId && this.snapshot.phase === 'running') this.emitEvent(executionId, 'started', emit);
@@ -351,7 +351,8 @@ export class RuntimeHost {
     const onComplete = (result: string) => {
       if (!this.active || this.active.executionId !== executionId) return;
       this.active = null; const response = JSON.parse(result) as RuntimeValue; const intent = this.session!.takeBluePlayIntent();
-      if (response.fatal) this.simulation.state = 'faulted'; else if (intent === 'stop' || this.simulation.state === 'stopping') this.simulation.state = 'paused'; else this.simulation.state = automatic ? 'running' : 'paused';
+      // An exception in act() stops the simulation; the world stays usable (RT-82).
+      if (response.fatal) this.simulation.state = 'faulted'; else if (response.kind === 'error' || intent === 'stop' || this.simulation.state === 'stopping') this.simulation.state = 'paused'; else this.simulation.state = automatic ? 'running' : 'paused';
       this.snapshot.phase = response.fatal ? 'faulted' : 'ready';
       if (automatic) this.emitSimulationFrame(executionId, emit, response); else emit(this.publish(id, response));
       if (automatic && this.simulation.state === 'running') this.scheduleSimulationStep(performance.now() - startedAt);

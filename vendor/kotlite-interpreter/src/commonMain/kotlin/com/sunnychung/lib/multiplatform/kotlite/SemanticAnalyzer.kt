@@ -1321,11 +1321,10 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         if (PropertyModifier.abstract in modifiers && (initialValue != null || accessors != null)) {
             throw SemanticException(position, "An abstract property cannot have an initializer or accessors")
         }
-        // `lateinit var` (RT-81): Kotlin's rules; BlueK supports it for class properties
+        // `lateinit var` (RT-81, also local and top-level since RT-88): Kotlin's rules
         if (PropertyModifier.lateinit in modifiers) {
             val lateinitType = declaredType
             when {
-                !isClassProperty -> throw SemanticException(position, "'lateinit' is supported for class properties only in BlueK")
                 !isMutable -> throw SemanticException(position, "'lateinit' modifier is allowed only on mutable properties")
                 initialValue != null -> throw SemanticException(position, "'lateinit' modifier is not allowed on properties with initializer")
                 accessors != null -> throw SemanticException(position, "'lateinit' modifier is not allowed on properties with a custom getter or setter")
@@ -1716,6 +1715,23 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
 //                previousScope.declareExtensionFunction("Nothing/$name", this.copy(receiver = typeRegistry["Null"]).also { variantsOfThis += it })
 //                transformedRefName = "Nothing/$name/${++functionDefIndex}"
+            }
+        }
+
+        // `constructor(x: Int) : this(x, 0)`: the delegation sees the parameters (RT-83).
+        // Like a superclass call it may target an abstract class's own constructor.
+        (this as? ClassSecondaryConstructorNode)?.let { constructor ->
+            val delegation = constructor.delegationCall ?: return@let
+            delegation.visit(modifier = modifier, isSkipConstructionSecurityCheck = true)
+            // The constructors of a cycle are analyzed in order, so the last one closes it here.
+            val siblings = constructor.siblingConstructors
+            val seen = mutableSetOf<Int>()
+            var next = delegation.secondaryConstructorIndex
+            while (next != null && seen.add(next)) {
+                if (siblings[next] === constructor) {
+                    throw SemanticException(constructor.position, "There's a cycle in the delegation calls chain")
+                }
+                next = siblings[next].delegationCall?.secondaryConstructorIndex
             }
         }
 
@@ -2508,7 +2524,8 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         arguments.forEachIndexed { i, callArgument ->
             val functionArgumentType = argumentInfos[callArgumentMappedIndexes[i]].type
             if (callArgument.value is LambdaLiteralNode && functionArgumentType is FunctionType) {
-                if (callArgument.value.valueParameters.size != functionArgumentType.arguments.size && !(callArgument.value.valueParameters.isEmpty() && functionArgumentType.arguments.size == 1)) {
+                // a function reference takes its parameters from the expected type (RT-89)
+                if (callArgument.value.referenceName == null && callArgument.value.valueParameters.size != functionArgumentType.arguments.size && !(callArgument.value.valueParameters.isEmpty() && functionArgumentType.arguments.size == 1)) {
                     throw SemanticException(callArgument.position, "Lambda argument count is different from function parameter declaration.")
                 }
                 callArgument.value.parameterTypesUpperBound = functionArgumentType.arguments.map {
@@ -2730,7 +2747,22 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         }
     }
 
-    fun checkBreakOrContinueScope(statement: ASTNode) {
+    /** Labels of the loops being analyzed, innermost last; null for a loop without label (RT-85). */
+    private val loopLabels = mutableListOf<String?>()
+
+    private inline fun <T> inLoop(label: String?, visit: () -> T): T {
+        loopLabels += label
+        try {
+            return visit()
+        } finally {
+            loopLabels.removeLast()
+        }
+    }
+
+    fun checkBreakOrContinueScope(statement: ASTNode, label: String = "") {
+        if (label.isNotEmpty() && label !in loopLabels) {
+            throw SemanticException(statement.position, "There is no loop with the label `$label`")
+        }
         var s: SymbolTable = currentScope
         while (!s.scopeType.isLoop()) {
             if (s.scopeType in setOf(ScopeType.Script, ScopeType.Function) || s.parentScope == null) {
@@ -2741,11 +2773,11 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     }
 
     fun BreakNode.visit(modifier: Modifier = Modifier()) {
-        checkBreakOrContinueScope(this)
+        checkBreakOrContinueScope(this, returnToLabel)
     }
 
     fun ContinueNode.visit(modifier: Modifier = Modifier()) {
-        checkBreakOrContinueScope(this)
+        checkBreakOrContinueScope(this, returnToLabel)
     }
 
     fun IfNode.visit(modifier: Modifier = Modifier()) {
@@ -2765,12 +2797,12 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
     fun WhileNode.visit(modifier: Modifier = Modifier()) {
         condition.visit(modifier = modifier)
-        withSmartCasts(smartCastsWhenTrue(condition)) { body?.visit(modifier = modifier) }
+        inLoop(label) { withSmartCasts(smartCastsWhenTrue(condition)) { body?.visit(modifier = modifier) } }
     }
 
     fun DoWhileNode.visit(modifier: Modifier = Modifier()) {
         condition.visit(modifier = modifier)
-        body?.visit(modifier = modifier)
+        inLoop(label) { body?.visit(modifier = modifier) }
     }
 
     fun NavigationNode.visit(modifier: Modifier = Modifier(), lookupType: IdentifierClassifier = IdentifierClassifier.Property, isCheckWriteAccess: Boolean = false): DataType {
@@ -3006,15 +3038,16 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             if (ClassModifier.open in modifiers) {
                 throw SemanticException(position, "An enum class cannot be applied with an 'open' modifier")
             }
-            if (!superInvocations.isNullOrEmpty()) {
-                throw SemanticException(position, "Enum class cannot inherit classes or interfaces")
+            // Like Kotlin, an enum class may implement interfaces (it is `Comparable`, RT-84), but not extend a class.
+            superInvocations?.firstOrNull { it is FunctionCallNode }?.let {
+                throw SemanticException(it.position, "Enum class cannot inherit from classes")
             }
         }
         if (ClassModifier.abstract in modifiers) {
             inferredModifiers += ClassModifier.open
         }
         if (isInterface) {
-            val unsupportedModifiers = modifiers - setOf(ClassModifier.abstract, ClassModifier.open)
+            val unsupportedModifiers = modifiers - setOf(ClassModifier.abstract, ClassModifier.open, ClassModifier.sealed)
             if (unsupportedModifiers.isNotEmpty()) {
                 throw SemanticException(position, "Modifiers ${unsupportedModifiers.joinToString(", ")} are not applicable to interfaces")
             }
@@ -3521,6 +3554,47 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         }
     }
 
+    /**
+     * The parameters and the call of a function reference (RT-89). The parameter types come from
+     * the expected function type, or, for `::f` without one, from the only function `f`.
+     * `Typ::f` passes the first parameter as receiver (`String::length`, `Karte::wert`),
+     * `objekt::f` calls `f` on that object.
+     */
+    private fun LambdaLiteralNode.buildFunctionReference() {
+        val name = referenceName!!
+        val receiver = referenceReceiver
+        val shown = "${receiver ?: ""}::$name"
+        val types = parameterTypesUpperBound ?: run {
+            if (receiver != null) throw SemanticException(position, "`$shown` needs an expected function type here, e.g. as the argument of `map`")
+            val functions = currentScope.findFunctionsByOriginalName(name)
+            val function = functions.singleOrNull()?.first
+                ?: throw SemanticException(position, if (functions.isEmpty()) "`$shown`: there is no function `$name`" else "`$shown` is ambiguous here: give the variable a function type")
+            function.valueParameters.map { it.type }
+        }
+        val parameters = types.mapIndexed { index, type -> FunctionValueParameterNode(position, "__ref$index", type, null, emptySet()) }
+        referenceParameters = parameters
+        fun argument(index: Int, parameter: FunctionValueParameterNode) =
+            FunctionCallArgumentNode(position = position, index = index, value = VariableReferenceNode(position, parameter.name))
+        val isTypeReceiver = receiver != null && !currentScope.hasProperty(receiver) && currentScope.findClass(receiver) != null
+        val call: ASTNode = when {
+            receiver == null -> FunctionCallNode(VariableReferenceNode(position, name), parameters.mapIndexed(::argument), emptyList(), position)
+            isTypeReceiver -> {
+                if (parameters.isEmpty()) throw SemanticException(position, "`$shown` needs the object as its first parameter")
+                val subject = VariableReferenceNode(position, parameters.first().name)
+                val member = NavigationNode(position, subject, ".", ClassMemberReferenceNode(position, name))
+                val receiverType = currentScope.assertToDataType(types.first())
+                val hasFunction = currentScope.findMatchingCallables(currentScope, name, receiverType, emptyList(), SearchFunctionModifier.NoRestriction).isNotEmpty()
+                if (parameters.size == 1 && !hasFunction) member
+                else FunctionCallNode(member, parameters.drop(1).mapIndexed { index, parameter -> argument(index, parameter) }, emptyList(), position)
+            }
+            else -> FunctionCallNode(
+                NavigationNode(position, VariableReferenceNode(position, receiver), ".", ClassMemberReferenceNode(position, name)),
+                parameters.mapIndexed(::argument), emptyList(), position,
+            )
+        }
+        (body.statements as MutableList<ASTNode>)[0] = call
+    }
+
     private fun LambdaLiteralNode.visitLambda(modifier: Modifier) {
 //        val type = type() as FunctionTypeNode
 
@@ -3530,6 +3604,8 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             scopeType = ScopeType.Closure,
             returnType = returnTypeUpperBound?.toDataType() //type.returnType.toDataType(),
         )
+
+        if (referenceName != null) buildFunctionReference()
 
         if (parameterTypesUpperBound != null) {
             if (valueParameters.size != parameterTypesUpperBound!!.size) {
@@ -3846,9 +3922,9 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         if (subjectType.name == "Boolean") {
             return values.any { it is BooleanNode && it.value } && values.any { it is BooleanNode && !it.value }
         }
-        val enumClass = currentScope.findClass(subjectType.name)?.first
-            ?.takeIf { ClassModifier.enum in it.modifiers }
-            ?: return false
+        val subjectClass = currentScope.findClass(subjectType.name)?.first ?: return false
+        if (ClassModifier.sealed in subjectClass.modifiers) return coversSealedClass(subjectClass)
+        val enumClass = subjectClass.takeIf { ClassModifier.enum in it.modifiers } ?: return false
         // Inside its own class the entries are not created yet: take them from the declaration.
         val entries = declaredClasses.values.firstOrNull { it.definition === enumClass }?.node?.enumEntries?.map { it.name }
             ?: enumClass.enumValues.keys.toList()
@@ -3866,6 +3942,31 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             }
         }.toSet()
         return covered.containsAll(entries)
+    }
+
+    /**
+     * Whether the entries cover every subclass of a sealed class or interface (RT-86): `is X` for
+     * it or a supertype, the object itself for an `object` subclass, or all subclasses of a sealed one.
+     */
+    private fun WhenNode.coversSealedClass(sealed: ClassDefinition): Boolean {
+        val conditions = entries.flatMap { it.conditions }.filter { !it.isNegateResult }
+        val testedTypes = conditions.filter { it.testType == WhenConditionNode.TestType.TypeTest }
+            .mapNotNull { (it.expression as? TypeNode)?.let { type -> currentScope.findClass(type.name)?.first?.fullQualifiedName } }
+        val objects = conditions.filter { it.testType == WhenConditionNode.TestType.Regular }
+            .mapNotNull { (it.expression as? VariableReferenceNode)?.transformedRefName?.takeIf { name -> name.startsWith(OBJECT_REF_PREFIX) }?.removePrefix(OBJECT_REF_PREFIX) }
+        fun ClassDefinition.isSameOrSubtypeOf(name: String): Boolean =
+            fullQualifiedName == name || superClass?.isSameOrSubtypeOf(name) == true || superInterfaces.any { it.isSameOrSubtypeOf(name) }
+        fun ClassDefinition.directSubclasses() = declaredClasses.values.map { it.definition }.filter { candidate ->
+            candidate.superClass?.fullQualifiedName == fullQualifiedName || candidate.superInterfaces.any { it.fullQualifiedName == fullQualifiedName }
+        }
+        fun covers(clazz: ClassDefinition, seen: Set<String>): Boolean {
+            if (testedTypes.any { clazz.isSameOrSubtypeOf(it) }) return true
+            if (clazz.isObjectDeclaration && clazz.fullQualifiedName in objects) return true
+            if (ClassModifier.sealed !in clazz.modifiers || clazz.fullQualifiedName in seen) return false
+            val subclasses = clazz.directSubclasses()
+            return subclasses.isNotEmpty() && subclasses.all { covers(it, seen + clazz.fullQualifiedName) }
+        }
+        return covers(sealed, emptySet())
     }
 
     /** Kotlin rejects a `when` without `else` whose value is used, unless it covers every value. */
@@ -3931,7 +4032,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         val iteratingType = (returnType as ObjectType).arguments.first()
 
         variables.forEach { it.visit(modifier = modifier, iteratingType = iteratingType) } // TODO don't hardcode one iterating type
-        body.visit(modifier = modifier)
+        inLoop(label) { body.visit(modifier = modifier) }
         popScope()
     }
 

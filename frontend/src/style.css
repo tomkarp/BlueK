@@ -429,6 +429,15 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 .create-object-dialog label,.method-dialog label{color:#333;font-size:16px}
 .create-object-dialog label>input,.method-dialog label>input{font-size:16px;background:#fff;border:1px solid #999}
 .create-object-dialog .dialog-actions,.method-dialog .dialog-actions{border-top:1px solid #ccc;padding-top:14px}
+/* The call as code, like BlueJ: `Karte(` and one field per parameter with `,` and `)` (GUI-100). */
+.call-arguments{display:flex;align-items:flex-start;gap:6px;margin-bottom:14px;font:16px monospace}
+.call-prefix{flex:none;font-weight:bold;line-height:34px;white-space:pre}
+.call-argument-list{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.call-argument{display:flex;align-items:center;gap:4px}
+.dialog .call-argument input{flex:1;min-width:0;display:block;width:auto;margin:0;padding:7px;font:16px monospace;background:#fff;border:1px solid #999}
+.call-separator{flex:none;font-weight:bold;width:1ch}
+.call-empty{line-height:34px}
+.create-object-dialog label>select{display:block;width:100%;margin-top:6px;padding:6px;font:16px monospace}
 .new-project-dialog{min-width:min(520px,88vw)}
 .new-project-dialog p{margin:0 0 14px;color:#555}
 .project-choice-list{display:grid;gap:8px}
@@ -689,6 +698,7 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 .dark .bench,.dark .codepad,.dark .console,.dark .terminal-output{background:#252526;border-color:#3c3c3c}
 .dark .codepad textarea,.dark .console pre,.dark .codepad-history{background:#1e1e1e;color:#d4d4d4;border-color:#3c3c3c}
 .dark .offline-download{background:#303034;color:#d4d4d4;border-color:#55555c}
+.dark .create-object-dialog label,.dark .method-dialog label{color:#d4d4d4}
 .dark .console input,.dark input:not([type]),.dark input[type=text],.dark input[type=number],.dark input[type=search],.dark select,.dark textarea{background:#3c3c3c;color:#d4d4d4;border-color:#5a5a5a}
 .dark input:not([type]):focus,.dark input[type=text]:focus,.dark input[type=number]:focus,.dark input[type=search]:focus{border-color:#0a9dcc;outline:2px solid #0a9dcc55;outline-offset:1px}
 .dark .popup{background:#2d2d30;border-color:#3c3c3c;color:#d4d4d4}

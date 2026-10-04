@@ -91,7 +91,7 @@ assert.equal(evaluate('Image(0, -2).width.toString() + "," + Image(0, -2).height
 assert.equal(evaluate('val a = Actor(); a.rotation = 90; a.turnTowards(0, 0); a.rotation').display, '90');
 
 // Actors may exist detached, but operations requiring membership must fail;
-// an uncaught error faults the session and prevents further execution.
+// the uncaught exception ends the command, the session stays usable (RT-82).
 for (const operation of ['actor.world', 'actor.isAtEdge', 'actor.isClicked', 'actor.intersects(Actor())', 'actor.getIntersecting<Actor>()', 'actor.getOneIntersecting<Actor>()', 'actor.isTouching<Actor>()', 'actor.removeTouching<Actor>()']) {
   const detachedSession = await create();
   const run = source => JSON.parse(detachedSession.evaluate('<detached actor>', source));
@@ -99,9 +99,9 @@ for (const operation of ['actor.world', 'actor.isAtEdge', 'actor.isClicked', 'ac
   const failure = run(operation);
   assert.equal(failure.kind, 'error', operation);
   assert.equal(failure.phase, 'runtime', operation);
-  assert.equal(failure.fatal, true, operation);
+  assert.equal(failure.fatal, false, operation);
   assert.match(failure.display, /IllegalStateException: The actor is not in a world/, operation);
-  assert.match(run('1 + 1').display, /Runtime failed/, 'Uncaught membership failure requires reset or compile');
+  assert.equal(run('actor.x + 1').display, '4', 'The session and the actor stay usable after an uncaught exception');
 }
 assert.equal(evaluate('val unattached = Actor(); try { unattached.world; false } catch (e: IllegalStateException) { true }').display, 'true', 'Detached world throws a catchable membership exception');
 assert.equal(evaluate('try { unattached.isAtEdge; false } catch (e: IllegalStateException) { true }').display, 'true', 'Membership exceptions remain catchable as in Kotlin');

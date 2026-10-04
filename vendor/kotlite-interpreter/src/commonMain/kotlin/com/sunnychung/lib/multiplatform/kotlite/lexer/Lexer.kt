@@ -272,6 +272,8 @@ open class Lexer(val filename: String, val code: String, val isParseComment: Boo
                         c in setOf('\n') -> return Token(TokenType.NewLine, c.toString(), makeSourcePosition(), makeNextCharSourcePosition())
                         c.isWhitespace() -> continue
                         c.isDigit() -> return readNumber()
+                        // `.5` like Kotlin; `1..5` stays a range, as `..` is not followed by a digit (RT-87)
+                        c == '.' && nextChar()?.isDigit() == true -> return readNumber()
                         c in setOf('(', ')', '[', ']') -> return Token(TokenType.Operator, c.toString(), makeSourcePosition(), makeNextCharSourcePosition())
                         c in setOf('+', '-', '*', '/', '%') -> {
                             val position = makeSourcePosition()

@@ -197,6 +197,7 @@ export class ObjectWorkspace {
       if (result.kind === "error")
         this.showCallError(
           result.display || "Objekt konnte nicht erstellt werden.",
+          result.phase === "runtime",
         );
     } catch (reason) {
       if (this.host.session().client.getSnapshot().generationId === generation)
@@ -253,11 +254,12 @@ export class ObjectWorkspace {
     this.host.ui().dialogError = "";
     this.invokeDialog = call;
   };
-  showCallError = (reason: unknown) => {
+  showCallError = (reason: unknown, exception = false) => {
     this.host
       .session()
       .reportCallError(
         reason instanceof Error ? reason.message : String(reason),
+        exception,
       );
   };
   showResult = (result: RuntimeValue, method = "") => {
@@ -336,7 +338,10 @@ export class ObjectWorkspace {
       if (this.host.session().client.getSnapshot().generationId !== generation)
         return;
       if (result.kind === "error")
-        this.showCallError(result.display || "Aufruf fehlgeschlagen.");
+        this.showCallError(
+          result.display || "Aufruf fehlgeschlagen.",
+          result.phase === "runtime",
+        );
       else {
         this.showResult(
           result,

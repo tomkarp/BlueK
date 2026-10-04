@@ -684,6 +684,10 @@ open class SymbolTable(
         while (scope != null) {
             scope.propertyValuesStore?.get(name)?.read()?.let { return it }
             if (scope.isReceiverName(name)) return scope.receiverValue!!
+            // declared without a value yet, e.g. a local or top-level `lateinit var` (RT-88)
+            if (scope.propertyDeclarationsStore?.containsKey(name) == true) {
+                throw UninitializedPropertyAccessException("Property has not been initialized")
+            }
             if (isThisScopeOnly) break
             scope = scope.parentScope
         }

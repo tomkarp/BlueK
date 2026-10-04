@@ -771,3 +771,71 @@ not been initialized" (`ClassDefinition.isLateinitMemberProperty`). The class is
 registered as a standard exception, catchable by name. Passive reads for
 inspectors (`readBackingPropertyByDeclaredName`) return null for unassigned
 properties. Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (RT-81).
+
+Uncaught exceptions (RT-82): `Interpreter.stacktraceOf(e)` returns the Kotlin
+stack trace of an exception that left the program (the thrown object's trace, or
+the recorded trace of a host exception such as `NumberFormatException`), so
+BlueK can print `Exception in thread "main" …` like Kotlin. Coverage:
+`node scripts/smoke-runtime-state.mjs` and the browser test RT-82.
+
+Secondary constructor delegation (RT-83): `constructor(...) : this(...)` was rejected,
+and so was any secondary constructor next to a primary one. The parser reads the
+delegation (`ClassSecondaryConstructorNode.delegationArguments`, body optional) and
+builds `delegationCall` as `ClassName<T>(arguments)`; with a primary constructor a
+secondary one must delegate ("Primary constructor call expected"), constructors with
+the same parameter types conflict, and `: super(...)` gets its own message. The
+analyzer visits the delegation in the constructor's parameter scope and reports
+cycles ("There's a cycle in the delegation calls chain"). Constructor candidates are
+the primary constructor (index null) plus the secondary ones. The interpreter binds
+the parameters (with defaults), creates the object through the delegation, then runs
+the body. Overload resolution prefers, like Kotlin, a candidate that needs no default
+values (`f(1)` with `f(a)` and `f(a, b = 2)`). Coverage:
+`node scripts/smoke-curriculum-kotlin.mjs` (RT-83), `node scripts/smoke-kotlite-browser.mjs`
+and the browser test RT-83.
+
+Comparable enums (RT-84): like Kotlin's `Enum`, every enum class implements
+`Comparable<E>` with a generated `compareTo` by `ordinal` (`Parser.enumClassMembers`,
+marked as generated), so `<`, `compareTo`, `sorted()`, `maxOrNull()` and `a..b` work.
+Declaring `compareTo(other: E)` in an enum is an error (final in Kotlin). Enum classes
+may now implement interfaces; only extending a class is rejected ("Enum class cannot
+inherit from classes"). Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (RT-84).
+
+Labeled loops (RT-85): `outer@ for`, `outer@ while` and `outer@ do` were parse errors,
+and so were `break@outer` and `continue@outer`. The parser sets `label` on the loop
+node and the jump's `returnToLabel`; the analyzer rejects a label that no enclosing
+loop has ("There is no loop with the label `x`"). `NormalBreakException` and
+`NormalContinueException` carry the label, and a loop handles only unlabeled jumps
+and its own. Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (RT-85).
+
+Sealed classes (RT-86): `sealed` was rejected. It is now a class modifier
+(`ClassModifier.sealed`); a sealed class is also abstract, and `sealed interface` is
+allowed. A `when` on a sealed type is exhaustive without `else` when its `is` tests and
+`object` entries cover every subclass declared in the project, recursively for sealed
+subclasses (`WhenNode.coversSealedClass`). As a BlueK project is one module, subclasses
+may be in any file. Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (RT-86).
+
+`.5` (RT-87): the lexer reads a `.` followed by a digit as the start of a number, like
+Kotlin's DoubleLiteral; `1..5` stays a range because `..` is not followed by a digit.
+The bit operations of RT-87 are BlueK stdlib functions. Coverage:
+`node scripts/smoke-kotlin-surface.mjs`.
+
+Local and top-level `lateinit var` (RT-88): the analyzer no longer restricts `lateinit`
+to class properties. `SymbolTable.read` throws `UninitializedPropertyAccessException`
+for a declared variable without a value (was "has not been declared"), and the
+interpreter remembers lateinit declarations (`lateinitRefNames`) to rethrow it with
+Kotlin's message "lateinit property x has not been initialized". Coverage:
+`node scripts/smoke-curriculum-kotlin.mjs` (RT-88).
+
+Function references (RT-89): `::f`, `Typ::f`, `name::f` were parse errors. The parser turns
+them into a `LambdaLiteralNode` with `referenceReceiver`/`referenceName` and a placeholder
+body; `SemanticAnalyzer.buildFunctionReference` creates the parameters from the expected
+function type (or from the only function `f` for `::f` without one) and the call:
+`f(p…)`, `p0.f(p…)` or `p0.property` for a type receiver, `name.f(p…)` for a variable. The
+argument count check of lambda arguments skips references. Coverage:
+`node scripts/smoke-curriculum-kotlin.mjs` (RT-89).
+
+`this` in lambdas (RT-90): lambda arguments of member and extension calls were created after
+`this` became the call's receiver, so `liste.map { this.f(it) }` used the list as `this`.
+`evalClassMemberAnyFunctionCall` now evaluates lambda arguments in the caller's scope like the
+other arguments, and a lambda without receiver keeps the `this` of the place where it is
+created, also for nested lambdas. Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (RT-90).

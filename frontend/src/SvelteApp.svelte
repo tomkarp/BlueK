@@ -510,6 +510,7 @@
   />
   <CompilerDialog
     bind:compilerDialog={session.compilerDialog}
+    exception={session.callException}
     compilerDiagnostics={editor.compilerDiagnostics}
     error={ui.error}
   />

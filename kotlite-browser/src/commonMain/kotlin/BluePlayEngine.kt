@@ -743,7 +743,8 @@ internal class BluePlayEngine {
         fun actCall(instance: ClassInstance): ActCall? {
             val function = instance.findMemberFunctionByDeclaredName("act") ?: return null
             if (function.body?.statements?.isEmpty() == true) return null
-            return ActCall(FunctionCallNode(function, emptyList(), emptyList(), function.position), function)
+            // Called by the library: no frame of the student's source below act() in stack traces.
+            return ActCall(FunctionCallNode(function, emptyList(), emptyList(), SourcePosition.BUILTIN), function)
         }
     }
 }

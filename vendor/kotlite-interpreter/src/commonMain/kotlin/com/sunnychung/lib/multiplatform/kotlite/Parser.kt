@@ -74,7 +74,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.WhileNode
 
 val ACCEPTED_MODIFIERS = setOf(
     "open", "override", "private", "operator", "vararg", "enum", "abstract", "infix", "nullaware", "inline", "noinline", "crossinline", "const",
-    "protected", "internal", "lateinit",
+    "protected", "internal", "lateinit", "sealed",
 )
 
 /**
@@ -1084,8 +1084,38 @@ open class Parser(protected val lexer: Lexer) {
      *     | tryExpression
      *     | jumpExpression
      */
+    /** `::` right after [before] (or at the current token if null). */
+    private fun isFunctionReferenceAhead(before: Token?): Boolean {
+        val first = currentToken
+        if (!first.`is`(TokenType.Symbol, ":")) return false
+        val second = peekNextToken()
+        return second.`is`(TokenType.Symbol, ":") && areTokensConsecutive(first, second) &&
+            (before == null || areTokensConsecutive(before, first))
+    }
+
+    /**
+     * `::f`, `Typ::f` or `objekt::f` (RT-89): a lambda whose body the analyzer builds from the
+     * expected function type, e.g. `liste.map(::quadrat)`, `forEach(::println)`, `map(String::length)`.
+     */
+    private fun functionReference(receiver: Token?): LambdaLiteralNode {
+        val position = (receiver ?: currentToken).position
+        eat(TokenType.Symbol, ":")
+        eat(TokenType.Symbol, ":")
+        val name = eat(TokenType.Identifier).value as String
+        val placeholder: MutableList<ASTNode> = mutableListOf(VariableReferenceNode(position, name))
+        return LambdaLiteralNode(
+            position = position,
+            declaredValueParameters = emptyList(),
+            body = BlockNode(placeholder, position, ScopeType.FunctionBlock, FunctionBodyFormat.Lambda),
+            label = null,
+            referenceReceiver = receiver?.value as String?,
+            referenceName = name,
+        )
+    }
+
     fun primaryExpression(label: LabelNode? = null): ASTNode {
         val currentToken = currentToken
+        if (isFunctionReferenceAhead(null)) return functionReference(null)
         when (currentToken.type) {
             TokenType.Operator -> {
                 if (currentToken.value == "(") {
@@ -1123,6 +1153,7 @@ open class Parser(protected val lexer: Lexer) {
                 }
 
                 val t = eat(TokenType.Identifier)
+                if (isFunctionReferenceAhead(t)) return functionReference(t)
                 return VariableReferenceNode(t.position, t.value as String)
             }
             TokenType.Symbol -> {
@@ -1394,8 +1425,17 @@ open class Parser(protected val lexer: Lexer) {
                 } else null
                 return ReturnNode(position = t.position, value = expr, returnToLabel = label, returnToAddress = "")
             }
-            "break" -> return BreakNode(t.position, "", "")
-            "continue" -> return ContinueNode(t.position, "", "")
+            "break", "continue" -> {
+                // `break@outer` / `continue@outer` (RT-85)
+                val label = if (currentToken.`is`(TokenType.Symbol, "@")
+                    && peekNextToken().type == TokenType.Identifier
+                    && areTokensConsecutive(t, currentToken, peekNextToken())
+                ) {
+                    eat(TokenType.Symbol, "@")
+                    eat(TokenType.Identifier).value as String
+                } else ""
+                return if (t.value == "break") BreakNode(t.position, label, "") else ContinueNode(t.position, label, "")
+            }
         }
         TODO(t.value.toString())
     }
@@ -2278,11 +2318,23 @@ open class Parser(protected val lexer: Lexer) {
             declarations += if (isCurrentToken(TokenType.Identifier, "constructor")) {
                 val t = eat(TokenType.Identifier, "constructor")
                 val parameters = functionValueParameters()
-                repeatedNL()
-                if (isCurrentToken(TokenType.Symbol, ":")) {
-                    throw UnsupportedOperationException("Secondary constructor delegation (this/super) is not supported by this Kotlite build.")
-                }
-                ClassSecondaryConstructorNode(t.position, parameters, block(ScopeType.Function))
+                // `: this(...)` delegates to another constructor of the class (RT-83).
+                val delegationArguments = if (isCurrentTokenExcludingNL(TokenType.Symbol, ":")) {
+                    repeatedNL()
+                    eat(TokenType.Symbol, ":")
+                    repeatedNL()
+                    if (isCurrentToken(TokenType.Identifier, "super")) {
+                        throw SemanticException(currentToken.position, "Delegation to a superclass constructor with `super(...)` is not supported. Give the class a primary constructor and delegate to it with `this(...)`.")
+                    }
+                    eat(TokenType.Identifier, "this")
+                    valueArguments()
+                } else null
+                // The body is optional, as in `constructor() : this(0)`.
+                val body = if (isCurrentTokenExcludingNL(TokenType.Symbol, "{")) {
+                    repeatedNL()
+                    block(ScopeType.Function)
+                } else BlockNode(emptyList(), t.position, ScopeType.Function, FunctionBodyFormat.Block)
+                ClassSecondaryConstructorNode(t.position, parameters, body, delegationArguments)
             } else if (isCurrentToken(TokenType.Identifier, "companion") && peekNextToken().let { it.type == TokenType.Identifier && it.value == "object" }) {
                 val t = eat(TokenType.Identifier, "companion")
                 objectDeclaration(emptySet(), companionPosition = t.position)
@@ -2394,6 +2446,7 @@ open class Parser(protected val lexer: Lexer) {
             "enum" -> ClassModifier.enum
             "abstract" -> ClassModifier.abstract
             "data" -> ClassModifier.data
+            "sealed" -> ClassModifier.sealed
             else -> throw ParseException("Modifier `$it` cannot be applied to class")
         }
     }.toSet()
@@ -2476,12 +2529,14 @@ open class Parser(protected val lexer: Lexer) {
      *     [({NL} classBody) | ({NL} enumClassBody)]
      */
     fun classDeclaration(modifiers: Set<String>): ClassDeclarationNode {
-        val modifiers = modifiers.toClassModifiers()
+        var modifiers = modifiers.toClassModifiers()
         if (!currentToken.`is`(TokenType.Identifier, "class") && !currentToken.`is`(TokenType.Identifier, "interface")) {
             throw ExpectTokenMismatchException("\"class\" or \"interface\"", currentToken.position)
         }
         val t = eat(TokenType.Identifier)
         val isInterface = t.value == "interface"
+        // Like Kotlin, a sealed class is abstract; its subclasses are known to `when` (RT-86).
+        if (ClassModifier.sealed in modifiers && !isInterface) modifiers = modifiers + ClassModifier.abstract
         repeatedNL()
         val name = userDefinedIdentifier()
         var token = currentTokenExcludingNL()
@@ -2514,13 +2569,42 @@ open class Parser(protected val lexer: Lexer) {
                 declarations = classBody(isInterface = isInterface)
             }
         }
-        if (declarations.any { it is ClassSecondaryConstructorNode } && primaryConstructor != null) {
-            throw UnsupportedOperationException("Secondary constructors alongside a primary constructor are not supported by this Kotlite build.")
+        val secondaryConstructors = declarations.filterIsInstance<ClassSecondaryConstructorNode>()
+        // Like Kotlin: two constructors with the same parameter types conflict.
+        val signatures = mutableSetOf<String>()
+        primaryConstructor?.let { primary -> signatures += primary.parameters.joinToString(", ") { it.parameter.type.descriptiveName() } }
+        secondaryConstructors.forEach { constructor ->
+            val signature = constructor.valueParameters.joinToString(", ") { it.type.descriptiveName() }
+            if (!signatures.add(signature)) throw SemanticException(constructor.position, "Conflicting overloads: constructor $name($signature)")
+        }
+        secondaryConstructors.forEach { constructor ->
+            constructor.siblingConstructors = secondaryConstructors
+            val arguments = constructor.delegationArguments
+            if (arguments == null) {
+                // Like Kotlin: with a primary constructor, every secondary one must delegate to it.
+                if (primaryConstructor != null) throw SemanticException(constructor.position, "Primary constructor call expected: add `: this(...)` to the secondary constructor")
+            } else {
+                constructor.delegationCall = FunctionCallNode(
+                    function = VariableReferenceNode(constructor.position, name),
+                    arguments = arguments,
+                    declaredTypeArguments = typeParameters.map { TypeNode(constructor.position, it.name, null, false) },
+                    position = constructor.position,
+                )
+            }
         }
         val (companionObject, otherDeclarations) = companionObjectOf(name, declarations)
         declarations = otherDeclarations
         if (ClassModifier.data in modifiers) {
             declarations = declarations + dataClassMembers(t.position, name, modifiers, typeParameters, primaryConstructor, declarations)
+        }
+        var supertypes = superInvocations
+        if (ClassModifier.enum in modifiers) {
+            // Like Kotlin's `Enum`: entries are `Comparable` by their order (RT-84).
+            declarations.filterIsInstance<FunctionDeclarationNode>().firstOrNull { it.name == "compareTo" && it.valueParameters.size == 1 }?.let {
+                throw SemanticException(it.position, "`compareTo` of an enum class is final: entries compare by their order (`ordinal`)")
+            }
+            supertypes = superInvocations.orEmpty() + TypeNode(t.position, "Comparable", listOf(TypeNode(t.position, name, null, false)), false)
+            declarations = declarations + enumClassMembers(t.position, name)
         }
         return ClassDeclarationNode(
             position = t.position,
@@ -2529,7 +2613,7 @@ open class Parser(protected val lexer: Lexer) {
             declaredModifiers = modifiers,
             typeParameters = typeParameters,
             primaryConstructor = primaryConstructor,
-            superInvocations = superInvocations,
+            superInvocations = supertypes,
             declarations = declarations,
             enumEntries = enumEntries,
             companionObject = companionObject,
@@ -2666,6 +2750,14 @@ open class Parser(protected val lexer: Lexer) {
             }
             append("}")
         }
+        return Parser(Lexer(position.filename, source)).classBody(isInterface = false)
+            .onEach { (it as? FunctionDeclarationNode)?.isGenerated = true }
+    }
+
+    /** `compareTo` of an enum class by `ordinal`, like Kotlin's final `Enum.compareTo` (RT-84). */
+    private fun enumClassMembers(position: SourcePosition, name: String): List<ASTNode> {
+        val source = "{" + "\n".repeat(position.lineNum) +
+            "override operator fun compareTo(other: $name): Int = this.ordinal.compareTo(other.ordinal)\n}"
         return Parser(Lexer(position.filename, source)).classBody(isInterface = false)
             .onEach { (it as? FunctionDeclarationNode)?.isGenerated = true }
     }
@@ -2911,6 +3003,24 @@ open class Parser(protected val lexer: Lexer) {
      *     {label | annotation} (declaration | assignment | loopStatement | expression)
      */
     fun statement(): ASTNode { // TODO complete
+        // `outer@ for (...)`: a labeled loop (RT-85)
+        if (currentToken.type == TokenType.Identifier && peekNextToken().`is`(TokenType.Symbol, "@")
+            && areTokensConsecutive(currentToken, peekNextToken())
+        ) {
+            val start = tokenIndex
+            val label = eat(TokenType.Identifier).value as String
+            eat(TokenType.Symbol, "@")
+            repeatedNL()
+            if (currentToken.type == TokenType.Identifier && currentToken.value in setOf("for", "while", "do")) {
+                return when (val loop = loopStatement()) {
+                    is ForNode -> loop.also { it.label = label }
+                    is WhileNode -> loop.also { it.label = label }
+                    is DoWhileNode -> loop.also { it.label = label }
+                    else -> loop
+                }
+            }
+            resetTokenToIndex(start)
+        }
         if (currentToken.type == TokenType.Identifier) {
             when (currentToken.value) {
                 "interface" -> return declaration(isInterface = true)
