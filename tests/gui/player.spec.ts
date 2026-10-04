@@ -205,3 +205,11 @@ test('EXP-07 the player runs console and BluePlay programs in WebKit', async ({}
     await browser.close();
   }
 });
+
+test('EXP-12 an exported console program shows ANSI colours like the IDE terminal', async ({ page }, testInfo) => {
+  const files: Files = [{ fileName: 'App.kt', source: 'fun main() {\n    println("\\u001B[H\\u001B[2J\\u001B[31m♥\\u001B[0m Herz")\n}\n' }];
+  await openPlayer(page, await exportFile(testInfo, 'colours', files, 'App.kt'));
+  const output = page.getByRole('region', { name: 'Terminal' }).locator('pre');
+  await expect(output).toHaveText('♥ Herz\n');
+  await expect(output.locator('span', { hasText: '♥' })).toHaveCSS('color', 'rgb(205, 49, 49)');
+});

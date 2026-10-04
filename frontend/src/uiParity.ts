@@ -367,16 +367,7 @@ export function combineTerminalOutput(pending: string, addition: string) {
   return combined.length > TERMINAL_LIMIT ? combined.slice(-TERMINAL_LIMIT) : combined;
 }
 
-export function terminalParts(value: string) {
-  let input = false;
-  return value.split(/([\u0001\u0002])/).flatMap((part) => {
-    if (part === "\u0001" || part === "\u0002") {
-      input = !input;
-      return [];
-    }
-    return part ? [{ text: part, input }] : [];
-  });
-}
+export { terminalParts } from "./terminalText";
 
 export function codepadResult(value: any) {
   if (!value || value.kind === "unit" || value.kind === "error")

@@ -82,7 +82,10 @@ open class ThrowableValue(
                 returnType = "String",
                 parameterTypes = emptyList(),
                 executable = { interpreter, receiver, args, typeArgs ->
-                    receiver.throwable().stacktrace.joinToString("\n").let { StringValue(it, interpreter.symbolTable()) }
+                    // Like Kotlin: the text `printStackTrace()` writes, `MyEx: x` and one `at` line per frame (RT-71).
+                    val text = (receiver as ClassInstance).convertToString(isCallCustomFunction = false) + "\n" +
+                        receiver.throwable().stacktrace.joinToString("") { "    at $it\n" }
+                    StringValue(text, interpreter.symbolTable())
                 },
             ),
         )

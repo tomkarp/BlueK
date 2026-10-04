@@ -16,6 +16,42 @@ assert.deepEqual(ui.terminalParts(transcript), [
 assert.equal(ui.appendTerminal(transcript, '\fnew'), 'new');
 assert.equal(ui.appendTerminal(transcript, 'first\fsecond\ffinal'), 'final');
 assert.deepEqual(ui.terminalParts(''), []);
+// ANSI escape sequences and control characters as terminals interpret them (GUI-97).
+const ESC = '\u001B';
+assert.deepEqual(ui.terminalParts(`│  ${ESC}[31m♥${ESC}[0m  │\n│  ${ESC}[30m♠${ESC}[0m  │`), [
+  { text: '│  ', input: false }, { text: '♥', input: false, style: 'color:var(--ansi-1,#cd3131)' },
+  { text: '  │\n│  ', input: false }, { text: '♠', input: false, style: 'color:var(--ansi-0,#000000)' }, { text: '  │', input: false },
+]);
+assert.deepEqual(ui.terminalParts(`${ESC}[1;4;93;44mA${ESC}[22;24mB${ESC}[39;49mC`), [
+  { text: 'A', input: false, style: 'color:var(--ansi-11,#b5ba00);background-color:var(--ansi-4,#0451a5);font-weight:bold;text-decoration-line:underline' },
+  { text: 'B', input: false, style: 'color:var(--ansi-11,#b5ba00);background-color:var(--ansi-4,#0451a5)' }, { text: 'C', input: false },
+]);
+assert.deepEqual(ui.terminalParts(`${ESC}[38;5;208mx${ESC}[38;2;10;20;30;48;5;240my${ESC}[mz`), [
+  { text: 'x', input: false, style: 'color:#ff8700' },
+  { text: 'y', input: false, style: 'color:#0a141e;background-color:#585858' }, { text: 'z', input: false },
+]);
+assert.deepEqual(ui.terminalParts(`${ESC}[7mi${ESC}[27m${ESC}[2mj${ESC}[3;9mk${ESC}[8ml`), [
+  { text: 'i', input: false, style: 'color:var(--terminal-bg,#fff);background-color:var(--terminal-fg,#222)' },
+  { text: 'j', input: false, style: 'opacity:.6' }, { text: 'k', input: false, style: 'opacity:.6;font-style:italic;text-decoration-line:line-through' },
+  { text: 'l', input: false, style: 'color:transparent;opacity:.6;font-style:italic;text-decoration-line:line-through' },
+]);
+const plainText = (value) => ui.terminalParts(value).map(part => part.text).join('');
+assert.equal(plainText('Laden 10%\rLaden 100%\nfertig'), 'Laden 100%\nfertig'); // \r overwrites the line
+assert.equal(plainText('Laden 100%\rOK'), 'OKden 100%');
+assert.equal(plainText(`Laden 100%\r${ESC}[KOK`), 'OK');
+assert.equal(plainText('abc\b\bX\ty\u0007'), 'aXc     y'); // \t moves to the next tab stop
+assert.equal(plainText('Name\tAlter\nBob\t42'), 'Name    Alter\nBob     42');
+assert.equal(plainText(`alt\nalt${ESC}[H${ESC}[2Jneu`), 'neu'); // clear screen
+assert.equal(plainText(`alt${ESC}[2J${ESC}[Hneu`), 'neu');
+assert.equal(plainText(`${ESC}cneu`), 'neu');
+assert.equal(plainText(`1\n2\n3${ESC}[2A${ESC}[2Gx${ESC}[3;3Hy`), '1x\n2\n3 y');
+assert.equal(plainText(`ab${ESC}[s\ncd${ESC}[uX`), 'abX\ncd');
+assert.equal(plainText(`a${ESC}[?25lb${ESC}]0;Titel\u0007c${ESC}[`), 'abc'); // swallowed; an unfinished sequence follows later
+assert.equal(plainText(`zeile\n${ESC}[1A${ESC}[2Kneu`), 'neu\n');
+assert.deepEqual(ui.terminalParts(`${ESC}[32m>\u0001ein\u0002\n`), [
+  { text: '>', input: false, style: 'color:var(--ansi-2,#00bc00)' }, { text: 'ein', input: true, style: 'color:var(--ansi-2,#00bc00)' },
+  { text: '\n', input: false, style: 'color:var(--ansi-2,#00bc00)' },
+]);
 assert.equal(ui.codepadResult({ kind: 'unit' }), undefined);
 assert.equal(ui.codepadResult({ kind: 'error' }), undefined);
 assert.equal(ui.codepadResult({ kind: 'scalar', type: { displayName: 'String' }, display: 'hello' }), '"hello" : String');

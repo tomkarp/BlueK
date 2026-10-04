@@ -149,6 +149,12 @@ Der Worker hält genau eine `KotliteSession` mit genau einem lebenden
 - `editorDiagnostics.ts`, `markdownEditor.ts`, `uiParity.ts`, `shareApi.ts`:
   Editor-Markierungen, README-Editor, UI-Hilfsfunktionen (Projektlinks,
   Terminal, Argumentlisten) und Kurzlink-API.
+- `terminalText.ts`: wertet die Terminalausgabe wie ein Terminal aus
+  (ANSI-Escape-Sequenzen, `\r`, `\b`, `\t`, Löschen) und liefert Textteile mit
+  Inline-Stil für das IDE-Terminal und den exportierten Player. Die Ausgabe
+  bleibt der rohe Text der Laufzeit; nur die Darstellung interpretiert ihn.
+  Palettenfarben sind CSS-Variablen (`--ansi-0` … `--ansi-15`) mit hellen
+  Standardwerten, das dunkle Design überschreibt sie (GUI-97).
 
 **Worker**
 
@@ -334,8 +340,9 @@ Danach werden alle Dateien zu **einem** Skript `<BlueK project>` verbunden
 (je mit Kopfzeile `// BlueK file: Name.kt`), bei BluePlay mit vorangestelltem
 Bibliotheksquelltext. Weil alle Dateien ein Skript bilden, erhalten
 zusätzliche `main()`-Funktionen interne Namen (`main__Datei`); Manifest und
-Karten zeigen weiterhin `main`. Analyse- und Laufzeitfehler werden auf Datei
-und Zeile zurückgerechnet, auch hinter dem Bibliotheksquelltext.
+Karten zeigen weiterhin `main`. Analyse- und Laufzeitfehler sowie
+Stacktrace-Zeilen werden auf Datei und Zeile zurückgerechnet, auch hinter dem
+Bibliotheksquelltext.
 
 Ein erfolgreicher Compile kann Warnungen tragen (`Diagnostic.severity:
 "warning"`, bisher nur für Accessoren, die ihre eigene Property statt `field`

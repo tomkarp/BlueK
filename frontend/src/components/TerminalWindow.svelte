@@ -104,7 +104,8 @@
       </div>
       <div class="terminal-output">
         {#key terminal}<pre>{#each terminalParts(terminal) as part}<span
-                class:terminal-input-echo={part.input}>{part.text}</span
+                class:terminal-input-echo={part.input}
+                style={part.style}>{part.text}</span
               >{/each}</pre>{/key}
         <button
           class="terminal-clear"

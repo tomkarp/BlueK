@@ -313,7 +313,7 @@
 
   {#if !bluePlay || terminal || inputReady}
     <section class="player-terminal" aria-label="Terminal">
-      <pre bind:this={outputElement}>{#each terminalParts(terminal) as part}<span class:player-input-echo={part.input}>{part.text}</span>{/each}</pre>
+      <pre bind:this={outputElement}>{#each terminalParts(terminal) as part}<span class:player-input-echo={part.input} style={part.style}>{part.text}</span>{/each}</pre>
       <div class="player-input-row">
         <input
           bind:this={inputElement}

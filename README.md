@@ -46,6 +46,9 @@ Build-Pipeline, Tests und Deployment stehen in [DEVELOPMENT.md](DEVELOPMENT.md).
   erhalten. Ergebnisse lassen sich per „Get“ auf die Objektbank legen.
 - **Terminal:** `print`/`println`, `readln`/`readLine`/`readlnOrNull` mit
   echter Wartestellung, EOF, Stop und BlueJ-artigem Löschen per Form Feed.
+  Farben, Schriftstile, Löschen und Cursorbewegung über ANSI-Escape-Sequenzen
+  wie in anderen Terminals (`"\u001B[31m"` für rote Schrift); siehe
+  [docs/terminal.md](docs/terminal.md).
 - **BluePlay:** eingebaute Bibliothek mit `World`, `Actor`, `Image` und
   Hilfsfunktionen; Weltfenster mit Act, Run/Pause, Reset und Speed;
   Tastatur und Maus; pixelgenaue Kollision; mitgelieferte Standardgrafiken.
@@ -236,8 +239,14 @@ nennt BlueK eine verständliche Meldung statt Kotlites generischem Fehler.
   `NoSuchElementException` und `ArithmeticException` (auch Ganzzahldivision
   durch 0) mit ihrer Klasse oder mit `Exception` fangen (etwa `"x".toInt()`
   mit `catch (e: NumberFormatException)`, RT-38). Andere, etwa
-  `UnsupportedOperationException`, fängt nur `catch (e: Throwable)`. Solche
-  Ausnahmen haben keinen Stacktrace; `printStackTrace()` zeigt nur Klasse und
+  `UnsupportedOperationException`, fängt nur `catch (e: Throwable)`.
+- `printStackTrace()` und `stackTraceToString()` zeigen den Stack wie Kotlin,
+  innen zuerst mit Datei und Zeile der Projektdatei
+  (`at Karte.pruefe(Karte.kt:6)`, `at Karte.<init>(Karte.kt:2)`,
+  `at main(Main.kt:3)`); Bibliotheksfunktionen erscheinen als
+  `at toInt(Kotlin library)`, im Codepad deklarierte Funktionen als
+  `at g(Codepad)`, die Codepad-Zeile selbst gar nicht (RT-71). Ohne Paketnamen
+  und Spalte; eine nicht gefangene Ausnahme meldet BlueK nur mit Klasse und
   Meldung.
 - `substring` prüft seine Grenzen wie Kotlin und wirft
   `IndexOutOfBoundsException` (RT-39).
@@ -288,6 +297,7 @@ weder auf `addObject`/`removeObject` noch auf Kollisionsabfragen aus.
 | [docs/blueplay.md](docs/blueplay.md) | BluePlay-Bibliothek, Scheduler, Rendering, Kollision, Performance, API |
 | [docs/blueplay-api-audit.md](docs/blueplay-api-audit.md) | Abgleich mit der GitHub-API und dem BlueJ-Projekt; reproduzierte Abweichungen |
 | [docs/kotlin-surface.md](docs/kotlin-surface.md) | Zugesagte Standardbibliothek und bekannte Lücken |
+| [docs/terminal.md](docs/terminal.md) | Für Nutzer: Farben und Steuerzeichen im Terminal (ANSI-Escape-Sequenzen) |
 | [docs/kotlite-generics.md](docs/kotlite-generics.md) | Generics, `reified`, Inline-Lambdas und Host-Funktionen |
 | [docs/regression-checklist.md](docs/regression-checklist.md) | Regressionsliste mit stabilen IDs und Prüfprotokoll |
 | [docs/deployment.md](docs/deployment.md) | GitHub Actions, Server, Caddy, Share-Dienst, Beta |

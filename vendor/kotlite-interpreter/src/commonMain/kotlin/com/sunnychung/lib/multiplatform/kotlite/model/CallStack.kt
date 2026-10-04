@@ -47,21 +47,50 @@ class CallStack {
         activationRecords[0].symbolTable.declareExtensionProperty(SourcePosition.BUILTIN, property.transformedName!!, property)
     }
 
-    fun getStacktrace(currentPosition: SourcePosition? = null): List<String> {
-        // first two are built-in and global, which are not in user scope
-        return let {
-            if (currentPosition != null) {
-                listOf("${currentPosition.filename}:${currentPosition.lineNum}:${currentPosition.col}")
-            } else {
-                emptyList()
-            }
-        } + activationRecords.subList(2, activationRecords.size)
-            .filter { it.isFunctionCall }
-            .asReversed()
-            .map { "${it.functionFullQualifiedName ?: "<anonymous>"} (${it.callPosition.filename}:${it.callPosition.lineNum}:${it.callPosition.col})" }
+    /**
+     * Writes one stack trace line for a function or constructor [name] (null: top-level code) at
+     * [position] (null: unknown, e.g. inside a native function); a null result omits the line.
+     * Hosts map positions to their own files (RT-71).
+     */
+    var frameFormatter: (name: String?, position: SourcePosition?) -> String? = { name, position ->
+        "${name ?: "<top-level>"}(${position?.let { "${it.filename}:${it.lineNum}" } ?: "Unknown Source"})"
     }
 
-    fun push(functionFullQualifiedName: String?, scopeType: ScopeType, callPosition: SourcePosition, isFunctionCall: Boolean = false) {
+    /**
+     * Like Kotlin, innermost first: each function or constructor with the position its code has
+     * reached, i.e. [currentPosition] or the call into the next frame (RT-71). Without
+     * [currentPosition] the trace is that of a new exception object, which starts where it is
+     * created: the constructors that create it are no frames.
+     */
+    fun getStacktrace(currentPosition: SourcePosition? = null): List<String> {
+        // first two are built-in and global, which are not in user scope
+        val records = activationRecords.subList(2, activationRecords.size)
+        var index = records.lastIndex
+        var position = currentPosition
+        if (position == null) {
+            var creation = index
+            while (creation >= 0 && !records[creation].isFunctionCall) {
+                if (records[creation].frameName != null) {
+                    position = records[creation].callPosition
+                    index = creation - 1
+                }
+                creation -= 1
+            }
+        }
+        val frames = mutableListOf<String>()
+        while (index >= 0) {
+            val record = records[index]
+            if (record.frameName != null) {
+                frameFormatter(record.frameName, if (record.isNative) null else position)?.let { frames += it }
+                position = record.callPosition
+            }
+            index -= 1
+        }
+        frameFormatter(null, position)?.let { frames += it }
+        return frames
+    }
+
+    fun push(functionFullQualifiedName: String?, scopeType: ScopeType, callPosition: SourcePosition, isFunctionCall: Boolean = false, frameName: String? = null, isNative: Boolean = false) {
         activationRecords += ActivationRecord(
             functionFullQualifiedName = functionFullQualifiedName,
             callPosition = callPosition,
@@ -69,6 +98,8 @@ class CallStack {
             parent = activationRecords.last(),
             scopeLevel = activationRecords.size,
             scopeType = scopeType,
+            frameName = frameName ?: if (isFunctionCall) functionFullQualifiedName ?: "<lambda>" else null,
+            isNative = isNative,
         )
         if (scopeType.isClassCode()) classCodeScopes += 1
     }

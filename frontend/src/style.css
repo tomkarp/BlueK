@@ -701,6 +701,8 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 .dark .dialog,.dark .settings-dialog,.dark .shortcuts-help-dialog,.dark .editor-dialog,.dark .terminal-window,.dark .stage-window{background:#252526;border-color:#3c3c3c;color:#d4d4d4}
 .dark .editor-header,.dark .terminal-header,.dark .window-header,.dark .editor-tabs{background:#2d2d30;border-color:#3c3c3c}
 .dark .terminal-window pre{background:#1e1e1e;color:#d4d4d4;border-color:#3c3c3c}
+/* ANSI colours of terminal output in the dark theme (VS Code dark palette, terminalText.ts). */
+.dark .terminal-window pre{--terminal-fg:#d4d4d4;--terminal-bg:#1e1e1e;--ansi-0:#000000;--ansi-1:#cd3131;--ansi-2:#0dbc79;--ansi-3:#e5e510;--ansi-4:#2472c8;--ansi-5:#bc3fbc;--ansi-6:#11a8cd;--ansi-7:#e5e5e5;--ansi-8:#666666;--ansi-9:#f14c4c;--ansi-10:#23d18b;--ansi-11:#f5f543;--ansi-12:#3b8eea;--ansi-13:#d670d6;--ansi-14:#29b8db;--ansi-15:#e5e5e5}
 .dark .terminal-window input{background:#3c3c3c;color:#d4d4d4;border-color:#5a5a5a}
 .dark .terminal-window input:not(:disabled){background:#3c3c3c;color:#d4d4d4;border-color:#0a9dcc;box-shadow:0 0 0 2px #0a9dcc33}
 .dark .terminal-header button,.dark .terminal-actions button,.dark .terminal-clear,.dark .terminal-reopen{background:#303034;color:#d4d4d4;border-color:#55555c;box-shadow:none}

@@ -214,6 +214,26 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
     }
 
     internal val callStack = CallStack()
+
+    /** How stack trace lines name frames and positions, see [CallStack.frameFormatter] (RT-71). */
+    var stackFrameFormatter: (name: String?, position: SourcePosition?) -> String?
+        get() = callStack.frameFormatter
+        set(value) { callStack.frameFormatter = value }
+
+    // The statement the innermost running function has reached: the line of its stack trace frame
+    // when host code (`10 / 0`, a native function) throws there.
+    private var statementPosition: SourcePosition? = null
+
+    // The stack trace of the last host exception, taken where it passed the first frame: interpreted
+    // code sees the exception only in a `catch`, when its frames are gone (RT-71).
+    private var hostExceptionTrace: Pair<Throwable, List<String>>? = null
+
+    private fun recordHostException(e: Throwable, position: SourcePosition?) {
+        if (e is EvaluateRuntimeException || e is com.sunnychung.lib.multiplatform.kotlite.error.controlflow.NormalControlFlowException ||
+            e is InterpreterStateException || e is kotlin.coroutines.cancellation.CancellationException) return
+        if (hostExceptionTrace?.first === e) return
+        hostExceptionTrace = e to callStack.getStacktrace(position)
+    }
     internal val globalScope = callStack.currentSymbolTable()
 
     init {
@@ -904,6 +924,16 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         else -> false
     }
 
+    /** `Karte.wert` for a member function, as in Kotlin with its declaring class (RT-71). */
+    private fun frameName(function: CallableNode, subject: RuntimeValue?): String {
+        val name = function.name ?: return "<lambda>"
+        if (subject !is ClassInstance || function !is FunctionDeclarationNode || function.receiver != null) return name
+        val owner = function.transformedRefName
+            ?.let { subject.clazz?.findMemberFunctionWithEnclosingTypeNameByTransformedName(it)?.second }
+            ?: subject.clazz?.fullQualifiedName
+        return owner?.let { "$it.$name" } ?: name
+    }
+
     suspend fun evalFunctionCall(
         arguments: Array<RuntimeValue?>,
         typeArguments: Array<TypeNode>,
@@ -993,11 +1023,14 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
 
         enterCall(callPosition)
+        val callerStatementPosition = statementPosition
         callStack.push(
             functionFullQualifiedName = functionNode.name,
             isFunctionCall = true,
             scopeType = scopeType,
             callPosition = callPosition,
+            frameName = frameName(functionNode, subject),
+            isNative = functionNode is CustomFunctionDeclarationNode,
         )
         val returnTarget = Any()
         try {
@@ -1135,7 +1168,11 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             }
 
             return FunctionCallResult(returnValue, symbolTable)
+        } catch (e: Throwable) {
+            recordHostException(e, statementPosition)
+            throw e
         } finally {
+            statementPosition = callerStatementPosition
             callStack.pop(scopeType)
             leaveCall()
         }
@@ -1156,7 +1193,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         subject: RuntimeValue?,
     ): FunctionCallResult {
         enterCall(callPosition)
-        callStack.push(functionFullQualifiedName = functionNode.name, isFunctionCall = true, scopeType = scopeType, callPosition = callPosition)
+        callStack.push(functionFullQualifiedName = functionNode.name, isFunctionCall = true, scopeType = scopeType, callPosition = callPosition, frameName = frameName(functionNode, subject), isNative = true)
         try {
             @Suppress("UNCHECKED_CAST")
             val result = functionNode.execute(this, subject, arguments.asList() as List<RuntimeValue>, typeArguments)
@@ -1165,6 +1202,10 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 throw RuntimeException("Return value's type ${returnValue.type().descriptiveName} cannot be casted to ${returnType.descriptiveName} in function `${functionNode.name}` at ${functionNode.position}")
             }
             return FunctionCallResult(returnValue, callStack.currentSymbolTable())
+        } catch (e: Throwable) {
+            // inside the native function: no position of its own
+            recordHostException(e, null)
+            throw e
         } finally {
             callStack.pop(scopeType)
             leaveCall()
@@ -1173,7 +1214,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
 
     suspend fun FunctionCallNode.evalCreateClassInstance(clazz: ClassDefinition, typeArguments: List<TypeNode>, replaceArguments: Map<Int, RuntimeValue> = emptyMap()): ClassInstance {
         enterCall(position)
-        callStack.push(functionFullQualifiedName = "class", scopeType = ScopeType.ClassInitializer, callPosition = this.position)
+        callStack.push(functionFullQualifiedName = "class", scopeType = ScopeType.ClassInitializer, callPosition = this.position, frameName = "${clazz.name}.<init>")
         try {
             // TODO generalize duplicated code
             val secondary = secondaryConstructorIndex?.let { clazz.secondaryConstructors[it] }
@@ -1452,7 +1493,10 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
     suspend fun BlockNode.eval(): RuntimeValue {
         if (!declaresNames) {
             var value: RuntimeValue = UnitValue
-            for (statement in statements) value = statement.eval() as? RuntimeValue ?: UnitValue
+            for (statement in statements) {
+                statementPosition = statement.position
+                value = statement.eval() as? RuntimeValue ?: UnitValue
+            }
             return value
         }
         // additional scope because new variables can be declared in blocks of `if`, `while`, etc.
@@ -1460,7 +1504,10 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         callStack.push(functionFullQualifiedName = null, scopeType = type, callPosition = position)
         val result = try {
             var value: RuntimeValue = UnitValue
-            for (statement in statements) value = statement.eval() as? RuntimeValue ?: UnitValue
+            for (statement in statements) {
+                statementPosition = statement.position
+                value = statement.eval() as? RuntimeValue ?: UnitValue
+            }
             value
         } finally {
             callStack.pop(type)
@@ -1916,13 +1963,15 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
      * A host exception as seen by interpreted code: a standard Kotlin exception gets its Kotlite class, so that
      * `catch (e: NumberFormatException)` and `catch (e: Exception)` match; anything else is a plain `Throwable`.
      */
+    private fun Throwable.hostStacktrace(): List<String> = hostExceptionTrace?.takeIf { it.first === this }?.second ?: emptyList()
+
     fun Throwable.toValue(): ThrowableValue {
         val cause = cause?.toValue()
         val standardClass = StandardExceptionValue.classNameOf(this)?.let { symbolTable().findClass(it)?.first }
         return if (standardClass != null) {
-            StandardExceptionValue(symbolTable(), message, cause, emptyList(), standardClass)
+            StandardExceptionValue(symbolTable(), message, cause, hostStacktrace(), standardClass)
         } else {
-            ThrowableValue(symbolTable(), message, cause, emptyList(), fullClassName, symbolTable().findClass("Throwable")!!.first)
+            ThrowableValue(symbolTable(), message, cause, hostStacktrace(), fullClassName, symbolTable().findClass("Throwable")!!.first)
         }
     }
 

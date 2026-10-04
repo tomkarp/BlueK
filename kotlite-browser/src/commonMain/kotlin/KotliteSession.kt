@@ -281,6 +281,7 @@ class KotliteSession {
         registerRead("readlnOrNull", true)
         if (bluePlayEnabled) bluePlay.register(environment)
         interpreter = KotliteInterpreter("<BlueK>", "", environment)
+        interpreter.stackFrameFormatter = ::stackFrame
         interpreter.checkpointHook = Interpreter.CheckpointHook(::runtimeCheckpointDue) { awaitRuntimeCheckpoint() }
         interpreter.stackResetHook = { awaitRuntimeStackReset() }
     }
@@ -475,7 +476,12 @@ class KotliteSession {
         val source = if (bluePlayEnabled) BluePlayLibrary.source + "\n\n" + projectSource else projectSource
         // The library must not see top-level declarations of the project.
         val projectOffsets = if (bluePlayEnabled) listOf(BluePlayLibrary.source.length + 2) else emptyList()
-        return startEvaluateInternal("<BlueK project>", source, onInput, { result -> onComplete(withAccessorWarnings(withProjectDiagnostic(result))) }, emptySet(), projectOffsets)
+        return startEvaluateInternal("<BlueK project>", source, onInput, { result ->
+            val reported = withAccessorWarnings(withProjectDiagnostic(result))
+            // Not loaded: later code must not be attributed to the project files (RT-71).
+            if (result.startsWith("{\"kind\":\"error\"")) projectFunctionRanges.clear()
+            onComplete(reported)
+        }, emptySet(), projectOffsets)
     }
 
     /**
@@ -515,6 +521,23 @@ class KotliteSession {
         val message = Regex("\"display\":\"((?:[^\"\\\\]|\\\\.)*)\"").find(result)?.groupValues?.get(1) ?: return result
         val diagnostic = "{\"fileName\":\"${escape(range.first)}\",\"line\":${line - range.second + 1},\"column\":${location.groupValues[2]},\"severity\":\"error\",\"message\":\"$message\"}"
         return result.removeSuffix("}") + ",\"diagnostics\":[$diagnostic]}"
+    }
+
+    /**
+     * A stack trace line as Kotlin writes it, `Karte.wert(Karte.kt:3)`, with the file and line of
+     * the project file instead of the combined source (RT-71). Code typed in the Codepad has no
+     * file: its top-level line is left out, a function declared there shows `(Codepad)`. A native
+     * function has no position (`toInt(Kotlin library)`).
+     */
+    private fun stackFrame(name: String?, position: SourcePosition?): String? {
+        val location = position?.takeIf { it.filename == "<BlueK project>" }?.let { sourcePosition ->
+            val line = sourcePosition.lineNum
+            projectFunctionRanges.firstOrNull { line in it.second..it.third }?.let { "${it.first}:${line - it.second + 1}" }
+                ?: if (bluePlayEnabled && line < (projectFunctionRanges.firstOrNull()?.second ?: 0)) "BluePlay" else "Codepad"
+        }
+        if (name == null) return location?.takeIf { it.contains(".kt:") }?.let { "<top-level>($it)" }
+        val function = if (name.startsWith(MAIN_ALIAS_PREFIX)) "main" else name
+        return "$function(${location ?: "Kotlin library"})"
     }
 
     private fun statementPosition(node: ASTNode): SourcePosition = when (node) {

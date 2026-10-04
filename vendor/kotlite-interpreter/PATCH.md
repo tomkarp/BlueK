@@ -671,3 +671,19 @@ not skip newlines after `=`, unlike Kotlin's grammar (`'=' {NL} expression`), so
 writes long values) was "Unexpected token NewLine". Both now call `repeatedNL()`.
 Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (RT-70) and the RT-70
 browser test (format, then compile).
+
+Stack traces (RT-71): `CallStack.getStacktrace` printed each function-call record
+with its own call position (`pruefe (<BlueK project>:11:22)`), one frame off from
+Kotlin, and native exceptions had no frames. Frames now follow Kotlin: innermost
+first, each frame (`ActivationRecord.frameName`: `Karte.wert` with the declaring
+class for members, `Karte.<init>` for constructors, `<lambda>`) with the position
+its code has reached; a new exception object starts where it is created (the
+constructors creating it are skipped), native frames (`isNative`) have no
+position, and a trailing top-level frame carries the position of top-level code.
+Hosts format lines through `Interpreter.stackFrameFormatter` (default
+`name(file:line)`). Host exceptions record the stack when they leave the first
+frame (`recordHostException` in both call paths, using `statementPosition`, the
+statement the innermost function reached); `toValue()` attaches it.
+`stackTraceToString()` returns the `printStackTrace()` text (`MyEx: x` plus one
+`    at …` line per frame) like Kotlin. Coverage:
+`node scripts/smoke-curriculum-kotlin.mjs` (RT-38, RT-71).

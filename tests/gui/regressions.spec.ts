@@ -634,6 +634,35 @@ test('GUI-96 the method result appears in front of an open editor', async ({ pag
   await expect(editor).toBeVisible();
 });
 
+test('GUI-97 the terminal shows ANSI colours and handles control sequences like a terminal', async ({ page }) => {
+  await project(page, `class Hund {
+    fun karte(farbe: String) {
+        val textfarbe = if (farbe == "herz") "\\u001B[31m" else "\\u001B[30m"
+        val zuruecksetzen = "\\u001B[0m"
+        println("┌─────┐")
+        println("│  $textfarbe♥$zuruecksetzen  │")
+        println("└─────┘")
+    }
+  }`);
+  await evaluate(page, 'Hund().karte("herz")');
+  const output = page.locator('.terminal-output pre');
+  await expect(output).toHaveText('┌─────┐\n│  ♥  │\n└─────┘\n');
+  const heart = output.locator('span', { hasText: '♥' });
+  await expect(heart).toHaveText('♥');
+  await expect(heart).toHaveCSS('color', 'rgb(205, 49, 49)');
+  // The dark theme has its own palette.
+  await evaluate(page, 'println("\\u001B[32mgrün\\u001B[0m")');
+  const green = output.locator('span', { hasText: 'grün' });
+  await expect(green).toHaveCSS('color', 'rgb(0, 188, 0)');
+  await page.locator('.bluek').evaluate((root) => root.classList.add('dark'));
+  await expect(green).toHaveCSS('color', 'rgb(13, 188, 121)');
+  await page.locator('.bluek').evaluate((root) => root.classList.remove('dark'));
+  // Clearing the screen and overwriting a line with \r, as console programs do.
+  await evaluate(page, 'print("\\u001B[H\\u001B[2JLaden 10%\\rLaden 100%\\n\\u001B[1mfertig\\u001B[0m")');
+  await expect(output).toHaveText('Laden 100%\nfertig');
+  await expect(output.locator('span', { hasText: 'fertig' })).toHaveCSS('font-weight', '700');
+});
+
 test('GUI-31 additional editor files open in tabs by default', async ({ page }) => {
   const payload = { format: 'bluek-project', version: 1, files: [
     { fileName: 'Hund.kt', kind: 'class', source: 'class Hund {}' },

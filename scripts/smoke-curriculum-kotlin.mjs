@@ -80,7 +80,7 @@ const fails = (value, label, pattern) => {
   ];
   for (const [source, expected] of caught) assert.equal(ok(p.evaluate(source), source).display, expected, source);
   ok(p.evaluate('try { "x".toInt() } catch (e: Exception) { e.printStackTrace() }'), 'printStackTrace');
-  assert.equal(p.output(), "NumberFormatException: Invalid number format: 'x'\n");
+  assert.equal(p.output(), "NumberFormatException: Invalid number format: 'x'\n    at toInt(Kotlin library)\n");
   // An uncaught runtime error ends the session, so each of these needs its own.
   fails((await project({ 'Main.kt': 'fun main() {}' })).evaluate('try { "x".toInt() } catch (e: IllegalStateException) { -1 }'), 'unrelated catch type', /^NumberFormatException: Invalid number format: 'x'$/);
   fails((await project({ 'Main.kt': 'fun main() {}' })).evaluate('7 / 0'), 'uncaught division by zero', /^ArithmeticException: \/ by zero$/);
@@ -990,6 +990,34 @@ fails((await project({ 'Anzeige.kt': 'class Anzeige {\n    fun zeige(text: Strin
     ['val lokal =\n    start * 2\nlokal', '6'],
   ];
   for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-70 ${source}`).display, expected, `RT-70 ${source}`);
+}
+
+// Stack traces like Kotlin's (RT-71): each frame with its function and the file and line it has
+// reached, innermost first. They showed the call position in the combined project source instead
+// (`at pruefe (<BlueK project>:11:22)`), and exceptions from library code had no frames.
+{
+  const files = {
+    'Main.kt': 'fun main() {\n    val k = Karte("herz")\n    println(k.zahl("x"))\n}',
+    'Karte.kt': 'class Karte(farbe: String) {\n    val farbe = pruefe(farbe)\n    private fun pruefe(f: String): String {\n        if (f != "herz") throw IllegalArgumentException("Farbe $f")\n        return f\n    }\n    fun alle() = listOf(1, 2).map { teile(it) }\n    fun teile(n: Int) = 10 / (n - 2)\n    fun zahl(t: String) = t.toInt()\n}',
+    'Util.kt': 'fun String.laut(): String {\n    throw IllegalStateException("laut $this")\n}\nfun werfe() {\n    "a".laut()\n}',
+    'Z.kt': 'object Z {\n    fun f(): Int = throw IllegalStateException("in Z")\n}',
+  };
+  const p = await project(files);
+  ok(p.result, 'RT-71 project');
+  const trace = source => { ok(p.evaluate(`try { ${source} } catch (e: Throwable) { e.printStackTrace() }`), `RT-71 ${source}`); return p.output(); };
+  assert.equal(trace('Karte("pik")'), 'IllegalArgumentException: Farbe pik\n    at Karte.pruefe(Karte.kt:4)\n    at Karte.<init>(Karte.kt:2)\n');
+  assert.equal(trace('main()'), "NumberFormatException: Invalid number format: 'x'\n    at toInt(Kotlin library)\n    at Karte.zahl(Karte.kt:9)\n    at main(Main.kt:3)\n");
+  assert.equal(trace('Karte("herz").alle()'), 'ArithmeticException: / by zero\n    at Karte.teile(Karte.kt:8)\n    at <lambda>(Karte.kt:7)\n    at map(Kotlin library)\n    at Karte.alle(Karte.kt:7)\n');
+  assert.equal(trace('werfe()'), 'IllegalStateException: laut a\n    at laut(Util.kt:2)\n    at werfe(Util.kt:5)\n');
+  assert.equal(trace('Z.f()'), 'IllegalStateException: in Z\n    at Z.f(Z.kt:2)\n');
+  // Code typed in the Codepad has no file.
+  assert.equal(ok(p.evaluate('fun g() { throw IllegalStateException("cp") }\ntry { g() } catch (e: Exception) { e.stackTraceToString() }'), 'RT-71 stackTraceToString').display,
+    'IllegalStateException: cp\n    at g(Codepad)\n');
+  // After a project failed to compile, Codepad lines are not attributed to its files.
+  const failed = await project({ 'K.kt': 'class K {\n    val x: Int = "nein"\n}' });
+  fails(failed.result, 'RT-71 failed project');
+  assert.equal(ok(failed.evaluate('fun h() { throw IllegalStateException("h") }\ntry { h() } catch (e: Exception) { e.stackTraceToString() }'), 'RT-71 after failed load').display,
+    'IllegalStateException: h\n    at h(Codepad)\n');
 }
 
 console.log('Curriculum Kotlin smoke test passed.');

@@ -413,7 +413,22 @@ BlueK zeigt diese Meldung ohne technischen Exception-Präfix.
   werden zugeordnet. Andere Host-Ausnahmen, etwa
   `UnsupportedOperationException` (der Interpreter wirft sie auch für eigene
   nicht unterstützte Pfade), sind nur mit `catch (e: Throwable)` fangbar.
-  Native Ausnahmen haben keinen Kotlite-Stacktrace. (RT-38)
+  Native Ausnahmen bekommen ihren Stacktrace vom ersten Funktionsaufruf, den
+  sie durchlaufen (RT-71, siehe unten). (RT-38)
+- **Stacktraces:** `CallStack.getStacktrace` liefert die Frames wie Kotlin:
+  innen zuerst jede Funktion (`ActivationRecord.frameName`, für Member mit
+  deklarierender Klasse, Konstruktoren als `Klasse.<init>`) mit der Position,
+  die ihr Code erreicht hat, also die Stelle des Aufrufs in den nächsten Frame
+  bzw. die Fehlerstelle. Ein neues Ausnahmeobjekt beginnt dort, wo es erzeugt
+  wird; die Konstruktoren, die es erzeugen, sind keine Frames. Native
+  Funktionen haben keine Position. Wie Positionen erscheinen, bestimmt der
+  Host (`Interpreter.stackFrameFormatter`): BlueK rechnet sie auf Datei und
+  Zeile der Projektdatei um, lässt die Codepad-Zeile weg und schreibt
+  `(Codepad)`, `(BluePlay)` oder `(Kotlin library)`. Eine Host-Ausnahme
+  (`10 / 0`, `"x".toInt()`) sieht interpretierter Code erst im `catch`, wenn
+  ihre Frames schon abgebaut sind; der erste Funktionsaufruf, den sie
+  durchläuft, merkt sich deshalb den Stack mit der zuletzt begonnenen
+  Anweisung als Zeile (`hostExceptionTrace`, `statementPosition`). (RT-71)
 - **Vorwärtsverweise zwischen Klassen:** gelöst durch die Deklaration aller
   Klassen vor der Analyse und Analyse bei Bedarf (RT-40, siehe
   [oben](#klassen-in-beliebiger-reihenfolge)); das frühere Umordnen und
