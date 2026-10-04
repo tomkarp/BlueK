@@ -156,6 +156,12 @@ const supported = [
   ['listOf("a", "b").withIndex()', '[IndexedValue(index=0, value=a), IndexedValue(index=1, value=b)]'],
   ['listOf("a", "b").withIndex().map { it.index * 10 + it.value.length }', '[1, 11]'],
 
+  // RT-73: error() throws IllegalStateException and has the type Nothing.
+  ['try { error("kaputt") } catch (e: IllegalStateException) { e.message }', 'kaputt'],
+  ['try { error(42) } catch (e: Exception) { e.message }', '42'],
+  ['val e1: String? = null; try { e1 ?: error("leer") } catch (e: IllegalStateException) { "gefangen: " + e.message }', 'gefangen: leer'],
+  ['val e2: Int = if (1 > 0) 7 else error("nie"); e2 + 1', '8'],
+
   // RT-66: format strings like java.util.Formatter, always with `.` as decimal point.
   ['"%.2f".format(3.14159)', '3.14'],
   ['"%.1f".format(0.15)', '0.2'],

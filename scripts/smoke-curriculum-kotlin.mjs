@@ -1020,4 +1020,166 @@ fails((await project({ 'Anzeige.kt': 'class Anzeige {\n    fun zeige(text: Strin
     'IllegalStateException: h\n    at h(Codepad)\n');
 }
 
+// Number literals as in Kotlin (RT-74): exponents, hex, binary and `_` between digits were parse errors.
+{
+  const p = await project({ 'Main.kt': 'const val MAX = 1_000_000\nval avogadro = 6.02E+23\nfun maske() = 0xFF' });
+  ok(p.result, 'RT-74 project');
+  const cases = [
+    ['MAX', '1000000'], ['avogadro', '6.02E23'], ['maske()', '255'],
+    ['1.5e3', '1500.0'], ['2E-3', '0.002'], ['1e10', '1.0E10'], ['1e2f', '100.0'],
+    ['0b1010', '10'], ['0x7FFFFFFF', '2147483647'], ['0xFFL + 1', '256'], ['1_000L * 2', '2000'],
+    ['val big = 0xFFFFFFFF; big is Long', 'true'], ['val small = 0x7FFFFFFF; small is Int', 'true'],
+    ['5.toString() + (1..3).count()', '53'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-74 ${source}`).display, expected, `RT-74 ${source}`);
+  fails(p.evaluate('1_'), 'RT-74 trailing underscore', /Illegal underscore in a number literal/);
+  fails(p.evaluate('0x'), 'RT-74 hex without digits', /A hexadecimal number needs digits/);
+}
+
+// Calling a property of a function type like a method (RT-75): `k.f()` was "`f` is unknown for K",
+// `f()` inside the class failed at runtime with "Class Function `f` not found".
+{
+  const p = await project({ 'K.kt': 'class K(val n: Int) {\n    val f: () -> Int = { n * 2 }\n    var aktion: (Int) -> String = { "x$it" }\n    fun innen() = f() + 1\n    fun innen2() = this.f()\n    fun inLambda() = listOf(1, 2).map { aktion(it) }\n    companion object { val fabrik: (Int) -> K = { K(it) } }\n}' });
+  ok(p.result, 'RT-75 project');
+  const cases = [
+    ['K(4).f()', '8'], ['val k4 = K(4); k4.f.invoke()', '8'], ['K(4).innen()', '9'], ['K(4).innen2()', '8'],
+    ['val k = K(1); k.aktion = { "y$it" }; k.aktion(5)', 'y5'], ['k.inLambda()', '[y1, y2]'],
+    ['val k2: K? = K(3); k2?.f()', '6'], ['val k3: K? = null; k3?.f()', 'null'], ['K.fabrik(7).n', '7'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-75 ${source}`).display, expected, `RT-75 ${source}`);
+  fails(p.evaluate('k.aktion("a")'), 'RT-75 argument type', /Expected type is `Int`, but actual type is `String`/);
+  fails(p.evaluate('k.f(1)'), 'RT-75 argument count', /`f` expects 0 argument\(s\), but 1 were given/);
+}
+
+// An override may return a subtype, like in Kotlin (RT-76); it needed exactly the overridden type.
+{
+  const p = await project({
+    'Tier.kt': 'open class Tier {\n    open fun nachwuchs(): Tier = Tier()\n    open fun laut(): Any = "?"\n    open fun name(): String? = null\n    open fun alter(): Any = 0\n}',
+    'Hund.kt': 'class Hund : Tier() {\n    override fun nachwuchs(): Hund = Hund()\n    override fun laut(): String = "Wau"\n    override fun name(): String = "Rex"\n    override fun alter() = 3\n    fun bellen() = "wuff"\n}',
+    'Form.kt': 'interface Form { fun kopie(): Form }',
+    'Kreis.kt': 'class Kreis : Form {\n    override fun kopie(): Kreis = Kreis()\n    fun r() = 1\n}',
+  });
+  ok(p.result, 'RT-76 project');
+  const cases = [
+    ['Hund().nachwuchs().bellen()', 'wuff'], ['val t: Tier = Hund(); t.laut()', 'Wau'], ['Hund().laut().length', '3'],
+    ['Hund().name().length', '3'], ['Hund().alter() + 1', '4'], ['Kreis().kopie().r()', '1'], ['val f: Form = Kreis(); f.kopie() is Kreis', 'true'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-76 ${source}`).display, expected, `RT-76 ${source}`);
+  fails((await project({ 'Tier.kt': 'open class Tier { open fun laut(): String = "?" }', 'Hund.kt': 'class Hund : Tier() { override fun laut(): Any = 1 }' })).result,
+    'RT-76 supertype', /Return type `Any` of function `laut` is not a subtype of the overridden return type `String`/);
+}
+
+// An object with an overridden property in a Codepad variable (RT-77): BlueK's reachability check
+// threw "Duplicate key while merging maps", which ended the session.
+{
+  const p = await project({
+    'Tier.kt': 'open class Tier {\n    open val laut: Any = "?"\n    val beine = 4\n}',
+    'Hund.kt': 'class Hund : Tier() {\n    override val laut: String = "Wau"\n}',
+  });
+  ok(p.result, 'RT-77 project');
+  const cases = [
+    ['val t: Tier = Hund(); t.laut', 'Wau'], ['Hund().laut.length', '3'], ['listOf<Tier>(Hund(), Tier()).map { it.laut }', '[Wau, ?]'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-77 ${source}`).display, expected, `RT-77 ${source}`);
+  const hund = ok(p.evaluate('t'), 'RT-77 object');
+  assert.deepEqual(JSON.parse(p.session.inspect(hund.objectId)).fields.map(field => `${field.name}=${field.value}`), ['laut=Wau', 'beine=4']);
+}
+
+// Enums like in Kotlin (RT-78): entries printed as `Farbe()`, `name`, `ordinal` and `values()` were
+// unknown, members after `;` were a parse error and `Farbe("X")` created a new entry.
+{
+  const p = await project({
+    'Farbe.kt': 'enum class Farbe(val symbol: String) {\n    HERZ("♥"), KARO("♦"), PIK("♠"), KREUZ("♣");\n\n    val istRot: Boolean get() = this == HERZ || this == KARO\n    fun beschreibung() = "$name ($symbol)"\n    fun wert() = when (this) {\n        HERZ, KARO -> 1\n        PIK -> 2\n        KREUZ -> 3\n    }\n}',
+    'Richtung.kt': 'enum class Richtung {\n    NORD, SUED;\n    override fun toString() = name.lowercase()\n}',
+    'Main.kt': 'fun main() {\n    for (f in Farbe.values()) println("${f.ordinal}: $f ${f.istRot}")\n}',
+  });
+  ok(p.result, 'RT-78 project');
+  ok(p.evaluate('main()'), 'RT-78 main');
+  assert.equal(p.output(), '0: HERZ true\n1: KARO true\n2: PIK false\n3: KREUZ false\n');
+  const cases = [
+    ['Farbe.HERZ', 'HERZ'], ['"${Farbe.KARO}"', 'KARO'], ['Farbe.HERZ.name', 'HERZ'], ['Farbe.PIK.ordinal', '2'],
+    ['Farbe.values().size', '4'], ['Farbe.values()[3]', 'KREUZ'], ['Farbe.valueOf("KREUZ").beschreibung()', 'KREUZ (♣)'],
+    ['Farbe.entries.map { it.name }', '[HERZ, KARO, PIK, KREUZ]'], ['Farbe.PIK.wert() + Farbe.KARO.wert()', '3'],
+    ['val f: Farbe? = null; f?.name', 'null'], ['"${Richtung.NORD}" + Richtung.SUED.name', 'nordSUED'],
+    ['listOf(Farbe.PIK, Farbe.HERZ).sortedBy { it.ordinal }', '[HERZ, PIK]'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-78 ${source}`).display, expected, `RT-78 ${source}`);
+  fails(p.evaluate('Farbe("X")'), 'RT-78 construction', /Enum types cannot be instantiated: use an entry such as `Farbe.HERZ`/);
+  const farbe = JSON.parse(p.session.manifest()).classes.find(item => item.name === 'Farbe');
+  assert.deepEqual([farbe.kind, farbe.constructors], ['enum', []]);
+  fails((await project({ 'F.kt': 'enum class F { A { } }' })).result, 'RT-78 entry body', /Enum entries with their own body/);
+}
+
+// Interfaces with default functions and properties, abstract properties (RT-79): all three were
+// rejected ("Expected token {", "Properties in interfaces are not supported", "Modifier `abstract`
+// cannot be applied to properties").
+{
+  const p = await project({
+    'Tier.kt': 'abstract class Tier {\n    abstract val laut: String\n    abstract val beine: Int\n    fun sprich() = "$laut mit $beine Beinen"\n}',
+    'Hund.kt': 'class Hund(override val beine: Int = 4) : Tier() {\n    override val laut = "Wau"\n}',
+    'Form.kt': 'interface Form {\n    val name: String\n    fun flaeche(): Double\n    fun beschreibung() = "$name: ${flaeche()}"\n    fun art(): String = "Form"\n}',
+    'Quadrat.kt': 'class Quadrat(val a: Double) : Form {\n    override val name = "Quadrat"\n    override fun flaeche() = a * a\n    override fun art() = "Viereck"\n}',
+    'Kreis.kt': 'class Kreis(override val name: String) : Form {\n    override fun flaeche() = 3.0\n}',
+  });
+  ok(p.result, 'RT-79 project');
+  const cases = [
+    ['Hund().sprich()', 'Wau mit 4 Beinen'], ['val t: Tier = Hund(3); t.laut + t.beine', 'Wau3'],
+    ['Quadrat(2.0).beschreibung()', 'Quadrat: 4.0'], ['val f: Form = Kreis("K"); f.name + f.art()', 'KForm'],
+    ['listOf<Form>(Quadrat(1.0), Kreis("kreis")).map { it.art() + " " + it.name }', '[Viereck Quadrat, Form kreis]'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-79 ${source}`).display, expected, `RT-79 ${source}`);
+  const hund = ok(p.evaluate('Hund()'), 'RT-79 object');
+  assert.deepEqual(JSON.parse(p.session.inspect(hund.objectId)).fields.map(field => `${field.name}=${field.value}`), ['beine=4', 'laut=Wau']);
+  const rejected = [
+    [{ 'T.kt': 'abstract class Tier { abstract val laut: String }', 'H.kt': 'class Hund : Tier()' }, /Class `Hund` is not abstract and does not implement the abstract property `laut`/],
+    [{ 'F.kt': 'interface Form { val name: String }', 'Q.kt': 'class Quadrat : Form' }, /Class `Quadrat` is not abstract and does not implement the abstract property `name`/],
+    [{ 'F.kt': 'interface Form { fun f(): Int }', 'Q.kt': 'class Quadrat : Form' }, /Class Quadrat must be marked as abstract/],
+    [{ 'T.kt': 'abstract class Tier { abstract val laut: String = "x" }' }, /An abstract property cannot have an initializer or accessors/],
+    [{ 'F.kt': 'interface Form { val name: String = "x" }' }, /Property initializers are not allowed in interfaces/],
+  ];
+  for (const [files, pattern] of rejected) fails((await project(files)).result, `RT-79 ${Object.values(files).join(' | ')}`, pattern);
+}
+
+// `protected` and `internal` (RT-80): both were parse errors. `protected` members are visible in the
+// class and its subclasses; `internal` is public, a BlueK project being one module.
+{
+  const p = await project({
+    'Tier.kt': 'open class Tier(protected val name: String) {\n    protected var energie = 10\n    protected open fun essen() { energie += 1 }\n    internal fun info() = "$name $energie"\n}',
+    'Hund.kt': 'class Hund : Tier("Rex") {\n    fun fressen(): Int { essen(); return energie }\n    override fun essen() { energie += 2 }\n    fun wer() = name\n    companion object { fun test(h: Hund) = h.energie }\n}',
+    'Hilfe.kt': 'internal class Hilfe { internal val x = 1 }',
+  });
+  ok(p.result, 'RT-80 project');
+  const cases = [['Hund().fressen()', '12'], ['Hund().wer()', 'Rex'], ['Tier("a").info()', 'a 10'], ['Hund.test(Hund())', '10'], ['Hilfe().x', '1']];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-80 ${source}`).display, expected, `RT-80 ${source}`);
+  fails(p.evaluate('Hund().energie'), 'RT-80 protected property', /Protected property `energie` cannot be accessed here/);
+  fails(p.evaluate('Tier("a").essen()'), 'RT-80 protected function', /Protected function `essen` cannot be accessed here/);
+  const tier = JSON.parse(p.session.manifest()).classes.find(item => item.name === 'Tier');
+  assert.deepEqual(tier.properties.map(property => `${property.name}:${property.visibility}`), ['name:protected', 'energie:protected']);
+  assert.deepEqual(tier.methods.map(method => `${method.name}:${method.visibility}`), ['essen:protected', 'info:public']);
+}
+
+// `lateinit var` (RT-81): was a parse error. Reading it before the first assignment throws Kotlin's
+// UninitializedPropertyAccessException; the inspector shows it as uninitialized.
+{
+  const p = await project({ 'Konto.kt': 'class Konto {\n    lateinit var inhaber: String\n    lateinit var liste: MutableList<Int>\n    var stand = 0\n    fun eroeffne(name: String) { inhaber = name; liste = mutableListOf(1) }\n    fun info() = "$inhaber ${liste.size}"\n}' });
+  ok(p.result, 'RT-81 project');
+  const cases = [
+    ['val k = Konto(); k.eroeffne("Ada"); k.info()', 'Ada 1'],
+    ['k.inhaber = "Bob"; k.inhaber', 'Bob'],
+    ['try { Konto().inhaber } catch (e: UninitializedPropertyAccessException) { e.message }', 'lateinit property inhaber has not been initialized'],
+    ['try { Konto().info() } catch (e: Exception) { e.message }', 'lateinit property inhaber has not been initialized'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-81 ${source}`).display, expected, `RT-81 ${source}`);
+  const leer = ok(p.evaluate('val leer = Konto(); leer'), 'RT-81 object');
+  assert.deepEqual(JSON.parse(p.session.inspect(leer.objectId)).fields.map(field => `${field.name}=${field.value}`), ['inhaber=<uninitialized>', 'liste=<uninitialized>', 'stand=0']);
+  fails((await project({ 'K.kt': 'class K { lateinit var x: String }' })).evaluate('K().x'), 'RT-81 uncaught', /^UninitializedPropertyAccessException: lateinit property x has not been initialized$/);
+  const rejected = [
+    ['class K { lateinit val x: String }', /'lateinit' modifier is allowed only on mutable properties/],
+    ['class K { lateinit var x: Int }', /not allowed on properties of primitive types/],
+    ['class K { lateinit var x: String? }', /not allowed on properties of nullable types/],
+    ['class K { lateinit var x: String = "a" }', /not allowed on properties with initializer/],
+  ];
+  for (const [source, pattern] of rejected) fails((await project({ 'K.kt': source })).result, `RT-81 ${source}`, pattern);
+}
+
 console.log('Curriculum Kotlin smoke test passed.');

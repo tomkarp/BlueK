@@ -67,6 +67,10 @@ Genauigkeit, Argumentindex (`%2$s`, im Kotlin-Quelltext `%2\$s`) und den Flags
 Dezimaldarstellung (`"%.1f".format(0.15)` ist `0.2`). Falsche Typen
 (`"%d".format(1.5)`) und fehlende Argumente werfen `IllegalArgumentException`.
 
+**Fehler melden (RT-73).** `error("Meldung")` wirft wie in Kotlin eine
+`IllegalStateException` mit dieser Meldung; der Rückgabetyp `Nothing` erlaubt
+`val x: Int = if (ok) 1 else error("…")` und `?: error("…")`.
+
 **Destrukturierung (RT-65).** `component1()` … für `Pair`, `Triple`,
 Map-Einträge, Listen (`component1` bis `component5`) und `IndexedValue`;
 `withIndex()` liefert eine Liste von `IndexedValue` mit `index` und `value`

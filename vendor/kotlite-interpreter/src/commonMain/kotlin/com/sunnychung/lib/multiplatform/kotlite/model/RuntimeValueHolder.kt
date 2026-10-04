@@ -33,7 +33,8 @@ class RuntimeValueHolder(override val type: DataType, val isMutable: Boolean, va
         this.value = value
     }
 
-    override fun read(interpreter: Interpreter?) = value!!
+    // Read before its first assignment, e.g. a `lateinit var` (RT-81); the reader names the property.
+    override fun read(interpreter: Interpreter?) = value ?: throw UninitializedPropertyAccessException("Property has not been initialized")
 
     override fun toString(): String = value.toString()
 }

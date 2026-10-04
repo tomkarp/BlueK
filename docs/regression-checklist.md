@@ -217,6 +217,15 @@ bei Verweisen die Beschreibung mitnennen.
 | RT-69 | Eine Methode der eigenen Klasse lässt sich ohne `this.` in Lambdas aufrufen, die eine Bibliotheksfunktion ausführt: `map { laut() + it }` (auch überschrieben in einer Unterklasse), `filter { gerade(it) }`, verschachtelte Lambdas, `apply { add(gross()) }`, `sortedBy { … }` in einem Property-Initialisierer, `forEach { s += mal10(it) }` mit `private`-Methode, zurückgegebene Lambdas, geerbte Methoden, in Companions und Objekten | 2026-10-03 beim Prüfen von RT-68 gefunden. Vorher scheiterte der Aufruf zur Laufzeit mit „Function `…` not found on implicit receiver“, auch mit dem Bundle aus 891dd9a; mit dem Bundle aus 1724af8 scheitert der RT-69-Block in `smoke-curriculum-kotlin.mjs` am ersten Fall | Runtime-Tests mit echtem Bundle; kein GUI-Test. Daneben gefunden, offen: eine Property vom Funktionstyp lässt sich nicht als `objekt.f()` aufrufen (`val f = objekt.f; f()` geht) |
 | RT-70 | Eine Klasse bleibt nach „Format Kotlin file“ compilierbar: Zeilenumbruch nach `=` in Property-Deklarationen (`val symbol =` mit dem `when` in der nächsten Zeile, auch auf oberster Ebene und lokal) und bei benannten Argumenten (`f(a =` …) | 2026-10-04 vom Nutzer gemeldet: die Klasse `Karte` compilierte, nach dem Formatieren „Line 27: Unexpected token Token(type=NewLine …)“. Mit dem Bundle aus a09d104 zeigt der Browser-Test RT-70 genau diese Meldung (Zeile 23 der Testklasse), der RT-70-Block in `smoke-curriculum-kotlin.mjs` scheitert beim Laden; mit dem neuen Bundle beide grün. Weitere typische Umbrüche des Formatierers (Aufrufketten, `&&`/`+` am Zeilenende, `?:` am Zeilenanfang, mehrzeilige `when`-Bedingungen, nachgestellte Kommas) liefen schon vorher | Runtime-Test und Browser-Test RT-70 (formatieren, schließen, compilieren, aufrufen) |
 | RT-71 | `printStackTrace()` und `stackTraceToString()` zeigen den Stack wie Kotlin, innen zuerst mit Funktion und erreichter Zeile der Projektdatei: `at Karte.pruefe(Karte.kt:6)`, `at Karte.wert(Karte.kt:3)`, `at main(Main.kt:3)`, Konstruktoren als `Karte.<init>`, Objekte als `Z.f`, Lambdas als `<lambda>`; Bibliotheksfunktionen als `toInt(Kotlin library)`, `map(Kotlin library)`; im Codepad deklarierte Funktionen als `g(Codepad)`, die Codepad-Zeile selbst fehlt. Auch Ausnahmen aus Bibliothekscode (`10 / 0`, `"x".toInt()`) haben Frames. `stackTraceToString()` liefert denselben Text wie `printStackTrace()` | 2026-10-04 nach „weiter mit den Stacktraces“ des Nutzers. Vorher `at pruefe (<BlueK project>:11:22)` mit der Aufrufstelle im zusammengesetzten Quelltext, Bibliotheksausnahmen ohne Frames, `stackTraceToString()` nur mit den Frames. Mit dem Bundle aus c65c68d scheitert `smoke-curriculum-kotlin.mjs` schon an der angepassten RT-38-Erwartung (`at toInt(Kotlin library)` fehlt); mit dem neuen Bundle grün einschließlich RT-71-Block | Runtime-Tests mit echtem Bundle; kein GUI-Test. Offen: nicht gefangene Ausnahmen meldet die GUI nur mit Klasse und Meldung, ohne Stack; kein `Caused by:` |
+| RT-73 | `error("Meldung")` wirft wie in Kotlin eine `IllegalStateException` mit der Meldung (auch `error(42)`); Rückgabetyp `Nothing`, also `?: error("…")` und `if (…) 1 else error("…")` | 2026-10-04 beim Testen von RT-71 gefunden: `error` war unbekannt. Mit dem Bundle aus 6e40ce1 fehlen die vier neuen Ausdrücke in `smoke-kotlin-surface.mjs`, mit dem neuen Bundle grün (132 unterstützt) | Runtime-Test `smoke-kotlin-surface.mjs` |
+| RT-74 | Zahlliterale wie in Kotlin: Exponent (`1.5e3`, `2E-3`, `1e10`, `6.02E+23`, `1e2f`), hexadezimal (`0xFF`, `0xFFL`), binär (`0b1010`), `_` zwischen Ziffern (`1_000_000`, auch in `const val`); ganzzahlige Literale sind `Int`, wenn sie passen, sonst `Long` (`0xFFFFFFFF`). `1_` und `0x` sind Fehler | 2026-10-04, offener Punkt aus RT-67. Vorher Parsefehler; mit dem Bundle aus 9a357fd scheitert der RT-74-Block in `smoke-curriculum-kotlin.mjs` beim Laden. Mit dem neuen Bundle grün | Runtime-Test. Offen: `.5` ohne führende Ziffer, Bit-Operationen |
+| RT-75 | Properties mit Funktionstyp lassen sich wie Methoden aufrufen: `objekt.f()`, `this.f()`, `f()` in der Klasse (auch in Lambdas), `k?.f()`, `Klasse.fabrik(7)` aus dem Companion, `k.f.invoke()`; Anzahl und Typen der Argumente werden geprüft | 2026-10-04 beim Prüfen von RT-69 gefunden. Vorher meldete `k.f()` „`f` is unknown for K“, `f()` in der Klasse scheiterte zur Laufzeit mit „Class Function `f` not found“. Zwischenstand: eine Vorab-Analyse des Empfängers jedes `objekt.f(…)` analysierte ihn doppelt und brach RT-65 (Destrukturierung in Lambdas) und einen Generics-Test; jetzt erst nach gescheiterter Methodensuche. Mit dem Bundle aus af66836 scheitert der RT-75-Block beim Laden | Runtime-Test. Offen: `.invoke()` auf einem zusammengesetzten Empfänger (`K(4).f.invoke()`) |
+| RT-76 | Überschreibungen dürfen einen spezielleren Rückgabetyp haben: `override fun nachwuchs(): Hund` für `open fun nachwuchs(): Tier`, `String` für `Any`, `String` für `String?`, bei Interface-Funktionen und mit abgeleitetem Typ (`override fun alter() = 3` für `Any`); ein allgemeinerer Typ bleibt ein Compilefehler | 2026-10-04, offener Punkt aus RT-57. Vorher „Return type … is not the same as the overridden one“; mit dem Bundle aus 8990a6a scheitert der RT-76-Block beim Laden | Runtime-Test; Properties mit spezielleren Typen gehen ebenfalls (`override val laut: String` für `Any`, geprüft mit RT-77) |
+| RT-77 | Ein Objekt mit überschriebener Property (`open val laut` / `override val laut`) bleibt im Codepad benutzbar: `val t: Tier = Hund(); t.laut`, `listOf<Tier>(Hund(), Tier()).map { it.laut }`; der Inspektor zeigt die überschriebene Property einmal mit ihrem Wert | 2026-10-04 beim Prüfen von RT-76 gefunden. Vorher brach jede Codepad-Eingabe, die ein solches Objekt in einer Variable hielt, mit „DuplicateKeyException: Duplicate key while merging maps“ ab (BlueKs Erreichbarkeitsprüfung führte die Properties aller Objektteile als Map zusammen), auch bei gleichem Typ und mit dem Bundle aus 891dd9a; in Funktionen ging es. Mit dem Bundle aus 6b29ca2 scheitert der RT-77-Block | Runtime-Test |
+| RT-78 | Enums wie in Kotlin: Einträge geben ihren Namen aus (`println(Farbe.HERZ)` → `HERZ`, ein eigenes `toString()` hat Vorrang), `name`, `ordinal`, `values()` (als Liste), `valueOf()`, Member nach `;` (Properties mit Getter, Funktionen, `when (this)` mit Einträgen ohne Klassennamen und ohne `else`), `name` auch ohne `this.`; `Farbe("X")` ist ein Compilefehler; das Klassenmenü zeigt für Enums keinen Konstruktor (`kind: "enum"`) | 2026-10-04 beim Sondieren offener Punkte gefunden: vorher druckte `println(Farbe.HERZ)` `Farbe()`, `name`/`ordinal`/`values()` waren unbekannt, `HERZ("♥");` war ein Parsefehler und `Farbe("X")` legte einen neuen Eintrag an. Mit dem Bundle aus 9f0ccb0 scheitert der RT-78-Block beim Laden | Runtime-Test. Offen: `<`/`compareTo`, Einträge mit eigenem Rumpf, `companion object` in Enums |
+| RT-79 | Interfaces mit Methoden mit Rumpf (`fun beschreibung() = "$name: ${flaeche()}"`, ruft überschriebene Methoden der Klasse) und abstrakten Properties (`val name: String`), abstrakte Properties in abstrakten Klassen (`abstract val laut: String`, von Methoden der abstrakten Klasse lesbar); implementiert auch als Konstruktor-Property (`class Hund(override val beine: Int)`); Zugriff über den Obertyp; fehlende Implementierungen, Anfangswerte bei abstrakten bzw. Interface-Properties sind Compilefehler; der Inspektor zeigt die implementierten Properties | 2026-10-04, offener Punkt der README (wichtig für den OOP-Unterricht). Vorher „Expected token Symbol `{`“, „Properties in interfaces are not supported“ bzw. „Modifier `abstract` cannot be applied to properties“; mit dem Bundle aus 06304ce scheitert der RT-79-Block beim Laden | Runtime-Test. Offen: Interface-Properties mit Getter, Extension-Properties mit Getter |
+| RT-80 | `protected` an Properties, Funktionen und Konstruktor-Properties: in der Klasse, in Unterklassen und deren Companions benutzbar, von außen ein Compilefehler („Protected property/function … cannot be accessed here“); `internal` an Klassen und Membern wirkt wie `public`. Manifest meldet `protected`; Objektmenüs zeigen `protected`-Methoden nicht, der Inspektor bearbeitet `protected`-Felder nicht | 2026-10-04, offener Punkt der README. Vorher Parsefehler; `smoke-kotlite-browser.mjs` erwartete ausdrücklich die Ablehnung von `protected` und prüft jetzt den Zugriffsfehler. Mit dem Bundle aus 17e430b scheitert der RT-80-Block beim Laden | Runtime-Tests; Objektmenü-Filter in `objectMenuMethods.ts` ohne eigenen Browser-Test |
+| RT-81 | `lateinit var` bei Klassen-Properties: Zuweisung später, Lesen vorher wirft `UninitializedPropertyAccessException: lateinit property x has not been initialized` (mit `catch` fangbar), der Inspektor zeigt `<uninitialized>`; Kotlins Regeln (nur `var`, ohne Anfangswert, nicht nullable, nicht primitiv) als Compilefehler | 2026-10-04, offener Punkt der README. Vorher Parsefehler; beim Einbau gefunden: ein nicht belegtes Feld brachte `inspect()` mit einer Host-Ausnahme zum Absturz. Mit dem Bundle aus 39b28cd scheitert der RT-81-Block beim Laden | Runtime-Test. Offen: `lateinit` auf oberster Ebene und lokal, `::x.isInitialized` |
 
 | GUI-93 | Objekt-Kontextmenüs und geerbte Methoden-Untermenüs liegen über offenen Inspektoren und bleiben anklickbar; Parameterdialoge liegen weiterhin darüber | Chromium GUI-93 erzeugt tatsächliche Überlappungen mit einem verschobenen Inspektor, prüft den vordersten DOM-Treffer, öffnet den Parameterdialog und ruft eine geerbte Methode auf. Vor der Korrektur rot, nachher grün; GUI-49/82/85/87 ebenfalls grün | Automatisch im echten Browser abgesichert; keine separate visuelle Benutzerabnahme |
 | GUI-94 | Reset erhält den maximierten bzw. wiederhergestellten Zustand des BluePlay-Weltfensters | Chromium GUI-94 wechselt die angezeigte Welt, maximiert und setzt zurück; prüft die erneut erzeugte ursprüngliche Welt und unveränderte Fenstergrenzen, danach Reset bei normaler Fenstergröße | Vor der Korrektur rot, danach grün; GUI-57 und beide RT-25-BluePlay-Reset-Tests ebenfalls grün; keine gesonderte visuelle Benutzerabnahme |
@@ -2646,4 +2655,55 @@ Tatsächliche Prüfungen:
 - Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
   alle Node-Suiten grün, `test:offline` 4/4, Chromium 146/146 grün; PERF-01
   dabei 323 Frames, p95 15,0 ms, max. 16,5 ms.
+- `git diff --check` ohne Befund; keine `* 2.*`-Dateien.
+
+### RT-73 bis RT-77 (2026-10-04)
+
+Eigenständig abgearbeitet, während der Nutzer abwesend war: `error()` (RT-73),
+Zahlliterale (RT-74), Properties mit Funktionstyp aufrufen (RT-75),
+speziellere Rückgabetypen beim Überschreiben (RT-76) und der Codepad-Absturz
+bei überschriebenen Properties (RT-77, beim Prüfen von RT-76 gefunden). Je
+ein Commit, ein gemeinsamer Regressionslauf und ein Push.
+
+- Jeder Punkt: neuer Testblock grün, mit dem Bundle des vorigen Commits rot
+  (Einzelheiten in den Zeilen RT-73 bis RT-77).
+- Zwischenstand RT-75: eine Vorab-Analyse des Empfängers brach RT-65 und einen
+  Generics-Grenztest sowie zwei Meldungen in `smoke-kotlin-surface.mjs`;
+  behoben, bevor committet wurde.
+- `browser-smoke`, `test:generics`, `test:blueplay-demos`, `test:references`
+  und `test:inspector` grün.
+- Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
+  alle Node-Suiten grün, `test:offline` 4/4, Chromium 146/146 grün; PERF-01
+  dabei 324 Frames, p95 15,1 ms, max. 19,1 ms.
+- `git diff --check` ohne Befund; keine `* 2.*`-Dateien.
+
+### RT-78 und RT-79 (2026-10-04)
+
+Eigenständig während der Abwesenheit des Nutzers: Enums (RT-78, beim
+Sondieren gefunden) und Interfaces mit Default-Methoden und Properties sowie
+abstrakte Properties (RT-79, offener Punkt der README).
+
+- Je ein Testblock in `smoke-curriculum-kotlin.mjs`, grün; mit dem Bundle des
+  vorigen Commits rot beim Laden des Projekts.
+- `browser-smoke`, `test:generics`, `test:blueplay-demos`, `test:references`
+  und `test:inspector` grün.
+- Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
+  alle Node-Suiten grün, `test:offline` 4/4, Chromium 146/146 grün; PERF-01
+  dabei 320 Frames, p95 15,3 ms, max. 19,8 ms.
+- `git diff --check` ohne Befund; keine `* 2.*`-Dateien.
+
+### RT-80 und RT-81 (2026-10-04)
+
+Eigenständig während der Abwesenheit des Nutzers: `protected`/`internal`
+(RT-80) und `lateinit var` (RT-81), beide offene Punkte der README.
+
+- Je ein Testblock in `smoke-curriculum-kotlin.mjs`, grün; mit dem Bundle des
+  vorigen Commits rot beim Laden. `smoke-kotlite-browser.mjs` erwartete die
+  Ablehnung von `protected` und prüft jetzt den Zugriffsfehler.
+- `browser-smoke`, `test:generics`, `test:blueplay-demos`, `test:references`
+  und `test:inspector` grün; Typecheck nach der Änderung in
+  `objectMenuMethods.ts` grün.
+- Vollständiger `npm run test:regression`: Typecheck 0 Fehler/0 Warnungen,
+  alle Node-Suiten grün, `test:offline` 4/4, Chromium 146/146 grün; PERF-01
+  dabei 321 Frames, p95 15,2 ms, max. 19,5 ms.
 - `git diff --check` ohne Befund; keine `* 2.*`-Dateien.

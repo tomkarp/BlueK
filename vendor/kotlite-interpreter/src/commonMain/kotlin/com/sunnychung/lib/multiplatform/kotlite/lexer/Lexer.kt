@@ -1,6 +1,5 @@
 package com.sunnychung.lib.multiplatform.kotlite.lexer
 
-import com.sunnychung.lib.multiplatform.kotlite.extension.compareString
 import com.sunnychung.lib.multiplatform.kotlite.extension.removeAfterIndex
 import com.sunnychung.lib.multiplatform.kotlite.log
 import com.sunnychung.lib.multiplatform.kotlite.model.SourcePosition
@@ -85,19 +84,6 @@ open class Lexer(val filename: String, val code: String, val isParseComment: Boo
     // Kotlin identifier, e.g. `"$rang│"` or `"$name's"`.
     internal fun Char.isFieldIdentifierChar() = isLetterOrDigit() || this == '_'
 
-    internal fun readInteger(): String {
-        val sb = StringBuilder()
-        while (currentChar()?.isDigit() == true) {
-            sb.append(currentChar()!!)
-            advanceChar() // TODO better structure
-        }
-        if (currentChar() == 'L') {
-            sb.append(currentChar()!!)
-            advanceChar()
-        }
-        return sb.toString()
-    }
-
     internal fun readIdentifier(): String {
         val sb = StringBuilder()
         while (currentChar()?.isIdentifierChar() == true) {
@@ -143,35 +129,74 @@ open class Lexer(val filename: String, val code: String, val isParseComment: Boo
         return sb.toString()
     }
 
+    /**
+     * Number literals as in Kotlin (RT-74): decimal digits with `_` between them (`1_000_000`), hex
+     * (`0xFF`) and binary (`0b1010`) integers, a fraction (`1.5`), an exponent (`1e10`, `2.5E-3`),
+     * and the suffixes `L` (Long) and `f`/`F` (Float, represented as Double). An integer without
+     * `L` is an Int if it fits, else a Long.
+     */
     internal fun readNumber(): Token {
         try {
             val position = makeSourcePosition()
-            val number = readInteger()
-            val hasDot = if (currentChar() == '.') {
-                true
-            } else {
-                // TODO throw error if not followed by whitespaces, symbols or EOF
-                false
+            fun digits(isDigit: (Char) -> Boolean): String {
+                val sb = StringBuilder()
+                while (true) {
+                    val c = currentChar() ?: break
+                    if (isDigit(c)) {
+                        sb.append(c)
+                    } else if (c == '_' && sb.isNotEmpty()) {
+                        // an underscore must stand between digits
+                        var next = nextChar()
+                        var offset = 1
+                        while (next == '_') { offset++; next = nextChar(offset) }
+                        if (next == null || !isDigit(next)) throw RuntimeException("Illegal underscore in a number literal")
+                    } else {
+                        break
+                    }
+                    advanceChar()
+                }
+                return sb.toString()
+            }
+            fun integer(text: String, radix: Int): Token {
+                if (currentChar() == 'L') {
+                    advanceChar()
+                    val value = text.toLongOrNull(radix) ?: throw RuntimeException("Long `$text` is too big.")
+                    return Token(TokenType.Long, value, position, makeSourcePosition())
+                }
+                text.toIntOrNull(radix)?.let { return Token(TokenType.Integer, it, position, makeSourcePosition()) }
+                val value = text.toLongOrNull(radix) ?: throw RuntimeException("Number `$text` is too big.")
+                return Token(TokenType.Long, value, position, makeSourcePosition())
+            }
+            if (currentChar() == '0' && nextChar()?.lowercaseChar() in setOf('x', 'b')) {
+                val radix = if (nextChar()!!.lowercaseChar() == 'x') 16 else 2
+                advanceChar()
+                advanceChar()
+                val text = digits { if (radix == 16) it.isDigit() || it.lowercaseChar() in 'a'..'f' else it == '0' || it == '1' }
+                if (text.isEmpty()) throw RuntimeException("A ${if (radix == 16) "hexadecimal" else "binary"} number needs digits")
+                return integer(text, radix)
+            }
+            val whole = digits { it.isDigit() }
+            var text = whole
+            var isDouble = false
+            if (currentChar() == '.' && nextChar()?.isDigit() == true) {
+                advanceChar() // eat the '.'
+                text += "." + digits { it.isDigit() }
+                isDouble = true
+            }
+            if (currentChar()?.lowercaseChar() == 'e' &&
+                (nextChar()?.isDigit() == true || (nextChar() in setOf('+', '-') && nextChar(2)?.isDigit() == true))) {
+                advanceChar() // eat the 'e'
+                val sign = if (currentChar() in setOf('+', '-')) currentChar().toString().also { advanceChar() } else ""
+                text += "e" + sign + digits { it.isDigit() }
+                isDouble = true
             }
             // `2f` / `1.5F`: BlueK represents Float values as Double.
             if (currentChar() == 'f' || currentChar() == 'F') {
                 advanceChar()
-                return Token(TokenType.Double, number.toDouble(), position, makeSourcePosition())
+                isDouble = true
             }
-            if (!hasDot || !nextChar()!!.isDigit()) { // is an integral number
-                if (number.removeSuffix("L").length > 19) throw RuntimeException("Number `$number` is too big.")
-                if (number.endsWith("L") || compareString(number, "2147483647") > 0) { // FIXME -2147483648 should not be casted to Long
-                    val value = number.removeSuffix("L").toLongOrNull() ?: throw RuntimeException("Long `$number` is invalid.")
-                    return Token(TokenType.Long, value, position, makeSourcePosition())
-                } else {
-                    val value = number.toIntOrNull() ?: throw RuntimeException("Integer `$number` is invalid.")
-                    return Token(TokenType.Integer, value, position, makeSourcePosition())
-                }
-            }
-            advanceChar() // eat the '.'
-            val decimal = readInteger()
-            val value = "$number.$decimal".toDoubleOrNull() ?: throw RuntimeException("Double `$number` is invalid.")
-            if (currentChar() == 'f' || currentChar() == 'F') advanceChar()
+            if (!isDouble) return integer(whole, 10)
+            val value = text.toDoubleOrNull() ?: throw RuntimeException("Double `$text` is invalid.")
             return Token(TokenType.Double, value, position, makeSourcePosition())
         } finally {
             backward()

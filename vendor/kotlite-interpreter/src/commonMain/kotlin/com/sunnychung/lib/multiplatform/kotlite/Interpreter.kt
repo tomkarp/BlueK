@@ -37,6 +37,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.ClassDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassDefinition
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassInstance
 import com.sunnychung.lib.multiplatform.kotlite.model.OBJECT_REF_PREFIX
+import com.sunnychung.lib.multiplatform.kotlite.model.ENUM_REF_PREFIX
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassInstanceInitializerNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassMemberReferenceNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassModifier
@@ -613,6 +614,11 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         // class constructor -> variableName? TODO
         (transformedRefName ?: variableName).let { name ->
             if (name.startsWith(OBJECT_REF_PREFIX)) return objectInstance(name.removePrefix(OBJECT_REF_PREFIX))
+            if (name.startsWith(ENUM_REF_PREFIX)) {
+                val (className, entry) = name.removePrefix(ENUM_REF_PREFIX).let { it.substringBeforeLast('/') to it.substringAfterLast('/') }
+                return symbolTable().findClass(className)?.first?.enumValues?.get(entry)
+                    ?: throw RuntimeException("Enum entry `$entry` of `$className` is not created yet")
+            }
         }
         if (ownerRef != null) {
             return ownerAccess().eval()
@@ -772,6 +778,16 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                     }
                 }
                 when (callableType) {
+                    // `objekt.f()` for a property of a function type (RT-75)
+                    CallableType.Property -> {
+                        val instance = subject as? ClassInstance
+                            ?: throw EvaluateNullPointerException(callStack.currentSymbolTable(), callStack.getStacktrace(position))
+                        val value = instance.read(this@Interpreter, function.memberSlotIn(instance))
+                        if (value is LambdaValue) {
+                            return evalFunctionCall(value.value, extraSymbols = value.symbolRefs, replaceArguments = replaceArguments)
+                        }
+                        throw EvaluateNullPointerException(callStack.currentSymbolTable(), callStack.getStacktrace(position))
+                    }
                     CallableType.ClassMemberFunction -> {
                         if (subject === NullValue) {
                             throw EvaluateNullPointerException(callStack.currentSymbolTable(), callStack.getStacktrace(position))
@@ -1705,6 +1721,24 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                             name = "valueOf",
                         ).transformedName,
                     ))
+                    // like Kotlin's `values()`, but a List: BlueK has no arrays (RT-78)
+                    add(CustomFunctionDeclarationNode(
+                        CustomFunctionDefinition(
+                            position = position,
+                            receiverType = "$fullQualifiedName.Companion",
+                            functionName = "values",
+                            returnType = "List<${classType.descriptiveName()}>",
+                            parameterTypes = emptyList(),
+                            executable = { interpreter, _, _, _ ->
+                                ListValue(clazz.enumValues.values.toList() as List<RuntimeValue>, interpreter.symbolTable().assertToDataType(classType), interpreter.symbolTable())
+                            }
+                        ),
+                        transformedRefName = executionEnvironment.findGeneratedMapping(
+                            type = ExecutionEnvironment.SymbolType.Function,
+                            receiverType = "$fullQualifiedName.Companion",
+                            name = "values",
+                        ).transformedName,
+                    ))
                 }
             },
             primaryConstructor = null
@@ -1712,9 +1746,31 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
 
         // creating enum values
         if (ClassModifier.enum in modifiers) {
-            clazz.enumValues = enumEntries.associate {
-                val instance = it.call!!.eval() as ClassInstance
-                it.name to instance
+            clazz.enumValues = enumEntries.withIndex().associate { (ordinal, entry) ->
+                val instance = entry.call!!.eval() as ClassInstance
+                instance.enumName = entry.name
+                instance.enumOrdinal = ordinal
+                entry.name to instance
+            }
+            // `name` and `ordinal` of every entry, like Kotlin's `Enum` (RT-78)
+            listOf(
+                Triple("name", "String") { value: ClassInstance -> StringValue(value.enumName!!, symbolTable()) as RuntimeValue },
+                Triple("ordinal", "Int") { value: ClassInstance -> IntValue(value.enumOrdinal, symbolTable()) as RuntimeValue },
+            ).forEach { (propertyName, propertyType, read) ->
+                ExtensionProperty(
+                    declaredName = propertyName,
+                    receiver = fullQualifiedName,
+                    type = propertyType,
+                    getter = { _, receiver, _ -> read((receiver as ClassInstance).wholeInstance()) },
+                ).also {
+                    val transformedName = executionEnvironment.findGeneratedMapping(
+                        type = ExecutionEnvironment.SymbolType.ExtensionProperty,
+                        receiverType = fullQualifiedName,
+                        name = propertyName,
+                    ).transformedName
+                    it.transformedName = transformedName
+                    symbolTable().declareExtensionProperty(position, transformedName, it)
+                }
             }
 
             ExtensionProperty(
@@ -1781,7 +1837,16 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             throw RuntimeException("Private property `${member.name}` cannot be accessed here")
         }
         // before type resolution is implemented in SemanticAnalyzer, reflect from clazz as a slower alternative
-        return when (val r = obj.read(this@Interpreter, memberSlotIn(obj))) {
+        val value = try {
+            obj.read(this@Interpreter, memberSlotIn(obj))
+        } catch (e: UninitializedPropertyAccessException) {
+            // like Kotlin for a `lateinit var` (RT-81)
+            throw UninitializedPropertyAccessException(
+                if (obj.clazz!!.isLateinitMemberProperty(member.name)) "lateinit property ${member.name} has not been initialized"
+                else "Property ${member.name} has not been initialized"
+            )
+        }
+        return when (val r = value) {
             is RuntimeValue -> r
             /*is FunctionDeclarationNode -> {
                 FunctionCallNode(

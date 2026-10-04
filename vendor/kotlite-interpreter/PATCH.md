@@ -687,3 +687,87 @@ statement the innermost function reached); `toValue()` attaches it.
 `stackTraceToString()` returns the `printStackTrace()` text (`MyEx: x` plus one
 `    at …` line per frame) like Kotlin. Coverage:
 `node scripts/smoke-curriculum-kotlin.mjs` (RT-38, RT-71).
+
+Number literals (RT-74): `Lexer.readNumber` follows Kotlin's grammar: `_` between
+digits, hex (`0x…`) and binary (`0b…`) integers, fractions, exponents (`1e10`,
+`2.5E-3`, also without fraction) and the `L` and `f`/`F` suffixes. An integer
+literal without `L` is an Int if it fits (also for hex: `0xFFFFFFFF` is a Long),
+else a Long, as before for decimal literals. Malformed literals (`1_`, `0x`)
+are lexer errors. `readInteger` and the `compareString` check are gone.
+Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (RT-74).
+
+Calling properties of a function type (RT-75): `objekt.f()` for `val f: () -> Int`
+was "unknown member", and `f()` inside the class (resolved as a property with
+owner `this/<Class>`) failed at runtime because the owner call took the member
+function path. When the member-function lookup of `objekt.f(…)` fails, the
+analyzer now checks for a non-nullable function-typed property `f` (nullable only
+through `?.`), checks the arguments against its function type and marks the call
+`CallableType.Property`; the interpreter reads the property from the evaluated
+subject and calls the lambda (`FunctionCallNode.eval`, navigation branch, also
+used by owner calls). `objekt.f.invoke()` is rewritten to `objekt.f()` when the
+subject is a plain name (it is analyzed twice). Coverage:
+`node scripts/smoke-curriculum-kotlin.mjs` (RT-75).
+
+Covariant override return types (RT-76): `visitClassBody` required an override's
+return type to equal the overridden one; like Kotlin it now only needs to be a
+subtype (`override fun nachwuchs(): Hund` for `open fun nachwuchs(): Tier`, also
+for interface functions and for inferred types such as `override fun alter() = 3`
+for `open fun alter(): Any`). Coverage: `node scripts/smoke-curriculum-kotlin.mjs`
+(RT-76).
+
+Reachability of objects with overridden properties (RT-77):
+`ClassInstance.getAllMemberProperties` merged the properties of all parts of an
+object with the strict `merge`, but an overridden property is in both parts, so
+`reachableRuntimeValues` (BlueK's reference check after each Codepad command)
+threw "Duplicate key while merging maps". It is replaced by
+`getAllMemberPropertyAccessors`, a list of the accessors of every part.
+Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (RT-77).
+
+Enums (RT-78): entries printed as `Farbe()`; `name`, `ordinal` and `values()` were
+missing; members after `;` were a parse error (`enumClassBody` checked `;` as a
+`Symbol`, but the lexer emits `Semicolon`, and it never parsed members); and
+`Farbe("X")` created a new entry. Now `ClassInstance.enumName`/`enumOrdinal` are
+set when the entries are created and `convertToString` returns the name (an own
+`toString()` still wins); `name` and `ordinal` are extension properties of the
+enum type, declared like `entries` (and, with owner `this/<Enum>`, in the class
+scope for plain use inside the class); `values()` joins `valueOf` in the implicit
+companion and returns a List (BlueK has no arrays). Inside an enum class its
+entries can be named without the class (`enum/<Enum>/<ENTRY>`, `ENUM_REF_PREFIX`,
+also for `when` exhaustiveness). Constructor calls of an enum class are rejected
+("Enum types cannot be instantiated"). Entries with a body and a companion object
+in an enum class are rejected with own messages. Coverage:
+`node scripts/smoke-curriculum-kotlin.mjs` (RT-78).
+
+Interfaces with default functions and properties, abstract properties (RT-79):
+interface functions may have a body (`functionDeclaration(isBodyOptional = true)`
+parses one if `=` or `{` follows; such a function is open but not abstract);
+interface properties without initializer or accessors are abstract and open;
+`abstract val` is accepted in abstract classes (no initializer or accessors).
+`ClassDefinition.addProperty` no longer rejects interfaces, overriding an
+interface property needs `override`, and a concrete class must implement every
+abstract property of its superclasses and interfaces, also as a constructor
+property ("Class `Hund` is not abstract and does not implement the abstract
+property `laut`"). A member call binds `this/<Interface>` for all interfaces of
+the receiver's class hierarchy (`ClassDefinition.receiverNames`), so default
+functions reach the object's members. Coverage:
+`node scripts/smoke-curriculum-kotlin.mjs` (RT-79).
+
+`protected` and `internal` (RT-80): both were parse errors. `protected` is a
+property and function modifier (`PropertyModifier.protected`,
+`FunctionModifier.protected`, also on constructor properties); qualified access is
+allowed from the declaring class, its subclasses and their companions
+(`canAccessProtectedMembersOf`, `ClassDefinition.isProtectedMemberProperty`).
+`internal` is accepted and dropped, since a BlueK project is one module. Coverage:
+`node scripts/smoke-curriculum-kotlin.mjs` (RT-80) and
+`node scripts/smoke-kotlite-browser.mjs`.
+
+`lateinit var` (RT-81): accepted for class properties (`PropertyModifier.lateinit`)
+with Kotlin's rules (only `var`, no initializer or accessors, not nullable, not a
+primitive type) and without the "must be initialized" check. Reading any property
+before its first assignment throws `UninitializedPropertyAccessException`
+(`RuntimeValueHolder.read`, previously a host NullPointerException without
+message); member reads rethrow it with Kotlin's message "lateinit property x has
+not been initialized" (`ClassDefinition.isLateinitMemberProperty`). The class is
+registered as a standard exception, catchable by name. Passive reads for
+inspectors (`readBackingPropertyByDeclaredName`) return null for unassigned
+properties. Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (RT-81).

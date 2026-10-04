@@ -14,6 +14,9 @@ import com.sunnychung.lib.multiplatform.kotlite.util.ClassMemberResolver
  */
 internal const val OBJECT_REF_PREFIX = "object/"
 
+/** `enum/<Class>/<ENTRY>`: an entry named without its class inside its enum class (RT-78). */
+internal const val ENUM_REF_PREFIX = "enum/"
+
 /**
  * This class is stateful and may not survive after Semantic Analyzer.
  */
@@ -75,6 +78,19 @@ open class ClassDefinition(
         while (clazz != null) {
             names += clazz.thisPropertyName
             clazz = clazz.superClass
+        }
+        // The default functions of interfaces refer to their receiver as `this/<Interface>` (RT-79).
+        val interfaces = ArrayDeque<ClassDefinition>()
+        clazz = this
+        while (clazz != null) {
+            interfaces += clazz.superInterfaces
+            clazz = clazz.superClass
+        }
+        while (interfaces.isNotEmpty()) {
+            val superInterface = interfaces.removeFirst()
+            if (superInterface.thisPropertyName in names) continue
+            names += superInterface.thisPropertyName
+            interfaces += superInterface.superInterfaces
         }
         names += "this"
         if (isObject) names += "super"
@@ -535,9 +551,6 @@ open class ClassDefinition(
      * Only for SemanticAnalyzer use during parsing class declarations.
      */
     internal fun addProperty(currentScope: SymbolTable?, it: PropertyDeclarationNode) {
-        if (isInterface) {
-            throw RuntimeException("Properties in interfaces are not supported")
-        }
 
         val type = (currentScope!!.typeNodeToPropertyType(
             it.type,
@@ -551,6 +564,8 @@ open class ClassDefinition(
         (memberPropertyTypes as MutableMap)[it.name] = type
         // Properties added during semantic analysis are private for the analyzer's access checks too.
         if (PropertyModifier.private in it.modifiers) privateMemberProperties += it.name
+        if (PropertyModifier.protected in it.modifiers) protectedMemberProperties += it.name
+        if (PropertyModifier.lateinit in it.modifiers) lateinitMemberProperties += it.name
         if (it.accessors == null) {
             (memberProperties as MutableMap)[it.name] = type
         } else {
@@ -624,6 +639,20 @@ open class ClassDefinition(
             else -> superClass?.findMemberPropertyOwnerName(declaredName)
         }
     }
+
+    private val protectedMemberProperties = mutableSetOf<String>()
+    private val lateinitMemberProperties = mutableSetOf<String>()
+
+    /** `lateinit var` (RT-81), here or in a superclass. */
+    fun isLateinitMemberProperty(declaredName: String): Boolean =
+        declaredName in lateinitMemberProperties || superClass?.isLateinitMemberProperty(declaredName) == true
+
+    /** `protected` (RT-80): visible in the declaring class and its subclasses. */
+    fun isProtectedMemberProperty(declaredName: String): Boolean =
+        findMemberPropertyOwnerName(declaredName)?.let { owner ->
+            owner == fullQualifiedName && declaredName in protectedMemberProperties
+                || superClass?.isProtectedMemberProperty(declaredName) == true
+        } ?: false
 
     fun isPrivateMemberProperty(declaredName: String): Boolean =
         findMemberPropertyOwnerName(declaredName)?.let { owner ->

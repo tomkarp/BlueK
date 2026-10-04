@@ -252,6 +252,7 @@ class StandardExceptionValue(
             definition("IndexOutOfBoundsException", "Exception"),
             definition("NoSuchElementException", "Exception"),
             definition("UnsupportedOperationException", "Exception"),
+            definition("UninitializedPropertyAccessException", "Exception"),
             // Not exceptions: `catch (e: Exception)` does not handle them.
             definition("Error", "Throwable"),
             definition("StackOverflowError", "Error"),
@@ -275,6 +276,7 @@ class StandardExceptionValue(
             error is ArithmeticException -> "ArithmeticException"
             error is IndexOutOfBoundsException -> "IndexOutOfBoundsException"
             error is NoSuchElementException -> "NoSuchElementException"
+            error is UninitializedPropertyAccessException -> "UninitializedPropertyAccessException"
             else -> null
         }
     }

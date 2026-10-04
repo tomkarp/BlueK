@@ -26,7 +26,7 @@ fun reachableRuntimeValues(
         fun backing(accessor: RuntimeValueAccessor) {
             runCatching { accessor.read() }.getOrNull()?.let { pending += it }
         }
-        if (value is ClassInstance) value.getAllMemberProperties().values.forEach(::backing)
+        if (value is ClassInstance) value.getAllMemberPropertyAccessors().forEach(::backing)
         if (value is LambdaValue) value.symbolRefs.propertyValues.values.forEach(::backing)
         if (value is DelegatedValue<*>) {
             pending.addAll(value.retainedRuntimeValues)

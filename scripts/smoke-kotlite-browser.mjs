@@ -609,8 +609,10 @@ expectOk(JSON.parse(privateWriteSession.load('<visibility>', 'class Secret { pri
 const privateWriteError = JSON.parse(privateWriteSession.evaluate('<visibility>', 'secret.hidden = 2'));
 if (privateWriteError.kind !== 'error' || !/private/i.test(privateWriteError.display)) throw new Error('Private property could be written from top-level code.');
 const syntaxSession = api.bluekCreateKotliteSession();
-const protectedError = JSON.parse(syntaxSession.load('<visibility>', 'class Protected { protected fun hidden() {} }'));
-if (protectedError.kind !== 'error' || !protectedError.display.includes('protected')) throw new Error('Unsupported protected visibility did not produce a clear error.');
+// `protected` members are visible in the class and its subclasses only (RT-80).
+expectOk(JSON.parse(syntaxSession.load('<visibility>', 'class Protected { protected fun hidden() {} }')), 'protected fixture');
+const protectedError = JSON.parse(syntaxSession.evaluate('<visibility>', 'Protected().hidden()'));
+if (protectedError.kind !== 'error' || !protectedError.display.includes('Protected function `hidden` cannot be accessed here')) throw new Error('A protected function could be called from top-level code.');
 const secondaryConstructorError = JSON.parse(syntaxSession.evaluate('<visibility>', 'class Secondary { constructor(value: Int) : this() {} }'));
 if (secondaryConstructorError.kind !== 'error' || !secondaryConstructorError.display.includes('Secondary constructor delegation')) throw new Error('Secondary constructors did not produce a clear local error.');
 

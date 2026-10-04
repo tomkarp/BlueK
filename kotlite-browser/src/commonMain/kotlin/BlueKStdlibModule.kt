@@ -326,6 +326,10 @@ object BlueKStdlibModule : LibraryModule("bluek-stdlib") {
             val symbolTable = interpreter.symbolTable()
             ListValue(text(receiver).map { CharValue(it, symbolTable) }, symbolTable.CharType, symbolTable)
         },
+        // RT-73: like Kotlin, `error(message)` throws an IllegalStateException with the message.
+        function(null, "error", "Nothing", listOf(parameter("message", "Any"))) { _, _, args, _ ->
+            throw IllegalStateException((args[0] as? StringValue)?.value ?: args[0].convertToString())
+        },
         // RT-66: Java's format specifiers, see KotlinFormat. Kotlite allows `vararg` only as the
         // sole parameter, so `String.format(pattern, …)` takes the pattern as its first value.
         function("String", "format", "String", listOf(parameter("args", "Any?", setOf("vararg")))) { interpreter, receiver, args, _ ->

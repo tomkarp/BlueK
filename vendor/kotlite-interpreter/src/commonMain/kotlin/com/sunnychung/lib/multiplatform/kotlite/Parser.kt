@@ -73,7 +73,8 @@ import com.sunnychung.lib.multiplatform.kotlite.model.WhenSubjectNode
 import com.sunnychung.lib.multiplatform.kotlite.model.WhileNode
 
 val ACCEPTED_MODIFIERS = setOf(
-    "open", "override", "private", "operator", "vararg", "enum", "abstract", "infix", "nullaware", "inline", "noinline", "crossinline", "const"
+    "open", "override", "private", "operator", "vararg", "enum", "abstract", "infix", "nullaware", "inline", "noinline", "crossinline", "const",
+    "protected", "internal", "lateinit",
 )
 
 /**
@@ -1726,12 +1727,16 @@ open class Parser(protected val lexer: Lexer) {
         else -> throw RuntimeException("Type is needed if a custom accessor has no inferable initial value")
     }
 
-    fun Set<String>.toPropertyModifiers() = this.map {
+    // `internal` means visible in the module, which a BlueK project is as a whole (RT-80).
+    fun Set<String>.toPropertyModifiers() = this.filter { it != "internal" }.map {
         when (it) {
             "open" -> PropertyModifier.open
             "override" -> PropertyModifier.override
             "private" -> PropertyModifier.private
             "const" -> PropertyModifier.const
+            "abstract" -> PropertyModifier.abstract
+            "protected" -> PropertyModifier.protected
+            "lateinit" -> PropertyModifier.lateinit
             else -> throw ParseException("Modifier `$it` cannot be applied to properties")
         }
     }.toSet()
@@ -2089,7 +2094,7 @@ open class Parser(protected val lexer: Lexer) {
         return receiverType to name
     }
 
-    fun Set<String>.toFunctionModifiers() = this.map {
+    fun Set<String>.toFunctionModifiers() = this.filter { it != "internal" }.map {
         when (it) {
             "operator" -> FunctionModifier.operator
             "open" -> FunctionModifier.open
@@ -2099,6 +2104,7 @@ open class Parser(protected val lexer: Lexer) {
             "nullaware" -> FunctionModifier.nullaware
             "inline" -> FunctionModifier.inline
             "private" -> FunctionModifier.private
+            "protected" -> FunctionModifier.protected
             else -> throw ParseException("Modifier `$it` cannot be applied to function")
         }
     }.toSet()
@@ -2119,7 +2125,7 @@ open class Parser(protected val lexer: Lexer) {
      *     [{NL} functionBody]
      *
      */
-    fun functionDeclaration(modifiers: Set<String>, isProcessBody: Boolean = true): FunctionDeclarationNode {
+    fun functionDeclaration(modifiers: Set<String>, isProcessBody: Boolean = true, isBodyOptional: Boolean = false): FunctionDeclarationNode {
         val modifiers = modifiers.toFunctionModifiers()
         val t = eat(TokenType.Identifier, "fun")
         repeatedNL()
@@ -2138,7 +2144,8 @@ open class Parser(protected val lexer: Lexer) {
         } else {
             null
         }
-        val body = if (!isProcessBody || FunctionModifier.abstract in modifiers) {
+        val hasBody = isCurrentToken(TokenType.Symbol, "=") || isCurrentTokenExcludingNL(TokenType.Symbol, "{")
+        val body = if (!isProcessBody || FunctionModifier.abstract in modifiers || (isBodyOptional && !hasBody)) {
             null
         } else {
             functionBody()
@@ -2157,12 +2164,13 @@ open class Parser(protected val lexer: Lexer) {
 
     fun dummyBlockNode() = BlockNode(emptyList(), SourcePosition("", 1, 1), ScopeType.Function, FunctionBodyFormat.Block)
 
-    fun Set<String>.toClassParameterModifiers(): List<Any> = this.map {
+    fun Set<String>.toClassParameterModifiers(): List<Any> = this.filter { it != "internal" }.map {
         when (it) {
             "vararg" -> /*FunctionValueParameterModifier.vararg*/ throw UnsupportedOperationException("vararg in class primary constructor is not supported")
             "open" -> PropertyModifier.open
             "override" -> PropertyModifier.override
             "private" -> PropertyModifier.private
+            "protected" -> PropertyModifier.protected
             else -> throw ParseException("Modifier `$it` cannot be applied to class parameter")
         }
     }
@@ -2380,7 +2388,7 @@ open class Parser(protected val lexer: Lexer) {
     private fun isDataClassModifier(): Boolean =
         currentToken.value == "data" && peekNextToken().let { it.type == TokenType.Identifier && it.value == "class" }
 
-    fun Set<String>.toClassModifiers() = this.map {
+    fun Set<String>.toClassModifiers() = this.filter { it != "internal" }.map {
         when (it) {
             "open" -> ClassModifier.open
             "enum" -> ClassModifier.enum
@@ -2402,6 +2410,9 @@ open class Parser(protected val lexer: Lexer) {
             repeatedNL()
             valueArguments()
         } else emptyList()
+        if (isCurrentTokenExcludingNL(TokenType.Symbol, "{")) {
+            throw SemanticException(t.position, "Enum entries with their own body (`$name { … }`) are not supported in BlueK")
+        }
         return EnumEntryNode(position = t.position, name = name, arguments = valueArguments)
     }
 
@@ -2424,7 +2435,7 @@ open class Parser(protected val lexer: Lexer) {
         repeatedNL()
         val enumEntries = buildList {
             while (!currentTokenExcludingNL().let {
-                    it.`is`(TokenType.Symbol, ";") || it.`is`(TokenType.Symbol, "}")
+                    it.`is`(TokenType.Semicolon, ";") || it.`is`(TokenType.Symbol, "}")
                 }) {
                 var hasComma = false
                 add(enumEntry())
@@ -2438,8 +2449,18 @@ open class Parser(protected val lexer: Lexer) {
             }
         }
         repeatedNL()
+        // Members after the entries, separated by `;` (RT-78)
+        val declarations = if (isCurrentToken(TokenType.Semicolon, ";")) {
+            eat(TokenType.Semicolon, ";")
+            repeatedNL()
+            classMemberDeclarations(isInterface = false)
+        } else emptyList()
+        repeatedNL()
         eat(TokenType.Symbol, "}")
-        return Pair(enumEntries, emptyList())
+        declarations.firstOrNull { it is ClassDeclarationNode && it.isCompanion }?.let {
+            throw SemanticException(it.position, "A companion object in an enum class is not supported in BlueK")
+        }
+        return Pair(enumEntries, declarations)
     }
 
     /**
@@ -2666,7 +2687,8 @@ open class Parser(protected val lexer: Lexer) {
         while (true) {
             when (currentToken.value as String) {
                 "val", "var" -> return propertyDeclaration(modifiers ?: emptySet())
-                "fun" -> return functionDeclaration(modifiers ?: emptySet(), isProcessBody = !isInterface)
+                // An interface function may have a default body (RT-79).
+                "fun" -> return functionDeclaration(modifiers ?: emptySet(), isBodyOptional = isInterface)
                 "class", "interface" -> return classDeclaration(modifiers ?: emptySet())
                 "object" -> return objectDeclaration(modifiers ?: emptySet())
                 "constructor" -> throw UnsupportedOperationException(

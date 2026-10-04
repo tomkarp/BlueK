@@ -74,6 +74,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.PropertyAccessorsNode
 import com.sunnychung.lib.multiplatform.kotlite.model.PropertyDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.model.PropertyModifier
 import com.sunnychung.lib.multiplatform.kotlite.model.OBJECT_REF_PREFIX
+import com.sunnychung.lib.multiplatform.kotlite.model.ENUM_REF_PREFIX
 import com.sunnychung.lib.multiplatform.kotlite.model.PropertyOwnerInfo
 import com.sunnychung.lib.multiplatform.kotlite.model.RepeatedType
 import com.sunnychung.lib.multiplatform.kotlite.model.ReturnNode
@@ -625,6 +626,18 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     private fun canAccessPrivateMembersOf(ownerName: String?): Boolean {
         val current = currentClassName() ?: return false
         return current == ownerName || current == "$ownerName.Companion" || "$current.Companion" == ownerName
+    }
+
+    /** `protected` (RT-80): code of the declaring class, of its subclasses and of their companions. */
+    private fun canAccessProtectedMembersOf(ownerName: String?): Boolean {
+        if (canAccessPrivateMembersOf(ownerName)) return true
+        val current = currentClassName()?.removeSuffix(".Companion") ?: return false
+        var clazz = currentScope.findClass(current)?.first
+        while (clazz != null) {
+            if (clazz.fullQualifiedName == ownerName) return true
+            clazz = clazz.superClass
+        }
+        return false
     }
 
     fun currentClassName(): String? {
@@ -1302,8 +1315,24 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     }
 
     fun PropertyDeclarationNode.visit(modifier: Modifier = Modifier(), isVisitInitialValue: Boolean = true, isClassProperty: Boolean = false, scopeLevel: Int = currentScope.scopeLevel, isVisitAccessors: Boolean = true) {
-        if (declaredModifiers.contains(PropertyModifier.override)) {
+        if (declaredModifiers.contains(PropertyModifier.override) || declaredModifiers.contains(PropertyModifier.abstract)) {
             inferredModifiers += PropertyModifier.open
+        }
+        if (PropertyModifier.abstract in modifiers && (initialValue != null || accessors != null)) {
+            throw SemanticException(position, "An abstract property cannot have an initializer or accessors")
+        }
+        // `lateinit var` (RT-81): Kotlin's rules; BlueK supports it for class properties
+        if (PropertyModifier.lateinit in modifiers) {
+            val lateinitType = declaredType
+            when {
+                !isClassProperty -> throw SemanticException(position, "'lateinit' is supported for class properties only in BlueK")
+                !isMutable -> throw SemanticException(position, "'lateinit' modifier is allowed only on mutable properties")
+                initialValue != null -> throw SemanticException(position, "'lateinit' modifier is not allowed on properties with initializer")
+                accessors != null -> throw SemanticException(position, "'lateinit' modifier is not allowed on properties with a custom getter or setter")
+                lateinitType == null || lateinitType.isNullable -> throw SemanticException(position, "'lateinit' modifier is not allowed on properties of nullable types")
+                lateinitType.name in setOf("Int", "Long", "Double", "Float", "Boolean", "Char", "Byte") ->
+                    throw SemanticException(position, "'lateinit' modifier is not allowed on properties of primitive types")
+            }
         }
         if (isVisitInitialValue) {
             if (declaredType is FunctionTypeNode && initialValue is LambdaLiteralNode) {
@@ -1410,6 +1439,15 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             analyzeTopLevelAhead(variableName)
         }
         if (!currentScope.hasProperty(variableName)) {
+            // Inside an enum class, its entries are named without the class (RT-78).
+            currentClassName()?.let { currentScope.findClass(it)?.first }
+                ?.takeIf { ClassModifier.enum in it.modifiers }
+                ?.takeIf { clazz -> declaredClasses.values.any { it.definition === clazz && it.node.enumEntries.any { entry -> entry.name == variableName } } }
+                ?.let { clazz ->
+                    transformedRefName = "$ENUM_REF_PREFIX${clazz.fullQualifiedName}/$variableName"
+                    type = TypeNode(position, clazz.fullQualifiedName, null, false)
+                    return
+                }
             currentScope.findClass(variableName)?.let { (clazz, _) ->
                 // The name of an object is its single instance (RT-67).
                 if (clazz.isObjectDeclaration) {
@@ -1877,6 +1915,46 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         }
     }
 
+    /**
+     * `objekt.f(…)` for a property `f` of a function type, e.g. `val f: (Int) -> String`, which is
+     * no member function (RT-75): reads the property and calls its value. Arguments are checked
+     * against the function type. False if [navigation] does not name such a property.
+     */
+    private fun FunctionCallNode.visitFunctionValueCall(navigation: NavigationNode): Boolean {
+        // The subject is analyzed already, by the failed lookup of a member function.
+        if (navigation.member.name == "invoke") return false
+        val subjectType = runCatching { navigation.subject.type().unboxClassTypeAsCompanion() }.getOrNull() ?: return false
+        val clazz = runCatching {
+            currentScope.findClass(subjectType.toDataType().resolveTypeParameterAsUpperBound().copyOf(isNullable = false).nameWithNullable)?.first
+        }.getOrNull() ?: return false
+        if (clazz.findMemberFunctionsWithEnclosingTypeNameByDeclaredName(navigation.member.name).isNotEmpty()) return false
+        if (clazz.findMemberPropertyWithoutAccessor(navigation.member.name) == null && clazz.findMemberPropertyCustomAccessor(navigation.member.name) == null) return false
+        val functionType = runCatching { navigation.type() }.getOrNull() as? FunctionTypeNode
+        // nullable only through `?.` on a nullable subject
+        val isNullable = functionType?.isNullable == true && !(navigation.operator == "?." && subjectType.isNullable)
+        if (functionType == null || functionType.receiverType != null || isNullable) {
+            navigation.type = null
+            return false
+        }
+        navigation.visit(Modifier(), IdentifierClassifier.Property)
+        val parameterTypes = functionType.parameterTypes.orEmpty()
+        arguments.firstOrNull { it.name != null }?.let {
+            throw SemanticException(it.position, "Named arguments are not allowed for function types")
+        }
+        if (arguments.size != parameterTypes.size) {
+            throw SemanticException(position, "`${navigation.member.name}` expects ${parameterTypes.size} argument(s), but ${arguments.size} were given")
+        }
+        arguments.forEachIndexed { index, argument ->
+            val expected = parameterTypes[index].toDataType()
+            val actual = argument.type(ResolveTypeModifier(isSkipGenerics = true)).toDataType()
+            if (!expected.isAssignableFrom(actual)) throw TypeMismatchException(argument.position, expected.nameWithNullable, actual.nameWithNullable)
+        }
+        callableType = CallableType.Property
+        val result: TypeNode = functionType.returnType ?: typeRegistry["Unit"]!!
+        returnType = if (navigation.operator == "?." && subjectType.isNullable) result.copy(isNullable = true) else result
+        return true
+    }
+
     private fun FunctionCallNode.describeArgumentTypes(): String = arguments.joinToString(", ") { argument ->
         runCatching { argument.type(ResolveTypeModifier(isSkipGenerics = true)).descriptiveName() }.getOrDefault("?")
     }
@@ -1885,9 +1963,21 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         // Function values have no class member table. Route explicit invoke through
         // the same resolution and inline-escape checks as the ordinary f(...) form.
         val navigation = function as? NavigationNode
-        if (navigation?.operator == "." && navigation.member.name == "invoke" && navigation.subject is VariableReferenceNode) {
-            navigation.subject.visit(modifier.copy(isSkipGenerics = true))
-            if (navigation.subject.type() is FunctionTypeNode) {
+        val isInvokeOnValue = navigation?.operator == "." && navigation.member.name == "invoke" && when (val value = navigation.subject) {
+            is VariableReferenceNode -> {
+                value.visit(modifier.copy(isSkipGenerics = true))
+                value.type() is FunctionTypeNode
+            }
+            // `objekt.f.invoke()` for a property of a function type (RT-75); only for a plain
+            // name as subject, which may be analyzed twice
+            is NavigationNode -> value.subject is VariableReferenceNode && run {
+                value.subject.visit(modifier.copy(isSkipGenerics = true))
+                (runCatching { value.type() }.getOrNull() is FunctionTypeNode).also { if (!it) value.type = null }
+            }
+            else -> false
+        }
+        if (navigation != null && isInvokeOnValue) {
+            run {
                 val direct = copy(function = navigation.subject, resolvedInvoke = null)
                 direct.visit(modifier, isSkipConstructionSecurityCheck, isSuperClassInvocation)
                 resolvedInvoke = direct
@@ -1971,6 +2061,10 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                         if (clazz.isObjectDeclaration) {
                             throw SemanticException(position, "`${clazz.name}` is an object: it has exactly one instance, which you use by its name `${clazz.name}`, without a constructor call")
                         }
+                        // Only its entries create enum objects (RT-78).
+                        if (ClassModifier.enum in clazz.modifiers && !isSuperClassInvocation) {
+                            throw SemanticException(position, "Enum types cannot be instantiated: use an entry such as `${clazz.name}.${declaredClasses.values.firstOrNull { it.definition === clazz }?.node?.enumEntries?.firstOrNull()?.name ?: "…"}`")
+                        }
                         if ((isSuperClassInvocation && !clazz.isInstanceCreationAllowed) || (!isSuperClassInvocation && !clazz.isInstanceCreationByUserAllowed())) {
                             throw SemanticException(
                                 position,
@@ -2018,7 +2112,14 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             }
 
             is NavigationNode -> {
-                /*val receiverType =*/ function.visit(modifier = modifier, IdentifierClassifier.Function)
+                try {
+                    /*val receiverType =*/ function.visit(modifier = modifier, IdentifierClassifier.Function)
+                } catch (e: SemanticException) {
+                    if (!visitFunctionValueCall(function)) throw e
+                    popScope()
+                    evaluateAndRegisterReturnType(this)
+                    return
+                }
 //                val lookupReceiverTypes = listOf(receiverType)
                 val receiverType = function.subject.type().unboxClassTypeAsCompanion().toDataType()
                 val lookupReceiverTypes = if (!receiverType.isNullable || function.operator == ".") {
@@ -2720,6 +2821,9 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     if (clazz.isPrivateMemberProperty(memberName) && !canAccessPrivateMembersOf(clazz.findMemberPropertyOwnerName(memberName))) {
                         throw SemanticException(position, "Private property `$memberName` cannot be accessed here")
                     }
+                    if (clazz.isProtectedMemberProperty(memberName) && !canAccessProtectedMembersOf(clazz.findMemberPropertyOwnerName(memberName))) {
+                        throw SemanticException(position, "Protected property `$memberName` cannot be accessed here")
+                    }
                     if (isCheckWriteAccess && !property.isMutable) {
                         throw SemanticException(position, "val `$memberName` cannot be reassigned")
                     }
@@ -2729,6 +2833,9 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 clazz.findMemberPropertyCustomAccessor(memberName)?.let { accessor ->
                     if (clazz.isPrivateMemberProperty(memberName) && !canAccessPrivateMembersOf(clazz.findMemberPropertyOwnerName(memberName))) {
                         throw SemanticException(position, "Private property `$memberName` cannot be accessed here")
+                    }
+                    if (clazz.isProtectedMemberProperty(memberName) && !canAccessProtectedMembersOf(clazz.findMemberPropertyOwnerName(memberName))) {
+                        throw SemanticException(position, "Protected property `$memberName` cannot be accessed here")
                     }
                     if (isCheckWriteAccess && clazz.findMemberProperty(memberName)?.isMutable == false) {
                         throw SemanticException(position, "val `$memberName` cannot be reassigned")
@@ -2781,6 +2888,9 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     // A private member function is only callable from code of its own class.
                     if (functions.values.all { (function, owner) -> FunctionModifier.private in function.modifiers && !canAccessPrivateMembersOf(owner) }) {
                         throw SemanticException(position, "Private function `$memberName` cannot be accessed here")
+                    }
+                    if (functions.values.all { (function, owner) -> FunctionModifier.protected in function.modifiers && !canAccessProtectedMembersOf(owner) }) {
+                        throw SemanticException(position, "Protected function `$memberName` cannot be accessed here")
                     }
                     memberType = NavigationNode.MemberType.Direct
                     return subjectType
@@ -2864,6 +2974,14 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                         throw NotImplementedError()
                     }
                 )))
+                add(CustomFunctionDeclarationNode(CustomFunctionDefinition(
+                    position = node.position,
+                    receiverType = "${node.fullQualifiedName}.Companion",
+                    functionName = "values",
+                    returnType = "List<${classType.descriptiveName()}>",
+                    parameterTypes = emptyList(),
+                    executable = { _, _, _, _ -> throw NotImplementedError() }
+                )))
             }
         },
         primaryConstructor = null,
@@ -2925,20 +3043,27 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         }
 
         if (ClassModifier.enum in modifiers) {
-            ExtensionProperty(
-                declaredName = "entries",
-                receiver = "$fullQualifiedClassName.Companion",
-                type = "List<${classType.descriptiveName()}>",
-                getter = { _, _, _ -> throw NotImplementedError() }
-            ).also {
-                it.generateTransformedName()
-                symbolTable.declareExtensionProperty(position, it.transformedName!!, it)
-                executionEnvironment.registerGeneratedMapping(
-                    type = ExecutionEnvironment.SymbolType.ExtensionProperty,
-                    receiverType = it.receiver,
-                    name = it.declaredName,
-                    transformedName = it.transformedName!!,
-                )
+            listOf(
+                Triple("entries", "$fullQualifiedClassName.Companion", "List<${classType.descriptiveName()}>"),
+                // RT-78
+                Triple("name", fullQualifiedClassName, "String"),
+                Triple("ordinal", fullQualifiedClassName, "Int"),
+            ).forEach { (propertyName, receiver, type) ->
+                ExtensionProperty(
+                    declaredName = propertyName,
+                    receiver = receiver,
+                    type = type,
+                    getter = { _, _, _ -> throw NotImplementedError() }
+                ).also {
+                    it.generateTransformedName()
+                    symbolTable.declareExtensionProperty(position, it.transformedName!!, it)
+                    executionEnvironment.registerGeneratedMapping(
+                        type = ExecutionEnvironment.SymbolType.ExtensionProperty,
+                        receiverType = it.receiver,
+                        name = it.declaredName,
+                        transformedName = it.transformedName!!,
+                    )
+                }
             }
         }
 
@@ -2996,9 +3121,22 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             clazz
         }
         val superClassProperties = superClass?.getAllMemberProperties()
+        // The properties of the interfaces of this class and its superclasses (RT-79).
+        val interfaceProperties = buildSet {
+            val pending = ArrayDeque(superInterfaces + generateSequence(superClass) { it.superClass }.flatMap { it.superInterfaces })
+            while (pending.isNotEmpty()) {
+                val superInterface = pending.removeFirst()
+                superInterface.declarations.filterIsInstance<PropertyDeclarationNode>().forEach { add(it.name) }
+                pending += superInterface.superInterfaces
+            }
+        }
 
         fun checkForOverriddenProperties(property: PropertyDeclarationNode) {
-            if (superClassProperties?.containsKey(property.name) == true) {
+            if (superClassProperties?.containsKey(property.name) != true && property.name in interfaceProperties) {
+                if (PropertyModifier.override !in property.modifiers) {
+                    throw SemanticException(property.position, "A property cannot override anything without the `override` modifier")
+                }
+            } else if (superClassProperties?.containsKey(property.name) == true) {
                 if (PropertyModifier.override !in property.modifiers) {
                     throw SemanticException(property.position, "A property cannot override anything without the `override` modifier")
                 }
@@ -3065,13 +3203,18 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 }
                 declarations.forEach {
                     when (it) {
-                        is FunctionDeclarationNode -> if (it.body != null) {
-                            throw SemanticException(it.position, "Concrete functions in interfaces are not supported")
-                        } else {
-                            it.inferredModifiers += FunctionModifier.abstract
+                        // A function with a body is a default implementation (RT-79).
+                        is FunctionDeclarationNode -> {
+                            if (it.body == null) it.inferredModifiers += FunctionModifier.abstract
                             it.inferredModifiers += FunctionModifier.open
                         }
-                        is PropertyDeclarationNode -> throw SemanticException(it.position, "Properties in interfaces are not supported")
+                        // an abstract property, which implementing classes override (RT-79)
+                        is PropertyDeclarationNode -> {
+                            if (it.initialValue != null) throw SemanticException(it.position, "Property initializers are not allowed in interfaces")
+                            if (it.accessors != null) throw SemanticException(it.position, "Properties with accessors in interfaces are not supported in BlueK")
+                            it.inferredModifiers += PropertyModifier.abstract
+                            it.inferredModifiers += PropertyModifier.open
+                        }
                         else -> throw SemanticException(it.position, "Declarations other than abstract functions in interfaces are not supported")
                     }
                 }
@@ -3155,6 +3298,16 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 //            currentScope.registerTransformedSymbol(position, IdentifierClassifier.Property, "this", "this")
             currentScope.declareProperty(position, "this/${fullQualifiedClassName}", TypeNode(SourcePosition.NONE, name, pseudoTypeArguments, false), false)
             currentScope.registerTransformedSymbol(position, IdentifierClassifier.Property, "this/${fullQualifiedClassName}", "this")
+            // `name` and `ordinal` of an enum entry also without `this.` in its class (RT-78)
+            if (ClassModifier.enum in modifiers) {
+                currentScope.findExtensionPropertyByReceiver(TypeNode(position, fullQualifiedClassName, null, false))
+                    .filter { it.second.declaredName in setOf("name", "ordinal") && !currentScope.hasProperty(it.second.declaredName, isThisScopeOnly = true) }
+                    .forEach {
+                        currentScope.declareProperty(position, it.second.declaredName, it.second.typeNode!!, false)
+                        currentScope.registerTransformedSymbol(position, IdentifierClassifier.Property, it.second.transformedName!!, it.second.declaredName)
+                        currentScope.declarePropertyOwner(it.second.transformedName!!, "this/$fullQualifiedClassName", extensionPropertyRef = it.first)
+                    }
+            }
 
             classDefinition.superClassInvocation?.let { superClassInvocation ->
                 currentScope.declareProperty(position, "super", superClassInvocation.type(), false)
@@ -3199,7 +3352,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             // (the latter is checked at runtime) or a getter computes it.
             if (declarations.none { it is ClassInstanceInitializerNode }) {
                 declarations.filterIsInstance<PropertyDeclarationNode>()
-                    .firstOrNull { it.initialValue == null && it.accessors?.getter == null }
+                    .firstOrNull { it.initialValue == null && it.accessors?.getter == null && PropertyModifier.abstract !in it.modifiers && PropertyModifier.lateinit !in it.modifiers }
                     ?.let { throw SemanticException(it.position, "Property `${it.name}` must be initialized") }
             }
             declarations.filter { it is ClassInstanceInitializerNode || it is PropertyDeclarationNode }
@@ -3264,13 +3417,44 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                         }
                     }
 
-                    // check type after type inference
+                    // check type after type inference: like Kotlin, an override may return a subtype
+                    // (`override fun nachwuchs(): Hund` for `open fun nachwuchs(): Tier`, RT-76)
                     identicalSuperClassFunctions.forEach { superFunc ->
-                        if (currentScope.assertToDataType(thisFunc.returnType) != currentScope.assertToDataType(superFunc.resolvedReturnType)) {
-                            throw SemanticException(thisFunc.position, "Return type of function `${thisFunc.name}` `${thisFunc.returnType.descriptiveName()}` is not the same as the overridden one `${superFunc.resolvedReturnType.descriptiveName()}`")
+                        val overriddenType = currentScope.assertToDataType(superFunc.resolvedReturnType)
+                        if (!overriddenType.isAssignableFrom(currentScope.assertToDataType(thisFunc.returnType))) {
+                            throw SemanticException(thisFunc.position, "Return type `${thisFunc.returnType.descriptiveName()}` of function `${thisFunc.name}` is not a subtype of the overridden return type `${superFunc.resolvedReturnType.descriptiveName()}`")
                         }
                     }
                 }
+
+            // A concrete class implements every abstract property of its supertypes, also as a
+            // constructor property (`class Hund(override val laut: String) : Tier()`, RT-79).
+            if (!isInterface && ClassModifier.abstract !in modifiers) {
+                val implemented = mutableSetOf<String>()
+                val missing = mutableListOf<String>()
+                val interfaces = ArrayDeque<ClassDefinition>()
+                var current: ClassDefinition? = classDefinition
+                while (current != null) {
+                    current.primaryConstructor?.parameters?.filter { it.isProperty }?.forEach { implemented += it.parameter.name }
+                    current.declarations.filterIsInstance<PropertyDeclarationNode>().forEach {
+                        if (PropertyModifier.abstract in it.modifiers) {
+                            if (it.name !in implemented) missing += it.name
+                        } else {
+                            implemented += it.name
+                        }
+                    }
+                    interfaces += current.superInterfaces
+                    current = current.superClass
+                }
+                while (interfaces.isNotEmpty()) {
+                    val superInterface = interfaces.removeFirst()
+                    superInterface.declarations.filterIsInstance<PropertyDeclarationNode>().forEach { if (it.name !in implemented) missing += it.name }
+                    interfaces += superInterface.superInterfaces
+                }
+                missing.firstOrNull()?.let {
+                    throw SemanticException(position, "Class `$name` is not abstract and does not implement the abstract property `$it`")
+                }
+            }
 
             ClassSemanticAnalyzer(symbolTable = currentScope, position = position, classDefinition = classDefinition)
                 .check()
@@ -3663,14 +3847,25 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             return values.any { it is BooleanNode && it.value } && values.any { it is BooleanNode && !it.value }
         }
         val enumClass = currentScope.findClass(subjectType.name)?.first
-            ?.takeIf { ClassModifier.enum in it.modifiers && it.enumValues.isNotEmpty() }
+            ?.takeIf { ClassModifier.enum in it.modifiers }
             ?: return false
+        // Inside its own class the entries are not created yet: take them from the declaration.
+        val entries = declaredClasses.values.firstOrNull { it.definition === enumClass }?.node?.enumEntries?.map { it.name }
+            ?: enumClass.enumValues.keys.toList()
+        if (entries.isEmpty()) return false
         val covered = values.mapNotNull { value ->
-            (value as? NavigationNode)
-                ?.takeIf { it.memberType == NavigationNode.MemberType.Enum && (it.subject as? VariableReferenceNode)?.variableName == enumClass.fullQualifiedName }
-                ?.member?.name
+            when (value) {
+                is NavigationNode -> value
+                    .takeIf { it.memberType == NavigationNode.MemberType.Enum && (it.subject as? VariableReferenceNode)?.variableName == enumClass.fullQualifiedName }
+                    ?.member?.name
+                // an entry named without its class inside the enum class (RT-78)
+                is VariableReferenceNode -> value.transformedRefName
+                    ?.takeIf { it.startsWith("$ENUM_REF_PREFIX${enumClass.fullQualifiedName}/") }
+                    ?.substringAfterLast('/')
+                else -> null
+            }
         }.toSet()
-        return covered.containsAll(enumClass.enumValues.keys)
+        return covered.containsAll(entries)
     }
 
     /** Kotlin rejects a `when` without `else` whose value is used, unless it covers every value. */

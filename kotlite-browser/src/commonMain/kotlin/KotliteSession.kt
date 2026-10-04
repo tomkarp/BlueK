@@ -558,7 +558,8 @@ class KotliteSession {
         val classes = script.nodes.filterIsInstance<ClassDeclarationNode>()
         val functions = script.nodes.filterIsInstance<FunctionDeclarationNode>()
         val classJson = classes.joinToString(",", "[", "]") { declaration ->
-            val constructors = if (declaration.isInterface || declaration.isObject) "[]" else {
+            val isEnum = declaration.modifiers.any { it.name == "enum" }
+            val constructors = if (declaration.isInterface || declaration.isObject || isEnum) "[]" else {
                 val secondary = declaration.declarations.filterIsInstance<ClassSecondaryConstructorNode>()
                 val parameterSets = if (secondary.isEmpty()) listOf(declaration.primaryConstructor?.parameters.orEmpty().map { it.parameter })
                     else secondary.map { it.valueParameters }
@@ -567,15 +568,15 @@ class KotliteSession {
                 }.joinToString(",", "[", "]")
             }
             val primaryProperties = declaration.primaryConstructor?.parameters.orEmpty().filter { it.isProperty }.map { parameter ->
-                jsonProperty(declaration.name, parameter.parameter.name, parameter.parameter.type, parameter.isMutable, parameter.modifiers.any { it.name == "private" }, false, false, false)
+                jsonProperty(declaration.name, parameter.parameter.name, parameter.parameter.type, parameter.isMutable, visibility(parameter.modifiers.toSet()), false, false, false)
             }
             val bodyProperties = declaration.declarations.filterIsInstance<PropertyDeclarationNode>().map { property ->
-                jsonProperty(declaration.name, property.name, property.type, property.isMutable, property.modifiers.any { it.name == "private" }, property.accessors?.getter != null, property.accessors?.setter != null, property.accessors?.setterIsPrivate == true)
+                jsonProperty(declaration.name, property.name, property.type, property.isMutable, visibility(property.modifiers), property.accessors?.getter != null, property.accessors?.setter != null, property.accessors?.setterIsPrivate == true)
             }
             val properties = (primaryProperties + bodyProperties).filterNot { bluePlayEnabled && declaration.name in setOf("World", "Actor", "Image") && it.contains("\"visibility\":\"private\"") }.distinctBy { it.substringBefore("\",\"name\":") }.joinToString(",", "[", "]")
             val methods = declaration.declarations.filterIsInstance<FunctionDeclarationNode>().filterNot { it is ClassSecondaryConstructorNode || it.isGenerated || (bluePlayEnabled && declaration.name in setOf("World", "Actor", "Image") && it.modifiers.any { modifier -> modifier.name == "private" }) }.mapIndexed { index, function -> jsonFunction(declaration.name, function, index) }.joinToString(",", "[", "]")
             val supers = declaration.superInvocations.orEmpty().mapNotNull(::superName).joinToString(",", "[", "]") { jsonTypeName(it) }
-            val kind = if (declaration.isInterface) "interface" else if (declaration.isObject) "object" else if (declaration.modifiers.any { it.name == "abstract" }) "abstract" else "class"
+            val kind = if (declaration.isInterface) "interface" else if (declaration.isObject) "object" else if (isEnum) "enum" else if (declaration.modifiers.any { it.name == "abstract" }) "abstract" else "class"
             // Called as `Klasse.f()` from the class menu, like the methods of an object.
             val companionMethods = declaration.companionObject?.declarations.orEmpty().filterIsInstance<FunctionDeclarationNode>()
                 .filterNot { it.modifiers.any { modifier -> modifier.name == "private" } }
@@ -595,8 +596,8 @@ class KotliteSession {
     private fun parameterJson(parameter: com.sunnychung.lib.multiplatform.kotlite.model.FunctionValueParameterNode): String =
         "{\"name\":\"${escape(parameter.name)}\",\"type\":${jsonType(parameter.type)},\"hasDefault\":${parameter.defaultValue != null}}"
 
-    private fun jsonProperty(owner: String, name: String, type: TypeNode, mutable: Boolean, private: Boolean, getter: Boolean, setter: Boolean, setterPrivate: Boolean): String =
-        "{\"id\":\"${escape(owner)}.${escape(name)}\",\"name\":\"${escape(name)}\",\"type\":${jsonType(type)},\"mutable\":$mutable,\"visibility\":\"${if (private) "private" else "public"}\",\"getter\":$getter,\"setter\":$setter,\"setterPrivate\":$setterPrivate}"
+    private fun jsonProperty(owner: String, name: String, type: TypeNode, mutable: Boolean, visibility: String, getter: Boolean, setter: Boolean, setterPrivate: Boolean): String =
+        "{\"id\":\"${escape(owner)}.${escape(name)}\",\"name\":\"${escape(name)}\",\"type\":${jsonType(type)},\"mutable\":$mutable,\"visibility\":\"$visibility\",\"getter\":$getter,\"setter\":$setter,\"setterPrivate\":$setterPrivate}"
 
    private fun visibility(modifiers: Set<*>): String = when {
         modifiers.any { it.toString() == "private" } -> "private"

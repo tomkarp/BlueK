@@ -226,7 +226,7 @@ open class VariableReferenceNode(override val position: SourcePosition, val vari
  * Member names are the exact identifiers in Kotlin code
  */
 enum class FunctionModifier {
-    operator, open, override, abstract, infix, nullaware, inline, private
+    operator, open, override, abstract, infix, nullaware, inline, private, protected
 }
 
 enum class FunctionValueParameterModifier {
@@ -238,7 +238,7 @@ enum class ClassModifier {
 }
 
 enum class PropertyModifier {
-    open, override, private, const
+    open, override, private, const, abstract, protected, lateinit
 }
 
 data class FunctionValueParameterNode(override val position: SourcePosition, val name: String, val declaredType: TypeNode?, val defaultValue: ASTNode?, val modifiers: Set<FunctionValueParameterModifier>, @ModifyByAnalyzer var transformedRefName: String? = null) : ASTNode {

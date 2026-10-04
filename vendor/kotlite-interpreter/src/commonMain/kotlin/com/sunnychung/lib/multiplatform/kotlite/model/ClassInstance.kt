@@ -1,7 +1,6 @@
 package com.sunnychung.lib.multiplatform.kotlite.model
 
 import com.sunnychung.lib.multiplatform.kotlite.Interpreter
-import com.sunnychung.lib.multiplatform.kotlite.extension.merge
 
 open class ClassInstance(
     currentScope: SymbolTable,
@@ -22,6 +21,12 @@ open class ClassInstance(
     internal var hasInitialized: Boolean = false
     internal var typeArgumentByName: Map<String, DataType> = emptyMap()
     internal var type: DataType? = null
+
+    /** An enum entry's `name` and `ordinal` (RT-78); null and -1 for other objects. */
+    var enumName: String? = null
+        internal set
+    var enumOrdinal: Int = -1
+        internal set
 
     /** The subclass part this part belongs to; null for the part of the most derived class. */
     private var childInstance: ClassInstance? = null
@@ -198,12 +203,21 @@ open class ClassInstance(
         val name = resolveRuntimeMemberName(declaredName)
             ?: return parentInstance?.readBackingPropertyByDeclaredName(declaredName)
         val accessor = memberPropertyValues[name] ?: return parentInstance?.readBackingPropertyByDeclaredName(declaredName)
-        return (accessor as? RuntimeValueDelegate)?.backing?.read(null) ?: accessor.read(null)
+        // null while unassigned, e.g. a `lateinit var` (RT-81)
+        return try {
+            (accessor as? RuntimeValueDelegate)?.backing?.read(null) ?: accessor.read(null)
+        } catch (_: UninitializedPropertyAccessException) {
+            null
+        }
     }
 
-    internal fun getAllMemberProperties(): Map<String, RuntimeValueAccessor> {
-        return memberPropertyValues merge (parentInstance?.getAllMemberProperties() ?: emptyMap())
-    }
+    /**
+     * The member properties of all parts of this object. An overridden property is in both parts
+     * (`open val laut` and `override val laut`), so this is a list, not a map by name: merging
+     * them threw "Duplicate key while merging maps" in BlueK's reachability check (RT-77).
+     */
+    internal fun getAllMemberPropertyAccessors(): List<RuntimeValueAccessor> =
+        memberPropertyValues.values.toList() + (parentInstance?.getAllMemberPropertyAccessors() ?: emptyList())
 
     /**
      * This method should not make use of parentInstance to avoid logic errors, e.g. same type parameter name resolved
@@ -251,6 +265,8 @@ open class ClassInstance(
             val name = (this as? ThrowableValue)?.externalExceptionClassName ?: clazz!!.fullQualifiedName
             return name + (throwable.message?.let { ": $it" } ?: "")
         }
+        // An enum entry shows its name, like Kotlin's `Enum.toString()` (RT-78).
+        enumName?.let { return it }
         // An object has no constructor call to show: `Hund`, `Karte.Companion` (RT-67).
         if (clazz!!.isObjectDeclaration) return clazz!!.fullQualifiedName
         return "${clazz!!.fullQualifiedName}()"

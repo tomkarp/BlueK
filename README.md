@@ -149,10 +149,12 @@ auch gegenseitig verwenden (`Hund` mit `var herrchen: Mensch?`, `Mensch` mit
 -Properties, die in Dateireihenfolge erst später stehen (`main()` ruft
 `hilfe()` aus `Util.kt`, eine Klasse liest `val maximum` einer späteren
 Datei, RT-45),
-Vererbung (`open`, `abstract`, `override`, `super`), Interfaces mit abstrakten
-Methoden, Generics einschließlich `inline`/`reified`, Extension-Funktionen,
+Vererbung (`open`, `abstract`, `override`, `super`), Interfaces mit
+abstrakten und Default-Methoden sowie Properties, abstrakte Properties
+(RT-79), Generics einschließlich `inline`/`reified`, Extension-Funktionen,
 Operator-Überladung, Lambdas und Scope-Funktionen, `enum class` (auch mit
-Konstruktor), `data class` mit `toString`, `equals`/`hashCode`, `copy` und
+Konstruktor, Membern nach `;`, `name`, `ordinal`, `values()`, `valueOf()` und
+`entries`; Einträge geben ihren Namen aus, RT-78), `data class` mit `toString`, `equals`/`hashCode`, `copy` und
 `componentN` (RT-64), `object` und `companion object` (deren Mitglieder
 in der Klasse und ihren Unterklassen auch ohne Klassennamen) sowie
 `const val` (RT-67), Destrukturierung mit `val (a, b) = …`,
@@ -171,15 +173,20 @@ Nicht unterstützt sind derzeit:
   (`object : Typ { … }`), benannte Companion-Objekte
   (`companion object Fabrik`), `fun interface`, `typealias`
 - sekundäre Konstruktoren zusammen mit einem Primärkonstruktor oder mit
-  `this`-/`super`-Delegation (mit eigener Fehlermeldung), `protected`,
-  `internal`, `lateinit`
+  `this`-/`super`-Delegation (mit eigener Fehlermeldung); `lateinit` nur bei
+  Properties von Klassen (RT-81). `protected` und `internal` gehen, `internal`
+  wirkt wie `public`, weil ein BlueK-Projekt ein Modul ist (RT-80)
 - Braucht eine Klasse ihr Companion schon in Default-Argumenten des
   Konstruktors (`class Konto(val stand: Int = START)`), sieht das Companion
   von der Klasse nur die Konstruktor-Properties; in Initialisierern auch ihre
   Methoden und die Properties darüber (RT-67)
-- Default-Methoden und Properties in Interfaces, abstrakte Properties,
-  Extension-Properties mit Getter
+- Extension-Properties mit Getter; Properties mit Getter oder Anfangswert in
+  Interfaces (Interfaces dürfen Methoden mit Rumpf und abstrakte Properties
+  haben, abstrakte Klassen abstrakte Properties, RT-79)
 - Funktionsreferenzen (`::f`), Labels an Schleifen (`break@outer`)
+- Properties mit Funktionstyp lassen sich wie Methoden aufrufen (`objekt.f()`,
+  `f()` in der Klasse, RT-75); `.invoke()` darauf nur über einen Namen
+  (`k.f.invoke()`, nicht `K(4).f.invoke()`)
 - Destrukturierung ist auch auf oberster Ebene einer Projektdatei erlaubt
   (Kotlin: nur lokal); `componentN` lässt sich nicht als `operator`
   deklarieren, eigene Klassen werden über ihre `componentN()`-Funktionen
@@ -191,19 +198,25 @@ Nicht unterstützt sind derzeit:
   (Kotlin bildet Schnittmengen-Typen) und Zuweisungen in einem späteren
   Schleifendurchlauf werden nicht berücksichtigt; dort ist ein explizites `as`
   nötig
-- Arrays (`arrayOf`, `IntArray`), `Short`, Hex-/Binär-/`_`-Zahlliterale,
-  Bit-Operationen
-- `enum`-`values()` (`entries` funktioniert)
+- Arrays (`arrayOf`, `IntArray`), `Short`, Bit-Operationen; Zahlliterale gehen
+  wie in Kotlin mit Exponent (`1.5e3`), hexadezimal (`0xFF`), binär
+  (`0b1010`) und mit `_` (`1_000_000`, RT-74), nur `.5` ohne führende Ziffer
+  nicht
+- Bei Enums: Vergleiche mit `<` oder `compareTo` (Abhilfe:
+  `a.ordinal < b.ordinal`), Einträge mit eigenem Rumpf (`HERZ { … }`) und ein
+  `companion object` in der Enum-Klasse; `values()` liefert eine Liste, weil
+  BlueK keine Arrays hat
 - Über einen impliziten Empfänger (`liste.apply { add(1) }`,
   `with(text) { uppercase() }`, `gruss()` für `fun Hund.gruss()` in einer
   `Hund`-Methode) gewinnt eine gleichnamige eigene Top-Level-Funktion, die zu
   den Argumenten passt (Kotlin: die Funktion des Empfängers, RT-63);
   Erweiterungs-Properties eines Obertyps werden dort nur gefunden, wenn ihr Typ
   keinen Typparameter enthält (`size`, `lastIndex`)
-- Eine überschreibende Funktion braucht denselben Rückgabetyp wie die
-  überschriebene; Kotlin erlaubt auch einen spezielleren (`override fun f():
-  String` für `open fun f(): Any`). Ohne angegebenen Rückgabetyp übernimmt sie
-  den überschriebenen, z. B. `override fun toString() = "…"` (RT-57)
+- Eine überschreibende Funktion darf wie in Kotlin einen spezielleren
+  Rückgabetyp haben (`override fun f(): String` für `open fun f(): Any`,
+  RT-76); ohne angegebenen Rückgabetyp gilt der Typ ihres Ausdrucks, z. B.
+  `override fun toString() = "…"` (RT-57); ebenso Properties
+  (`override val laut: String` für `open val laut: Any`)
 - Top-Level-Properties bei Bedarf initialisieren: BlueK initialisiert sie
   beim Laden in Dateireihenfolge. Liest ein Initialisierer eine später
   stehende Property direkt (`val a = b + 1` vor `val b = 2`), ist das ein
