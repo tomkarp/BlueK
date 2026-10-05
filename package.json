@@ -18,6 +18,7 @@
     "test:references": "node scripts/smoke-references.mjs",
     "test:generics": "node scripts/smoke-generics.mjs && node scripts/smoke-generics-boundaries.mjs",
     "test:kotlin-surface": "node scripts/smoke-kotlin-surface.mjs",
+    "test:performance": "node scripts/benchmark-interpreter.mjs",
     "test:offline": "node scripts/smoke-offline-build.mjs",
     "test:blueplay-demos": "node scripts/smoke-space-invaders.mjs",
     "test:ui": "node scripts/smoke-ui-behavior.mjs",
@@ -30,7 +31,7 @@
     "test:codepad-flow": "node scripts/smoke-codepad-flow.mjs",
     "share:server": "node server/share-server.mjs",
     "test:share-server": "node scripts/smoke-share-server.mjs",
-    "test:regression": "npm run typecheck && npm run test:ui && npm run test:window-interaction && npm run test:workspace && npm run test:runtime-state && npm run test:references && npm run test:kotlin-surface && npm run test:inspector && npm run test:blueplay-api && npm run test:blueplay-stage && npm run test:project-format && npm run test:program-export && npm run test:player-worker && npm run test:codepad-flow && npm run test:offline && npm run test:gui",
+    "test:regression": "npm run typecheck && npm run test:ui && npm run test:window-interaction && npm run test:workspace && npm run test:runtime-state && npm run test:references && npm run test:kotlin-surface && npm run test:performance && npm run test:inspector && npm run test:blueplay-api && npm run test:blueplay-stage && npm run test:project-format && npm run test:program-export && npm run test:player-worker && npm run test:codepad-flow && npm run test:offline && npm run test:gui",
     "test:blueplay-api": "node scripts/smoke-blueplay-api.mjs",
     "test:window-interaction": "node scripts/smoke-window-interaction.mjs",
     "test:workspace": "node scripts/smoke-workspace-controllers.mjs"

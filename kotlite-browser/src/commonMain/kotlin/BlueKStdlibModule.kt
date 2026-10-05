@@ -352,6 +352,15 @@ object BlueKStdlibModule : LibraryModule("bluek-stdlib") {
             val symbolTable = interpreter.symbolTable()
             ListValue(text(receiver).map { CharValue(it, symbolTable) }, symbolTable.CharType, symbolTable)
         },
+        // RT-93: empty read-only collections, e.g. `karten[name] ?: emptyList()`.
+        function(null, "emptyList", "List<T>", typeParameters = listOf(TypeParameter("T", null))) { interpreter, _, _, typeArgs ->
+            val symbolTable = interpreter.symbolTable()
+            ListValue(emptyList(), typeArgs["T"] ?: symbolTable.AnyType, symbolTable)
+        },
+        function(null, "emptySet", "Set<T>", typeParameters = listOf(TypeParameter("T", null))) { interpreter, _, _, typeArgs ->
+            val symbolTable = interpreter.symbolTable()
+            SetValue(LinkedHashSet(), typeArgs["T"] ?: symbolTable.AnyType, symbolTable)
+        },
         // RT-73: like Kotlin, `error(message)` throws an IllegalStateException with the message.
         function(null, "error", "Nothing", listOf(parameter("message", "Any"))) { _, _, args, _ ->
             throw IllegalStateException((args[0] as? StringValue)?.value ?: args[0].convertToString())

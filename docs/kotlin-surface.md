@@ -38,7 +38,9 @@ Werte), `coerceIn` / `coerceAtLeast` / `coerceAtMost` für `Int` und `Double`,
 Bit-Operationen `and`, `or`, `xor`, `shl`, `shr`, `ushr` (infix) und `inv()`
 für `Int` und `Long` (RT-87).
 
-**Listen und Ranges.** `sum()` (`Int`, `Double`), `average()`, `sumOf { }`,
+**Listen und Ranges.** `emptyList()` und `emptySet()` (Typ aus dem Ziel wie
+`val leer: List<Int> = emptyList()`, `karten[name] ?: emptyList()` oder dem
+Rückgabetyp, RT-93), `sum()` (`Int`, `Double`), `average()`, `sumOf { }`,
 `reduce { }`, `flatten()`, `indices`, `chunked(n)`, `windowed(n, step,
 partialWindows)` (RT-59). Ranges sind mit erfasst, `(1..4).sum()`
 funktioniert ebenso wie `listOf(1,2).sum()`. Zeichenbereiche wie `'a'..'z'`

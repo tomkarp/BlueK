@@ -160,6 +160,8 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     ) {
         var state = ClassAnalysisState.Declared
         var companionDeclared: DeclaredClass? = null
+        // For an inner class: the members of its outer objects, outermost first (RT-92).
+        var outerScopes: List<SemanticAnalyzerSymbolTable> = emptyList()
         var areCompanionMembersProvided = false
     }
     private enum class ClassAnalysisState { Declared, AnalyzingSupertypes, Analyzing, Analyzed }
@@ -963,6 +965,21 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             declaring.removeLast()
             val declared = DeclaredClass(node, definition, companion, listOf(typeParameterScope, superClassScope, classScope), companionScope)
             declaredClasses[node.position] = declared
+            // An inner class reaches the members of its outer object by their plain names (RT-92).
+            if (node.isInner) byName[node.outerClassName]?.let { outerNode ->
+                declare(outerNode)
+                val outer = declaredClasses[outerNode.position] ?: return@let
+                val scope = SemanticAnalyzerSymbolTable(symbolTable.scopeLevel + 1, "outer ${outerNode.name}", ScopeType.ExtraWrap, parentScope = symbolTable)
+                // The type parameters of the outer class, by their bounds.
+                outerNode.typeParameters.forEach { scope.declareTypeAlias(it.position, it.name, it.typeUpperBound) }
+                val provide = { memberName: String ->
+                    // The outer class's own members and those it inherits.
+                    outer.scopes.reversed().forEach { scope.declareObjectMemberFrom(it, "this/${outerNode.fullQualifiedName}", memberName) }
+                }
+                scope.beforeFunctionLookup = provide
+                scope.beforePropertyLookup = provide
+                declared.outerScopes = outer.outerScopes + scope
+            }
             val analyze = { analyzeDeclaredClass(declared, isOnDemand = true) }
             definition.pendingAnalysis = analyze
             companion?.pendingAnalysis = analyze
@@ -1739,6 +1756,11 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         smartCasts.clear()
         if (body != null) {
             body.returnTypeUpperBound = declaredReturnType
+            // `fun leer(): List<Int> = emptyList()` takes its type arguments from the return type (RT-93).
+            val expression = body.statements.singleOrNull() as? FunctionCallNode
+            if (body.format == FunctionBodyFormat.Expression && declaredReturnType != null && expression != null && expression.expectedReturnType == null) {
+                expression.expectedReturnType = declaredReturnType
+            }
             val previousReified = activeReifiedTypeParameters.toMap()
             typeParameters.forEach { activeReifiedTypeParameters[it.name] = it.isReified }
             callableContexts += CallableContext(this, (declaredReturnType ?: inferredReturnType)?.resolveGenericParameterType(typeParameters)?.toDataType())
@@ -1772,7 +1794,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             } else {
                 val subjectType = returnType.resolveGenericParameterType(typeParameters).toDataType()
                 if (subjectType !is UnitType && valueType !is NothingType && !subjectType.isAssignableFrom(valueType)) {
-                    throw TypeMismatchException(position, subjectType.nameWithNullable, valueType.nameWithNullable)
+                    throw TypeMismatchException(position, subjectType.descriptiveName, valueType.descriptiveName)
                 }
             }
         }
@@ -2627,7 +2649,10 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             }
 
             if (callableType != CallableType.Constructor || declaredTypeArguments.isEmpty()) {
-                returnType.resolveGenericParameterTypeArguments(typeArgumentByName)
+                // Type parameters resolved through the receiver are replaced already; replacing them
+                // again would also replace a caller's type parameter of the same name, e.g. `T` in
+                // `List<List<T>>[0]`, which is a `List<T>` (RT-93).
+                returnType.resolveGenericParameterTypeArguments(typeArgumentByName.filterKeys { it !in extraTypeResolutions })
             } else {
                 /**
                  * not resolving generic parameters in order to support this case:
@@ -2739,6 +2764,10 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             value.returnTypeUpperBound = declaredReturnType.returnType.toTypeNode()
         }
 
+        // `return emptyList()` takes its type arguments from the declared return type (RT-93).
+        if (value is FunctionCallNode && (value as FunctionCallNode).expectedReturnType == null && declaredReturnType != null && declaredReturnType !is UnitType) {
+            (value as FunctionCallNode).expectedReturnType = declaredReturnType.toTypeNode()
+        }
         value?.visit(modifier = modifier)
         requireWhenValue(value)
         val valueType = value?.type()?.toDataType() ?: UnitType()
@@ -3060,6 +3089,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             // Objects keep their single instance in their class definition, which a local declaration recreates.
             if (isObject) throw SemanticException(position, "An object can only be declared at the top level of a file")
             companionObject?.let { throw SemanticException(it.position, "A companion object is only allowed in a class declared at the top level of a file") }
+            nestedClasses.firstOrNull()?.let { throw SemanticException(it.position, "A nested class is only allowed in a class declared at the top level of a file") }
             declarationScope.declareClass(position, nullableClassDefinition(this).also { it.attachToSemanticAnalyzer(this@SemanticAnalyzer) })
             declarationScope.declareClass(position, companionClassDefinition(this, classType).also { it.attachToSemanticAnalyzer(this@SemanticAnalyzer) })
         } else {
@@ -3109,6 +3139,8 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             }
             declared?.companionScope?.let { add(it) }
         }
+        val outerScopes = declared?.outerScopes.orEmpty()
+        outerScopes.forEach { pushScope(it) }
         companionScopes.forEach { pushScope(it) }
         pushClassScope(0)
         // copy this class's type parameter to superclass scope, so that
@@ -3511,6 +3543,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         popScope()
         popScope()
         companionScopes.forEach { _ -> popScope() }
+        outerScopes.forEach { _ -> popScope() }
 
         if (currentScope !== declarationScope) {
             throw RuntimeException("Original scope is not restored")
@@ -3750,6 +3783,11 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
     fun ElvisOpNode.visit(modifier: Modifier = Modifier()) {
         this.primaryNode.visit(modifier = modifier)
+        // `karten[name] ?: emptyList()`: the fallback may take its type arguments from the primary side (RT-93).
+        val fallback = fallbackNode
+        if (fallback is FunctionCallNode && fallback.expectedReturnType == null) {
+            primaryNode.type().takeIf { it.name != "Nothing" }?.let { fallback.expectedReturnType = it.copy(isNullable = false) }
+        }
         this.fallbackNode.visit(modifier = modifier)
 
         type()

@@ -28,6 +28,10 @@ open class ClassInstance(
     var enumOrdinal: Int = -1
         internal set
 
+    /** An object of an inner class: the object of its outer class (RT-92). */
+    var outerInstance: ClassInstance? = null
+        internal set
+
     /** The subclass part this part belongs to; null for the part of the most derived class. */
     private var childInstance: ClassInstance? = null
 
@@ -224,11 +228,20 @@ open class ClassInstance(
      * to an unexpected type.
      */
     private fun DataType.resolveTypeParameter(): DataType {
+        // Also inside type arguments: a property `List<T>` of a `Box<String>` is a `List<String>` (RT-93).
+        if (this is ObjectType && arguments.any { it.containsTypeParameter() }) {
+            return copy(arguments = arguments.map { argument ->
+                if (argument is TypeParameterType && argument.name !in typeArgumentByName) argument else argument.resolveTypeParameter()
+            })
+        }
         if (this !is TypeParameterType) return this
         return typeArgumentByName[name]?.let {
             it.copyOf(isNullable = it.isNullable || isNullable)
         } ?: TODO()
     }
+
+    private fun DataType.containsTypeParameter(): Boolean =
+        this is TypeParameterType || (this is ObjectType && arguments.any { it.containsTypeParameter() })
 
     override fun compareTo(other: ComparableRuntimeValue<Comparable<Any>, Any>): Int {
         clazz?.compareToExec?.let { executable ->

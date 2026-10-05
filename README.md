@@ -146,7 +146,10 @@ Es funktionieren unter anderem Klassen mit Primärkonstruktor und `init`,
 sekundäre Konstruktoren, auch neben einem Primärkonstruktor mit Delegation
 `constructor(name: String) : this(name, 0)` (RT-83), `sealed class` und
 `sealed interface` mit `when` ohne `else`, wenn alle Unterklassen abgedeckt
-sind (RT-86),
+sind (RT-86), verschachtelte Klassen, Enums, Interfaces und Objekte
+(`class Liste { class Knoten(…) }`, außen `Liste.Knoten`, auch `private`,
+RT-91) und innere Klassen (`inner class`) mit Zugriff auf das äußere Objekt
+und `this@Liste` (RT-92),
 Klassen, die einander in beliebiger Datei- und Deklarationsreihenfolge und
 auch gegenseitig verwenden (`Hund` mit `var herrchen: Mensch?`, `Mensch` mit
 `val hunde = mutableListOf<Hund>()`, RT-40), Top-Level-Funktionen und
@@ -155,7 +158,9 @@ auch gegenseitig verwenden (`Hund` mit `var herrchen: Mensch?`, `Mensch` mit
 Datei, RT-45),
 Vererbung (`open`, `abstract`, `override`, `super`), Interfaces mit
 abstrakten und Default-Methoden sowie Properties, abstrakte Properties
-(RT-79), Generics einschließlich `inline`/`reified`, Extension-Funktionen,
+(RT-79), Generics einschließlich `inline`/`reified` und generischer Klassen
+mit Listen- und Map-Properties (`class Stapel<T> { val elemente =
+mutableListOf<T>() }`, `class Box<T>(val inhalt: List<T>)`, RT-93), Extension-Funktionen,
 Operator-Überladung, Lambdas und Scope-Funktionen, `enum class` (auch mit
 Konstruktor, Membern nach `;`, `name`, `ordinal`, `values()`, `valueOf()` und
 `entries`; Einträge geben ihren Namen aus, RT-78), `data class` mit `toString`, `equals`/`hashCode`, `copy` und
@@ -173,7 +178,7 @@ List/Map/Set und Ranges.
 
 Nicht unterstützt sind derzeit:
 
-- verschachtelte und innere Klassen und Objekte, Objekt-Ausdrücke
+- Objekt-Ausdrücke
   (`object : Typ { … }`), benannte Companion-Objekte
   (`companion object Fabrik`), `fun interface`, `typealias`
 - Delegation an die Oberklasse mit `constructor() : super(…)` (mit eigener
@@ -196,6 +201,17 @@ Nicht unterstützt sind derzeit:
 - Properties mit Funktionstyp lassen sich wie Methoden aufrufen (`objekt.f()`,
   `f()` in der Klasse, RT-75); `.invoke()` darauf nur über einen Namen
   (`k.f.invoke()`, nicht `K(4).f.invoke()`)
+- Typargumente eines Aufrufs wie `emptyList()` oder `mutableListOf()` ergeben
+  sich aus der Deklaration, der linken Seite von `?:`, `return` und dem
+  Rückgabetyp eines Ausdrucksrumpfs (RT-93), nicht aus dem Ergebnis eines
+  Lambdas: `getOrPut(k) { mutableListOf<V>() }` braucht das Typargument
+- Ein Objekt einer inneren Klasse entsteht nur im Code der äußeren Klasse
+  (`Laeufer()` in `Liste`), nicht von außen mit `liste.Laeufer()`; innere
+  Klassen haben keine sekundären Konstruktoren, und der Typ
+  `Stapel<String>.Zeiger` lässt sich nicht hinschreiben (RT-92). Klassen in
+  lokalen Klassen oder in Objekten gehen nicht; eine verschachtelte Klasse
+  sieht die Companion-Mitglieder ihrer äußeren Klasse nur mit Klassennamen
+  (RT-91)
 - Destrukturierung ist auch auf oberster Ebene einer Projektdatei erlaubt
   (Kotlin: nur lokal); `componentN` lässt sich nicht als `operator`
   deklarieren, eigene Klassen werden über ihre `componentN()`-Funktionen

@@ -562,6 +562,12 @@ data class ClassDeclarationNode(
     val isCompanion: Boolean = false,
     /** The `companion object` of this class, an object named `<Class>.Companion`. */
     val companionObject: ClassDeclarationNode? = null,
+    /** Classes declared in this class's body, named `<Class>.<Name>`; the parser declares them at the top level (RT-91). */
+    val nestedClasses: List<ClassDeclarationNode> = emptyList(),
+    /** For a nested class: the class it is declared in (RT-91). */
+    val outerClassName: String? = null,
+    /** An inner class: its objects belong to an object of [outerClassName], kept as constructor property `this/<Outer>` (RT-92). */
+    val isInner: Boolean = false,
 ) : ASTNode {
     @ModifyByAnalyzer val inferredModifiers: MutableSet<ClassModifier> = mutableSetOf()
     val modifiers: Set<ClassModifier>

@@ -1337,6 +1337,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         val symbolTable = callStack.currentSymbolTable()
         val instance = ClassInstance(symbolTable, clazz.fullQualifiedName, clazz, typeArguments.toList(), parentInstance = parentInstance)
         if (clazz.isObjectDeclaration) clazz.objectInstance = instance
+        if (clazz.isInner) instance.outerInstance = callArguments[0] as ClassInstance
         val properties = clazz.primaryConstructor?.parameters?.filter { it.isProperty }?.map { it.parameter.transformedRefName!! }?.toMutableSet() ?: mutableSetOf()
 
         val nonPropertyArguments = mutableMapOf<String, Pair<ClassParameterNode, RuntimeValue>>()
@@ -1372,6 +1373,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             symbolTable.assign(receiverName, instance)
             receiverClass = receiverClass.superClass
         }
+        symbolTable.bindOuterReceivers(callPosition, instance)
 
 //            instance.memberPropertyValues.forEach {
 //                symbolTable.putPropertyHolder(instance.clazz!!.memberPropertyNameToTransformedName[it.key]!!, it.value)
@@ -1403,6 +1405,11 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             )
             try {
                 val innerSymbolTable = callStack.currentSymbolTable()
+                // Property initializers see the type arguments, like `init` blocks: `mutableListOf<T>()` (RT-93).
+                typeParametersAndArguments.forEachIndexed { index, typeParameter ->
+                    innerSymbolTable.declareTypeAlias(typeParameter.position, typeParameter.name, clazz.typeParameters[index].typeUpperBound)
+                    innerSymbolTable.declareTypeAliasResolution(typeParameter.position, typeParameter.name, typeArguments[index])
+                }
                 nonPropertyArguments.forEach {
                     innerSymbolTable.declareProperty(callPosition, it.value.first.transformedRefNameInBody!!, it.value.first.parameter.type.resolveGenericParameterTypeArguments(typeArgumentByName), false)
                     innerSymbolTable.assign(it.value.first.transformedRefNameInBody!!, it.value.second)
@@ -1510,6 +1517,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 if (subjectType is ObjectType) subjectType.clazz.receiverNames(isObject)
                 else if (isObject) arrayOf("this/${subjectType.name}", "this", "super")
                 else arrayOf("this/${subjectType.name}", "this"))
+            if (subject is ClassInstance) symbolTable.bindOuterReceivers(position, subject)
             if (receiverType != null) {
                 val receiverIdentifier = receiverType.resolveGenericParameterTypeToUpperBound(function.typeParameters).descriptiveName()
                 val receiverPropertyName = "this/$receiverIdentifier"
@@ -1535,13 +1543,34 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
-    /** The subject's class type arguments, e.g. `T` = `Invader` for a `List<Invader>`. */
-    private fun instanceGenericTypeResolutions(subject: RuntimeValue): List<TypeParameterNode> =
-        if (subject is ClassInstance && subject.typeArguments.isNotEmpty()) {
-            subject.clazz!!.typeParameters.mapIndexed { index, it ->
-                TypeParameterNode(it.position, it.name, subject.typeArguments[index].toTypeNode())
+    /**
+     * In code of an inner class, the members of the outer object are reached through its
+     * `this/<Outer>` names (RT-92), also through several levels of inner classes. Names the
+     * object itself has, e.g. a common superclass, stay its own.
+     */
+    private fun SymbolTable.bindOuterReceivers(position: SourcePosition, instance: ClassInstance) {
+        var outer = instance.outerInstance ?: return
+        while (true) {
+            for (name in outer.clazz!!.receiverNames(true)) {
+                if (name.startsWith("this/") && !hasProperty(name, true)) declareInitializedProperty(position, name, outer.type(), outer)
             }
-        } else emptyList()
+            outer = outer.outerInstance ?: return
+        }
+    }
+
+    /**
+     * The subject's class type arguments, e.g. `T` = `Invader` for a `List<Invader>`; for an
+     * inner class also those of its outer objects (RT-92).
+     */
+    private fun instanceGenericTypeResolutions(subject: RuntimeValue): List<TypeParameterNode> {
+        if (subject !is ClassInstance) return emptyList()
+        fun own(instance: ClassInstance) = if (instance.typeArguments.isEmpty()) emptyList() else
+            instance.clazz!!.typeParameters.mapIndexed { index, it ->
+                TypeParameterNode(it.position, it.name, instance.typeArguments[index].toTypeNode())
+            }
+        val outer = subject.outerInstance ?: return own(subject)
+        return instanceGenericTypeResolutions(outer).filter { o -> subject.clazz!!.typeParameters.none { it.name == o.name } } + own(subject)
+    }
 
     suspend fun BlockNode.eval(): RuntimeValue {
         if (!declaresNames) {
@@ -1943,8 +1972,8 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         // Like Kotlin, `this` in a lambda without receiver is the `this` where it is written, also
         // for a nested lambda that uses it (`map { x -> listOf(1).map { this.f(x) } }`, RT-90).
         if (receiverType == null && "this" !in refs.properties) {
-            runCatching { currentSymbolTable.getPropertyHolder("this") }.getOrNull()
-                ?.let { runtimeRefs.putPropertyHolder("this", false, it) }
+            // No exception for a lambda without `this`: it would be costly and could swallow a host stack overflow.
+            currentSymbolTable.findPropertyHolder("this")?.let { runtimeRefs.putPropertyHolder("this", false, it) }
         }
         refs.functions.forEach {
             runtimeRefs.declareFunction(position, it, currentSymbolTable.findFunction(it)!!.first)

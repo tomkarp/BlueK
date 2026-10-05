@@ -918,7 +918,6 @@ fails((await project({ 'Anzeige.kt': 'class Anzeige {\n    fun zeige(text: Strin
     [{ 'K.kt': 'const val A = readln()' }, /Const 'val' initializer should be a constant value/],
     [{ 'K.kt': 'class K {\n    companion object Fabrik {}\n}' }, /^Named companion objects are not supported in BlueK/],
     [{ 'K.kt': 'class K {\n    companion object {}\n    companion object {}\n}' }, /^Only one companion object is allowed per class/],
-    [{ 'K.kt': 'class K {\n    object Innen {}\n}' }, /^Nested objects are not supported in BlueK/],
   ];
   for (const [files, pattern] of rejected) fails((await project(files)).result, `RT-67 ${Object.values(files)[0]}`, pattern);
   // A parser message now marks its own line instead of the file's first line.
@@ -1346,6 +1345,101 @@ fails((await project({ 'Anzeige.kt': 'class Anzeige {\n    fun zeige(text: Strin
     ['Rechner(7).j(listOf(1, 2))', '71,72'],
   ];
   for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-90 ${source}`).display, expected, `RT-90 ${source}`);
+}
+
+// Nested classes (RT-91): declared in a class body, named `Liste.Knoten` outside and `Knoten`
+// inside; also enums, interfaces, objects, data and sealed subclasses, generic and two levels.
+{
+  const p = await project({
+    'Liste.kt': 'class Liste {\n    private var kopf: Knoten? = null\n    fun hinzufuegen(wert: Int) { kopf = Knoten(wert, kopf) }\n    fun summe(): Int {\n        var k: Knoten? = kopf\n        var s = 0\n        while (k != null) { s += k.wert; k = k.naechster }\n        return s\n    }\n    fun erster(): Knoten? = kopf\n    class Knoten(val wert: Int, val naechster: Knoten?)\n}',
+    'Form.kt': 'sealed class Form {\n    abstract fun flaeche(): Double\n    class Kreis(val r: Double) : Form() { override fun flaeche() = 3.0 * r * r }\n    class Rechteck(val a: Double, val b: Double) : Form() { override fun flaeche() = a * b }\n    data class Punkt(val x: Int) : Form() { override fun flaeche() = 0.0 }\n}',
+    'Beschreibung.kt': 'fun beschreibe(f: Form): String = when (f) {\n    is Form.Kreis -> "Kreis " + f.r\n    is Form.Rechteck -> "Rechteck"\n    is Form.Punkt -> "Punkt"\n}',
+    'Ampel.kt': 'class Ampel {\n    enum class Farbe { ROT, GELB, GRUEN }\n    var farbe = Farbe.ROT\n    fun weiter() { farbe = when (farbe) { Farbe.ROT -> Farbe.GRUEN; Farbe.GRUEN -> Farbe.GELB; Farbe.GELB -> Farbe.ROT } }\n    private class Geheim(val x: Int)\n    fun geheim(): Int = Geheim(5).x\n    object Regeln { val dauer = 3 }\n    interface Schalter { fun an(): Boolean }\n    class Taster : Schalter { override fun an() = true }\n    companion object { val start = Farbe.ROT }\n}',
+    'Baum.kt': 'class Baum<T : Comparable<T>> {\n    var wurzel: Knoten<T>? = null\n    fun einfuegen(w: T) { wurzel = einf(wurzel, w) }\n    private fun einf(k: Knoten<T>?, w: T): Knoten<T> {\n        if (k == null) return Knoten(w)\n        if (w < k.wert) k.links = einf(k.links, w) else k.rechts = einf(k.rechts, w)\n        return k\n    }\n    fun tiefe(k: Knoten<T>? = wurzel): Int = if (k == null) 0 else 1 + maxOf(tiefe(k.links), tiefe(k.rechts))\n    class Knoten<T>(val wert: T) { var links: Knoten<T>? = null; var rechts: Knoten<T>? = null }\n}',
+    'Knoten.kt': 'class Knoten(val name: String)',
+    'O.kt': 'class O {\n    class N { class M(val v: Int); fun m() = M(4) }\n}',
+    'Main.kt': 'fun main() { println(Liste.Knoten(4, null).wert) }',
+  });
+  ok(p.result, 'RT-91 project');
+  const cases = [
+    ['val l = Liste(); l.hinzufuegen(2); l.hinzufuegen(5); l.summe()', '7'], ['l.erster()?.wert', '5'],
+    ['Liste.Knoten(7, null).wert', '7'], ['val k: Liste.Knoten = Liste.Knoten(1, Liste.Knoten(2, null)); k.naechster?.wert', '2'], ['k is Liste.Knoten', 'true'],
+    ['beschreibe(Form.Kreis(2.0))', 'Kreis 2.0'], ['beschreibe(Form.Punkt(1))', 'Punkt'], ['Form.Punkt(3).toString()', 'Punkt(x=3)'],
+    ['Form.Punkt(3) == Form.Punkt(3)', 'true'], ['Form.Punkt(3).copy(x = 4).x', '4'], ['listOf<Form>(Form.Kreis(1.0), Form.Rechteck(2.0, 3.0)).map { it.flaeche() }', '[3.0, 6.0]'],
+    ['val a = Ampel(); a.weiter(); a.farbe.name', 'GRUEN'], ['Ampel.Farbe.GELB.ordinal', '1'], ['a.geheim()', '5'], ['Ampel.Regeln.dauer', '3'],
+    ['Ampel.start.name', 'ROT'], ['val s: Ampel.Schalter = Ampel.Taster(); s.an()', 'true'],
+    ['val b = Baum<Int>(); listOf(5, 2, 8, 1).forEach { b.einfuegen(it) }; b.tiefe()', '3'],
+    ['Knoten("top").name', 'top'], ['O.N.M(5).v + O.N().m().v', '9'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-91 ${source}`).display, expected, `RT-91 ${source}`);
+  ok(p.evaluate('main()'), 'RT-91 main');
+  assert.equal(p.output(), '4\n', 'RT-91 main output');
+  fails(p.evaluate('Ampel.Geheim(1)'), 'RT-91 private', /Cannot access 'Geheim': it is private in 'Ampel'/);
+  ok(p.evaluate('class P { class Q(val x: Int); fun q() = Q(2) }'), 'RT-91 codepad class');
+  assert.equal(ok(p.evaluate('P().q().x + P.Q(9).x'), 'RT-91 codepad nested').display, '11');
+  // The nested classes belong to their outer class's file, not to a file of their own.
+  assert.ok(JSON.parse(p.session.manifest()).classes.some(item => item.name === 'Liste.Knoten'), 'RT-91 manifest');
+  fails((await project({ 'A.kt': 'class A {\n    fun f() { class L { class M } }\n}' })).result, 'RT-91 local', /only allowed in a class declared at the top level/);
+  fails((await project({ 'A.kt': 'class A { val x = 1; class N { fun f() = x } }' })).result, 'RT-91 no outer object', /`x` is unknown/);
+}
+
+// Inner classes (RT-92): an object of an inner class belongs to an object of its outer class
+// and uses its members; `this@Aussen` names that object.
+{
+  const p = await project({
+    'Liste.kt': 'class Liste(val name: String) {\n    private val elemente = mutableListOf<Int>()\n    fun add(x: Int) { elemente.add(x) }\n    fun laeufer() = Laeufer()\n    fun groesse() = elemente.size\n\n    inner class Laeufer {\n        var index = 0\n        fun hatNaechstes() = index < elemente.size\n        fun naechstes(): Int { val w = elemente[index]; index += 1; return w }\n        fun besitzer() = name + "/" + groesse()\n        fun liste(): Liste = this@Liste\n        fun ich() = this@Laeufer.index\n    }\n}',
+    'Konto.kt': 'class Konto(var stand: Int) {\n    inner class Buchung(val betrag: Int) {\n        val vorher = stand\n        init { stand += betrag }\n        fun beschreibung() = "$betrag -> $stand"\n    }\n    fun buche(b: Int) = Buchung(b)\n    val historie = mutableListOf<Buchung>()\n    fun bucheUndMerke(b: Int) { historie.add(Buchung(b)) }\n}',
+    'Spiel.kt': 'class Spiel {\n    var punkte = 0\n    inner class Spieler(val name: String) {\n        fun treffer() { punkte += 1 }\n        fun partner(n: String) = Spieler(n)\n        fun alle(l: List<Int>) = l.map { it + punkte }\n        inner class Hand { fun wer() = name + punkte }\n        fun hand() = Hand()\n    }\n    fun neu(n: String) = Spieler(n)\n}',
+  });
+  ok(p.result, 'RT-92 project');
+  const cases = [
+    ['val l = Liste("a"); l.add(3); l.add(4); val it = l.laeufer(); var s = 0; while (it.hatNaechstes()) s += it.naechstes(); s', '7'],
+    ['it.besitzer()', 'a/2'], ['it.liste().name', 'a'], ['it.ich()', '2'],
+    ['val k = Konto(10); val b = k.buche(5); b.vorher', '10'], ['k.stand', '15'], ['b.beschreibung()', '5 -> 15'],
+    ['k.bucheUndMerke(7); k.historie.map { it.beschreibung() }', '[7 -> 22]'],
+    ['val sp = Spiel(); val a = sp.neu("A"); a.treffer(); a.partner("B").treffer(); sp.punkte', '2'],
+    ['a.alle(listOf(1, 2))', '[3, 4]'], ['a.hand().wer()', 'A2'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-92 ${source}`).display, expected, `RT-92 ${source}`);
+  // The hidden reference to the outer object is neither a constructor parameter nor a property.
+  const laeufer = JSON.parse(p.session.manifest()).classes.find(item => item.name === 'Liste.Laeufer');
+  assert.deepEqual(laeufer.properties.map(item => item.name), ['index'], 'RT-92 manifest properties');
+  assert.deepEqual(laeufer.constructors.map(item => item.parameters.length), [0], 'RT-92 manifest constructor');
+  fails(p.evaluate('Liste.Laeufer()'), 'RT-92 outside', /Constructor of inner class Laeufer can be called only with receiver of containing class/);
+  fails((await project({ 'A.kt': 'inner class A' })).result, 'RT-92 top level', /Modifier 'inner' is only allowed for a class declared in a class body/);
+  fails((await project({ 'A.kt': 'class A { inner class I; class N { fun f() = I() } }' })).result, 'RT-92 nested', /can be called only with receiver of containing class/);
+  fails((await project({ 'A.kt': 'class A { inner class I(val x: Int) { constructor() : this(1) } }' })).result, 'RT-92 secondary', /Secondary constructors of an inner class/);
+  // Like `data`, `inner` is a modifier only before `class`; elsewhere it stays a name.
+  const names = await project({ 'A.kt': 'class A {\n    val inner = 3\n    fun f(inner: Int) = inner + 1\n    private inner class P(val x: Int)\n    fun g() = P(2).x\n}' });
+  ok(names.result, 'RT-92 inner as name');
+  for (const [source, expected] of [['A().inner + A().f(1) + A().g()', '7'], ['listOf(1).map { inner -> inner * 2 }', '[2]']]) {
+    assert.equal(ok(names.evaluate(source), `RT-92 ${source}`).display, expected, `RT-92 ${source}`);
+  }
+}
+
+// Generic classes (RT-93): properties that use `T` in generic calls and constructor properties
+// such as `List<T>`; `T` inside nested types (`List<List<T>>`); expected types for `?:`,
+// `return` and expression bodies.
+{
+  const p = await project({
+    'Stapel.kt': 'class Stapel<T> {\n    private val elemente = mutableListOf<T>()\n    fun push(x: T) { elemente.add(x) }\n    fun pop(): T? = if (elemente.isEmpty()) null else elemente.removeAt(elemente.size - 1)\n    fun alle(): List<T> = elemente\n    val groesse: Int get() = elemente.size\n}',
+    'Box.kt': 'class Box<T>(val inhalt: List<T>) { fun erstes(): T = inhalt.first() }',
+    'Lager.kt': 'class Lager<K, V> {\n    private val inhalt = mutableMapOf<K, MutableList<V>>()\n    fun lege(k: K, v: V) { inhalt.getOrPut(k) { mutableListOf<V>() }.add(v) }\n    fun hole(k: K): List<V> = inhalt[k] ?: emptyList()\n}',
+    'Gruppen.kt': 'class Gruppen<T> {\n    val listen = mutableListOf<List<T>>()\n    fun erste(): List<T> = listen[0]\n}',
+    'Util.kt': 'fun <T> erstes(m: List<List<T>>): List<T> = m[0]\nfun keine(): Set<Int> = emptySet()\nfun nichts(): List<String> { return emptyList() }',
+  });
+  ok(p.result, 'RT-93 project');
+  const cases = [
+    ['val s = Stapel<String>(); s.push("a"); s.push("b"); s.pop() + s.groesse', 'b1'], ['s.alle()', '[a]'],
+    ['Box<String>(listOf("x", "y")).erstes()', 'x'], ['Box(listOf(1, 2)).inhalt', '[1, 2]'],
+    ['val l = Lager<String, Int>(); l.lege("a", 1); l.lege("a", 2); l.hole("a")', '[1, 2]'], ['l.hole("b")', '[]'],
+    ['val g = Gruppen<Int>(); g.listen.add(listOf(4)); g.erste()', '[4]'], ['erstes(listOf(listOf(1)))', '[1]'],
+    ['keine()', '[]'], ['nichts()', '[]'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-93 ${source}`).display, expected, `RT-93 ${source}`);
+  fails(p.evaluate('Box<Int>(listOf("x"))'), 'RT-93 wrong type', /List<String> cannot be mapped to type List<Int>/);
+  // The message names the type arguments, not only `List`.
+  fails((await project({ 'F.kt': 'fun f(): List<Int> = listOf("a")' })).result, 'RT-93 message', /Expected type is `List<Int>`, but actual type is `List<String>`/);
 }
 
 console.log('Curriculum Kotlin smoke test passed.');

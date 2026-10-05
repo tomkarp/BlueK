@@ -91,6 +91,11 @@ const supported = [
   ['listOf(1, 2, 3).reduce { a, b -> a + b }', '6'],
   ['(1..4).reduce { a, b -> a + b }', '10'],
   ['listOf(listOf(1, 2), listOf(3)).flatten()', '[1, 2, 3]'],
+  // RT-93: empty collections, typed by their target.
+  ['val leer: List<String> = emptyList(); leer.size', '0'],
+  ['emptyList<Int>().isEmpty()', 'true'],
+  ['emptySet<String>() + "x"', '[x]'],
+  ['val m = mapOf("a" to listOf(1)); m["b"] ?: emptyList()', '[]'],
   ['listOf(3, 1, 2).sorted()', '[1, 2, 3]'],
   ['listOf(1, 2, 3).maxOrNull()', '3'],
 

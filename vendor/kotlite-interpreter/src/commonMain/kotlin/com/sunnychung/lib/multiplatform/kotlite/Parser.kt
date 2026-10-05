@@ -21,6 +21,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.ClassInstanceInitializerNo
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassMemberReferenceNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassModifier
 import com.sunnychung.lib.multiplatform.kotlite.model.DestructuringDeclarationNode
+import com.sunnychung.lib.multiplatform.kotlite.extension.emptyToNull
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassParameterNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassSecondaryConstructorNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassPrimaryConstructorNode
@@ -77,10 +78,25 @@ val ACCEPTED_MODIFIERS = setOf(
     "protected", "internal", "lateinit", "sealed",
 )
 
+/** A class declared in a class body (RT-91); an inner one belongs to an object of its outer class (RT-92). */
+data class NestedClassInfo(val isPrivate: Boolean, val isInner: Boolean)
+
 /**
  * Reference grammar: https://kotlinlang.org/spec/syntax-and-grammar.html#grammar-rule-expression
  */
-open class Parser(protected val lexer: Lexer) {
+/**
+ * [nestedClasses]: the nested classes of the source by their qualified names (`Liste.Knoten`),
+ * with their visibility. [script] finds them in a first pass and, if there are any, parses
+ * again with them, so that a simple name inside the outer class can mean the nested class
+ * even before its declaration (RT-91).
+ */
+open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<String, NestedClassInfo>? = null) {
+    /** The classes whose body is being parsed, innermost last, by qualified name. */
+    private val enclosingClasses = mutableListOf<String>()
+    private val foundNestedClasses = linkedMapOf<String, NestedClassInfo>()
+    /** The type parameters of the classes parsed so far, for the outer object of an inner class. */
+    private val classTypeParameters = mutableMapOf<String, List<String>>()
+
     internal val allTokens = mutableListOf<Token>()
     internal val tokenCharIndexes = mutableListOf<Int>()
 
@@ -474,7 +490,7 @@ open class Parser(protected val lexer: Lexer) {
             return callSuffix(subject)
         }
         when (currentTokenExcludingNL().value) {
-            ".", "?." -> return navigationSuffix(subject)
+            ".", "?." -> return navigationSuffix(subject).let { nestedClassReference(it) ?: it }
         }
         return subject
     }
@@ -504,6 +520,14 @@ open class Parser(protected val lexer: Lexer) {
             )
         } else if (label != null) {
             throw ExpectTokenMismatchException("{", currentToken.position)
+        }
+        // An inner class gets its outer object as hidden first argument (RT-92).
+        val innerClass = (subject as? VariableReferenceNode)?.variableName?.takeIf { nestedClasses?.get(it)?.isInner == true }
+        if (innerClass != null) {
+            val shifted = arguments.map { it.copy(index = it.index + 1) }
+            arguments.clear()
+            arguments += FunctionCallArgumentNode(position, 0, value = outerObjectReference(innerClass, subject.position))
+            arguments += shifted
         }
         return FunctionCallNode(
             function = subject,
@@ -1113,6 +1137,62 @@ open class Parser(protected val lexer: Lexer) {
         )
     }
 
+    /**
+     * Inside a class, the simple name of one of its nested classes, or of a class nested in an
+     * enclosing class, means that class: `Knoten` in `Liste` is `Liste.Knoten` (RT-91).
+     */
+    private fun nestedClassName(name: String): String {
+        val known = nestedClasses ?: return name
+        val first = name.substringBefore('.')
+        for (index in enclosingClasses.indices.reversed()) {
+            val qualified = "${enclosingClasses[index]}.$first"
+            if (qualified in known) return qualified + name.substring(first.length)
+        }
+        return name
+    }
+
+    /** `Liste.Knoten` names a nested class; a private one only inside its outer class (RT-91). */
+    private fun nestedClassReference(navigation: NavigationNode): VariableReferenceNode? {
+        val known = nestedClasses ?: return null
+        val subject = navigation.subject as? VariableReferenceNode ?: return null
+        val member = navigation.member as? ClassMemberReferenceNode ?: return null
+        if (navigation.operator != ".") return null
+        val name = "${subject.variableName}.${member.name}"
+        val info = known[name] ?: return null
+        checkNestedClassAccess(name, info, member.position)
+        return VariableReferenceNode(subject.position, name)
+    }
+
+    private fun checkNestedClassAccess(name: String, info: NestedClassInfo, position: SourcePosition) {
+        val outer = name.substringBeforeLast('.')
+        if (info.isPrivate && enclosingClasses.none { it == outer || it.startsWith("$outer.") }) {
+            throw SemanticException(position, "Cannot access '${name.substringAfterLast('.')}': it is private in '$outer'")
+        }
+    }
+
+    /**
+     * The outer object for creating inner class [name] here (RT-92): `this` in its outer class,
+     * the outer object of the inner class whose code this is otherwise. Like Kotlin, only code of
+     * the outer class and of its inner classes has one.
+     */
+    private fun outerObjectReference(name: String, position: SourcePosition): VariableReferenceNode {
+        val outer = name.substringBeforeLast('.')
+        val index = enclosingClasses.lastIndexOf(outer)
+        if (index < 0 || enclosingClasses.drop(index + 1).any { nestedClasses?.get(it)?.isInner == false }) {
+            throw SemanticException(position, "Constructor of inner class ${name.substringAfterLast('.')} can be called only with receiver of containing class: create it in the code of $outer")
+        }
+        return VariableReferenceNode(position, if (index == enclosingClasses.lastIndex) "this" else "this/$outer")
+    }
+
+    /** `this@Klasse`: the object of an enclosing class, e.g. the outer object in an inner class (RT-92). */
+    private fun labeledThis(thisToken: Token): VariableReferenceNode {
+        eat(TokenType.Symbol, "@")
+        val label = eat(TokenType.Identifier)
+        val qualified = enclosingClasses.lastOrNull { it.substringAfterLast('.') == label.value }
+            ?: throw SemanticException(label.position, "Unresolved label @${label.value}: BlueK supports `this@Klasse` for an enclosing class")
+        return VariableReferenceNode(thisToken.position, if (qualified == enclosingClasses.last()) "this" else "this/$qualified")
+    }
+
     fun primaryExpression(label: LabelNode? = null): ASTNode {
         val currentToken = currentToken
         if (isFunctionReferenceAhead(null)) return functionReference(null)
@@ -1154,7 +1234,13 @@ open class Parser(protected val lexer: Lexer) {
 
                 val t = eat(TokenType.Identifier)
                 if (isFunctionReferenceAhead(t)) return functionReference(t)
-                return VariableReferenceNode(t.position, t.value as String)
+                // `currentToken` is shadowed here by the token this expression started with.
+                val next = this@Parser.currentToken
+                if (t.value == "this" && next.`is`(TokenType.Symbol, "@") && peekNextToken().type == TokenType.Identifier
+                    && areTokensConsecutive(t, next, peekNextToken())) {
+                    return labeledThis(t)
+                }
+                return VariableReferenceNode(t.position, nestedClassName(t.value as String))
             }
             TokenType.Symbol -> {
                 when (currentToken.value) {
@@ -1591,8 +1677,9 @@ open class Parser(protected val lexer: Lexer) {
         val nameB = StringBuilder()
         val t = eat(TokenType.Identifier)
         nameB.append(t.value as String)
-        // The type of a companion object (RT-67), e.g. of a Codepad result `Karte`.
-        if (!isParseDottedIdentifiers && isCurrentToken(TokenType.Operator, ".") && peekNextToken().let { it.type == TokenType.Identifier && it.value == "Companion" }) {
+        // A nested class `Liste.Knoten` (RT-91) or the type of a companion object (RT-67), e.g.
+        // of a Codepad result `Karte`. Like class names, their names start with a capital letter.
+        while (!isParseDottedIdentifiers && isCurrentToken(TokenType.Operator, ".") && peekNextToken().let { it.type == TokenType.Identifier && (it.value as String).first().isUpperCase() }) {
             eat(TokenType.Operator, ".")
             nameB.append(".").append(eat(TokenType.Identifier).value as String)
         }
@@ -1609,7 +1696,8 @@ open class Parser(protected val lexer: Lexer) {
                 break
             }
         }
-        val name = nameB.toString()
+        val name = if (isParseDottedIdentifiers) nameB.toString() else nestedClassName(nameB.toString())
+        if (!isParseDottedIdentifiers && '.' in name) nestedClasses?.get(name)?.let { checkNestedClassAccess(name, it, t.position) }
         val argument = if (isCurrentTokenExcludingNL(TokenType.Operator, "<")) {
             typeArguments()
         } else null
@@ -2344,7 +2432,7 @@ open class Parser(protected val lexer: Lexer) {
                 val block = block(ScopeType.Initializer)
                 ClassInstanceInitializerNode(position = t.position, block = block)
             } else {
-                declaration(isInterface = isInterface)
+                declaration(isInterface = isInterface, isMember = true)
             }
 
             if (isSemi()) {
@@ -2428,7 +2516,7 @@ open class Parser(protected val lexer: Lexer) {
      */
     fun modifiers(): Set<String> {
         val modifiers = mutableSetOf<String>()
-        while (currentToken.type == TokenType.Identifier && (currentToken.value in ACCEPTED_MODIFIERS || isDataClassModifier())) {
+        while (currentToken.type == TokenType.Identifier && (currentToken.value in ACCEPTED_MODIFIERS || isDataClassModifier() || isInnerClassModifier())) {
             modifiers += currentToken.value as String
             eat(TokenType.Identifier)
             repeatedNL()
@@ -2439,6 +2527,10 @@ open class Parser(protected val lexer: Lexer) {
     /** `data` is a modifier only before `class`; elsewhere it stays a name (`val data = …`, RT-64). */
     private fun isDataClassModifier(): Boolean =
         currentToken.value == "data" && peekNextToken().let { it.type == TokenType.Identifier && it.value == "class" }
+
+    /** Likewise `inner`, before `class` or another class modifier; elsewhere it stays a name (RT-92). */
+    private fun isInnerClassModifier(): Boolean =
+        currentToken.value == "inner" && peekNextToken().let { it.type == TokenType.Identifier && (it.value == "class" || it.value in ACCEPTED_MODIFIERS) }
 
     fun Set<String>.toClassModifiers() = this.filter { it != "internal" }.map {
         when (it) {
@@ -2528,8 +2620,13 @@ open class Parser(protected val lexer: Lexer) {
      *     [{NL} typeConstraints]
      *     [({NL} classBody) | ({NL} enumClassBody)]
      */
-    fun classDeclaration(modifiers: Set<String>): ClassDeclarationNode {
-        var modifiers = modifiers.toClassModifiers()
+    /** [isMember]: declared in a class body, so it is a nested class of that class (RT-91). */
+    fun classDeclaration(modifiers: Set<String>, isMember: Boolean = false): ClassDeclarationNode {
+        // A nested class may be private to its outer class; visibility of other classes is not supported.
+        val isPrivate = isMember && "private" in modifiers
+        val isInner = "inner" in modifiers
+        if (isInner && !isMember) throw SemanticException(currentToken.position, "Modifier 'inner' is only allowed for a class declared in a class body")
+        var modifiers = (if (isMember) modifiers - "private" - "inner" else modifiers).toClassModifiers()
         if (!currentToken.`is`(TokenType.Identifier, "class") && !currentToken.`is`(TokenType.Identifier, "interface")) {
             throw ExpectTokenMismatchException("\"class\" or \"interface\"", currentToken.position)
         }
@@ -2538,19 +2635,52 @@ open class Parser(protected val lexer: Lexer) {
         // Like Kotlin, a sealed class is abstract; its subclasses are known to `when` (RT-86).
         if (ClassModifier.sealed in modifiers && !isInterface) modifiers = modifiers + ClassModifier.abstract
         repeatedNL()
-        val name = userDefinedIdentifier()
+        val simpleName = userDefinedIdentifier()
+        val outerClassName = if (isMember) enclosingClasses.last() else null
+        val name = outerClassName?.let { "$it.$simpleName" } ?: simpleName
+        if (outerClassName != null) foundNestedClasses[name] = NestedClassInfo(isPrivate = isPrivate, isInner = isInner)
+        return inClass(name) { classDeclarationAfterName(t, isInterface, modifiers, name, simpleName, outerClassName, isInner) }
+    }
+
+    private inline fun <T> inClass(name: String, block: () -> T): T {
+        enclosingClasses += name
+        try {
+            return block()
+        } finally {
+            enclosingClasses.removeLast()
+        }
+    }
+
+    private fun classDeclarationAfterName(t: Token, isInterface: Boolean, modifiers: Set<ClassModifier>, name: String, simpleName: String, outerClassName: String?, isInner: Boolean): ClassDeclarationNode {
         var token = currentTokenExcludingNL()
         val typeParameters = if (token.`is`(TokenType.Operator, "<")) {
             repeatedNL()
             typeParameters().also { token = currentTokenExcludingNL() }
         } else emptyList()
-        val primaryConstructor = if (
+        classTypeParameters[name] = typeParameters.map { it.name }
+        if (isInner && (isInterface || ClassModifier.enum in modifiers || ClassModifier.data in modifiers)) {
+            throw SemanticException(t.position, "Modifier 'inner' is not applicable to ${if (isInterface) "an interface" else if (ClassModifier.enum in modifiers) "an enum class" else "a data class"} in BlueK")
+        }
+        val declaredPrimaryConstructor = if (
             (token.type == TokenType.Identifier && token.value == "constructor")
             || (token.type == TokenType.Operator && token.value == "(")
         ) {
             repeatedNL()
             primaryConstructor().also { token = currentTokenExcludingNL() }
         } else null
+        // An inner class keeps its outer object in a hidden first constructor property `this/<Outer>` (RT-92).
+        val primaryConstructor = if (!isInner) declaredPrimaryConstructor else {
+            val outer = outerClassName!!
+            val outerType = TypeNode(t.position, outer, classTypeParameters[outer].orEmpty().map { TypeNode(t.position, "*", null, false) }.emptyToNull(), false)
+            val outerParameter = ClassParameterNode(
+                position = t.position,
+                isProperty = true,
+                isMutable = false,
+                modifiers = setOf(PropertyModifier.private),
+                parameter = FunctionValueParameterNode(t.position, "this/$outer", outerType, null, emptySet()),
+            )
+            ClassPrimaryConstructorNode(declaredPrimaryConstructor?.position ?: t.position, listOf(outerParameter) + declaredPrimaryConstructor?.parameters.orEmpty())
+        }
         val superInvocations = if (isCurrentTokenExcludingNL(TokenType.Symbol, ":")) {
             repeatedNL()
             eat(TokenType.Symbol, ":")
@@ -2570,6 +2700,10 @@ open class Parser(protected val lexer: Lexer) {
             }
         }
         val secondaryConstructors = declarations.filterIsInstance<ClassSecondaryConstructorNode>()
+        if (isInner) {
+            secondaryConstructors.firstOrNull()?.let { throw SemanticException(it.position, "Secondary constructors of an inner class are not supported in BlueK. Use default values in the primary constructor.") }
+            declarations.firstOrNull { it is ClassDeclarationNode && it.isCompanion }?.let { throw SemanticException(it.position, "Companion object is not allowed in an inner class") }
+        }
         // Like Kotlin: two constructors with the same parameter types conflict.
         val signatures = mutableSetOf<String>()
         primaryConstructor?.let { primary -> signatures += primary.parameters.joinToString(", ") { it.parameter.type.descriptiveName() } }
@@ -2592,10 +2726,10 @@ open class Parser(protected val lexer: Lexer) {
                 )
             }
         }
-        val (companionObject, otherDeclarations) = companionObjectOf(name, declarations)
+        val (companionObject, nestedClasses, otherDeclarations) = classMembersOf(name, declarations)
         declarations = otherDeclarations
         if (ClassModifier.data in modifiers) {
-            declarations = declarations + dataClassMembers(t.position, name, modifiers, typeParameters, primaryConstructor, declarations)
+            declarations = declarations + dataClassMembers(t.position, name, simpleName, modifiers, typeParameters, primaryConstructor, declarations)
         }
         var supertypes = superInvocations
         if (ClassModifier.enum in modifiers) {
@@ -2617,6 +2751,9 @@ open class Parser(protected val lexer: Lexer) {
             declarations = declarations,
             enumEntries = enumEntries,
             companionObject = companionObject,
+            nestedClasses = nestedClasses,
+            outerClassName = outerClassName,
+            isInner = isInner,
         )
     }
 
@@ -2628,9 +2765,9 @@ open class Parser(protected val lexer: Lexer) {
      *     [modifiers] 'companion' {NL} 'object' [{NL} simpleIdentifier] [{NL} ':' {NL} delegationSpecifiers] [{NL} classBody]
      *
      * An object is a class without constructor parameters that has exactly one instance (RT-67).
-     * A companion object is named `<Class>.Companion` by [companionObjectOf].
+     * A companion object is named `<Class>.Companion` by [classMembersOf].
      */
-    fun objectDeclaration(modifiers: Set<String>, companionPosition: SourcePosition? = null): ClassDeclarationNode {
+    fun objectDeclaration(modifiers: Set<String>, companionPosition: SourcePosition? = null, isMember: Boolean = false): ClassDeclarationNode {
         val isCompanion = companionPosition != null
         repeatedNL()
         val t = eat(TokenType.Identifier, "object")
@@ -2646,6 +2783,15 @@ open class Parser(protected val lexer: Lexer) {
             repeatedNL()
             userDefinedIdentifier()
         }
+        // An object in a class body is nested in that class, like a nested class (RT-91).
+        val outerClassName = if (isMember && !isCompanion) enclosingClasses.last() else null
+        val qualifiedName = outerClassName?.let { "$it.$name" } ?: name
+        if (outerClassName != null) foundNestedClasses[qualifiedName] = NestedClassInfo(isPrivate = false, isInner = false)
+        return if (isCompanion) objectDeclarationAfterName(t, name, null, companionPosition) else inClass(qualifiedName) { objectDeclarationAfterName(t, qualifiedName, outerClassName, null) }
+    }
+
+    private fun objectDeclarationAfterName(t: Token, name: String, outerClassName: String?, companionPosition: SourcePosition?): ClassDeclarationNode {
+        val isCompanion = companionPosition != null
         val superInvocations = if (isCurrentTokenExcludingNL(TokenType.Symbol, ":")) {
             repeatedNL()
             eat(TokenType.Symbol, ":")
@@ -2662,6 +2808,9 @@ open class Parser(protected val lexer: Lexer) {
         declarations.firstOrNull { it is ClassDeclarationNode && it.isCompanion }?.let {
             throw SemanticException(it.position, "A companion object is only allowed inside a class")
         }
+        declarations.firstOrNull { it is ClassDeclarationNode }?.let {
+            throw SemanticException(it.position, "Classes nested in an object are not supported in BlueK. Declare `${(it as ClassDeclarationNode).name.substringAfterLast('.')}` in a class or in its own file.")
+        }
         return ClassDeclarationNode(
             position = companionPosition ?: t.position,
             name = name,
@@ -2673,25 +2822,19 @@ open class Parser(protected val lexer: Lexer) {
             declarations = declarations,
             isObject = true,
             isCompanion = isCompanion,
+            outerClassName = outerClassName,
         )
     }
 
-    /** Separates the companion object from the other members of class [className]. */
-    private fun companionObjectOf(className: String, declarations: List<ASTNode>): Pair<ClassDeclarationNode?, List<ASTNode>> {
+    /** Separates the companion object and the nested classes (RT-91) from the other members of class [className]. */
+    private fun classMembersOf(className: String, declarations: List<ASTNode>): Triple<ClassDeclarationNode?, List<ClassDeclarationNode>, List<ASTNode>> {
         val nested = declarations.filterIsInstance<ClassDeclarationNode>()
-        nested.firstOrNull { !it.isCompanion }?.let {
-            throw SemanticException(it.position, if (it.isObject) {
-                "Nested objects are not supported in BlueK. Declare `object ${it.name}` in its own file or use a `companion object`."
-            } else {
-                "Nested classes are not supported in BlueK. Declare `${it.name}` in its own file."
-            })
-        }
         val companions = nested.filter { it.isCompanion }
         if (companions.size > 1) throw SemanticException(companions[1].position, "Only one companion object is allowed per class")
         val companion = companions.firstOrNull()?.let {
             it.copy(name = "$className.Companion", fullQualifiedName = "$className.Companion")
         }
-        return companion to declarations.filterNot { it is ClassDeclarationNode }
+        return Triple(companion, nested.filterNot { it.isCompanion }, declarations.filterNot { it is ClassDeclarationNode })
     }
 
     /**
@@ -2703,6 +2846,7 @@ open class Parser(protected val lexer: Lexer) {
     private fun dataClassMembers(
         position: SourcePosition,
         name: String,
+        simpleName: String,
         modifiers: Set<ClassModifier>,
         typeParameters: List<TypeParameterNode>,
         primaryConstructor: ClassPrimaryConstructorNode?,
@@ -2726,7 +2870,8 @@ open class Parser(protected val lexer: Lexer) {
             append("\n".repeat(position.lineNum - 1))
             append("\n")
             if (missing("toString", 0)) {
-                append("override fun toString(): String = \"$name(")
+                // Like Kotlin, a nested data class shows its simple name (RT-91).
+                append("override fun toString(): String = \"$simpleName(")
                 append(properties.joinToString(", ") { (property, _) -> "$property=\${$property}" })
                 append(")\"\n")
             }
@@ -2750,7 +2895,7 @@ open class Parser(protected val lexer: Lexer) {
             }
             append("}")
         }
-        return Parser(Lexer(position.filename, source)).classBody(isInterface = false)
+        return Parser(Lexer(position.filename, source), nestedClasses).classBody(isInterface = false)
             .onEach { (it as? FunctionDeclarationNode)?.isGenerated = true }
     }
 
@@ -2758,7 +2903,7 @@ open class Parser(protected val lexer: Lexer) {
     private fun enumClassMembers(position: SourcePosition, name: String): List<ASTNode> {
         val source = "{" + "\n".repeat(position.lineNum) +
             "override operator fun compareTo(other: $name): Int = this.ordinal.compareTo(other.ordinal)\n}"
-        return Parser(Lexer(position.filename, source)).classBody(isInterface = false)
+        return Parser(Lexer(position.filename, source), nestedClasses).classBody(isInterface = false)
             .onEach { (it as? FunctionDeclarationNode)?.isGenerated = true }
     }
 
@@ -2770,7 +2915,7 @@ open class Parser(protected val lexer: Lexer) {
      *     | propertyDeclaration
      *     | typeAlias
      */
-    fun declaration(isInterface: Boolean): ASTNode {
+    fun declaration(isInterface: Boolean, isMember: Boolean = false): ASTNode {
         if (currentToken.type != TokenType.Identifier) {
 //            throw ParseException("Expected an identifier but missing")
             throw UnexpectedTokenException(currentToken)
@@ -2781,13 +2926,13 @@ open class Parser(protected val lexer: Lexer) {
                 "val", "var" -> return propertyDeclaration(modifiers ?: emptySet())
                 // An interface function may have a default body (RT-79).
                 "fun" -> return functionDeclaration(modifiers ?: emptySet(), isBodyOptional = isInterface)
-                "class", "interface" -> return classDeclaration(modifiers ?: emptySet())
-                "object" -> return objectDeclaration(modifiers ?: emptySet())
+                "class", "interface" -> return classDeclaration(modifiers ?: emptySet(), isMember = isMember)
+                "object" -> return objectDeclaration(modifiers ?: emptySet(), isMember = isMember)
                 "constructor" -> throw UnsupportedOperationException(
                     "Secondary constructors are not supported by this Kotlite build."
                 )
-                in ACCEPTED_MODIFIERS, "data" -> {
-                    if (modifiers == null && (currentToken.value != "data" || isDataClassModifier())) {
+                in ACCEPTED_MODIFIERS, "data", "inner" -> {
+                    if (modifiers == null && (currentToken.value != "data" || isDataClassModifier()) && (currentToken.value != "inner" || isInnerClassModifier())) {
                         modifiers = modifiers()
                     } else {
                         throw UnexpectedTokenException(currentToken)
@@ -2996,7 +3141,12 @@ open class Parser(protected val lexer: Lexer) {
         }
     }
 
-    private fun ASTNode.flattened(): List<ASTNode> = (this as? DestructuringDeclarationNode)?.statements ?: listOf(this)
+    /** Nested classes (RT-91) are declared at the top level, after their outer class, by their qualified names. */
+    private fun ASTNode.flattened(): List<ASTNode> = when (this) {
+        is DestructuringDeclarationNode -> statements
+        is ClassDeclarationNode -> listOf(this) + nestedClasses.flatMap { it.flattened() }
+        else -> listOf(this)
+    }
 
     /**
      * statement:
@@ -3031,6 +3181,7 @@ open class Parser(protected val lexer: Lexer) {
                 }
                 "fun", "class", in ACCEPTED_MODIFIERS -> return declaration(isInterface = false)
                 "data" -> if (isDataClassModifier()) return declaration(isInterface = false)
+                "inner" -> if (isInnerClassModifier()) return declaration(isInterface = false)
                 "object" -> if (peekNextToken().type == TokenType.Identifier) return declaration(isInterface = false)
                 "for", "while", "do" -> return loopStatement()
             }
@@ -3105,6 +3256,10 @@ open class Parser(protected val lexer: Lexer) {
             }
         }
         eat(TokenType.EOF)
+        // Simple names of nested classes may occur before their declaration: parse again knowing them all.
+        if (nestedClasses == null && foundNestedClasses.isNotEmpty()) {
+            return Parser(Lexer(lexer.filename, lexer.code, lexer.isParseComment), foundNestedClasses.toMap()).script()
+        }
         return ScriptNode(position = t.position, nodes = nodes, imports = imports)
     }
 

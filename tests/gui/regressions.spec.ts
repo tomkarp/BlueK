@@ -822,6 +822,41 @@ test('GUI-100 constructor and method dialogs show the call as code like BlueJ', 
   await expect(page.locator('.result-dialog .result-value')).toHaveText('4 : Int');
 });
 
+test('RT-91 RT-92 nested and inner classes belong to their outer class card and inspect like other objects', async ({ page }) => {
+  const source = [
+    'class Liste {',
+    '    private var kopf: Knoten? = null',
+    '    fun add(wert: Int) { kopf = Knoten(wert, kopf) }',
+    '    fun laeufer() = Laeufer()',
+    '    class Knoten(val wert: Int, val naechster: Knoten?)',
+    '    inner class Laeufer {',
+    '        var aktuell = kopf',
+    '        fun weiter(): Int { val w = aktuell!!.wert; aktuell = aktuell?.naechster; return w }',
+    '    }',
+    '}',
+  ].join('\n');
+  const payload = { format: 'bluek-project', version: 1, files: [{ fileName: 'Liste.kt', kind: 'class', source }] };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  await page.getByRole('button', { name: 'Compile', exact: true }).click();
+  await expect(page.getByLabel('Ready', { exact: true })).toBeVisible();
+  // One card per file: the nested classes are part of `Liste`.
+  await expect(page.locator('.classcard')).toHaveCount(1);
+  await evaluate(page, 'val l = Liste(); l.add(1); l.add(2)');
+  await expect(await evaluate(page, 'Liste.Knoten(5, null).wert')).toContainText('5');
+  const entry = await evaluate(page, 'l.laeufer()');
+  await entry.getByRole('button').click();
+  await page.getByLabel('Name of instance').fill('laeufer1');
+  await page.getByRole('button', { name: 'OK', exact: true }).click();
+  await page.locator('.bench .object').filter({ hasText: 'laeufer1' }).dblclick();
+  const inspector = page.getByRole('dialog', { name: 'Object inspector' });
+  // The reference to the outer object is hidden, like the compiler's `this$0` in BlueJ.
+  await expect(inspector.locator('.inspect-row')).toHaveCount(1);
+  await expect(inspector.locator('.inspect-row').filter({ hasText: 'aktuell :' })).toBeVisible();
+  await page.locator('.bench .object').filter({ hasText: 'laeufer1' }).click({ button: 'right' });
+  await page.locator('.popup').getByRole('button', { name: /^weiter\(/ }).click();
+  await expect(page.locator('.result-dialog .result-value')).toHaveText('2 : Int');
+});
+
 test('GUI-31 additional editor files open in tabs by default', async ({ page }) => {
   const payload = { format: 'bluek-project', version: 1, files: [
     { fileName: 'Hund.kt', kind: 'class', source: 'class Hund {}' },

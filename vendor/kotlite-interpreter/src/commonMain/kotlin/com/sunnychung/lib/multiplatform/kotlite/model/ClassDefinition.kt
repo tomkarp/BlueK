@@ -66,6 +66,9 @@ open class ClassDefinition(
     private val declaredSuperClassInvocation = superClassInvocation
     internal val thisPropertyName = "this/$fullQualifiedName"
 
+    /** An inner class (RT-92): the parser gave it the hidden first constructor property `this/<Outer>`. */
+    internal val isInner: Boolean = primaryConstructor?.parameters?.firstOrNull()?.parameter?.name?.startsWith("this/") == true
+
     // `this`, `this/<Class>` for the class hierarchy and, for an object, `super`:
     // the names a member call binds to its receiver (see SymbolTable.bindReceiver).
     private var receiverNamesStore: Array<String>? = null

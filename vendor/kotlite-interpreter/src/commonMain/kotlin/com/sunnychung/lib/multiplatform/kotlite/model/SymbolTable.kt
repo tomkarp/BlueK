@@ -702,7 +702,11 @@ open class SymbolTable(
         propertyValues[name] = holder
     }
 
-    fun getPropertyHolder(name: String, isThisScopeOnly: Boolean = false): RuntimeValueAccessor {
+    fun getPropertyHolder(name: String, isThisScopeOnly: Boolean = false): RuntimeValueAccessor =
+        findPropertyHolder(name, isThisScopeOnly) ?: throw RuntimeException("The variable `$name` has not been declared")
+
+    /** Like [getPropertyHolder], but null for an undeclared name instead of an exception. */
+    fun findPropertyHolder(name: String, isThisScopeOnly: Boolean = false): RuntimeValueAccessor? {
         var scope: SymbolTable? = this
         while (scope != null) {
             scope.propertyValuesStore?.get(name)?.let { return it }
@@ -710,7 +714,7 @@ open class SymbolTable(
             if (isThisScopeOnly) break
             scope = scope.parentScope
         }
-        throw RuntimeException("The variable `$name` has not been declared")
+        return null
     }
 
     fun hasProperty(name: String, isThisScopeOnly: Boolean = false): Boolean {
@@ -1112,19 +1116,36 @@ open class SymbolTable(
      * names reach them, e.g. the members of a companion object inside its class (RT-67).
      */
     internal fun declareObjectMembersFrom(other: SymbolTable, ownerRefName: String) {
-        other.propertyDeclarationsStore?.forEach { (name, type) ->
-            if (name == "this" || name == "super" || name.startsWith("this/")) return@forEach
-            val transformedName = other.transformedSymbolsByDeclaredNameStore?.get(IdentifierClassifier.Property to name) ?: return@forEach
-            propertyDeclarations[name] = type
-            // initialized: a `val` cannot be assigned
-            assign(name, SemanticDummyRuntimeValue(type.type))
-            registerTransformedSymbol(SourcePosition.NONE, IdentifierClassifier.Property, transformedName, name)
-            propertyOwners[transformedName] = PropertyOwnerInfo(ownerRefName = ownerRefName)
-        }
+        other.propertyDeclarationsStore?.keys?.toList()?.forEach { declareObjectPropertyFrom(other, ownerRefName, it) }
         other.functionDeclarationsStore?.forEach { (signature, function) ->
             functionDeclarations[signature] = function
             functionOwners[functionNameTransform(function.name, function)] = ownerRefName
         }
+    }
+
+    /**
+     * Like [declareObjectMembersFrom], for the members named [name] only, unless they are declared
+     * here already: the members of the outer object in an inner class, provided as the inner class
+     * uses them, because its outer class may still be analyzed (RT-92).
+     */
+    internal fun declareObjectMemberFrom(other: SymbolTable, ownerRefName: String, name: String) {
+        if (propertyDeclarationsStore?.containsKey(name) != true) declareObjectPropertyFrom(other, ownerRefName, name)
+        other.functionDeclarationsStore?.forEach { (signature, function) ->
+            if (function.name != name || functionDeclarationsStore?.containsKey(signature) == true) return@forEach
+            functionDeclarations[signature] = function
+            functionOwners[functionNameTransform(function.name, function)] = ownerRefName
+        }
+    }
+
+    private fun declareObjectPropertyFrom(other: SymbolTable, ownerRefName: String, name: String) {
+        if (name == "this" || name == "super" || name.startsWith("this/")) return
+        val type = other.propertyDeclarationsStore?.get(name) ?: return
+        val transformedName = other.transformedSymbolsByDeclaredNameStore?.get(IdentifierClassifier.Property to name) ?: return
+        propertyDeclarations[name] = type
+        // initialized: a `val` cannot be assigned
+        assign(name, SemanticDummyRuntimeValue(type.type))
+        registerTransformedSymbol(SourcePosition.NONE, IdentifierClassifier.Property, transformedName, name)
+        propertyOwners[transformedName] = PropertyOwnerInfo(ownerRefName = ownerRefName)
     }
 
     /**

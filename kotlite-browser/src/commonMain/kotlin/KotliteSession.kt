@@ -442,14 +442,15 @@ class KotliteSession {
                 return projectError(filename, import.position.lineNum, import.position.col,
                     "Import `${import.path}` is not available in BlueK: Kotlin runs in the browser without JVM libraries (java.*, javax.*).")
             }
-            val classDeclarations = script.nodes.filterIsInstance<ClassDeclarationNode>()
+            // Nested classes belong to their outer class (RT-91).
+            val classDeclarations = script.nodes.filterIsInstance<ClassDeclarationNode>().filter { it.outerClassName == null }
             if (classDeclarations.isNotEmpty()) {
                 // BlueJ presents one class per source file. A file without a
                 // class may still contain any number of top-level functions
                 // and properties, but a class cannot be mixed with them (or
                 // with another class).
                 val conflictingNode = script.nodes.firstOrNull { node ->
-                    node !is ClassDeclarationNode || node !== classDeclarations.first()
+                    (node !is ClassDeclarationNode || node !== classDeclarations.first()) && (node as? ClassDeclarationNode)?.outerClassName == null
                 }
                 if (conflictingNode != null) {
                     val position = statementPosition(conflictingNode)
@@ -585,7 +586,7 @@ class KotliteSession {
             val constructors = if (declaration.isInterface || declaration.isObject || isEnum) "[]" else {
                 // The primary constructor and the secondary ones (RT-83), as the analyzer offers them.
                 val secondary = declaration.declarations.filterIsInstance<ClassSecondaryConstructorNode>()
-                val primary = declaration.primaryConstructor?.parameters?.map { it.parameter }
+                val primary = declaration.primaryConstructor?.parameters?.filterNot { it.isOuterObject() }?.map { it.parameter }
                     ?: if (secondary.isEmpty()) emptyList() else null
                 val parameterSets = listOfNotNull(primary?.let { "" to it }) +
                     secondary.mapIndexed { index, constructor -> ".$index" to constructor.valueParameters }
@@ -593,7 +594,7 @@ class KotliteSession {
                     "{\"id\":\"${escape(declaration.name)}.constructor$suffix\",\"parameters\":${parameters.joinToString(",", "[", "]") { parameterJson(it) }}}"
                 }
             }
-            val primaryProperties = declaration.primaryConstructor?.parameters.orEmpty().filter { it.isProperty }.map { parameter ->
+            val primaryProperties = declaration.primaryConstructor?.parameters.orEmpty().filter { it.isProperty && !it.isOuterObject() }.map { parameter ->
                 jsonProperty(declaration.name, parameter.parameter.name, parameter.parameter.type, parameter.isMutable, visibility(parameter.modifiers.toSet()), false, false, false)
             }
             val bodyProperties = declaration.declarations.filterIsInstance<PropertyDeclarationNode>().map { property ->
@@ -621,6 +622,9 @@ class KotliteSession {
     } catch (error: Throwable) {
         "{\"version\":1,\"classes\":[],\"error\":\"${escape(error.message ?: "Could not create Kotlite manifest.")}\"}"
     }
+
+    /** The hidden constructor property of an inner class for its outer object (RT-92). */
+    private fun com.sunnychung.lib.multiplatform.kotlite.model.ClassParameterNode.isOuterObject() = parameter.name.startsWith("this/")
 
     private fun parameterJson(parameter: com.sunnychung.lib.multiplatform.kotlite.model.FunctionValueParameterNode): String =
         "{\"name\":\"${escape(parameter.name)}\",\"type\":${jsonType(parameter.type)},\"hasDefault\":${parameter.defaultValue != null}}"
@@ -812,7 +816,7 @@ class KotliteSession {
             declaration.superInvocations.orEmpty().mapNotNull(::superName).mapNotNull(byName::get).forEach { record(it, visiting) }
             val names = propertyNames.getOrPut(declaration.name) { mutableListOf() }
             val privateSetters = privateSetterNames.getOrPut(declaration.name) { linkedSetOf() }
-            declaration.primaryConstructor?.parameters.orEmpty().filter { it.isProperty }.forEach { parameter ->
+            declaration.primaryConstructor?.parameters.orEmpty().filter { it.isProperty && !it.isOuterObject() }.forEach { parameter ->
                 if (parameter.parameter.name !in names) names += parameter.parameter.name
             }
             declaration.declarations.filterIsInstance<PropertyDeclarationNode>().filterNot { bluePlayEnabled && declaration.name in setOf("World", "Actor", "Image") && it.modifiers.any { modifier -> modifier.name == "private" } }.forEach { property ->

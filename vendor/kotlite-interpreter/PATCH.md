@@ -839,3 +839,47 @@ argument count check of lambda arguments skips references. Coverage:
 `evalClassMemberAnyFunctionCall` now evaluates lambda arguments in the caller's scope like the
 other arguments, and a lambda without receiver keeps the `this` of the place where it is
 created, also for nested lambdas. Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (RT-90).
+
+Lambdas without `this` (PERF-06): the RT-90 capture of `this` looked it up with
+`runCatching { getPropertyHolder("this") }`. A lambda at the top level has no `this`, so
+every such lambda created and caught an exception (twice the creation time), and the catch
+could also swallow a host stack overflow. `SymbolTable.findPropertyHolder` returns null
+instead; `getPropertyHolder` uses it. Coverage: `node scripts/benchmark-interpreter.mjs`
+(case "lambda creation") and `node scripts/smoke-curriculum-kotlin.mjs` (RT-90).
+
+Nested classes (RT-91): a class, enum, interface or object in a class body was rejected. The
+parser names it `<Outer>.<Name>` (`ClassDeclarationNode.outerClassName`) and lists it after
+its outer class at the top level (`nestedClasses`, `flattened()`), so the analyzer and the
+interpreter treat it like any top-level class. Because a simple name inside the outer class
+may come before the nested declaration, `script()` parses again when it found nested classes,
+now knowing all of them (`Parser.nestedClasses`); a project without nested classes is parsed
+once as before. Inside the outer class (and its nested classes) `Knoten` becomes
+`Liste.Knoten`, outside `Liste.Knoten` is a variable reference or type (`typeReference`
+accepts `.Name` with a capital letter). `private` nested classes are rejected outside their
+outer class; a nested data class prints its simple name. Classes in local classes or objects
+stay unsupported. Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (RT-91).
+
+Inner classes (RT-92): `inner class` gets a hidden first constructor property `this/<Outer>`
+(type `<Outer><*>`), and the parser passes `this` (or, in another inner class, `this/<Outer>`)
+as first argument of every constructor call; outside the outer class's code the call is
+rejected like in Kotlin. The analyzer pushes a scope that provides the outer class's members
+on lookup, owned by `this/<Outer>` (`SymbolTable.declareObjectMemberFrom`), and the outer
+type parameters by their bounds. The interpreter keeps `ClassInstance.outerInstance` and
+binds the outer object's `this/<Class>` names in member calls and initializers
+(`bindOuterReceivers`); generic resolutions of the outer object apply too. `this@Outer`
+becomes `this` or `this/<Outer>`. `inner` is a modifier only before `class` or another
+modifier, like `data`. Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (RT-92).
+
+Generic classes (RT-93): three faults, all present since the first BlueK commit.
+Property initializers ran without the class's type arguments (`init` blocks had them), so
+`val elemente = mutableListOf<T>()` failed with "Cannot resolve type T"; constructClassInstance
+now declares the type aliases and their resolutions in the initializer scope. Assigning a
+property checked `List<T>` without resolving `T` inside type arguments (`ClassInstance.
+resolveTypeParameter` now resolves nested arguments), so `class Box<T>(val inhalt: List<T>)`
+failed. And the return type of a call through a receiver (`liste[0]`, `get`) was resolved
+twice, the second time with the function's own type parameters, which also replaced a caller's
+type parameter of the same name: `T` in `List<List<T>>[0]` became `List<List<T>>`; type
+parameters already resolved through the receiver are skipped now. Calls such as `emptyList()`
+also take their expected type from the left side of `?:`, `return` and expression bodies
+(was: declarations only). Return type mismatches name the type arguments. Coverage:
+`node scripts/smoke-curriculum-kotlin.mjs` (RT-93), `node scripts/smoke-kotlin-surface.mjs`.
