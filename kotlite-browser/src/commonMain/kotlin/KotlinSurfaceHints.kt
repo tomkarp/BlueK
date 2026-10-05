@@ -19,32 +19,15 @@
  */
 object KotlinSurfaceHints {
 
-    private const val ARRAYS = "BlueK has no arrays. Use listOf(...) or mutableListOf(...) instead."
-    private const val TEXT_AS_LIST = "In BlueK a String is not a full character sequence. Use `for (c in text)`, `text[i]` or `text.toList()`."
-
     /** Documented gaps, as in docs/kotlin-surface.md. */
     private val gaps: Map<String, String> = mapOf(
-        "arrayOf" to ARRAYS,
-        "intArrayOf" to ARRAYS,
-        "IntArray" to ARRAYS,
-        "DoubleArray" to ARRAYS,
-        "Array" to ARRAYS,
-        "toIntArray" to ARRAYS,
-        "toTypedArray" to ARRAYS,
-        "toCharArray" to TEXT_AS_LIST,
         "Math" to "`Math` belongs to Java and is not available in BlueK. Kotlin writes `abs(x)`, `sqrt(x)` and `PI` directly.",
         "java" to "Java libraries are not available in BlueK. Use the Kotlin standard library instead.",
         "kotlin" to "BlueK does not support fully qualified calls such as `kotlin.math.abs(x)`. Write `import kotlin.math.abs` at the top of the file and then `abs(x)`.",
     )
 
     /** Members BlueK deliberately provides for one receiver only. */
-    private val memberGaps: Map<Pair<String, String>, String> = mapOf(
-        ("String" to "map") to TEXT_AS_LIST,
-        ("String" to "filterIndexed") to TEXT_AS_LIST,
-        ("String" to "toMutableList") to TEXT_AS_LIST,
-        ("String" to "chunked") to TEXT_AS_LIST,
-        ("String" to "windowed") to TEXT_AS_LIST,
-    )
+    private val memberGaps: Map<Pair<String, String>, String> = emptyMap()
 
     /** Kotlin's own wording for `.` on a nullable receiver; already the message BlueK wants to show. */
     private val unsafeCall = Regex("^Only safe \\(\\?\\.\\) or non-null asserted")

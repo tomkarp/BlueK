@@ -100,6 +100,8 @@ class KotliteSession {
     private val bluePlay = BluePlayEngine()
     private val projectFunctionRanges = mutableListOf<Triple<String, Int, Int>>()
     private val mainFunctionNames = linkedMapOf<String, String>()
+    // Files whose main takes `args: Array<String>`; BlueK passes an empty array (RT-96).
+    private val mainArgumentFiles = mutableSetOf<String>()
 
     /** The callable name of the main() declared in [filename]. */
     fun mainFunctionName(filename: String): String = mainFunctionNames[filename] ?: "main"
@@ -137,8 +139,17 @@ class KotliteSession {
         }
     }
 
+    /**
+     * Kotlite stdlib 1.1.0 also declares `Iterable<K>.associateBy(valueSelector: (K) -> V)`,
+     * which is really `associateWith`. With the same parameter shape as the
+     * real `associateBy` every call becomes ambiguous, so drop that overload.
+     */
+    private fun isUsableStdlibFunction(function: CustomFunctionDefinition): Boolean =
+        !(function.functionName == "associateBy" &&
+            function.parameterTypes.singleOrNull()?.name == "valueSelector")
+
     private fun resetInterpreter() {
-        environment = ExecutionEnvironment(sleepHandler = { millis ->
+        environment = ExecutionEnvironment(functionRegistrationFilter = ::isUsableStdlibFunction, sleepHandler = { millis ->
             checkCanPause(interpreter, "Thread.sleep()")
             awaitRuntimeSleep(millis)
         })
@@ -425,6 +436,7 @@ class KotliteSession {
             return errorMessage("BluePlay supplies World.kt, Actor.kt, Image.kt and BluePlayFunctions.kt as a built-in library. Remove the framework source files from this project.", "analysis")
         }
         val mainFiles = mutableListOf<String>()
+        mainArgumentFiles.clear()
         for (index in sources.indices) {
             val filename = filenames[index]
             val script = try {
@@ -458,7 +470,9 @@ class KotliteSession {
                         "A BlueK project file may contain one class or top-level functions and properties, but not both.")
                 }
             }
-            if (script.nodes.any { it is FunctionDeclarationNode && it.name == "main" }) mainFiles += filename
+            val main = script.nodes.firstOrNull { it is FunctionDeclarationNode && it.name == "main" } as FunctionDeclarationNode?
+            if (main != null) mainFiles += filename
+            if (main?.valueParameters?.size == 1) mainArgumentFiles += filename
             val statement = script.nodes.firstOrNull {
                 it !is ClassDeclarationNode && it !is FunctionDeclarationNode && it !is PropertyDeclarationNode
             }
@@ -726,7 +740,8 @@ class KotliteSession {
 
     /** Runs the main() of [filename]; an uncaught exception also goes to the terminal (RT-82). */
     fun startMain(filename: String, onInput: (Int) -> Unit, onComplete: (String) -> Unit): String {
-        return startEvaluateInternal(filename, "${mainFunctionName(filename)}()", onInput, onComplete, emptySet(), program = true)
+        val arguments = if (filename in mainArgumentFiles) "emptyArray<String>()" else ""
+        return startEvaluateInternal(filename, "${mainFunctionName(filename)}($arguments)", onInput, onComplete, emptySet(), program = true)
     }
 
     private fun startEvaluateInternal(filename: String, source: String, onInput: (Int) -> Unit, onComplete: (String) -> Unit, interactiveNames: Set<String>, unitOffsets: List<Int> = emptyList(), inspection: Boolean = false, program: Boolean = false): String {

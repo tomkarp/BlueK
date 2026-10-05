@@ -187,32 +187,123 @@ const supported = [
   ['String.format("%d Euro", 5)', '5 Euro'],
   ['String.format("%.2f", 1.0 / 3)', '0.33'],
 
+  // RT-94: String as a character sequence, ifBlank/ifEmpty, Char overloads, numbers.
+  ['"  ".ifBlank { "leer" }', 'leer'],
+  ['"".ifEmpty { "x" }', 'x'],
+  ['"abc".ifEmpty { "x" }', 'abc'],
+  ['"hallo".replaceFirstChar { it.uppercase() }', 'Hallo'],
+  ['"hallo".replaceFirstChar { it.uppercaseChar() }', 'Hallo'],
+  ["\"Hallo\".indexOf('l')", '2'],
+  ["\"Hallo\".lastIndexOf('l')", '3'],
+  ['"Hallo".map { it.uppercaseChar() }', '[H, A, L, L, O]'],
+  ['"abc".mapIndexed { i, c -> "$i$c" }', '[0a, 1b, 2c]'],
+  ['"a1b2".filterIndexed { i, c -> i % 2 == 0 }', 'ab'],
+  ["\"Hallo\".find { it == 'l' }", 'l'],
+  ["\"Hallo\".findLast { it < 'm' }", 'l'],
+  ["\"Hallo\".single { it == 'H' }", 'H'],
+  ['"Hallo".sumOf { it.code }', '496'],
+  ['"aab".groupBy { it }.mapValues { it.value.size }', '{a=2, b=1}'],
+  ['"ab".associateWith { it.code }', '{a=97, b=98}'],
+  ['"Hallo".toSet()', '[H, a, l, o]'],
+  ["val zl = \"ab\".toMutableList(); zl.add('c'); zl", '[a, b, c]'],
+  ['"Hallo".chunked(2)', '[Ha, ll, o]'],
+  ['"Hallo".windowed(4)', '[Hall, allo]'],
+  ['"Hallo".maxOrNull()', 'o'],
+  ['"Hallo".minOrNull()', 'H'],
+  ['"Hallo".elementAt(1)', 'a'],
+  ['"ab".withIndex().map { "${it.index}${it.value}" }', '[0a, 1b]'],
+  ['"  a\n  b".trimIndent()', 'a\nb'],
+  ['"12".toLong() + 1', '13'],
+  ['"x".toLongOrNull()', 'null'],
+  ["'7'.digitToIntOrNull()", '7'],
+  ["'x'.digitToIntOrNull()", 'null'],
+  ['(-7).mod(3)', '2'],
+  ['(-7).rem(3)', '-1'],
+  ['10.toString(2)', '1010'],
+  ['Long.MAX_VALUE', '9223372036854775807'],
+  ['3.toFloat()', '3.0'],
+  // RT-95: comparators, more list/map functions, Java-style constructors.
+  ['val cmp1: Comparator<String> = compareBy { it.length }; listOf("ccc", "a").sortedWith(cmp1)', '[a, ccc]'],
+  ['listOf("ccc", "a").sortedWith(compareBy<String> { it.length })', '[a, ccc]'],
+  ['listOf(3, 1, 2).sortedWith(reverseOrder<Int>())', '[3, 2, 1]'],
+  ['listOf(3, 1).sortedWith(Comparator<Int> { a, b -> a - b })', '[1, 3]'],
+  ['listOf(3, 1).sortedWith { a, b -> a - b }', '[1, 3]'],
+  ['data class Cmp2(val n: String, val a: Int); listOf(Cmp2("b", 2), Cmp2("a", 2), Cmp2("c", 1)).sortedWith(compareBy<Cmp2>({ it.a }, { it.n })).map { it.n }', '[c, a, b]'],
+  ['data class Cmp3(val n: String, val a: Int); listOf(Cmp3("b", 2), Cmp3("c", 1)).sortedWith(compareBy<Cmp3> { it.a }.thenByDescending { it.n }).map { it.n }', '[c, b]'],
+  ['data class Cmp4(val n: String, val a: Int); listOf(Cmp4("b", 2), Cmp4("c", 1)).sortedWith(compareByDescending<Cmp4> { it.a }).map { it.n }', '[b, c]'],
+  ['val cmp5 = mutableListOf("bb", "a"); cmp5.sortWith(compareBy<String> { it.length }); cmp5', '[a, bb]'],
+  ['listOf("a", "bbb").maxWith(compareBy<String> { it.length })', 'bbb'],
+  ['compareBy<String> { it.length }.reversed().compare("aa", "b")', '-1'],
+  ['listOf(1, 2, 3).sumOf { it * 2 }', '12'],
+  ['listOf(1.5, 2.0).sumOf { it }', '3.5'],
+  ['listOf(1, 2).associateBy { "k$it" }', '{k1=1, k2=2}'],
+  ['listOf("a", "bb").associateWith { it.length }', '{a=1, bb=2}'],
+  ['val mp1 = mutableMapOf("a" to 1); mp1.putAll(mapOf("c" to 3)); mp1', '{a=1, c=3}'],
+  ['mapOf("b" to 1, "a" to 2).toSortedMap()', '{a=2, b=1}'],
+  ['val mp2: Map<String, Int> = emptyMap(); mp2.isEmpty()', 'true'],
+  ['val mp3 = HashMap<String, Int>(); mp3["x"] = 1; mp3', '{x=1}'],
+  ['hashMapOf("a" to 1).size', '1'],
+  ['val al1 = ArrayList<Int>(); al1.add(1); al1', '[1]'],
+  ['arrayListOf(1, 2).size', '2'],
+  ['hashSetOf(1, 1).size', '1'],
+  ['listOf(1, 2, 3).slice(0..1)', '[1, 2]'],
+  ['listOf(1, 2, 3).zipWithNext()', '[(1, 2), (2, 3)]'],
+  ['listOf<Int>().ifEmpty { listOf(0) }', '[0]'],
+  ['val ml1 = mutableListOf(1, 2); ml1.add(0, 9); ml1', '[9, 1, 2]'],
+  ['val ml2 = mutableListOf(1, 2, 3); ml2.removeIf { it > 1 }; ml2', '[1]'],
+  ['val ml3 = mutableListOf(1, 2, 3); ml3.reverse(); ml3', '[3, 2, 1]'],
+  ['val ml4 = mutableListOf(1, 2); ml4.addFirst(0); ml4.addLast(3); ml4', '[0, 1, 2, 3]'],
+  ['measureTimeMillis { } >= 0', 'true'],
+  // RT-96: arrays as fixed-size lists with `set`, in-place sorting and `content…`.
+  ['arrayOf(1, 2).size', '2'],
+  ['intArrayOf(1, 2).sum()', '3'],
+  ['Array(3) { it * 2 }.toList()', '[0, 2, 4]'],
+  ['IntArray(3).toList()', '[0, 0, 0]'],
+  ['IntArray(3) { it + 1 }.joinToString()', '1, 2, 3'],
+  ['val ar1 = booleanArrayOf(false, false); ar1[1] = true; ar1.contentToString()', '[false, true]'],
+  ['val ar2 = arrayOf("x", "y"); ar2[1] = "z"; ar2.joinToString("")', 'xz'],
+  ['val ar3 = intArrayOf(3, 1, 2); ar3.sort(); ar3.contentToString()', '[1, 2, 3]'],
+  ['val ar4 = intArrayOf(3, 1, 2); ar4.sortDescending(); ar4.toList()', '[3, 2, 1]'],
+  ['data class Ar5(val n: Int); val ar5 = arrayOf(Ar5(2), Ar5(1)); ar5.sortBy { it.n }; ar5.map { it.n }', '[1, 2]'],
+  ['var ar6 = 0; for (x in intArrayOf(1, 2, 3)) ar6 += x; ar6', '6'],
+  ['val ar7 = intArrayOf(5, 6); var ar7s = ""; for (i in ar7.indices) ar7s += i; ar7s + ar7.lastIndex', '011'],
+  ['2 in intArrayOf(1, 2)', 'true'],
+  ['val ar8 = Array(2) { IntArray(3) }; ar8[1][2] = 7; ar8[1].contentToString()', '[0, 0, 7]'],
+  ['val ar9 = intArrayOf(1, 2); ar9 == intArrayOf(1, 2)', 'false'],
+  ['val ar10 = intArrayOf(1, 2); ar10.contentEquals(intArrayOf(1, 2))', 'true'],
+  ['val ar11 = intArrayOf(1, 2); val ar11c = ar11.copyOf(); ar11c[0] = 9; ar11[0]', '1'],
+  ['val ar12 = IntArray(2); ar12.fill(4); ar12.toList()', '[4, 4]'],
+  ['var ar13 = intArrayOf(1); ar13 = ar13 + 2; ar13.contentToString()', '[1, 2]'],
+  ['listOf(1, 2).toIntArray().sum()', '3'],
+  ['listOf("a").toTypedArray().size', '1'],
+  ['val ar14 = "cab".toCharArray(); ar14.sort(); ar14.concatToString() + ar14.joinToString("")', 'abcabc'],
+  ['DoubleArray(2).toList()', '[0.0, 0.0]'],
+  ['val ar15 = arrayOfNulls<String>(2); ar15[0] = "x"; ar15.toList()', '[x, null]'],
+  ['fun ar16(a: IntArray): Int = a.sum(); ar16(intArrayOf(2, 3))', '5'],
+  ['class Ar17 { val zellen = Array(2) { BooleanArray(2) }; fun setze(x: Int, y: Int) { zellen[y][x] = true } }; val ar17 = Ar17(); ar17.setze(1, 0); ar17.zellen[0].contentToString()', '[false, true]'],
   // A whole school-style routine, to prove the pieces combine.
   ['fun quersumme(wort: String): Int { var s = 0; for (c in wort) if (c.isDigit()) s += c.digitToInt(); return s }; quersumme("a1b22")', '5'],
 ];
 
 // Known gaps: documented in docs/kotlin-surface.md, deliberately not implemented.
 const gaps = [
-  'arrayOf(1, 2)',              // arrays are absent as a language feature
-  'IntArray(3)',
-  'Array(3) { 0 }',
-  '"abc".map { it }',           // String is not an Iterable
-  '"abc".toCharArray()',
-  '"abc".chunked(2)',
+  'fun spr(vararg x: Int) = x.sum(); spr(*intArrayOf(1, 2))', // the spread operator; `spr(1, 2)` works
+  'String(charArrayOf(\'a\'))',   // would hide `String.format`; `concatToString()` works
   'kotlin.math.abs(-5)',        // fully qualified calls (import + abs(-5) works)
   'Math.abs(-1)',               // Java, correctly unavailable
   'mapOf(1 to 2).forEach { k, v -> }', // the JVM's two-parameter form; `forEach { it.key }` works
+  'listOf("bb", "a").sortedWith(compareBy { it.length })', // T is not inferred from the outer call; `compareBy<String>` works
 ];
 
 // Messages for missing names: BlueK says which side the gap is on instead of
 // passing Kotlite's generic wording through. Three cases, see KotlinSurfaceHints.
 const messages = [
+  // Arrays check their bounds and keep `Array<Int>` and `IntArray` apart, as in Kotlin (RT-96).
+  ['val ar18 = IntArray(2); ar18[2] = 1', /Index 2 out of bounds for length 2/],
+  ['val ar19: IntArray = arrayOf(1)', /Expected type is `IntArray`, but actual type is `Array<Int>`/],
   // 1. documented gap -> named alternative
-  ['arrayOf(1, 2)', /BlueK has no arrays\. Use listOf/],
-  ['Array(3) { 0 }', /BlueK has no arrays/],
   ['Math.abs(-1)', /`Math` belongs to Java and is not available in BlueK/],
   ['kotlin.math.abs(-5)', /does not support fully qualified calls.*import kotlin\.math\.abs/],
-  ['"abc".map { it }', /a String is not a full character sequence/],
   ['val (d1, d2) = 5', /Destructuring declaration initializer of type Int must have a 'component1\(\)' function/],
   // 2. close to a name BlueK has -> suggestion
   ['minOff(1, 2)', /`minOff` is not available in BlueK\. Did you mean `minOf`\?/],

@@ -26,6 +26,13 @@ import com.sunnychung.lib.multiplatform.kotlite.model.StringValue
 import com.sunnychung.lib.multiplatform.kotlite.model.SymbolTable
 import com.sunnychung.lib.multiplatform.kotlite.model.TypeParameter
 import com.sunnychung.lib.multiplatform.kotlite.stdlib.collections.SetValue
+import com.sunnychung.lib.multiplatform.kotlite.stdlib.collections.MapValue
+import com.sunnychung.lib.multiplatform.kotlite.stdlib.collections.MutableListValue
+import com.sunnychung.lib.multiplatform.kotlite.stdlib.collections.MutableSetValue
+import com.sunnychung.lib.multiplatform.kotlite.stdlib.collections.MutableMapValue
+import com.sunnychung.lib.multiplatform.kotlite.model.ComparableRuntimeValue
+import com.sunnychung.lib.multiplatform.kotlite.model.FunctionType
+import com.sunnychung.lib.multiplatform.kotlite.model.UnitValue
 import com.sunnychung.lib.multiplatform.kotlite.stdlib.collections.MapEntryValue
 import com.sunnychung.lib.multiplatform.kotlite.model.TypeNode
 import kotlin.random.Random
@@ -96,6 +103,17 @@ object BlueKStdlibModule : LibraryModule("bluek-stdlib") {
         (arguments.firstOrNull() as? DelegatedValue<*>)?.value as? List<RuntimeValue> ?: emptyList()
 
     private fun ints(value: RuntimeValue): Int = (value as IntValue).value
+
+    /** The sum of `sumOf` results: `Int`, `Long` or `Double` as the selector returns (RT-95). */
+    private fun sumValues(values: List<RuntimeValue>, resultType: DataType?, symbolTable: SymbolTable): RuntimeValue = when {
+        values.all { it is IntValue } && resultType?.name != "Double" && resultType?.name != "Long" -> IntValue(values.sumOf { (it as IntValue).value }, symbolTable)
+        values.all { it is IntValue || it is LongValue } && resultType?.name != "Double" ->
+            LongValue(values.sumOf { if (it is IntValue) it.value.toLong() else (it as LongValue).value }, symbolTable)
+        values.all { it is IntValue || it is LongValue || it is DoubleValue } -> DoubleValue(values.sumOf {
+            when (it) { is IntValue -> it.value.toDouble(); is LongValue -> it.value.toDouble(); else -> (it as DoubleValue).value }
+        }, symbolTable)
+        else -> throw IllegalArgumentException("sumOf needs a selector that returns a number (Int, Long or Double)")
+    }
     private fun doubles(value: RuntimeValue): Double = (value as DoubleValue).value
 
     /**
@@ -191,6 +209,19 @@ object BlueKStdlibModule : LibraryModule("bluek-stdlib") {
         function("Double", "coerceAtMost", "Double", listOf(parameter("maximumValue", "Double"))) { interpreter, receiver, args, _ ->
             DoubleValue(doubles(receiver!!).coerceAtMost(doubles(args[0])), interpreter.symbolTable())
         },
+        // RT-94: `mod` is never negative for a positive divisor, `rem` is `%`.
+        function("Int", "mod", "Int", listOf(parameter("other", "Int"))) { interpreter, receiver, args, _ ->
+            IntValue(ints(receiver!!).mod(ints(args[0])), interpreter.symbolTable())
+        },
+        function("Int", "rem", "Int", listOf(parameter("other", "Int"))) { interpreter, receiver, args, _ ->
+            IntValue(ints(receiver!!).rem(ints(args[0])), interpreter.symbolTable())
+        },
+        function("Int", "toString", "String", listOf(parameter("radix", "Int"))) { interpreter, receiver, args, _ ->
+            StringValue(ints(receiver!!).toString(ints(args[0])), interpreter.symbolTable())
+        },
+        function("Int", "toFloat", "Double") { interpreter, receiver, _, _ ->
+            DoubleValue(ints(receiver!!).toDouble(), interpreter.symbolTable())
+        },
         function("Int", "toChar", "Char") { interpreter, receiver, _, _ ->
             CharValue(ints(receiver!!).toChar(), interpreter.symbolTable())
         },
@@ -220,6 +251,8 @@ object BlueKStdlibModule : LibraryModule("bluek-stdlib") {
         ),
         // Double and Char limits as in Kotlin (RT-59); `Double.MIN_VALUE` is the smallest positive value.
         constant("Double.Companion", "MAX_VALUE", "Double") { DoubleValue(Double.MAX_VALUE, it) },
+        constant("Long.Companion", "MAX_VALUE", "Long") { LongValue(Long.MAX_VALUE, it) },
+        constant("Long.Companion", "MIN_VALUE", "Long") { LongValue(Long.MIN_VALUE, it) },
         constant("Double.Companion", "MIN_VALUE", "Double") { DoubleValue(Double.MIN_VALUE, it) },
         constant("Double.Companion", "POSITIVE_INFINITY", "Double") { DoubleValue(Double.POSITIVE_INFINITY, it) },
         constant("Double.Companion", "NEGATIVE_INFINITY", "Double") { DoubleValue(Double.NEGATIVE_INFINITY, it) },
@@ -244,17 +277,16 @@ object BlueKStdlibModule : LibraryModule("bluek-stdlib") {
             val values = elements(receiver).map { elementAsInt(it) }
             DoubleValue(if (values.isEmpty()) Double.NaN else values.sum().toDouble() / values.size, interpreter.symbolTable())
         },
+        // Kotlite cannot choose overloads by the lambda's result, so one generic `sumOf` adds
+        // `Int`, `Long` or `Double` results like Kotlin's overloads (RT-95).
         suspendFunction(
-            "Iterable<T>", "sumOf", "Int",
-            listOf(parameter("selector", "(T) -> Int")),
-            listOf(TypeParameter("T", null)),
-        ) { interpreter, receiver, args, _ ->
+            "Iterable<T>", "sumOf", "R",
+            listOf(parameter("selector", "(T) -> R")),
+            listOf(TypeParameter("T", null), TypeParameter("R", null)),
+        ) { interpreter, receiver, args, typeArgs ->
             val selector = args[0] as LambdaValue
-            var total = 0
-            for (element in elements(receiver)) {
-                total += (selector.executeSuspended(arrayOf(asRuntimeValue(element, interpreter.symbolTable()))) as IntValue).value
-            }
-            IntValue(total, interpreter.symbolTable())
+            val symbolTable = interpreter.symbolTable()
+            sumValues(elements(receiver).map { selector.executeSuspended(arrayOf(asRuntimeValue(it, symbolTable))) }, typeArgs["R"], symbolTable)
         },
         suspendFunction(
             "Iterable<T>", "reduce", "T",
@@ -416,6 +448,138 @@ object BlueKStdlibModule : LibraryModule("bluek-stdlib") {
         return ((range.start as CharValue).value..(range.endInclusive as CharValue).value).map { CharValue(it, symbolTable) }
     }
 
+    // ---- String as a character sequence (RT-94) ------------------------------
+
+    private val r = listOf(TypeParameter("R", null))
+    private val k = listOf(TypeParameter("K", null))
+    private val v = listOf(TypeParameter("V", null))
+
+    private fun charValues(receiver: RuntimeValue?, symbolTable: SymbolTable): List<RuntimeValue> =
+        text(receiver).map { CharValue(it, symbolTable) }
+
+    private suspend fun LambdaValue.test(value: RuntimeValue): Boolean = (executeSuspended(arrayOf(value)) as BooleanValue).value
+
+    private fun stringList(values: List<String>, symbolTable: SymbolTable) =
+        ListValue(values.map { StringValue(it, symbolTable) }, symbolTable.StringType, symbolTable)
+
+    /**
+     * Kotlin's `CharSequence` functions that students use on a `String`: a `String` is not an
+     * `Iterable` in Kotlite, so these are provided for `String` one by one, with Kotlin's results.
+     */
+    private val textSequenceFunctions = listOf(
+        suspendFunction("String", "ifBlank", "String", listOf(parameter("defaultValue", "() -> String"))) { _, receiver, args, _ ->
+            if (text(receiver).isBlank()) (args[0] as LambdaValue).executeSuspended(emptyArray()) else receiver!!
+        },
+        suspendFunction("String", "ifEmpty", "String", listOf(parameter("defaultValue", "() -> String"))) { _, receiver, args, _ ->
+            if (text(receiver).isEmpty()) (args[0] as LambdaValue).executeSuspended(emptyArray()) else receiver!!
+        },
+        // Kotlin has overloads for a `Char` and a `String` result; one function accepts both.
+        suspendFunction("String", "replaceFirstChar", "String", listOf(parameter("transform", "(Char) -> Any"))) { interpreter, receiver, args, _ ->
+            val value = text(receiver)
+            if (value.isEmpty()) return@suspendFunction receiver!!
+            val first = (args[0] as LambdaValue).executeSuspended(arrayOf(CharValue(value[0], interpreter.symbolTable())))
+            StringValue((if (first is CharValue) first.value.toString() else first.convertToString()) + value.substring(1), interpreter.symbolTable())
+        },
+        function("String", "indexOf", "Int", listOf(parameter("char", "Char"))) { interpreter, receiver, args, _ ->
+            IntValue(text(receiver).indexOf((args[0] as CharValue).value), interpreter.symbolTable())
+        },
+        function("String", "lastIndexOf", "Int", listOf(parameter("char", "Char"))) { interpreter, receiver, args, _ ->
+            IntValue(text(receiver).lastIndexOf((args[0] as CharValue).value), interpreter.symbolTable())
+        },
+        suspendFunction("String", "map", "List<R>", listOf(parameter("transform", "(Char) -> R")), r) { interpreter, receiver, args, typeArgs ->
+            val symbolTable = interpreter.symbolTable()
+            val transform = args[0] as LambdaValue
+            ListValue(charValues(receiver, symbolTable).map { transform.executeSuspended(arrayOf(it)) }, typeArgs["R"] ?: symbolTable.AnyType, symbolTable)
+        },
+        suspendFunction("String", "mapIndexed", "List<R>", listOf(parameter("transform", "(Int, Char) -> R")), r) { interpreter, receiver, args, typeArgs ->
+            val symbolTable = interpreter.symbolTable()
+            val transform = args[0] as LambdaValue
+            ListValue(charValues(receiver, symbolTable).mapIndexed { index, c -> transform.executeSuspended(arrayOf(IntValue(index, symbolTable), c)) }, typeArgs["R"] ?: symbolTable.AnyType, symbolTable)
+        },
+        suspendFunction("String", "find", "Char?", listOf(parameter("predicate", "(Char) -> Boolean"))) { interpreter, receiver, args, _ ->
+            val predicate = args[0] as LambdaValue
+            charValues(receiver, interpreter.symbolTable()).firstOrNull { predicate.test(it) } ?: NullValue
+        },
+        suspendFunction("String", "findLast", "Char?", listOf(parameter("predicate", "(Char) -> Boolean"))) { interpreter, receiver, args, _ ->
+            val predicate = args[0] as LambdaValue
+            charValues(receiver, interpreter.symbolTable()).lastOrNull { predicate.test(it) } ?: NullValue
+        },
+        suspendFunction("String", "single", "Char", listOf(parameter("predicate", "(Char) -> Boolean"))) { interpreter, receiver, args, _ ->
+            val predicate = args[0] as LambdaValue
+            val matches = charValues(receiver, interpreter.symbolTable()).filter { predicate.test(it) }
+            if (matches.isEmpty()) throw NoSuchElementException("Char sequence contains no character matching the predicate.")
+            if (matches.size > 1) throw IllegalArgumentException("Char sequence contains more than one matching element.")
+            matches[0]
+        },
+        suspendFunction("String", "sumOf", "R", listOf(parameter("selector", "(Char) -> R")), r) { interpreter, receiver, args, typeArgs ->
+            val selector = args[0] as LambdaValue
+            val symbolTable = interpreter.symbolTable()
+            sumValues(charValues(receiver, symbolTable).map { selector.executeSuspended(arrayOf(it)) }, typeArgs["R"], symbolTable)
+        },
+        suspendFunction("String", "groupBy", "Map<K, List<Char>>", listOf(parameter("keySelector", "(Char) -> K")), k) { interpreter, receiver, args, typeArgs ->
+            val symbolTable = interpreter.symbolTable()
+            val keySelector = args[0] as LambdaValue
+            val groups = LinkedHashMap<RuntimeValue, MutableList<RuntimeValue>>()
+            for (c in charValues(receiver, symbolTable)) groups.getOrPut(keySelector.executeSuspended(arrayOf(c))) { mutableListOf() } += c
+            val listType = symbolTable.assertToDataType(TypeNode(BUILTIN, "List", listOf(TypeNode(BUILTIN, "Char", null, false)), false))
+            MapValue(groups.mapValuesTo(LinkedHashMap()) { ListValue(it.value, symbolTable.CharType, symbolTable) }, typeArgs["K"] ?: symbolTable.AnyType, listType, symbolTable)
+        },
+        suspendFunction("String", "associateWith", "Map<Char, V>", listOf(parameter("valueSelector", "(Char) -> V")), v) { interpreter, receiver, args, typeArgs ->
+            val symbolTable = interpreter.symbolTable()
+            val valueSelector = args[0] as LambdaValue
+            val result = LinkedHashMap<RuntimeValue, RuntimeValue>()
+            for (c in charValues(receiver, symbolTable)) result[c] = valueSelector.executeSuspended(arrayOf(c))
+            MapValue(result, symbolTable.CharType, typeArgs["V"] ?: symbolTable.AnyType, symbolTable)
+        },
+        function("String", "toSet", "Set<Char>") { interpreter, receiver, _, _ ->
+            val symbolTable = interpreter.symbolTable()
+            SetValue(charValues(receiver, symbolTable).toCollection(LinkedHashSet()), symbolTable.CharType, symbolTable)
+        },
+        function("String", "toMutableList", "MutableList<Char>") { interpreter, receiver, _, _ ->
+            val symbolTable = interpreter.symbolTable()
+            MutableListValue(charValues(receiver, symbolTable).toMutableList(), symbolTable.CharType, symbolTable)
+        },
+        function("String", "chunked", "List<String>", listOf(parameter("size", "Int"))) { interpreter, receiver, args, _ ->
+            stringList(text(receiver).chunked(ints(args[0])), interpreter.symbolTable())
+        },
+        function("String", "windowed", "List<String>", listOf(parameter("size", "Int"))) { interpreter, receiver, args, _ ->
+            stringList(text(receiver).windowed(ints(args[0])), interpreter.symbolTable())
+        },
+        function("String", "maxOrNull", "Char?") { interpreter, receiver, _, _ ->
+            text(receiver).maxOrNull()?.let { CharValue(it, interpreter.symbolTable()) } ?: NullValue
+        },
+        function("String", "minOrNull", "Char?") { interpreter, receiver, _, _ ->
+            text(receiver).minOrNull()?.let { CharValue(it, interpreter.symbolTable()) } ?: NullValue
+        },
+        function("String", "elementAt", "Char", listOf(parameter("index", "Int"))) { interpreter, receiver, args, _ ->
+            CharValue(text(receiver).elementAt(ints(args[0])), interpreter.symbolTable())
+        },
+        function("String", "trimIndent", "String") { interpreter, receiver, _, _ ->
+            StringValue(text(receiver).trimIndent(), interpreter.symbolTable())
+        },
+        function("String", "trimMargin", "String") { interpreter, receiver, _, _ ->
+            StringValue(text(receiver).trimMargin(), interpreter.symbolTable())
+        },
+        function("String", "toLong", "Long") { interpreter, receiver, _, _ ->
+            LongValue(text(receiver).toLong(), interpreter.symbolTable())
+        },
+        function("String", "toLongOrNull", "Long?") { interpreter, receiver, _, _ ->
+            text(receiver).toLongOrNull()?.let { LongValue(it, interpreter.symbolTable()) } ?: NullValue
+        },
+        function("Char", "digitToIntOrNull", "Int?") { interpreter, receiver, _, _ ->
+            (receiver as CharValue).value.digitToIntOrNull()?.let { IntValue(it, interpreter.symbolTable()) } ?: NullValue
+        },
+    ) + textWithIndex()
+
+    private fun textWithIndex() = function("String", "withIndex", "List<IndexedValue<Char>>") { interpreter, receiver, _, _ ->
+        val symbolTable = interpreter.symbolTable()
+        val indexedType = symbolTable.assertToDataType(TypeNode(BUILTIN, "IndexedValue", listOf(TypeNode(BUILTIN, "Char", null, false)), false))
+        val indexed = charValues(receiver, symbolTable).mapIndexed { index, c ->
+            DelegatedValue(IndexedValue(index, c), "IndexedValue", typeArguments = listOf(symbolTable.CharType), symbolTable = symbolTable)
+        }
+        ListValue(indexed, indexedType, symbolTable)
+    }
+
     private val stringProperties = listOf(
         ExtensionProperty(
             declaredName = "indices",
@@ -434,6 +598,234 @@ object BlueKStdlibModule : LibraryModule("bluek-stdlib") {
                 IntValue((receiver as CharValue).value.code, interpreter.symbolTable())
             },
         ),
+    )
+
+    // ---- collections and comparators (RT-95) ---------------------------------
+
+    /** How a `Comparator` compares; student lambdas may suspend, so comparing is suspendable. */
+    internal sealed class ComparatorSpec {
+        class Lambda(val comparison: LambdaValue) : ComparatorSpec()
+        class Selectors(val selectors: List<LambdaValue>, val descending: Boolean) : ComparatorSpec()
+        class Natural(val descending: Boolean) : ComparatorSpec()
+        class Then(val first: ComparatorSpec, val second: ComparatorSpec) : ComparatorSpec()
+        class Reversed(val inner: ComparatorSpec) : ComparatorSpec()
+    }
+
+    /** Like Kotlin's `compareValues`: `null` first, then natural order. */
+    @Suppress("UNCHECKED_CAST")
+    internal fun compareNatural(a: RuntimeValue, b: RuntimeValue): Int = when {
+        a === NullValue && b === NullValue -> 0
+        a === NullValue -> -1
+        b === NullValue -> 1
+        a is ComparableRuntimeValue<*, *> -> (a as Comparable<Any>).compareTo(b)
+        else -> throw IllegalArgumentException("${a.type().descriptiveName} is not Comparable")
+    }
+
+    internal suspend fun ComparatorSpec.compare(a: RuntimeValue, b: RuntimeValue): Int = when (this) {
+        is ComparatorSpec.Lambda -> ints(comparison.executeSuspended(arrayOf(a, b)))
+        is ComparatorSpec.Selectors -> {
+            var result = 0
+            for (selector in selectors) {
+                result = compareNatural(selector.executeSuspended(arrayOf(a)), selector.executeSuspended(arrayOf(b)))
+                if (result != 0) break
+            }
+            if (descending) -result else result
+        }
+        is ComparatorSpec.Natural -> compareNatural(a, b).let { if (descending) -it else it }
+        is ComparatorSpec.Then -> first.compare(a, b).takeIf { it != 0 } ?: second.compare(a, b)
+        is ComparatorSpec.Reversed -> -inner.compare(a, b)
+    }
+
+    /** A stable merge sort, like Kotlin's `sortedWith`, with suspendable comparisons. */
+    internal suspend fun sortWith(values: List<RuntimeValue>, comparator: ComparatorSpec): List<RuntimeValue> {
+        if (values.size < 2) return values
+        val middle = values.size / 2
+        val left = sortWith(values.subList(0, middle), comparator)
+        val right = sortWith(values.subList(middle, values.size), comparator)
+        val result = ArrayList<RuntimeValue>(values.size)
+        var i = 0
+        var j = 0
+        while (i < left.size && j < right.size) {
+            if (comparator.compare(left[i], right[j]) <= 0) result += left[i++] else result += right[j++]
+        }
+        while (i < left.size) result += left[i++]
+        while (j < right.size) result += right[j++]
+        return result
+    }
+
+    private fun comparator(spec: ComparatorSpec, elementType: DataType?, symbolTable: SymbolTable) =
+        DelegatedValue(spec, "Comparator", typeArguments = listOf(elementType ?: symbolTable.AnyType), symbolTable = symbolTable)
+
+    internal fun spec(value: RuntimeValue): ComparatorSpec = (value as DelegatedValue<*>).value as ComparatorSpec
+
+    @Suppress("UNCHECKED_CAST")
+    private fun mutableElements(receiver: RuntimeValue?): MutableList<RuntimeValue> =
+        (receiver as DelegatedValue<*>).value as MutableList<RuntimeValue>
+
+    private fun values(receiver: RuntimeValue?, symbolTable: SymbolTable): List<RuntimeValue> =
+        elements(receiver).map { asRuntimeValue(it, symbolTable) }
+
+    private val ct = listOf(TypeParameter("T", null))
+
+    private val comparatorClass = ProvidedClassDefinition(
+        position = BUILTIN,
+        fullQualifiedName = "Comparator",
+        typeParameters = ct,
+        isInstanceCreationAllowed = true,
+        primaryConstructorParameters = listOf(parameter("comparison", "(T, T) -> Int")),
+        constructInstance = { interpreter, args, _ ->
+            comparator(ComparatorSpec.Lambda(args[0] as LambdaValue), (args[0].type() as? FunctionType)?.arguments?.firstOrNull(), interpreter.symbolTable())
+        },
+    )
+
+    // Comparators: `sortedWith(compareBy({ it.nachname }, { it.vorname }))` and friends.
+    private val collectionFunctions = (1..3).map { count ->
+        // Kotlin's `compareBy(vararg selectors)`; Kotlite's `vararg` takes no function types.
+        function(null, "compareBy", "Comparator<T>", (1..count).map { parameter("selector$it", "(T) -> Any?") }, ct) { interpreter, _, args, typeArgs ->
+            comparator(ComparatorSpec.Selectors(args.map { it as LambdaValue }, false), typeArgs["T"], interpreter.symbolTable())
+        }
+    } + listOf(
+        function(null, "compareByDescending", "Comparator<T>", listOf(parameter("selector", "(T) -> Any?")), ct) { interpreter, _, args, typeArgs ->
+            comparator(ComparatorSpec.Selectors(listOf(args[0] as LambdaValue), true), typeArgs["T"], interpreter.symbolTable())
+        },
+        function(null, "naturalOrder", "Comparator<T>", typeParameters = ct) { interpreter, _, _, typeArgs ->
+            comparator(ComparatorSpec.Natural(false), typeArgs["T"], interpreter.symbolTable())
+        },
+        function(null, "reverseOrder", "Comparator<T>", typeParameters = ct) { interpreter, _, _, typeArgs ->
+            comparator(ComparatorSpec.Natural(true), typeArgs["T"], interpreter.symbolTable())
+        },
+        function("Comparator<T>", "thenBy", "Comparator<T>", listOf(parameter("selector", "(T) -> Any?")), ct) { interpreter, receiver, args, typeArgs ->
+            comparator(ComparatorSpec.Then(spec(receiver!!), ComparatorSpec.Selectors(listOf(args[0] as LambdaValue), false)), typeArgs["T"], interpreter.symbolTable())
+        },
+        function("Comparator<T>", "thenByDescending", "Comparator<T>", listOf(parameter("selector", "(T) -> Any?")), ct) { interpreter, receiver, args, typeArgs ->
+            comparator(ComparatorSpec.Then(spec(receiver!!), ComparatorSpec.Selectors(listOf(args[0] as LambdaValue), true)), typeArgs["T"], interpreter.symbolTable())
+        },
+        function("Comparator<T>", "reversed", "Comparator<T>", typeParameters = ct) { interpreter, receiver, _, typeArgs ->
+            comparator(ComparatorSpec.Reversed(spec(receiver!!)), typeArgs["T"], interpreter.symbolTable())
+        },
+        suspendFunction("Comparator<T>", "compare", "Int", listOf(parameter("a", "T"), parameter("b", "T")), ct) { interpreter, receiver, args, _ ->
+            IntValue(spec(receiver!!).compare(args[0], args[1]), interpreter.symbolTable())
+        },
+        suspendFunction("Iterable<T>", "sortedWith", "List<T>", listOf(parameter("comparator", "Comparator<T>")), ct) { interpreter, receiver, args, typeArgs ->
+            val symbolTable = interpreter.symbolTable()
+            ListValue(sortWith(values(receiver, symbolTable), spec(args[0])), typeArgs["T"] ?: symbolTable.AnyType, symbolTable)
+        },
+        suspendFunction("Iterable<T>", "sortedWith", "List<T>", listOf(parameter("comparison", "(T, T) -> Int")), ct) { interpreter, receiver, args, typeArgs ->
+            val symbolTable = interpreter.symbolTable()
+            ListValue(sortWith(values(receiver, symbolTable), ComparatorSpec.Lambda(args[0] as LambdaValue)), typeArgs["T"] ?: symbolTable.AnyType, symbolTable)
+        },
+        suspendFunction("MutableList<T>", "sortWith", "Unit", listOf(parameter("comparator", "Comparator<T>")), ct) { interpreter, receiver, args, _ ->
+            val list = mutableElements(receiver)
+            val sorted = sortWith(list.toList(), spec(args[0]))
+            list.clear()
+            list.addAll(sorted)
+            UnitValue
+        },
+        suspendFunction("Iterable<T>", "maxWith", "T", listOf(parameter("comparator", "Comparator<T>")), ct) { interpreter, receiver, args, _ ->
+            val all = values(receiver, interpreter.symbolTable())
+            if (all.isEmpty()) throw NoSuchElementException("Collection is empty.")
+            sortWith(all, spec(args[0])).last()
+        },
+        suspendFunction("Iterable<T>", "minWith", "T", listOf(parameter("comparator", "Comparator<T>")), ct) { interpreter, receiver, args, _ ->
+            val all = values(receiver, interpreter.symbolTable())
+            if (all.isEmpty()) throw NoSuchElementException("Collection is empty.")
+            sortWith(all, spec(args[0])).first()
+        },
+        // Lists
+        function("MutableList<T>", "add", "Unit", listOf(parameter("index", "Int"), parameter("element", "T")), ct) { _, receiver, args, _ ->
+            mutableElements(receiver).add(ints(args[0]), args[1])
+            UnitValue
+        },
+        function("MutableList<T>", "addFirst", "Unit", listOf(parameter("element", "T")), ct) { _, receiver, args, _ ->
+            mutableElements(receiver).add(0, args[0])
+            UnitValue
+        },
+        function("MutableList<T>", "addLast", "Unit", listOf(parameter("element", "T")), ct) { _, receiver, args, _ ->
+            mutableElements(receiver).add(args[0])
+            UnitValue
+        },
+        function("MutableList<T>", "reverse", "Unit", typeParameters = ct) { _, receiver, _, _ ->
+            mutableElements(receiver).reverse()
+            UnitValue
+        },
+        suspendFunction("MutableList<T>", "removeIf", "Boolean", listOf(parameter("predicate", "(T) -> Boolean")), ct) { interpreter, receiver, args, _ ->
+            val list = mutableElements(receiver)
+            val predicate = args[0] as LambdaValue
+            val kept = list.filterNot { predicate.test(it) }
+            val removed = kept.size != list.size
+            list.clear()
+            list.addAll(kept)
+            BooleanValue(removed, interpreter.symbolTable())
+        },
+        function("List<T>", "slice", "List<T>", listOf(parameter("indices", "Iterable<Int>")), ct) { interpreter, receiver, args, typeArgs ->
+            val symbolTable = interpreter.symbolTable()
+            val all = values(receiver, symbolTable)
+            ListValue(elements(args[0]).map { all[elementAsInt(it)] }, typeArgs["T"] ?: symbolTable.AnyType, symbolTable)
+        },
+        function("Iterable<T>", "zipWithNext", "List<Pair<T, T>>", typeParameters = ct) { interpreter, receiver, _, typeArgs ->
+            val symbolTable = interpreter.symbolTable()
+            val elementType = typeArgs["T"] ?: symbolTable.AnyType
+            val pairType = symbolTable.assertToDataType(TypeNode(BUILTIN, "Pair", listOf(elementType.toTypeNode(), elementType.toTypeNode()), false))
+            ListValue(values(receiver, symbolTable).zipWithNext { a, b -> PairValue(Pair(a, b), elementType, elementType, symbolTable) }, pairType, symbolTable)
+        },
+        suspendFunction("List<T>", "ifEmpty", "List<T>", listOf(parameter("defaultValue", "() -> List<T>")), ct) { _, receiver, args, _ ->
+            if (elements(receiver).isEmpty()) (args[0] as LambdaValue).executeSuspended(emptyArray()) else receiver!!
+        },
+        function("Set<T>", "random", "T", typeParameters = ct) { interpreter, receiver, _, _ ->
+            val all = values(receiver, interpreter.symbolTable())
+            if (all.isEmpty()) throw NoSuchElementException("Collection is empty.")
+            all.random()
+        },
+        // Java-style names that code from other sources uses.
+        function(null, "arrayListOf", "MutableList<T>", listOf(parameter("elements", "T", setOf("vararg"))), ct) { interpreter, _, args, typeArgs ->
+            val symbolTable = interpreter.symbolTable()
+            MutableListValue(varargList(args).toMutableList(), typeArgs["T"] ?: symbolTable.AnyType, symbolTable)
+        },
+        function(null, "ArrayList", "MutableList<T>", typeParameters = ct) { interpreter, _, _, typeArgs ->
+            val symbolTable = interpreter.symbolTable()
+            MutableListValue(mutableListOf(), typeArgs["T"] ?: symbolTable.AnyType, symbolTable)
+        },
+        function(null, "hashSetOf", "MutableSet<T>", listOf(parameter("elements", "T", setOf("vararg"))), ct) { interpreter, _, args, typeArgs ->
+            val symbolTable = interpreter.symbolTable()
+            MutableSetValue(varargList(args).toCollection(LinkedHashSet()), typeArgs["T"] ?: symbolTable.AnyType, symbolTable)
+        },
+        // Maps
+        function("Map<K, V>", "isEmpty", "Boolean", typeParameters = listOf(TypeParameter("K", null), TypeParameter("V", null))) { interpreter, receiver, _, _ ->
+            BooleanValue(map(receiver).isEmpty(), interpreter.symbolTable())
+        },
+        function("MutableMap<K, V>", "putAll", "Unit", listOf(parameter("from", "Map<K, V>")), listOf(TypeParameter("K", null), TypeParameter("V", null))) { _, receiver, args, _ ->
+            @Suppress("UNCHECKED_CAST")
+            ((receiver as DelegatedValue<*>).value as MutableMap<RuntimeValue, RuntimeValue>).putAll(map(args[0]))
+            UnitValue
+        },
+        function("Map<K, V>", "toSortedMap", "Map<K, V>", typeParameters = listOf(TypeParameter("K", null), TypeParameter("V", null))) { interpreter, receiver, _, typeArgs ->
+            val symbolTable = interpreter.symbolTable()
+            val sorted = map(receiver).entries.sortedWith { a, b -> compareNatural(a.key, b.key) }
+            MapValue(sorted.associateTo(LinkedHashMap()) { it.key to it.value }, typeArgs["K"] ?: symbolTable.AnyType, typeArgs["V"] ?: symbolTable.AnyType, symbolTable)
+        },
+        function(null, "emptyMap", "Map<K, V>", typeParameters = listOf(TypeParameter("K", null), TypeParameter("V", null))) { interpreter, _, _, typeArgs ->
+            val symbolTable = interpreter.symbolTable()
+            MapValue(LinkedHashMap(), typeArgs["K"] ?: symbolTable.AnyType, typeArgs["V"] ?: symbolTable.AnyType, symbolTable)
+        },
+        function(null, "hashMapOf", "MutableMap<K, V>", listOf(parameter("pairs", "Pair<K, V>", setOf("vararg"))), listOf(TypeParameter("K", null), TypeParameter("V", null))) { interpreter, _, args, typeArgs ->
+            val symbolTable = interpreter.symbolTable()
+            val result = LinkedHashMap<RuntimeValue, RuntimeValue>()
+            for (pair in varargList(args)) {
+                val entry = (pair as DelegatedValue<*>).value as Pair<*, *>
+                result[entry.first as RuntimeValue] = entry.second as RuntimeValue
+            }
+            MutableMapValue(result, typeArgs["K"] ?: symbolTable.AnyType, typeArgs["V"] ?: symbolTable.AnyType, symbolTable)
+        },
+        function(null, "HashMap", "MutableMap<K, V>", typeParameters = listOf(TypeParameter("K", null), TypeParameter("V", null))) { interpreter, _, _, typeArgs ->
+            val symbolTable = interpreter.symbolTable()
+            MutableMapValue(LinkedHashMap(), typeArgs["K"] ?: symbolTable.AnyType, typeArgs["V"] ?: symbolTable.AnyType, symbolTable)
+        },
+        // Others
+        suspendFunction(null, "measureTimeMillis", "Long", listOf(parameter("block", "() -> Unit"))) { interpreter, _, args, _ ->
+            val start = kotlin.time.TimeSource.Monotonic.markNow()
+            (args[0] as LambdaValue).executeSuspended(emptyArray())
+            LongValue(start.elapsedNow().inWholeMilliseconds, interpreter.symbolTable())
+        },
     )
 
     // ---- maps ----------------------------------------------------------------
@@ -698,8 +1090,8 @@ object BlueKStdlibModule : LibraryModule("bluek-stdlib") {
     /** A part of a larger object, as `super` evaluates to it; not a value of its own. */
     private fun RuntimeValue.isInheritancePart() = this is ClassInstance && wholeInstance() !== this
 
-    override val classes: List<ProvidedClassDefinition> = listOf(tripleClass, stringBuilderClass, randomClass, indexedValueClass)
+    override val classes: List<ProvidedClassDefinition> = listOf(tripleClass, stringBuilderClass, randomClass, indexedValueClass, comparatorClass) + BlueKArrays.classes
     override val properties: List<ExtensionProperty> = numberProperties + listProperties + stringProperties + mapProperties + tripleProperties + stringBuilderProperties + indexedValueProperties
     override val globalProperties: List<GlobalProperty> = emptyList()
-    override val functions: List<CustomFunctionDefinition> = numberFunctions + listFunctions + stringFunctions + mapFunctions + builderFunctions + randomFunctions + componentFunctions + nullableFunctions
+    override val functions: List<CustomFunctionDefinition> = numberFunctions + listFunctions + stringFunctions + textSequenceFunctions + collectionFunctions + mapFunctions + builderFunctions + randomFunctions + componentFunctions + nullableFunctions + BlueKArrays.functions
 }

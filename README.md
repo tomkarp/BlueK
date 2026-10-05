@@ -204,7 +204,11 @@ Nicht unterstützt sind derzeit:
 - Typargumente eines Aufrufs wie `emptyList()` oder `mutableListOf()` ergeben
   sich aus der Deklaration, der linken Seite von `?:`, `return` und dem
   Rückgabetyp eines Ausdrucksrumpfs (RT-93), nicht aus dem Ergebnis eines
-  Lambdas: `getOrPut(k) { mutableListOf<V>() }` braucht das Typargument
+  Lambdas: `getOrPut(k) { mutableListOf<V>() }` braucht das Typargument.
+  Ebenso nicht aus dem äußeren Aufruf: `sortedWith(compareBy { it.alter })`
+  und `sortedWith(reverseOrder())` brauchen `compareBy<Person>` bzw.
+  `reverseOrder<Int>()`; mit `val c: Comparator<Person> = compareBy { … }`
+  geht es ohne (RT-95)
 - Ein Objekt einer inneren Klasse entsteht nur im Code der äußeren Klasse
   (`Laeufer()` in `Liste`), nicht von außen mit `liste.Laeufer()`; innere
   Klassen haben keine sekundären Konstruktoren, und der Typ
@@ -223,14 +227,18 @@ Nicht unterstützt sind derzeit:
   (Kotlin bildet Schnittmengen-Typen) und Zuweisungen in einem späteren
   Schleifendurchlauf werden nicht berücksichtigt; dort ist ein explizites `as`
   nötig
-- Arrays (`arrayOf`, `IntArray`) und `Short`. Zahlliterale gehen wie in
+- `Short`. Arrays gehen (`arrayOf`, `IntArray(n)`, `Array(n) { … }`,
+  `a[i] = x`, `sort()`, `contentToString()`, RT-96), sind in BlueK aber
+  zugleich Listen: `val l: List<Int> = intArrayOf(1)` wird angenommen und
+  `println(array)` zeigt den Inhalt; der Spread-Operator `f(*array)` und
+  `String(charArray)` fehlen. Zahlliterale gehen wie in
   Kotlin mit Exponent (`1.5e3`), hexadezimal (`0xFF`), binär (`0b1010`), mit
   `_` (`1_000_000`, RT-74) und ohne führende Ziffer (`.5`); Bit-Operationen
   `and`, `or`, `xor`, `shl`, `shr`, `ushr`, `inv()` für `Int` und `Long`
   (RT-87)
 - Bei Enums: Einträge mit eigenem Rumpf (`HERZ { … }`) und ein
-  `companion object` in der Enum-Klasse; `values()` liefert eine Liste, weil
-  BlueK keine Arrays hat. Vergleiche nach der Reihenfolge (`<`, `compareTo`,
+  `companion object` in der Enum-Klasse; `values()` liefert eine Liste
+  (Kotlin: ein Array). Vergleiche nach der Reihenfolge (`<`, `compareTo`,
   `sorted()`, `PIK..KARO`) und Interfaces gehen wie in Kotlin (RT-84)
 - Über einen impliziten Empfänger (`liste.apply { add(1) }`,
   `with(text) { uppercase() }`, `gruss()` für `fun Hund.gruss()` in einer

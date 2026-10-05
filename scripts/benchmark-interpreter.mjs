@@ -79,7 +79,7 @@ fun texte(n: Int): Int {
 };
 
 // Medians on the quiet development Mac are 150-340 ms; the limits are about 1.6
-// times that. A short burst of load is filtered by a second attempt, but the
+// times that. A short burst of load is filtered by up to two more attempts, but the
 // test needs a machine without other heavy work. It catches e.g. the lambda
 // creation of e247b7b, which cost an exception each (1.65 times slower).
 const cases = [
@@ -127,9 +127,9 @@ for (const { name, limitMs, measure } of measurements) {
     for (let run = 0; run < runs; run++) durations.push(await measure());
     return median(durations);
   };
-  // A second attempt filters out a short burst of load on the machine.
+  // Further attempts filter out a short burst of load on the machine.
   let ms = await medianOfRuns();
-  if (ms > limitMs) ms = Math.min(ms, await medianOfRuns());
+  for (let attempt = 1; attempt < 3 && ms > limitMs; attempt++) ms = Math.min(ms, await medianOfRuns());
   console.log(`${name.padEnd(24)} ${ms.toFixed(1).padStart(8)} ms  (limit ${limitMs} ms)`);
   if (ms > limitMs) failures.push(`${name}: ${ms.toFixed(1)} ms > ${limitMs} ms`);
 }

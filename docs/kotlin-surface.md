@@ -64,6 +64,57 @@ bzw. `StringBuilder("text")` mit `append`, `appendLine`, `insert`, `reverse`,
 `nextInt(von, bis)`, `nextDouble()` (auch mit Grenzen) und `nextBoolean()`,
 mit oder ohne `import kotlin.random.Random`.
 
+**String als Zeichenfolge (RT-94).** `String` ist in Kotlite kein
+`Iterable`; die üblichen Funktionen von Kotlins `CharSequence` sind einzeln
+nachgerüstet: `ifBlank { }`, `ifEmpty { }`, `replaceFirstChar { }` (mit `Char`-
+oder `String`-Ergebnis), `indexOf`/`lastIndexOf` mit `Char`, `map`,
+`mapIndexed`, `find`, `findLast`, `single { }`, `sumOf { }`,
+`groupBy`, `associateWith`, `toSet()`, `toMutableList()`, `chunked(n)`,
+`windowed(n)`, `maxOrNull()`, `minOrNull()`, `elementAt`, `withIndex()`,
+`trimIndent()`, `trimMargin()`, `toLong()`, `toLongOrNull()`; dazu
+`Char.digitToIntOrNull()`, `Int.mod`, `Int.rem`, `Int.toString(radix)`,
+`Int.toFloat()` (als `Double`) und `Long.MAX_VALUE`/`MIN_VALUE`.
+
+**Vergleicher und weitere Sammlungsfunktionen (RT-95).** `Comparator<T>` mit
+`compareBy` (ein bis drei Selektoren), `compareByDescending`, `naturalOrder()`,
+`reverseOrder()`, `Comparator<T> { a, b -> … }`, `thenBy`,
+`thenByDescending`, `reversed()` und `compare(a, b)`; dazu `sortedWith`
+(mit Vergleicher oder Lambda `{ a, b -> … }`), `sortWith`, `maxWith`,
+`minWith`. Die Typvariable eines Vergleichers wird aus der Deklaration
+abgeleitet (`val c: Comparator<Person> = compareBy { it.alter }`), im Argument
+eines anderen Aufrufs aber nicht: dort `sortedWith(compareBy<Person> { it.alter })`
+oder `sortedBy { it.alter }` schreiben. Listen: generisches `sumOf { }`
+(`Int`, `Long`, `Double`), `slice`, `zipWithNext()`, `ifEmpty { }`,
+`add(index, element)`, `addFirst`, `addLast`, `reverse()`, `removeIf { }`,
+`associateBy { }`; Maps: `putAll`, `toSortedMap()`, `emptyMap()`,
+`hashMapOf`; Konstruktoren im Java-Stil `ArrayList<T>()`, `HashMap<K, V>()`,
+`arrayListOf`, `hashSetOf`, `Set.random()` und `measureTimeMillis { }`.
+Kotlite 1.1.0 deklariert zusätzlich ein falsches
+`Iterable<K>.associateBy(valueSelector)`, das jeden `associateBy`-Aufruf
+mehrdeutig machte; BlueK registriert diese Überladung nicht.
+
+**Arrays (RT-96).** `Array<T>`, `IntArray`, `LongArray`, `DoubleArray`,
+`BooleanArray` und `CharArray` mit `arrayOf`, `intArrayOf` … `charArrayOf`,
+`Array(n) { i -> … }`, `IntArray(n)` (mit `0`, `0.0`, `false`, `'\u0000'`
+gefüllt) und `IntArray(n) { … }`, `arrayOfNulls<T>(n)`, `emptyArray<T>()`,
+`toTypedArray()`, `toIntArray()` usw. und `String.toCharArray()`. Ein Array
+hat feste Größe; `a[i] = x` prüft die Grenzen wie die JVM
+(„Index 3 out of bounds for length 3“). Dazu `contentToString()`,
+`contentEquals`, `fill`, `reverse()`, `shuffle()`, `sort()`,
+`sortDescending()`, `sortBy { }`, `sortByDescending { }`, `sortWith`,
+`sortedArray()`, `copyOf()`, `copyOfRange`, `a + x`, `asList()` und
+`CharArray.concatToString()`. `==` vergleicht wie in Kotlin die Identität,
+`contentEquals` den Inhalt. Mehrdimensional: `Array(3) { IntArray(3) }` mit
+`feld[y][x]`. `fun main(args: Array<String>)` startet wie `main()` und
+bekommt ein leeres Array.
+
+In BlueK ist jedes Array zugleich eine `List` seines Elementtyps. Deshalb
+gelten `size`, `indices`, `lastIndex`, `for`, `in`, `sum()`, `average()`,
+`max()`, `map`, `filter`, `joinToString`, `sorted()` und alle anderen
+Listenfunktionen ohne eigene Definition. Abweichungen von Kotlin:
+`val l: List<Int> = intArrayOf(1)` wird angenommen, und
+`println(array)` gibt den Inhalt aus (`[1, 2]`, Kotlin/JVM `[I@1b6d3586`).
+
 **Formatierung (RT-66).** `"%.2f".format(x)` und `String.format("%d", n)` wie
 `java.util.Formatter` mit `%d %x %X %o %f %s %S %c %b %% %n`, Breite,
 Genauigkeit, Argumentindex (`%2$s`, im Kotlin-Quelltext `%2\$s`) und den Flags
@@ -124,8 +175,8 @@ Zug, und der Aufruf ist nicht mehrdeutig (RT-44).
 
 | Lücke | Stand |
 | --- | --- |
-| Arrays (`arrayOf`, `IntArray`, `Array(n) { }`) | Fehlt vollständig; eigenes Sprachfeature, bewusst offen. Der Lehrgang arbeitet mit `List`/`MutableList` |
-| `"abc".map { }`, `toCharArray()`, `"abc".chunked(2)`, `"abc".windowed(2)` | `String` ist kein `Iterable`; nur die oben gelisteten Zugänge sind nachgerüstet. Für Listen gibt es `chunked`/`windowed` |
+| Spread-Operator `f(*array)` | Parser kennt `*` vor Argumenten nicht; Werte einzeln übergeben (`f(1, 2)`) |
+| `String(charArray)` | Eine Funktion `String(…)` verdeckte `String.format`; `chars.concatToString()` oder `joinToString("")` funktionieren |
 | `kotlin.math.abs(-5)` als qualifizierter Aufruf | `import kotlin.math.abs` und dann `abs(-5)` funktioniert |
 | `Math.abs`, `java.*` | Java, bewusst nicht verfügbar |
 | `map.forEach { k, v -> }` | Java-Form mit zwei Parametern; eingebaute Überladungen, die sich nur in der Parameterzahl des Lambdas unterscheiden, kollidieren in Kotlite. `map.forEach { (k, v) -> }` (RT-65) und `map.forEach { it.key … it.value }` funktionieren |
@@ -144,7 +195,7 @@ aber nicht den vollen Kotlin-Umfang — und antwortet deshalb in drei Fällen:
 
 | Fall | Beispiel | Meldung |
 | --- | --- | --- |
-| Name steht in der Lückentabelle oben | `arrayOf(1, 2)` | „BlueK has no arrays. Use listOf(...) …" |
+| Name steht in der Lückentabelle oben | `Math.abs(-1)` | „`Math` belongs to Java and is not available in BlueK …" |
 | Name liegt dicht an einem bekannten | `minOff(1, 2)` | „`minOff` is not available in BlueK. Did you mean `minOf`?" |
 | sonst | `bruttosumme(5)` | „… is unknown: neither declared in this project nor provided by BlueK …" |
 

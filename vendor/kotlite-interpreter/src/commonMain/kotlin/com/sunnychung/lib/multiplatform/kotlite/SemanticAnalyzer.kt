@@ -1819,9 +1819,10 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             ?: throw SemanticException(position, "Class `${typeNode.descriptiveName()}` not found")
         val receiverIdentifier = typeNode.resolveGenericParameterTypeToUpperBound(typeParameters).descriptiveName()
         if (clazz.superClass != null) {
+            // The superclass's own type parameters, e.g. `T` of `List` for `IntArray : List<Int>` (RT-96).
             val superClassTypeResolutions = ClassMemberResolver.create(currentScope, clazz, typeNode.arguments)!!
                 .let {
-                    it.genericResolutionsByTypeName[clazz.fullQualifiedName]!!
+                    it.genericResolutionsByTypeName[clazz.superClass!!.fullQualifiedName]!!
                 }
             val superClassType = TypeNode(
                 SourcePosition.NONE,
@@ -2537,6 +2538,26 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             }
         }
         inferTypeArgumentsFromOtherArguments(isSkipGenerics = true)
+        // Type arguments only the expected type determines are known before lambda arguments are
+        // analyzed, so that `val c: Comparator<P> = compareBy { it.alter }` gives `it` its type
+        // (RT-95). A call nested in an argument is analyzed without an expected type.
+        expectedReturnType?.let { expected ->
+            if (declaredTypeArguments.isNotEmpty() || typeParameters.isEmpty()) return@let
+            fun unifyEarly(declared: TypeNode, target: TypeNode) {
+                if (typeParameters.any { it.name == declared.name } && declared.arguments.isNullOrEmpty()) {
+                    if (declared.name !in tpResolutions) tpResolutions[declared.name] = target.copy(isNullable = target.isNullable && !declared.isNullable)
+                    return
+                }
+                val declaredArguments = declared.arguments ?: return
+                val targetArguments = target.arguments ?: return
+                if (declared.name == target.name && declaredArguments.size == targetArguments.size) declaredArguments.indices.forEach { unifyEarly(declaredArguments[it], targetArguments[it]) }
+            }
+            unifyEarly(functionArgumentAndReturnTypeDeclarations.returnType, expected)
+            if (tpResolutions.isNotEmpty()) {
+                inferredTypeArguments = typeParameters.map { tpResolutions[it.name] }
+                typeArgumentByName = tpResolutions
+            }
+        }
         argumentInfos = evaluateArguments() // update upper bounds of generic lambda
 
 //        if (typeArguments.size != functionArgumentAndReturnTypeDeclarations.typeParameters.size) {

@@ -883,3 +883,19 @@ parameters already resolved through the receiver are skipped now. Calls such as 
 also take their expected type from the left side of `?:`, `return` and expression bodies
 (was: declarations only). Return type mismatches name the type arguments. Coverage:
 `node scripts/smoke-curriculum-kotlin.mjs` (RT-93), `node scripts/smoke-kotlin-surface.mjs`.
+
+Early type arguments from the expected type (RT-95): a generic call whose type parameters
+appear only in its return type (`compareBy`, `reverseOrder`, `emptyMap`) now unifies the
+expected type with the declared return type before the lambda arguments are analyzed, so
+`val c: Comparator<Person> = compareBy { it.alter }` gives `it` the type `Person` instead of
+`Any`. Explicit type arguments and types inferred from other arguments take precedence.
+A call nested in an argument (`sortedWith(compareBy { it.alter })`) still gets no expected
+type, because arguments are analyzed before the outer overload is chosen; there `compareBy<Person>`
+is needed. Coverage: `node scripts/smoke-kotlin-surface.mjs` (RT-95).
+
+Library classes with a concretely typed superclass (RT-96): for an extension function on a
+class with a superclass, `copyReceiverIntoCurrentScope` looked up the superclass's type
+arguments in the resolutions of the class itself. That only worked while both used the same
+type parameter names (`MutableList<T> : List<T>`); BlueK's `IntArray : List<Int>` failed with a
+NullPointerException when the session started. It now reads the resolutions of the superclass.
+Coverage: `node scripts/smoke-kotlin-surface.mjs` (RT-96).

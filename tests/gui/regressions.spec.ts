@@ -857,6 +857,27 @@ test('RT-91 RT-92 nested and inner classes belong to their outer class card and 
   await expect(page.locator('.result-dialog .result-value')).toHaveText('2 : Int');
 });
 
+test('RT-96 arrays run in main(args), change in place and show in the inspector', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, files: [
+    { fileName: 'Spielfeld.kt', kind: 'class', source: 'class Spielfeld {\n    val zellen = IntArray(3)\n    fun setze(i: Int) { zellen[i] = zellen[i] + 1 }\n}\n' },
+    // The AI-generated code from the user's report: a BooleanArray of flags.
+    { fileName: 'Main.kt', kind: 'functions', source: 'fun main(args: Array<String>) {\n    val fertig = booleanArrayOf(false, false)\n    fertig[1] = true\n    println(fertig.contentToString() + " " + args.size)\n}\n' },
+  ] };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  await page.getByRole('button', { name: 'Compile', exact: true }).click();
+  await expect(page.getByLabel('Ready', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Start main', exact: true }).click();
+  await expect(page.locator('.terminal-output pre')).toHaveText('[false, true] 0\n');
+  const entry = await evaluate(page, 'Spielfeld()');
+  await entry.getByRole('button').click();
+  await page.getByLabel('Name of instance').fill('feld1');
+  await page.getByRole('button', { name: 'OK', exact: true }).click();
+  await expect(await evaluate(page, 'feld1.setze(2); feld1.zellen.contentToString()')).toContainText('[0, 0, 1]');
+  await page.locator('.bench .object').filter({ hasText: 'feld1' }).dblclick();
+  const inspector = page.getByRole('dialog', { name: 'Object inspector' });
+  await expect(inspector.locator('.inspect-row').filter({ hasText: 'zellen' })).toContainText('IntArray');
+});
+
 test('GUI-31 additional editor files open in tabs by default', async ({ page }) => {
   const payload = { format: 'bluek-project', version: 1, files: [
     { fileName: 'Hund.kt', kind: 'class', source: 'class Hund {}' },
