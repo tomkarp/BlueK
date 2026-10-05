@@ -75,8 +75,11 @@ import com.sunnychung.lib.multiplatform.kotlite.model.WhileNode
 
 val ACCEPTED_MODIFIERS = setOf(
     "open", "override", "private", "operator", "vararg", "enum", "abstract", "infix", "nullaware", "inline", "noinline", "crossinline", "const",
-    "protected", "internal", "lateinit", "sealed",
+    "protected", "internal", "public", "lateinit", "sealed",
 )
+
+/** Visibility modifiers without effect: everything is public by default, and a BlueK project is one module (RT-80, RT-97). */
+private val DEFAULT_VISIBILITY = setOf("internal", "public")
 
 /** A class declared in a class body (RT-91); an inner one belongs to an object of its outer class (RT-92). */
 data class NestedClassInfo(val isPrivate: Boolean, val isInner: Boolean)
@@ -1856,7 +1859,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
     }
 
     // `internal` means visible in the module, which a BlueK project is as a whole (RT-80).
-    fun Set<String>.toPropertyModifiers() = this.filter { it != "internal" }.map {
+    fun Set<String>.toPropertyModifiers() = this.filter { it !in DEFAULT_VISIBILITY }.map {
         when (it) {
             "open" -> PropertyModifier.open
             "override" -> PropertyModifier.override
@@ -2222,7 +2225,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
         return receiverType to name
     }
 
-    fun Set<String>.toFunctionModifiers() = this.filter { it != "internal" }.map {
+    fun Set<String>.toFunctionModifiers() = this.filter { it !in DEFAULT_VISIBILITY }.map {
         when (it) {
             "operator" -> FunctionModifier.operator
             "open" -> FunctionModifier.open
@@ -2292,7 +2295,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
 
     fun dummyBlockNode() = BlockNode(emptyList(), SourcePosition("", 1, 1), ScopeType.Function, FunctionBodyFormat.Block)
 
-    fun Set<String>.toClassParameterModifiers(): List<Any> = this.filter { it != "internal" }.map {
+    fun Set<String>.toClassParameterModifiers(): List<Any> = this.filter { it !in DEFAULT_VISIBILITY }.map {
         when (it) {
             "vararg" -> /*FunctionValueParameterModifier.vararg*/ throw UnsupportedOperationException("vararg in class primary constructor is not supported")
             "open" -> PropertyModifier.open
@@ -2532,7 +2535,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
     private fun isInnerClassModifier(): Boolean =
         currentToken.value == "inner" && peekNextToken().let { it.type == TokenType.Identifier && (it.value == "class" || it.value in ACCEPTED_MODIFIERS) }
 
-    fun Set<String>.toClassModifiers() = this.filter { it != "internal" }.map {
+    fun Set<String>.toClassModifiers() = this.filter { it !in DEFAULT_VISIBILITY }.map {
         when (it) {
             "open" -> ClassModifier.open
             "enum" -> ClassModifier.enum

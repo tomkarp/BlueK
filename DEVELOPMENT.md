@@ -101,6 +101,7 @@ Runtime-State-Tests und GUI-Tests verwenden das gebaute Bundle unter
 | `npm run test:gui` | Playwright/Chromium gegen einen eigenen Vite-Server auf Port 5194 |
 | `node scripts/check-interactive-core.mjs` | Suspension bei `readln` direkt am Bundle |
 | `node scripts/smoke-kotlite-browser.mjs` | Teil von `browser-smoke`; enthält u. a. die RT-37-Fälle (Eingabe in Stdlib-Lambdas, gepuffert und auf Anforderung) |
+| `npm run test:conformance` | Offizielle Kotlin-Compilertests (`compiler/testData/codegen/box`, 39 Bereiche wie `controlStructures`, `classes`, `strings`, `arrays`) gegen das Bundle; jeder Test muss `"OK"` liefern. Holt beim ersten Lauf einen festen Stand nach `.cache/kotlin-box` (Netz nötig) und scheitert, wenn ein Test aus `scripts/conformance-baseline.txt` nicht mehr besteht. `-- --report` zeigt Bereiche, falsche Ergebnisse und häufigste Fehler, `-- --update` schreibt die Baseline neu. Etwa 5 Minuten; nicht Teil von `test:regression` (RT-97) |
 | `npm run test:performance` | Laufzeit des Interpreters (Rekursion, Schleifen, Objekte, Lambdas, Zeichenketten, Compile) gegen Grenzwerte (PERF-06); auch Teil von `test:regression`. Mit `BLUEK_BUNDLE=… node scripts/benchmark-interpreter.mjs --report` lässt sich ein anderes Bundle vergleichen |
 | `node scripts/benchmark-blueplay.mjs` | Tick- und Frame-Kosten des Space-Invaders-Beispiels und ihr Wachstum mit vielen Schüssen (0–400) |
 

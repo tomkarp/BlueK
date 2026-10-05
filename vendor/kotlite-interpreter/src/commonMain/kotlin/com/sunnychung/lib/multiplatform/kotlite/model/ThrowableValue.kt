@@ -165,7 +165,7 @@ class NullPointerExceptionValue(
                 val cause = (callArguments[1] as? ClassInstance)?.throwablePart()
                 NullPointerExceptionValue(interpreter.symbolTable(), message, cause, interpreter.callStack.getStacktrace())
             },
-            superClassInvocationString = "Exception(message, cause)",
+            superClassInvocationString = "RuntimeException(message, cause)",
 //            superClass = ExceptionValue.clazz,
         )
     }
@@ -199,7 +199,8 @@ class TypeCastExceptionValue(
                 val targetType = (callArguments[1] as StringValue).value
                 TypeCastExceptionValue(interpreter.symbolTable(), valueType, targetType, interpreter.callStack.getStacktrace())
             },
-            superClassInvocationString = "Exception()",
+            // Like Kotlin/JVM's `TypeCastException`, so that `catch (e: ClassCastException)` handles a failed `as`
+            superClassInvocationString = "ClassCastException()",
 //            superClass = ExceptionValue.clazz,
         )
     }
@@ -243,19 +244,25 @@ class StandardExceptionValue(
             return clazz
         }
 
-        // Ordered so that every superclass is registered before its subclasses.
+        // Ordered so that every superclass is registered before its subclasses. The hierarchy
+        // is Kotlin's: `RuntimeException` between `Exception` and the usual ones (RT-97).
         val classes: List<ProvidedClassDefinition> = listOf(
-            definition("IllegalArgumentException", "Exception"),
-            definition("IllegalStateException", "Exception"),
+            definition("RuntimeException", "Exception"),
+            definition("IllegalArgumentException", "RuntimeException"),
+            definition("IllegalStateException", "RuntimeException"),
             definition("NumberFormatException", "IllegalArgumentException"),
-            definition("ArithmeticException", "Exception"),
-            definition("IndexOutOfBoundsException", "Exception"),
-            definition("NoSuchElementException", "Exception"),
-            definition("UnsupportedOperationException", "Exception"),
-            definition("UninitializedPropertyAccessException", "Exception"),
+            definition("ArithmeticException", "RuntimeException"),
+            definition("IndexOutOfBoundsException", "RuntimeException"),
+            definition("NoSuchElementException", "RuntimeException"),
+            definition("UnsupportedOperationException", "RuntimeException"),
+            definition("UninitializedPropertyAccessException", "RuntimeException"),
+            definition("ClassCastException", "RuntimeException"),
+            definition("ConcurrentModificationException", "RuntimeException"),
             // Not exceptions: `catch (e: Exception)` does not handle them.
             definition("Error", "Throwable"),
             definition("StackOverflowError", "Error"),
+            definition("AssertionError", "Error"),
+            definition("NotImplementedError", "Error"),
         )
 
         /** Kotlin leaves the message empty; BlueK names the usual cause instead. */
@@ -277,6 +284,9 @@ class StandardExceptionValue(
             error is IndexOutOfBoundsException -> "IndexOutOfBoundsException"
             error is NoSuchElementException -> "NoSuchElementException"
             error is UninitializedPropertyAccessException -> "UninitializedPropertyAccessException"
+            error is ConcurrentModificationException -> "ConcurrentModificationException"
+            error is NotImplementedError -> "NotImplementedError"
+            error is AssertionError -> "AssertionError"
             else -> null
         }
     }

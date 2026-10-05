@@ -1068,6 +1068,20 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         if (operator in setOf("pre++", "pre--", "post++", "post--") && node is VariableReferenceNode) {
             checkPropertyWriteAccess(this, (node as VariableReferenceNode).variableName)
         }
+        // `a[i]++` writes through the `set` operator of the receiver (RT-97); the new value
+        // replaces the last argument at runtime.
+        val indexed = node as? IndexOpNode
+        if (operator in setOf("pre++", "pre--", "post++", "post--") && indexed != null) {
+            assignFunctionCall = FunctionCallNode(
+                function = NavigationNode(position, indexed.subject, ".", ClassMemberReferenceNode(position, "set")),
+                arguments = indexed.arguments.mapIndexed { index, it ->
+                    FunctionCallArgumentNode(position = it.position, index = index, value = it)
+                } + FunctionCallArgumentNode(position = indexed.position, index = indexed.arguments.size, value = indexed),
+                declaredTypeArguments = emptyList(),
+                position = position,
+                modifierFilter = SearchFunctionModifier.OperatorFunctionOnly,
+            ).also { it.visit(modifier) }
+        }
     }
 
     fun BinaryOpNode.visit(modifier: Modifier = Modifier()) {
@@ -1153,6 +1167,11 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     }
                 }
                 is NavigationNode -> {
+                    // `+=` reads first: the receiver (`liste[0]` in `liste[0].punkte += 1`) must be
+                    // analyzed before its type is asked for (RT-97)
+                    if (isRead && !isWrite) {
+                        subject.visit(modifier = modifier)
+                    }
                     if (isWrite) {
                         subject.visit(modifier = modifier, isCheckWriteAccess = true)
                     }

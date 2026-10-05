@@ -70,9 +70,10 @@ Stdlib](#suspendierende-lambdas-in-der-stdlib)) und
 `ExecutionEnvironment.patchFunction` (suspendierbares `count { }`,
 `removeAll { }` und `retainAll { }` auf `MutableList`; `String.substring` mit
 Kotlins Bereichsprüfung statt JavaScripts Begrenzung, RT-39). Ihre Ausnahmen sind
-Kotlin-Ausnahmen des Hosts, keine Kotlite-Werte; `TryNode.eval` ordnet sechs Standardklassen
+Kotlin-Ausnahmen des Hosts, keine Kotlite-Werte; `TryNode.eval` ordnet die Standardklassen
 (`NumberFormatException`, `IllegalArgumentException`, `IllegalStateException`,
-`IndexOutOfBoundsException`, `NoSuchElementException`, `ArithmeticException`)
+`IndexOutOfBoundsException`, `NoSuchElementException`, `ArithmeticException`, seit RT-97 auch
+`ConcurrentModificationException`, `NotImplementedError`, `AssertionError`)
 den gleichnamigen Kotlite-Klassen zu, damit `catch` sie wie selbst geworfene
 Ausnahmen nach Typ fängt (RT-38). Siehe [Technische Schulden](#technische-schulden).
 
@@ -409,7 +410,7 @@ BlueK zeigt diese Meldung ohne technischen Exception-Präfix.
   `ConcurrentModificationException`), wird das nicht erkannt. Schleifen in
   solchen Lambdas geben nicht an den Worker ab. Eine vendorte, suspendierbare
   Stdlib würde beides beheben.
-- **Ausnahmen aus der Stdlib:** Nur die sechs oben genannten Standardklassen
+- **Ausnahmen aus der Stdlib:** Nur die oben genannten Standardklassen
   werden zugeordnet. Andere Host-Ausnahmen, etwa
   `UnsupportedOperationException` (der Interpreter wirft sie auch für eigene
   nicht unterstützte Pfade), sind nur mit `catch (e: Throwable)` fangbar.

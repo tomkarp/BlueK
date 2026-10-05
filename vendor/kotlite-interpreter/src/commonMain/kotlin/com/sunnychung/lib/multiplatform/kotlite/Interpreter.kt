@@ -439,6 +439,9 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
     }
 
     suspend fun UnaryOpNode.eval(): RuntimeValue {
+        if (operator == "pre++" || operator == "pre--" || operator == "post++" || operator == "post--") {
+            return evalIncrement()
+        }
         val result = node!!.eval()
         if (operator == "!!") {
             if (result === NullValue) {
@@ -483,6 +486,46 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
+    /** `x++`, `--a[i]`, `liste[0].punkte++`: the target is evaluated once (RT-97). */
+    private suspend fun UnaryOpNode.evalIncrement(): RuntimeValue {
+        val target = node!!.evalTarget()
+        val result = node!!.readTarget(target)
+        if (result !is NumberValue<*>) throw UnsupportedOperationException("`$operator` needs a number")
+        val newValue = if (operator.endsWith("++")) result + IntValue(1) else result - IntValue(1)
+        node!!.writeTarget(target, assignFunctionCall, newValue)
+        return if (operator.startsWith("pre")) newValue else result
+    }
+
+    /**
+     * The receiver and index values of an assignment target (`a[i]`, `objekt.wert`), evaluated
+     * once and before the right side like in Kotlin. Before, `a[f()] += 1` called `f()` twice,
+     * `a[i]++` and `liste[0].punkte += 1` failed (RT-97).
+     */
+    private class EvaluatedTarget(val receiver: RuntimeValue, val indices: List<RuntimeValue>)
+
+    private suspend fun ASTNode.evalTarget(): EvaluatedTarget? = when {
+        this is IndexOpNode -> EvaluatedTarget(subject.eval() as RuntimeValue, arguments.map { it.eval() as RuntimeValue })
+        this is NavigationNode && operator == "." -> EvaluatedTarget(subject.eval() as RuntimeValue, emptyList())
+        else -> null
+    }
+
+    private suspend fun ASTNode.readTarget(target: EvaluatedTarget?): RuntimeValue = when {
+        target == null -> eval() as RuntimeValue
+        this is IndexOpNode -> call!!.eval(replaceArguments = ArgumentValues(target.indices.toTypedArray()), replaceSubject = target.receiver)
+        this is NavigationNode -> evalOn(target.receiver)
+        else -> eval() as RuntimeValue
+    }
+
+    private suspend fun ASTNode.writeTarget(target: EvaluatedTarget?, setCall: FunctionCallNode?, value: RuntimeValue) {
+        when {
+            target == null -> write(value)
+            this is IndexOpNode -> (setCall ?: throw RuntimeException("Operator function `set` not found"))
+                .eval(replaceArguments = ArgumentValues((target.indices + value).toTypedArray()), replaceSubject = target.receiver)
+            this is NavigationNode -> writeOn(target.receiver, value)
+            else -> write(value)
+        }
+    }
+
     suspend fun PropertyDeclarationNode.eval() {
         val symbolTable = callStack.currentSymbolTable()
         val name = transformedRefName!!
@@ -509,39 +552,34 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 }
             }
 
-            is NavigationNode -> {
-                val subject = (this.subject.eval() as RuntimeValue)
-                    .let { resolveSuperKeyword(it) }
-
-                if (transformedRefName != null) { // extension property
-                    val extensionProperty = symbolTable().findExtensionProperty(transformedRefName!!) ?: throw RuntimeException("Extension property `$transformedRefName` not found")
-                    val typeArgumentsMap = extensionProperty.typeArgumentsMap(subject.type())
-                    (extensionProperty.setter ?: throw RuntimeException("Setter not found"))(
-                        this@Interpreter,
-                        subject,
-                        value,
-                        typeArgumentsMap,
-                    )
-                    return
-                }
-
-                val obj = subject as ClassInstance
-//                    obj.assign((subject.member as ClassMemberReferenceNode).transformedRefName!!, value)
-                // before type resolution is implemented in SemanticAnalyzer, reflect from clazz as a slower alternative
-                if (!callStack.isInsideClassCode() && obj.clazz!!.isPrivateMemberProperty(this.member.name)) {
-                    throw RuntimeException("Private property `${this.member.name}` cannot be accessed here")
-                }
-                obj.assign(this@Interpreter, memberSlotIn(obj), value)/*?.also {
-                    FunctionCallNode(
-                        it,
-                        listOf(FunctionCallArgumentNode(index = 0, value = ValueNode(value))),
-                        SourcePosition(1, 1)
-                    ).evalClassMemberAnyFunctionCall(obj, it)
-                } // TODO remove */
-            }
+            is NavigationNode -> writeOn(this.subject.eval() as RuntimeValue, value)
 
             else -> throw UnsupportedOperationException()
         }
+    }
+
+    /** Assigns the member of an already evaluated [subjectValue]. */
+    protected suspend fun NavigationNode.writeOn(subjectValue: RuntimeValue, value: RuntimeValue) {
+        val subject = resolveSuperKeyword(subjectValue)
+
+        if (transformedRefName != null) { // extension property
+            val extensionProperty = symbolTable().findExtensionProperty(transformedRefName!!) ?: throw RuntimeException("Extension property `$transformedRefName` not found")
+            val typeArgumentsMap = extensionProperty.typeArgumentsMap(subject.type())
+            (extensionProperty.setter ?: throw RuntimeException("Setter not found"))(
+                this@Interpreter,
+                subject,
+                value,
+                typeArgumentsMap,
+            )
+            return
+        }
+
+        val obj = subject as ClassInstance
+        // before type resolution is implemented in SemanticAnalyzer, reflect from clazz as a slower alternative
+        if (!callStack.isInsideClassCode() && obj.clazz!!.isPrivateMemberProperty(this.member.name)) {
+            throw RuntimeException("Private property `${this.member.name}` cannot be accessed here")
+        }
+        obj.assign(this@Interpreter, memberSlotIn(obj), value)
     }
 
     fun NavigationNode.resolveSuperKeyword(subjectValue: RuntimeValue): RuntimeValue {
@@ -562,24 +600,18 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         if (subject is NavigationNode && subject.operator == "?.") {
             throw UnsupportedOperationException("?: on left side of assignment is not supported")
         }
-        val result = value.eval() as RuntimeValue
 
         wholeFunctionCall?.let { func ->
-            func.eval(replaceArguments = ArgumentValues.of(0, result))
+            // `ziel += x` through `plusAssign`: the target first, then the argument
+            val receiver = subject.eval() as RuntimeValue
+            val result = value.eval() as RuntimeValue
+            func.eval(replaceArguments = ArgumentValues.of(0, result), replaceSubject = receiver)
             return
         }
 
-        suspend fun read(): RuntimeValue = subject.eval() as RuntimeValue
-        suspend fun write(value: RuntimeValue) {
-            if (assignFunctionCall != null) {
-                // TODO any less "hacky" way to implement?
-                assignFunctionCall!!.eval(replaceArguments = ArgumentValues.of(assignFunctionCall!!.arguments.lastIndex, value))
-            } else {
-                subject.write(value)
-            }
-        }
-
+        val target = subject.evalTarget()
         val finalResult = if (operator == "=") {
+            val result = value.eval() as RuntimeValue
             if (subject.declaredType() isPrimitiveTypeOf PrimitiveTypeName.Byte && result !is ByteValue) {
                 if (isValidIntegerLiteralAssignToByte(value, subject.declaredType())) {
                     ByteValue((result as IntValue).value.toByte(), symbolTable())
@@ -587,15 +619,16 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                     throw RuntimeException("The integer value cannot be assigned to a Byte due to out of range")
                 }
             } else {
-                result as RuntimeValue
+                result
             }
         } else {
-            val existing = read()
+            val existing = subject.readTarget(target)
+            val result = value.eval() as RuntimeValue
             preAssignFunctionCall?.let { func ->
-                write(func.eval(replaceArguments = ArgumentValues.of(0, result)))
+                subject.writeTarget(target, assignFunctionCall, func.eval(replaceArguments = ArgumentValues.of(0, result), replaceSubject = existing))
                 return
             }
-            val newResult = when (operator) {
+            when (operator) {
                 "+=" -> {
                     if (subject.declaredType() isPrimitiveTypeOf PrimitiveTypeName.String) {
                         StringValue(existing.convertToString() + result.convertToString())
@@ -609,9 +642,8 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 "%=" -> (existing as NumberValue<*>) % result as NumberValue<*>
                 else -> throw UnsupportedOperationException()
             }
-            newResult
         }
-        write(finalResult)
+        subject.writeTarget(target, assignFunctionCall, finalResult)
     }
 
     suspend fun VariableReferenceNode.eval(): RuntimeValue {
@@ -722,8 +754,9 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
-    suspend fun FunctionCallNode.eval(replaceArguments: Map<Int, RuntimeValue> = emptyMap()): RuntimeValue {
-        resolvedInvoke?.let { return it.eval(replaceArguments) }
+    /** [replaceSubject] is the receiver of a `.` call when it was already evaluated (RT-97). */
+    suspend fun FunctionCallNode.eval(replaceArguments: Map<Int, RuntimeValue> = emptyMap(), replaceSubject: RuntimeValue? = null): RuntimeValue {
+        resolvedInvoke?.let { return it.eval(replaceArguments, replaceSubject) }
         // TODO move to semantic analyzer
         when (function) {
             is VariableReferenceNode, is TypeNode -> {
@@ -782,7 +815,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             }
 
             is NavigationNode -> {
-                val subject = function.subject.eval()
+                val subject = replaceSubject ?: function.subject.eval()
                 if (subject === NullValue) {
                     if (function.operator == "?.") {
                         return NullValue // TODO not always true for extension functions
@@ -1869,8 +1902,11 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
-    suspend fun NavigationNode.eval(): RuntimeValue {
-        val obj = (subject.eval() as RuntimeValue)
+    suspend fun NavigationNode.eval(): RuntimeValue = evalOn(subject.eval() as RuntimeValue)
+
+    /** Reads the member of an already evaluated [subjectValue]. */
+    suspend fun NavigationNode.evalOn(subjectValue: RuntimeValue): RuntimeValue {
+        val obj = subjectValue
             .let { resolveSuperKeyword(it) }
 //        return obj.memberPropertyValues[member.transformedRefName!!]!!
 

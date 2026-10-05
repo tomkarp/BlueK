@@ -44,9 +44,10 @@ class ExecutionEnvironment(
             registerFunction(it)
         }
         registerClass(ExceptionValue.clazz)
+        // The standard classes first: they include the superclasses of the two below.
+        StandardExceptionValue.classes.forEach { registerClass(it) }
         registerClass(NullPointerExceptionValue.clazz)
         registerClass(TypeCastExceptionValue.clazz)
-        StandardExceptionValue.classes.forEach { registerClass(it) }
 
         registerClass(IteratorClass.clazz)
         IteratorClass.functions.forEach {

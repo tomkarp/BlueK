@@ -1442,4 +1442,40 @@ fails((await project({ 'Anzeige.kt': 'class Anzeige {\n    fun zeige(text: Strin
   fails((await project({ 'F.kt': 'fun f(): List<Int> = listOf("a")' })).result, 'RT-93 message', /Expected type is `List<Int>`, but actual type is `List<String>`/);
 }
 
+// Found by running official Kotlin codegen tests (RT-97): `a[i]++` and `liste[0].punkte += 1`
+// failed, `a[f()] += 1` evaluated `f()` twice (a dice statistic counted wrongly), `public` was a
+// parse error and `RuntimeException` was missing, also as a superclass.
+{
+  const p = await project({
+    'Spieler.kt': 'public class Spieler(public val name: String) {\n    public var punkte = 0\n    public fun gewinnt() { punkte += 10 }\n}',
+    'MeinFehler.kt': 'class MeinFehler(meldung: String) : RuntimeException(meldung)',
+    'Main.kt': 'var aufrufe = 0\nfun index(): Int { aufrufe++; return 1 }\npublic fun main() {\n    val wuerfe = IntArray(6)\n    repeat(600) { wuerfe[(0..5).random()]++ }\n    val summe = mutableListOf(0, 0, 0)\n    repeat(300) { summe[(0..2).random()] += 1 }\n    println("${wuerfe.sum()} ${summe.sum()}")\n}',
+  });
+  ok(p.result, 'RT-97 project');
+  const cases = [
+    ['val l = mutableListOf(0, 0); l[1]++; ++l[0]; l[1] += 5; l', '[1, 6]'],
+    ['val a = IntArray(2); a[0]++; a[1]--; a[0] *= 7; a.toList()', '[7, -1]'],
+    ['val a2 = IntArray(3); a2[index()] += 1; a2[index()]++; "$aufrufe ${a2.toList()}"', '2 [0, 2, 0]'],
+    ['val m = mutableMapOf("a" to 1); m["a"] = m["a"]!! + 1; m', '{a=2}'],
+    ['val sp = listOf(Spieler("Ada"), Spieler("Bob")); sp[0].punkte += 3; sp[1].punkte++; sp[1].gewinnt(); sp.map { it.punkte }', '[3, 11]'],
+    ['var log = ""; fun ziel(): Spieler { log += "z"; return sp[0] }; ziel().punkte += 1; ziel().punkte++; log + sp[0].punkte', 'zz5'],
+    ['val x = 5; var y = x++ + 0; y', null], // a `val` stays read-only
+    ['try { throw MeinFehler("weg") } catch (e: RuntimeException) { e.message }', 'weg'],
+    ['try { require(false) { "arg" } } catch (e: RuntimeException) { e.message }', 'arg'],
+    ['try { val o: Any = "a"; o as Int; "nein" } catch (e: ClassCastException) { "cast" }', 'cast'],
+    ['try { throw AssertionError("a") } catch (e: Exception) { "exception" } catch (e: Error) { "error" }', 'error'],
+    ['try { TODO() } catch (e: NotImplementedError) { "todo" }', 'todo'],
+  ];
+  for (const [source, expected] of cases) {
+    if (expected === null) { fails(p.evaluate(source), `RT-97 ${source}`, /val `x` cannot be reassigned/); continue; }
+    assert.equal(ok(p.evaluate(source), `RT-97 ${source}`).display, expected, `RT-97 ${source}`);
+  }
+  const run = await new Promise(resolve => {
+    const started = JSON.parse(p.session.startMain('Main.kt', () => {}, value => resolve(JSON.parse(value))));
+    if (started.kind === 'error') resolve(started);
+  });
+  ok(run, 'RT-97 main');
+  assert.equal(p.output(), '600 300\n', 'RT-97 every throw counted once');
+}
+
 console.log('Curriculum Kotlin smoke test passed.');

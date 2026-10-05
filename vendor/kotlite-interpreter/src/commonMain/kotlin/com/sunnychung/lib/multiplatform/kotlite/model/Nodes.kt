@@ -64,6 +64,9 @@ data class BinaryOpNode(override val position: SourcePosition, val node1: ASTNod
 }
 
 data class UnaryOpNode(override val position: SourcePosition, var node: ASTNode?, val operator: String, @ModifyByAnalyzer var type: TypeNode? = null,) : ASTNode {
+    /** The `set` call of `a[i]++` (RT-97). */
+    @ModifyByAnalyzer var assignFunctionCall: FunctionCallNode? = null
+
     override fun toMermaid(): String {
         val self = "${generateId()}[\"Unary Op ${operator}\"]"
         return "$self-->${node?.toMermaid()}\n"

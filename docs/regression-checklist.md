@@ -242,6 +242,7 @@ bei Verweisen die Beschreibung mitnennen.
 | RT-94 | String als Zeichenfolge wie Kotlins `CharSequence`: `ifBlank { }`, `ifEmpty { }`, `replaceFirstChar { }`, `indexOf`/`lastIndexOf` mit `Char`, `map`, `mapIndexed`, `find`, `findLast`, `single { }`, `sumOf`, `groupBy`, `associateWith`, `toSet`, `toMutableList`, `chunked`, `windowed`, `maxOrNull`/`minOrNull`, `elementAt`, `withIndex`, `trimIndent`, `trimMargin`, `toLong(OrNull)`; `Char.digitToIntOrNull`, `Int.mod`/`rem`/`toString(radix)`/`toFloat`, `Long.MAX_VALUE`/`MIN_VALUE`. `toCharArray()` nennt die Alternative | 2026-10-05 vom Nutzer gemeldet (`ifBlank` fehlte). `smoke-kotlin-surface` (RT-94, 34 Ausdrücke) grün, mit dem Bundle aus 1b47dff rot | `smoke-kotlin-surface.mjs` |
 | RT-95 | Vergleicher und Sammlungen: `Comparator<T>` mit `compareBy` (1–3 Selektoren), `compareByDescending`, `naturalOrder`/`reverseOrder`, `Comparator<T> { a, b -> }`, `thenBy(Descending)`, `reversed`, `compare`; `sortedWith` (auch mit Lambda), `sortWith`, `maxWith`/`minWith`; generisches `sumOf` (`Int`/`Long`/`Double`), `slice`, `zipWithNext`, `ifEmpty`, `add(index, x)`, `addFirst`/`addLast`, `reverse`, `removeIf`, `associateBy` (vorher immer mehrdeutig), `putAll`, `toSortedMap`, `emptyMap`, `hashMapOf`, `HashMap()`, `ArrayList()`, `arrayListOf`, `hashSetOf`, `Set.random`, `measureTimeMillis`. Typvariable eines Vergleichers aus der Deklaration | 2026-10-05 Stdlib-Prüfung mit über 500 Ausdrücken (`ifBlank`-Meldung des Nutzers). `smoke-kotlin-surface` (RT-95, 31 Ausdrücke; `sortedWith(compareBy { … })` ohne Typargument als bekannte Lücke) grün, mit dem Bundle aus 1b47dff rot | `smoke-kotlin-surface.mjs`; Typargument im Argument eines anderen Aufrufs weiter nötig (README) |
 | RT-96 | Arrays wie in Kotlin: `arrayOf`, `intArrayOf`/`booleanArrayOf`/… , `Array(n) { }`, `IntArray(n)` mit Nullwerten, `arrayOfNulls`, `toTypedArray`/`toIntArray`, `toCharArray`; `a[i] = x` mit Grenzprüfung, feste Größe (kein `add`), `sort`/`sortBy`/`sortedArray`, `fill`, `reverse`, `copyOf`, `a + x`, `contentToString`/`contentEquals`, `==` als Identität; mehrdimensional `Array(2) { IntArray(3) }`; alle Listenfunktionen (`sum`, `indices`, `for`, `in`, `map`). `fun main(args: Array<String>)` startet mit leerem Array. `Array<Int>` und `IntArray` bleiben verschieden | 2026-10-05 vom Nutzer gemeldet (KI-Code mit `booleanArrayOf`). `smoke-kotlin-surface` (RT-96, 26 Ausdrücke, 2 Meldungen) grün, mit dem Bundle aus 41edf7a rot; Chromium `RT-96 arrays run in main(args) …` (main mit `args`, `booleanArrayOf`, Objekt mit `IntArray`-Property im Inspektor) grün, mit altem Bundle rot | Runtime- und echter Browsertest grün; Spread-Operator `f(*a)` und `String(chars)` fehlen; Arrays sind in BlueK zugleich `List` |
+| RT-97 | Gefunden mit den offiziellen Kotlin-Compilertests: `zaehler[i]++` und `--a[i]` (Listen, Arrays, Maps) laufen statt `UnsupportedOperationException`; `liste[0].punkte += 1` und `f().x += 1` statt NullPointerException; das Ziel von `=`, `+=`, `++` wird einmal und vor der rechten Seite ausgewertet (`h[(0..5).random()] += 1` zählt jeden Wurf genau einmal); `public` als Modifier; `RuntimeException` mit Kotlins Hierarchie (auch als Oberklasse eigener Ausnahmen), `ClassCastException` für gescheitertes `as`, `ConcurrentModificationException`, `AssertionError`, `NotImplementedError` (`TODO()`) | 2026-10-05 Konformitätsversuch auf Wunsch des Nutzers. `smoke-curriculum-kotlin` (RT-97, 12 Ausdrücke, `main` mit Würfelstatistik 600/300) grün, mit dem Bundle aus 3dc2527 rot; `npm run test:conformance`: 815 von 2.453 Tests im Umfang bestehen (vorher 734), keiner schlechter | Runtime-Tests grün; Konformität als eigener Lauf (nicht in `test:regression`); bekannte Abweichungen (Companion-`init`, Interface-Raute) in der README |
 
 | GUI-93 | Objekt-Kontextmenüs und geerbte Methoden-Untermenüs liegen über offenen Inspektoren und bleiben anklickbar; Parameterdialoge liegen weiterhin darüber | Chromium GUI-93 erzeugt tatsächliche Überlappungen mit einem verschobenen Inspektor, prüft den vordersten DOM-Treffer, öffnet den Parameterdialog und ruft eine geerbte Methode auf. Vor der Korrektur rot, nachher grün; GUI-49/82/85/87 ebenfalls grün | Automatisch im echten Browser abgesichert; keine separate visuelle Benutzerabnahme |
 | GUI-94 | Reset erhält den maximierten bzw. wiederhergestellten Zustand des BluePlay-Weltfensters | Chromium GUI-94 wechselt die angezeigte Welt, maximiert und setzt zurück; prüft die erneut erzeugte ursprüngliche Welt und unveränderte Fenstergrenzen, danach Reset bei normaler Fenstergröße | Vor der Korrektur rot, danach grün; GUI-57 und beide RT-25-BluePlay-Reset-Tests ebenfalls grün; keine gesonderte visuelle Benutzerabnahme |
@@ -3018,3 +3019,28 @@ Anlass: KI-generierter Code des Nutzers mit `val fertig = booleanArrayOf(false, 
 - Vollständiger Lauf grün: Typecheck 0 Fehler/0 Warnungen, alle Node-Suiten
   grün, PERF-06 157–346 ms je Fall, `test:offline` 4/4, Chromium 154/154;
   PERF-01 322 Frames, p95 15,2 ms, max. 23,5 ms.
+
+### RT-97: Konformitätsversuch mit offiziellen Kotlin-Tests (2026-10-05)
+
+Anlass: Vorschlag des Nutzers nach minikotlins Abdeckungsseite. Vereinbart war
+ein Versuch mit Abbruchkriterium: nur Unterrichtsbereiche, nur falsche
+Ergebnisse und Abstürze auswerten, abbrechen, wenn sich nur Exotisches findet.
+
+- Umfang: 39 Bereiche aus `compiler/testData/codegen/box` (Stand e5b61f33),
+  2.933 Tests, davon 2.453 im Umfang (ohne JVM/JS, mehrere Dateien,
+  Sprach-Flags, Reflection, Koroutinen). Erster Lauf: 734 bestanden,
+  14 falsche Ergebnisse, 122 Abstürze zur Laufzeit, Rest Compile-Lücken.
+- Kriterium nicht erfüllt, also lohnend: Funde in normalem Unterrichts-Kotlin
+  (`zaehler[i]++` stürzte ab, Würfelstatistik zählte 609 von 600 Würfen,
+  `spieler[0].punkte += 1` stürzte ab, `public` und `RuntimeException` fehlten).
+- Nach der Korrektur 815 bestanden, keiner schlechter; die bestandenen sind
+  die Baseline von `npm run test:conformance` (Prüflauf grün, etwa 5 Minuten).
+- Offene Abweichungen: Companion-`init`, Interface-Raute (README), dazu
+  Randfälle (Identität von Zahlen und Konstanten, `break` in
+  Schleifenbedingungen, Auswertungsreihenfolge bei `x += if (…) { x += 1 … }`).
+  Häufigste Compile-Lücken: Objekt-Ausdrücke, Enum-Einträge mit Rumpf,
+  `Char`-Ranges mit `downTo`/`step`, `Short`/`Byte`/`UInt`, `val x get() = …`
+  ohne Typ.
+- Vollständiger Lauf grün: Typecheck 0 Fehler/0 Warnungen, alle Node-Suiten
+  grün, PERF-06 164–348 ms je Fall, `test:offline` 4/4, Chromium 154/154;
+  PERF-01 322 Frames, p95 15,3 ms, max. 17,7 ms.

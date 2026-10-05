@@ -18,3 +18,4 @@ vendor/kotlite-interpreter/build/
 .gradle-local/
 .DS_Store
 server/data/projects.sqlite*
+.cache/

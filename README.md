@@ -184,8 +184,14 @@ Nicht unterstützt sind derzeit:
 - Delegation an die Oberklasse mit `constructor() : super(…)` (mit eigener
   Fehlermeldung; `: this(…)` geht, RT-83). `lateinit var` geht für
   Properties von Klassen (RT-81), lokale und Top-Level-Variablen (RT-88);
-  `protected` und `internal` gehen, `internal` wirkt wie `public`, weil ein
-  BlueK-Projekt ein Modul ist (RT-80)
+  `protected`, `internal` und `public` gehen, `internal` wirkt wie `public`,
+  weil ein BlueK-Projekt ein Modul ist (RT-80, RT-97)
+- Ein `init`-Block im `companion object` läuft erst beim ersten Zugriff auf
+  das Companion, nicht schon beim ersten Objekt der Klasse. Nennt eine
+  Klasse ein Interface und eines, das dessen Default-Methode überschreibt
+  (`class X : A, K` mit `K : A`), gewinnt die Methode von `A` statt der von
+  `K`. Beides fanden die offiziellen Kotlin-Tests (RT-97); weitere
+  Abweichungen dort betreffen Randfälle wie Identitätsvergleiche von Zahlen
 - Braucht eine Klasse ihr Companion schon in Default-Argumenten des
   Konstruktors (`class Konto(val stand: Int = START)`), sieht das Companion
   von der Klasse nur die Konstruktor-Properties; in Initialisierern auch ihre
@@ -283,10 +289,15 @@ nennt BlueK eine verständliche Meldung statt Kotlites generischem Fehler.
 - Ausnahmen aus Bibliotheksfunktionen lassen sich für
   `NumberFormatException`, `IllegalArgumentException`,
   `IllegalStateException`, `IndexOutOfBoundsException`,
-  `NoSuchElementException` und `ArithmeticException` (auch Ganzzahldivision
-  durch 0) mit ihrer Klasse oder mit `Exception` fangen (etwa `"x".toInt()`
-  mit `catch (e: NumberFormatException)`, RT-38). Andere, etwa
-  `UnsupportedOperationException`, fängt nur `catch (e: Throwable)`.
+  `NoSuchElementException`, `ArithmeticException` (auch Ganzzahldivision
+  durch 0), `ConcurrentModificationException`, `NotImplementedError` und
+  `AssertionError` mit ihrer Klasse fangen (etwa `"x".toInt()` mit
+  `catch (e: NumberFormatException)`, RT-38). Die Hierarchie ist Kotlins:
+  `RuntimeException` liegt zwischen `Exception` und den üblichen Ausnahmen,
+  `ClassCastException` fängt ein gescheitertes `as`, `AssertionError` und
+  `NotImplementedError` sind `Error`s (RT-97). Andere, etwa
+  `UnsupportedOperationException` aus der Bibliothek, fängt nur
+  `catch (e: Throwable)`.
 - `printStackTrace()` und `stackTraceToString()` zeigen den Stack wie Kotlin,
   innen zuerst mit Datei und Zeile der Projektdatei
   (`at Karte.pruefe(Karte.kt:6)`, `at Karte.<init>(Karte.kt:2)`,

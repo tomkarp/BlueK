@@ -899,3 +899,23 @@ arguments in the resolutions of the class itself. That only worked while both us
 type parameter names (`MutableList<T> : List<T>`); BlueK's `IntArray : List<Int>` failed with a
 NullPointerException when the session started. It now reads the resolutions of the superclass.
 Coverage: `node scripts/smoke-kotlin-surface.mjs` (RT-96).
+
+Assignment targets, `public`, exception hierarchy (RT-97), found by running official Kotlin
+codegen box tests (`scripts/conformance-kotlin.mjs`):
+- `a[i]++` and `--a[i]` had no write path (`UnsupportedOperationException`); the analyzer now
+  builds the `set` call (`UnaryOpNode.assignFunctionCall`). `liste[0].punkte += 1` and
+  `f().x += 1` failed with a NullPointerException, because the receiver of a compound
+  assignment was not analyzed before its type was asked for; `visitAssignment` now visits it.
+- The target of `=`, `+=` and `++` is evaluated once, before the right side, like in Kotlin
+  (`Interpreter.evalTarget`/`readTarget`/`writeTarget`; `FunctionCallNode.eval(replaceSubject)`,
+  `NavigationNode.evalOn`/`writeOn`). Before, `a[f()] += 1` called `f()` twice and read and
+  wrote different elements: `h[(0..5).random()] += 1` counted 609 of 600 throws.
+- `public` is accepted as a modifier without effect, like `internal`.
+- `RuntimeException` between `Exception` and `IllegalArgumentException`, `IllegalStateException`,
+  `IndexOutOfBoundsException`, `NoSuchElementException`, `ArithmeticException`,
+  `UnsupportedOperationException`, `UninitializedPropertyAccessException` and
+  `NullPointerException`; new `ClassCastException` (superclass of `TypeCastException`),
+  `ConcurrentModificationException`, `AssertionError` and `NotImplementedError` (for `TODO()`),
+  the last two `Error`s. The exceptions register before `NullPointerException` and
+  `TypeCastException` now, which extend them.
+Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (RT-97), `npm run test:conformance`.
