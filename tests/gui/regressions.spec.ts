@@ -2123,6 +2123,47 @@ test('GUI-75 class cards snap to a shared invisible grid while dragging', async 
   expect(alignedPosition.y - firstPosition.y).toBe(160);
 });
 
+test('GUI-102 class cards can be dragged beyond the visible diagram, which then scrolls', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, files: [
+    { fileName: 'Hund.kt', kind: 'class', source: 'class Hund {}' },
+  ] };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  await expect(page.getByLabel('Codepad input')).toBeEnabled();
+  const card = page.locator('.classcard').first();
+  const canvas = page.locator('.canvas');
+  const canvasBox = (await canvas.boundingBox())!;
+  const box = (await card.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(canvasBox.x + canvasBox.width - 10, box.y + box.height / 2, { steps: 4 });
+  // Scrolling is time-based: it must not depend on the number of mouse events.
+  await page.waitForTimeout(500);
+  const scrolled = await canvas.evaluate((element) => element.scrollLeft);
+  expect(scrolled).toBeGreaterThan(0);
+  expect(scrolled).toBeLessThan(500);
+  // Moving back must not shrink the scroll area under the drag: the card
+  // stays under the pointer instead of racing away.
+  const backX = canvasBox.x + canvasBox.width / 2;
+  for (let x = canvasBox.x + canvasBox.width - 10; x > backX; x -= 20) {
+    await page.mouse.move(x, box.y + box.height / 2);
+    await page.waitForTimeout(16);
+  }
+  await page.waitForTimeout(300);
+  const underPointer = (await card.boundingBox())!;
+  expect(Math.abs(underPointer.x + underPointer.width / 2 - backX)).toBeLessThanOrEqual(30);
+  // ... and the view does not jump back to the start when the card leaves the far end.
+  expect(await canvas.evaluate((element) => element.scrollLeft)).toBeGreaterThanOrEqual(scrolled);
+  await page.mouse.move(canvasBox.x + canvasBox.width - 10, box.y + box.height / 2, { steps: 4 });
+  await page.waitForTimeout(200);
+  await page.mouse.up();
+  const left = await card.evaluate((element) => Number.parseFloat((element as HTMLElement).style.left));
+  expect(left % 20).toBe(0);
+  expect(left).toBeGreaterThan(canvasBox.width - 250);
+  const scrollable = await canvas.evaluate((element) => ({ scroll: element.scrollWidth, client: element.clientWidth, left: element.scrollLeft }));
+  expect(scrollable.scroll).toBeGreaterThan(scrollable.client);
+  expect(scrollable.left).toBeGreaterThan(0);
+});
+
 test('GUI-77 the left action names the main entry point instead of Run', async ({ page }) => {
   await project(page, 'fun main() {}');
   const startMain = page.getByRole('button', { name: 'Start main', exact: true });

@@ -757,3 +757,29 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 .dark .blueplay-api-section h4{color:#c5a6ee}
 .dark .blueplay-api-member code{color:#91c2f1}
 .dark .blueplay-api-dialog>.dialog-actions{background:#202022;border-color:#3c3c3c}
+
+/* Compact workbench: class cards, objects, sidebar and toolbar buttons are
+   about one browser-zoom step smaller. Sizes are set per element (even
+   values), there is no global scale factor. */
+.sidebar{width:156px;padding:28px 16px;gap:14px}
+.sidebar button{height:44px;padding:10px 4px;font-size:16px;border-radius:5px}
+.sidebar button:nth-of-type(3) .inheritance-icon svg{width:50px;height:24px}
+.offline-download{padding:8px;font-size:10px}
+.offline-download span{font-size:10px}
+.toolbar{height:52px;gap:8px;padding:6px 14px}
+.toolbar button,.toolbar label{height:36px;padding:0 12px;font-size:12px}
+.toolbar .toolbar-icon-button,.toolbar .media-tool-button{width:40px;flex-basis:40px;padding:0}
+.toolbar .toolbar-icon-button svg{width:24px;height:24px}
+.toolbar .toolbar-icon-button:nth-child(2)::before{width:24px;height:24px}
+.toolbar .media-tool-button svg{width:24px;height:24px}
+.toolbar-action-icon{width:22px;height:22px;font-size:20px}
+.toolbar-action-icon svg{width:22px;height:22px}
+.project-title{font-size:14px;padding:6px 8px}
+.classcard,.canvas:has(.game-stage) .classcard{width:180px;height:108px;border-radius:10px}
+.classcard .card-header small{padding:6px 6px 0;font-size:14px;line-height:16px}
+.classcard .card-header strong{padding:2px 8px 6px;font-size:16px;line-height:24px}
+.classcard:not(:has(.card-header small)) .card-header strong{padding-top:8px;padding-bottom:8px}
+.card-menu{top:6px;right:8px;width:24px;height:20px;font-size:16px;line-height:14px}
+.bench-items{gap:20px;padding:12px}
+.object{width:144px;height:88px;padding:16px 8px;border-radius:28px;font-size:16px}
+.object-menu{top:8px;right:12px;width:24px;height:20px;font-size:16px;line-height:14px}
