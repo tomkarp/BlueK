@@ -630,7 +630,9 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             }
             when (operator) {
                 "+=" -> {
-                    if (subject.declaredType() isPrimitiveTypeOf PrimitiveTypeName.String) {
+                    // by the value: a smart-cast variable has no declared type at its node; `null`
+                    // of a `String?` concatenates as "null" like Kotlin's `String?.plus` (RT-99)
+                    if (existing is StringValue || existing === NullValue && result is StringValue) {
                         StringValue(existing.convertToString() + result.convertToString())
                     }  else {
                         (existing as NumberValue<*>) + result as NumberValue<*>
@@ -2255,8 +2257,11 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 val functionReceiverClazzTypeArgumentsMap = functionReceiverClazzTypeParameters.mapIndexed { i, tp ->
                     tp.name to functionReceiverClazzTypeArguments[i]
                 }.toMap()
+                // The published stdlib records collections without `?` in their type argument
+                // (`listOf("a", null)` is a `List<String>` at runtime), so `next()` would reject
+                // `null`. The analyzer has typed the loop variables already (RT-99).
                 inferredTypeArguments = functionTypeParameters.map {
-                    functionReceiverClazzTypeArgumentsMap[it.name]!!.toTypeNode()
+                    functionReceiverClazzTypeArgumentsMap[it.name]!!.toTypeNode().copy(isNullable = true)
                 }
             } else {
                 inferredTypeArguments = emptyList()
@@ -2379,7 +2384,9 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
     }
 
     fun VariableReferenceNode.declaredType(): DataType {
-        return callStack.currentSymbolTable().typeNodeToPropertyType(type!!, false)!!.type
+        // The analyzer leaves `type` empty where a smart cast applied (RT-99).
+        val declared = type ?: return callStack.currentSymbolTable().getPropertyType(transformedRefName ?: variableName).first.type
+        return callStack.currentSymbolTable().typeNodeToPropertyType(declared, false)!!.type
     }
 
     fun IndexOpNode.declaredType(): DataType {

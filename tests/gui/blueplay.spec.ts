@@ -220,6 +220,19 @@ test('GUI-82 inherited BluePlay methods are visible without scrolling the contex
   expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
   expect(box.y).toBeGreaterThanOrEqual(0);
   expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+
+  // The panel is as wide as its longest signature, so no entry needs horizontal scrolling.
+  const overflow = await submenu.evaluate((el) => ({
+    scrollLeft: el.scrollLeft,
+    scrollWidth: el.scrollWidth,
+    clientWidth: el.clientWidth,
+  }));
+  expect(overflow.scrollLeft).toBe(0);
+  expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth);
+  const longest = submenu.locator('.method-menu-item').filter({ hasText: 'getObjectsAt(x: Int, y: Int): List<Actor>' });
+  const longestBox = (await longest.boundingBox())!;
+  expect(longestBox.x).toBeGreaterThanOrEqual(box.x);
+  expect(longestBox.x + longestBox.width).toBeLessThanOrEqual(box.x + box.width);
 });
 
 test('GUI-54 a world without a custom background is rendered on white', async ({ page }) => {

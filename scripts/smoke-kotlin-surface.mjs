@@ -254,6 +254,20 @@ const supported = [
   ['val ml3 = mutableListOf(1, 2, 3); ml3.reverse(); ml3', '[3, 2, 1]'],
   ['val ml4 = mutableListOf(1, 2); ml4.addFirst(0); ml4.addLast(3); ml4', '[0, 1, 2, 3]'],
   ['measureTimeMillis { } >= 0', 'true'],
+  // RT-100: type arguments from the enclosing call and from a lambda's expected result.
+  ['listOf("bb", "a").sortedWith(compareBy { it.length })', '[a, bb]'],
+  ['data class Inf1(val n: String, val a: Int); listOf(Inf1("b", 2), Inf1("a", 2), Inf1("c", 1)).sortedWith(compareBy({ it.a }, { it.n })).map { it.n }', '[c, a, b]'],
+  ['data class Inf2(val n: String, val a: Int); listOf(Inf2("b", 2), Inf2("c", 1)).sortedWith(compareBy { it.a }.thenBy { it.n }).map { it.n }', '[c, b]'],
+  ['data class Inf3(val n: String, val a: Int); listOf(Inf3("b", 2), Inf3("c", 1)).sortedWith(compareByDescending { it.a }).map { it.n }', '[b, c]'],
+  ['val inf4 = mutableListOf("bb", "a"); inf4.sortWith(compareBy { it.length }); inf4', '[a, bb]'],
+  ['listOf("a", "bbb").maxWith(compareBy { it.length })', 'bbb'],
+  ['listOf(3, 1, 2).sortedWith(reverseOrder())', '[3, 2, 1]'],
+  ['val inf5 = mutableMapOf<String, MutableList<Int>>(); for (w in listOf(1, 2, 11)) inf5.getOrPut(if (w > 9) "zwei" else "eins") { mutableListOf() }.add(w); inf5', '{eins=[1, 2], zwei=[11]}'],
+  ['val inf6 = mutableMapOf<Char, MutableSet<String>>(); inf6.getOrPut(\'a\') { mutableSetOf() }.add("x"); inf6', '{a=[x]}'],
+  ['fun inf7(l: MutableList<String>): Int { l.add("a"); return l.size }; inf7(mutableListOf())', '1'],
+  ['fun inf8(m: Map<String, Int>): Int = m.size; inf8(mapOf())', '0'],
+  ['val inf9: Pair<List<Int>, Int> = Pair(emptyList(), 1); inf9.first.size', '0'],
+  ['fun inf10(): List<Int> = listOf(1).ifEmpty { emptyList() }; inf10()', '[1]'],
   // RT-96: arrays as fixed-size lists with `set`, in-place sorting and `content…`.
   ['arrayOf(1, 2).size', '2'],
   ['intArrayOf(1, 2).sum()', '3'],
@@ -292,7 +306,6 @@ const gaps = [
   'kotlin.math.abs(-5)',        // fully qualified calls (import + abs(-5) works)
   'Math.abs(-1)',               // Java, correctly unavailable
   'mapOf(1 to 2).forEach { k, v -> }', // the JVM's two-parameter form; `forEach { it.key }` works
-  'listOf("bb", "a").sortedWith(compareBy { it.length })', // T is not inferred from the outer call; `compareBy<String>` works
 ];
 
 // Messages for missing names: BlueK says which side the gap is on instead of

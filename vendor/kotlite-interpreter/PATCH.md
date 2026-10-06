@@ -919,3 +919,52 @@ codegen box tests (`scripts/conformance-kotlin.mjs`):
   the last two `Error`s. The exceptions register before `NullPointerException` and
   `TypeCastException` now, which extend them.
 Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (RT-97), `npm run test:conformance`.
+
+Smart casts by contract (RT-98): `x.isNullOrEmpty()` and `x.isNullOrBlank()` returning `false`
+make `x` non-null, as Kotlin's contracts of these functions do (`if (e.isNullOrEmpty()) a else e`,
+`if (!l.isNullOrEmpty()) l.size`, `||` chains, `when` without subject); `smartCastsWhenFalse`
+treats such a call on a simple name like `x == null`. Reported with a student-style Blackjack
+project. Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (RT-98).
+
+Smart casts checked systematically (RT-99): 60 cases Kotlin accepts and 24 it rejects.
+- `for (s in liste)` over a list with `null` elements failed at runtime ("Return value's type
+  Nothing? cannot be casted to String in function `next`"): the published stdlib records the
+  type argument without `?`. `ForNode.eval` lets `next()` return `null`; the analyzer has typed
+  the loop variables.
+- `x ?: return 0` had the common supertype of `x` and `Int` (`Comparable<Any>`); a fallback
+  that never completes gives the type of `x` (`ElvisOpNode.type`).
+- Narrowings after a statement (`BlockNode.visit` via `smartCastsAfter`): `x ?: return`, `x!!`,
+  `x as T`, `requireNotNull(x)`, `checkNotNull(x)`, `require(…)`, `check(…)`, and a non-null value
+  assigned to or declared for a nullable variable (`var s: String? = "a"; s.length`).
+- `if` joins the narrowings at the end of both branches (`if (s == null) s = "neu"`); a branch
+  that never completes contributes the other branch's end state, not its condition, which also
+  fixes `if (s != null) { s = null } else { return }; s.length` being accepted.
+- `while`/`do-while` left without `break` (tracked per loop in `loopBreaks`) narrow by the negated
+  condition: `while (zahl == null) { zahl = … }; zahl + 1`.
+- `name.property` narrows like a name when the property is a `val` without custom getter that
+  is not open (`propertySmartCastKey`, consulted by `NavigationNode.type`); an assignment to
+  `name` voids it.
+- `s += "x"` on a smart-cast variable crashed: the analyzer leaves `VariableReferenceNode.type`
+  empty where a smart cast applied, and `+=` read it. `+=` concatenates by the value now
+  (`null` of a `String?` as "null"), `declaredType()` falls back to the symbol table. Found by
+  the official test `strings/kt894.kt` once declarations narrowed.
+Coverage: `node scripts/smoke-curriculum-kotlin.mjs` (RT-99), `npm run test:conformance`.
+
+Type arguments from the enclosing call and from a lambda's expected result (RT-100):
+- A lambda's last expression gets the lambda's expected return type when that is concrete
+  (`getOrPut(k) { mutableListOf() }`, `ifEmpty { emptyList() }`; `LambdaLiteralNode.visit`).
+- In the first pass of an enclosing call (`isSkipGenerics`), a call whose type parameters are
+  still open and needed by its lambdas' parameters (or by nothing else) answers a provisional
+  return type: the open parameters become `<Repeated>` placeholders named with
+  `PROVISIONAL_TYPE_PREFIX`. Such placeholders do not take part in inferring the enclosing call's
+  type arguments, and match an invariant parameter (`DataType.isConvertibleFrom`). Before its
+  second pass the enclosing call gives each call argument the resolved parameter type as expected
+  type, which the early unification of RT-95 uses (`sortedWith(compareBy { it.alter })`,
+  `sortedWith(reverseOrder())`, `f(mutableListOf())`, `Pair(emptyList(), 1)` with a declared type).
+- A `.` call with an expected type whose receiver is a call that stayed provisional resolves
+  itself first, derives the receiver's expected type from its own return type and analyzes the
+  receiver again (`compareBy { it.a }.thenBy { it.n }`).
+- An unrestricted placeholder match broke `mutableListOf(1).add("x")` (accepted), and analyzing
+  every chained receiver twice broke `reified T` in `filter { … }.map { it as T }`; both were
+  caught by `smoke-curriculum-kotlin` and `smoke-generics-boundaries` and are restricted as above.
+Coverage: `node scripts/smoke-kotlin-surface.mjs` (RT-100), `npm run test:conformance`.

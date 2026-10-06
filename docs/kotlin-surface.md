@@ -81,9 +81,10 @@ oder `String`-Ergebnis), `indexOf`/`lastIndexOf` mit `Char`, `map`,
 `thenByDescending`, `reversed()` und `compare(a, b)`; dazu `sortedWith`
 (mit Vergleicher oder Lambda `{ a, b -> … }`), `sortWith`, `maxWith`,
 `minWith`. Die Typvariable eines Vergleichers wird aus der Deklaration
-abgeleitet (`val c: Comparator<Person> = compareBy { it.alter }`), im Argument
-eines anderen Aufrufs aber nicht: dort `sortedWith(compareBy<Person> { it.alter })`
-oder `sortedBy { it.alter }` schreiben. Listen: generisches `sumOf { }`
+(`val c: Comparator<Person> = compareBy { it.alter }`) und seit RT-100 auch aus
+dem äußeren Aufruf abgeleitet: `personen.sortedWith(compareBy({ it.alter },
+{ it.name }))`, `compareBy { it.alter }.thenBy { it.name }`,
+`sortedWith(reverseOrder())`. Listen: generisches `sumOf { }`
 (`Int`, `Long`, `Double`), `slice`, `zipWithNext()`, `ifEmpty { }`,
 `add(index, element)`, `addFirst`, `addLast`, `reverse()`, `removeIf { }`,
 `associateBy { }`; Maps: `putAll`, `toSortedMap()`, `emptyMap()`,

@@ -171,7 +171,12 @@ in der Klasse und ihren Unterklassen auch ohne Klassennamen) sowie
 wie `{ (k, v) -> }` (RT-65), eigene Getter/Setter mit `field`, `private` (auch `private set`),
 Default- und Named-Arguments, `vararg`, `try`/`catch`/`finally` mit
 Standardausnahmen, `Long`, `Float` (als `Double`), Nullability mit `?.`/`?:`,
-Smart Casts nach `is` und Null-Prüfungen,
+Smart Casts nach `is` und Null-Prüfungen, auch nach `isNullOrEmpty()` und
+`isNullOrBlank()` (RT-98), nach `x ?: return`, `x!!`, `x as T`,
+`requireNotNull`, `require(…)`/`check(…)`, nach Zuweisung eines Werts
+(`s = "neu"`, auch nur in einem Zweig wie `if (s == null) s = "neu"`), nach
+`while (zahl == null) { … }` und auf `person.adresse` für `val`-Properties
+(RT-99),
 `when` ohne `else` als Anweisung oder wenn alle Enum-Werte bzw. `true` und
 `false` abgedeckt sind (RT-56), `break`/`continue` in allen Schleifen (RT-55),
 List/Map/Set und Ranges.
@@ -208,13 +213,13 @@ Nicht unterstützt sind derzeit:
   `f()` in der Klasse, RT-75); `.invoke()` darauf nur über einen Namen
   (`k.f.invoke()`, nicht `K(4).f.invoke()`)
 - Typargumente eines Aufrufs wie `emptyList()` oder `mutableListOf()` ergeben
-  sich aus der Deklaration, der linken Seite von `?:`, `return` und dem
-  Rückgabetyp eines Ausdrucksrumpfs (RT-93), nicht aus dem Ergebnis eines
-  Lambdas: `getOrPut(k) { mutableListOf<V>() }` braucht das Typargument.
-  Ebenso nicht aus dem äußeren Aufruf: `sortedWith(compareBy { it.alter })`
-  und `sortedWith(reverseOrder())` brauchen `compareBy<Person>` bzw.
-  `reverseOrder<Int>()`; mit `val c: Comparator<Person> = compareBy { … }`
-  geht es ohne (RT-95)
+  sich aus der Deklaration, der linken Seite von `?:`, `return`, dem
+  Rückgabetyp eines Ausdrucksrumpfs (RT-93), dem erwarteten Ergebnis eines
+  Lambdas (`getOrPut(k) { mutableListOf() }`) und dem Parameter des äußeren
+  Aufrufs (`sortedWith(compareBy({ it.alter }, { it.name }))`,
+  `compareBy { … }.thenBy { … }`, `f(mutableListOf())`, RT-100), nicht aber aus
+  den Zweigen eines `if`-Ausdrucks (`val l: List<Int> = if (c) emptyList()
+  else …` braucht `emptyList<Int>()`)
 - Ein Objekt einer inneren Klasse entsteht nur im Code der äußeren Klasse
   (`Laeufer()` in `Liste`), nicht von außen mit `liste.Laeufer()`; innere
   Klassen haben keine sekundären Konstruktoren, und der Typ
@@ -226,10 +231,12 @@ Nicht unterstützt sind derzeit:
   (Kotlin: nur lokal); `componentN` lässt sich nicht als `operator`
   deklarieren, eigene Klassen werden über ihre `componentN()`-Funktionen
   dennoch zerlegt
-- Smart Casts nach `is` und Null-Prüfungen wirken nur auf einfache Namen
-  (nicht auf `objekt.eigenschaft` oder `this.eigenschaft`) und, wie in Kotlin,
-  bei `is` nur auf lokale Variablen, Parameter und `val`-Properties ohne eigenen
-  Getter, nicht auf `var`-Properties. Ein Test auf einen nicht verwandten Typ
+- Smart Casts wirken auf einfache Namen und auf `name.eigenschaft` (eine
+  Ebene, RT-99), nicht auf `this.eigenschaft` (ohne `this.` geht es) oder
+  längere Pfade, und, wie in Kotlin, nur auf lokale Variablen, Parameter und
+  `val`-Properties ohne eigenen Getter, nicht auf `var`-Properties. Nicht
+  berücksichtigt werden `this is Hund` in Erweiterungsfunktionen, `is` auf
+  einem Typparameter `T` und Bedingungen mit Safe Call (`x?.length != null`). Ein Test auf einen nicht verwandten Typ
   (Kotlin bildet Schnittmengen-Typen) und Zuweisungen in einem späteren
   Schleifendurchlauf werden nicht berücksichtigt; dort ist ein explizites `as`
   nötig

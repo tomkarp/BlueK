@@ -77,6 +77,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.OBJECT_REF_PREFIX
 import com.sunnychung.lib.multiplatform.kotlite.model.ENUM_REF_PREFIX
 import com.sunnychung.lib.multiplatform.kotlite.model.PropertyOwnerInfo
 import com.sunnychung.lib.multiplatform.kotlite.model.RepeatedType
+import com.sunnychung.lib.multiplatform.kotlite.model.PROVISIONAL_TYPE_PREFIX
 import com.sunnychung.lib.multiplatform.kotlite.model.ReturnNode
 import com.sunnychung.lib.multiplatform.kotlite.model.ScopeType
 import com.sunnychung.lib.multiplatform.kotlite.model.ScopeType.Companion.isLoop
@@ -139,6 +140,9 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
     /** Counts assignments per variable; a narrowing made before the latest assignment is void. */
     private val assignmentVersions = mutableMapOf<String, Int>()
+
+    /** The narrowings active at the end of the block visited last, for joining the branches of an `if` (RT-99). */
+    private var blockEndSmartCasts: Map<String, SmartCastFact> = emptyMap()
     private val activeReifiedTypeParameters = mutableMapOf<String, Boolean>()
     private data class CallableContext(val node: CallableNode, val returnType: DataType?)
     private data class InlineParameter(val owner: CallableNode, val crossinline: Boolean)
@@ -375,13 +379,66 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         val isSkipGenerics: Boolean = false,
     )
 
-    private fun nullCheckedVariable(node: ASTNode, operator: String): VariableReferenceNode? {
+    /** The name (or `name.property`, RT-99) compared with `null` by [node]. */
+    private fun nullCheckedVariable(node: ASTNode, operator: String): ASTNode? {
         if (node !is BinaryOpNode || node.operator != operator) return null
+        fun isCheckable(it: ASTNode) = it is VariableReferenceNode || it is NavigationNode
         return when {
-            node.node1 is VariableReferenceNode && node.node2 is NullNode -> node.node1 as VariableReferenceNode
-            node.node2 is VariableReferenceNode && node.node1 is NullNode -> node.node2 as VariableReferenceNode
+            isCheckable(node.node1) && node.node2 is NullNode -> node.node1
+            isCheckable(node.node2) && node.node1 is NullNode -> node.node2
             else -> null
         }
+    }
+
+    /** A type without type parameters still to be inferred, and more specific than `Any`/`Unit` (RT-100). */
+    private fun isConcreteType(type: TypeNode): Boolean {
+        if (type is FunctionTypeNode || type.name in setOf("Any", "Unit", "Nothing", "*")) return false
+        fun concrete(t: TypeNode): Boolean = t !is FunctionTypeNode && currentScope.findTypeAlias(t.name) == null &&
+            (t.arguments ?: emptyList()).all { it.name == "*" || concrete(it) }
+        return concrete(type)
+    }
+
+    /** Whether [node] (`return`, `throw`, `break`, `continue`, a call of type `Nothing`) never completes. */
+    private fun neverCompletes(node: ASTNode?): Boolean = when (node) {
+        is ReturnNode, is ThrowNode, is BreakNode, is ContinueNode -> true
+        is FunctionCallNode -> node.type().name == "Nothing"
+        else -> false
+    }
+
+    /**
+     * Narrowings that hold after [statement] completed normally (RT-99): `x ?: return`, `x!!`,
+     * `x as T`, `requireNotNull(x)`, `checkNotNull(x)`, `require(…)`, `check(…)` (Kotlin's
+     * contracts), and a non-null value assigned to or declared for a nullable local variable.
+     */
+    private fun smartCastsAfter(statement: ASTNode): List<SmartCastFact> = when (statement) {
+        is PropertyDeclarationNode -> smartCastsAfterExpression(statement.initialValue) + listOfNotNull(
+            statement.initialValue?.let { nonNullValueFact(statement.transformedRefName, statement.declaredType, statement.isMutable, it) })
+        is AssignmentNode -> smartCastsAfterExpression(statement.value) +
+            listOfNotNull((statement.subject as? VariableReferenceNode)?.takeIf { statement.operator == "=" }
+                ?.let { subject -> smartCastSubject(subject)?.let { nonNullValueFact(it.key, it.type, it.isMutable, statement.value) } })
+        else -> smartCastsAfterExpression(statement)
+    }
+
+    private fun smartCastsAfterExpression(node: ASTNode?): List<SmartCastFact> {
+        if (node == null) return emptyList()
+        if (node is ElvisOpNode && neverCompletes(node.fallbackNode)) return listOfNotNull(nonNullFact(smartCastSubject(node.primaryNode)))
+        if (node is UnaryOpNode && node.operator == "!!") return listOfNotNull(nonNullFact(smartCastSubject(node.node)))
+        if (node is AsOpNode && !node.isNullable) return listOfNotNull(typeTestFact(smartCastSubject(node.expression), node.type))
+        val call = node as? FunctionCallNode ?: return emptyList()
+        val argument = call.arguments.firstOrNull()?.value ?: return emptyList()
+        return when ((call.function as? VariableReferenceNode)?.variableName) {
+            "requireNotNull", "checkNotNull" -> listOfNotNull(nonNullFact(smartCastSubject(argument)))
+            "require", "check" -> smartCastsWhenTrue(argument)
+            else -> emptyList()
+        }
+    }
+
+    /** `s = "abc"` or `var s: String? = "abc"`: the nullable variable [key] holds a non-null value. */
+    private fun nonNullValueFact(key: String?, declaredType: TypeNode?, isMutable: Boolean, value: ASTNode): SmartCastFact? {
+        if (key == null || declaredType == null || !declaredType.isNullable) return null
+        val valueType = value.type()
+        if (valueType.isNullable || valueType.name == "Nothing") return null
+        return SmartCastFact(key, declaredType.copy(isNullable = false), isMutable)
     }
 
     /** Whether control never continues after the last statement, so facts of the other branch hold afterwards. */
@@ -477,10 +534,30 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             }
             return smartCastSubject(node.value)
         }
+        if (node is NavigationNode) {
+            val key = propertySmartCastKey(node) ?: return null
+            return SmartCastSubject(key, node.type(), isStableForTypeTest = true, isMutable = false)
+        }
         val variable = node as? VariableReferenceNode ?: return null
         val key = smartCastKey(variable) ?: return null
         val isMutable = currentScope.getPropertyTypeOrNull(variable.variableName)?.first?.isMutable == true
         return SmartCastSubject(key, variable.type(), isStableForTypeTest(variable), isMutable)
+    }
+
+    /**
+     * The key of `name.property` when Kotlin can smart-cast it (RT-99): `name` is a local
+     * variable or parameter, the property a `val` without custom getter that is not open.
+     * An assignment to `name` voids it (see AssignmentNode.visit).
+     */
+    private fun propertySmartCastKey(node: NavigationNode): String? {
+        if (node.operator != ".") return null
+        val variable = node.subject as? VariableReferenceNode ?: return null
+        val rootKey = smartCastKey(variable) ?: return null
+        val subjectType = variable.type().takeIf { !it.isNullable && it !is FunctionTypeNode && it !is ClassTypeNode } ?: return null
+        val clazz = currentScope.findClass(subjectType.name)?.first ?: return null
+        val property = clazz.findMemberPropertyWithoutAccessor(node.member.name) ?: return null
+        if (property.isMutable || isOverridableOrComputedProperty(clazz, node.member.name)) return null
+        return "$rootKey.${node.member.name}"
     }
 
     private fun nonNullFact(subject: SmartCastSubject?): SmartCastFact? {
@@ -532,8 +609,20 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             node is InfixFunctionCallNode && node.functionName == "!is" ->
                 listOfNotNull(typeTestFact(smartCastSubject(node.node1), node.node2))
             node is UnaryOpNode && node.operator == "!" -> smartCastsWhenTrue(node.node!!)
-            else -> emptyList()
+            else -> listOfNotNull(nonNullFact(smartCastSubject(nullOrEmptyCheckedVariable(node))))
         }
+    }
+
+    /**
+     * The receiver of `x.isNullOrEmpty()` or `x.isNullOrBlank()`: Kotlin's contracts make `x`
+     * non-null when the call returns `false` (RT-98).
+     */
+    private fun nullOrEmptyCheckedVariable(node: ASTNode): ASTNode? {
+        val call = node as? FunctionCallNode ?: return null
+        val navigation = call.function as? NavigationNode ?: return null
+        if (navigation.operator != "." || call.arguments.isNotEmpty()) return null
+        if (navigation.member.name != "isNullOrEmpty" && navigation.member.name != "isNullOrBlank") return null
+        return navigation.subject
     }
 
     /** Narrowings of a `when` subject after one condition of an entry matched (or did not match). */
@@ -1143,6 +1232,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         // an assignment voids what was known about the variable's type; the value was analysed before
         (subject as? VariableReferenceNode)?.let { smartCastKey(it) }?.let {
             assignmentVersions[it] = (assignmentVersions[it] ?: 0) + 1
+            smartCasts.keys.removeAll { key -> key.startsWith("$it.") } // `name.property` (RT-99)
         }
     }
 
@@ -2170,8 +2260,12 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             }
 
             is NavigationNode -> {
+                // `compareBy { it.a }.thenBy { it.n }` as argument: the receiver call gets its expected
+                // type from this call's expected type once this call is resolved (RT-100)
+                val chainedReceiver = (function.subject as? FunctionCallNode)
+                    ?.takeIf { expectedReturnType != null && !modifier.isSkipGenerics && it.expectedReturnType == null }
                 try {
-                    /*val receiverType =*/ function.visit(modifier = modifier, IdentifierClassifier.Function)
+                    /*val receiverType =*/ function.visit(modifier = if (chainedReceiver != null) modifier.copy(isSkipGenerics = true) else modifier, IdentifierClassifier.Function)
                 } catch (e: SemanticException) {
                     if (!visitFunctionValueCall(function)) throw e
                     popScope()
@@ -2208,6 +2302,24 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 }
                 val resolution = resolutions.firstOrNull()
                     ?: throw SemanticException(position, "No matching function `${function.member.name}` found for type ${receiverType.nameWithNullable} and the argument types (${describeArgumentTypes()})")
+                fun isProvisional(type: TypeNode?): Boolean = type != null &&
+                    (type.name == "<Repeated>" && type.arguments?.firstOrNull()?.name?.startsWith(PROVISIONAL_TYPE_PREFIX) == true ||
+                        type.arguments.orEmpty().any { isProvisional(it) })
+                // Only a receiver that stayed provisional is analyzed again; others are complete.
+                if (chainedReceiver != null && isProvisional(chainedReceiver.returnType)) {
+                    val names = (resolution.typeParameters + resolution.extraTypeParameters).map { it.name }.toSet()
+                    val found = mutableMapOf<String, TypeNode>()
+                    fun unify(declared: TypeNode, target: TypeNode) {
+                        if (declared.name in names && declared.arguments.isNullOrEmpty()) { found.getOrPut(declared.name) { target }; return }
+                        val declaredArguments = declared.arguments ?: return
+                        val targetArguments = target.arguments ?: return
+                        if (declared.name == target.name && declaredArguments.size == targetArguments.size) declaredArguments.indices.forEach { unify(declaredArguments[it], targetArguments[it]) }
+                    }
+                    unify(resolution.returnType, expectedReturnType!!)
+                    val expectedReceiver = resolution.receiverType?.resolveGenericParameterTypeArguments(found)
+                    if (expectedReceiver != null && isConcreteType(expectedReceiver)) chainedReceiver.expectedReturnType = expectedReceiver
+                    chainedReceiver.visit(modifier = modifier)
+                }
 
                 if (function.subject is VariableReferenceNode && function.subject.variableName == "super") {
                     if (resolution.definition is FunctionDeclarationNode && FunctionModifier.abstract in resolution.definition.modifiers) {
@@ -2500,7 +2612,10 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     }*/
                     parameterType.arguments?.withIndex()
                         ?.forEach {
-                            inferTypeArgumentFromOtherArgument(it.value, (argumentType.arguments ?: return@forEach)[it.index])
+                            val nested = (argumentType.arguments ?: return@forEach)[it.index]
+                            // a placeholder for a type not analyzed yet tells nothing (RT-100)
+                            if (nested.name == "<Repeated>") return@forEach
+                            inferTypeArgumentFromOtherArgument(it.value, nested)
                         }
                 }
 
@@ -2515,6 +2630,9 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                             }
                         }
                     val argumentType = callArg.type(ResolveTypeModifier(isSkipGenerics = isSkipGenerics))
+                    // the provisional type of a call not analyzed yet tells nothing (RT-100)
+                    fun isProvisional(type: TypeNode): Boolean = type.name == "<Repeated>" || type.arguments.orEmpty().any { isProvisional(it) }
+                    if (callArg.value is FunctionCallNode && isProvisional(argumentType)) return@forEachIndexed
                     inferTypeArgumentFromOtherArgument(parameterType = parameterType, argumentType = argumentType)
                 }
                 if (functionArgumentAndReturnTypeDeclarations.receiverType != null) {
@@ -2564,7 +2682,10 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             if (declaredTypeArguments.isNotEmpty() || typeParameters.isEmpty()) return@let
             fun unifyEarly(declared: TypeNode, target: TypeNode) {
                 if (typeParameters.any { it.name == declared.name } && declared.arguments.isNullOrEmpty()) {
-                    if (declared.name !in tpResolutions) tpResolutions[declared.name] = target.copy(isNullable = target.isNullable && !declared.isNullable)
+                    // a placeholder of a lambda not analyzed yet does not count as inferred (RT-100)
+                    if (tpResolutions[declared.name].let { it == null || it.name == "<Repeated>" }) {
+                        tpResolutions[declared.name] = target.copy(isNullable = target.isNullable && !declared.isNullable)
+                    }
                     return
                 }
                 val declaredArguments = declared.arguments ?: return
@@ -2578,6 +2699,29 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             }
         }
         argumentInfos = evaluateArguments() // update upper bounds of generic lambda
+
+        // In the first pass of an enclosing call, a type parameter only that call determines
+        // (`sortedWith(compareBy { it.alter })`, `sortedWith(reverseOrder())`) is still open. The
+        // call answers a provisional type that matches any overload, and analyzes its lambdas in
+        // the second pass, when the enclosing call passes the expected type (RT-100).
+        if (modifier.isSkipGenerics && declaredTypeArguments.isEmpty()) {
+            val open = typeParameters.map { it.name }.filter { tpResolutions[it].let { t -> t == null || t.name == "<Repeated>" } }.toSet()
+            fun mentionsOpen(type: TypeNode?): Boolean = type != null && (type.name in open ||
+                type.arguments.orEmpty().any { mentionsOpen(it) } ||
+                (type is FunctionTypeNode && (type.parameterTypes.orEmpty().any { mentionsOpen(it) } || mentionsOpen(type.receiverType))))
+            val lambdaParameterTypes = arguments.indices.filter { arguments[it].value is LambdaLiteralNode }.map { i ->
+                ((functionArgumentAndReturnTypeDeclarations.valueParameters[callArgumentMappedIndexes[i]] as? FunctionValueParameterNode)?.type as? FunctionTypeNode)
+            }
+            val dependsOnOpen = lambdaParameterTypes.isEmpty() ||
+                lambdaParameterTypes.any { it == null || it.parameterTypes.orEmpty().any { p -> mentionsOpen(p) } || mentionsOpen(it.receiverType) }
+            if (open.isNotEmpty() && dependsOnOpen) {
+                returnType = functionArgumentAndReturnTypeDeclarations.returnType.resolveGenericParameterTypeArguments(
+                    tpResolutions.filterKeys { it !in extraTypeResolutions && it !in open } + open.associateWith { TypeNode.createRepeatedTypeNode("$PROVISIONAL_TYPE_PREFIX$it>") }
+                )
+                popScope()
+                return
+            }
+        }
 
 //        if (typeArguments.size != functionArgumentAndReturnTypeDeclarations.typeParameters.size) {
 //            throw SemanticException("Number of type arguments does not match with number of type parameters of the matched callable")
@@ -2604,6 +2748,15 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     else -> null
                 }
             }
+        }
+
+        // A call as argument gets the parameter type as expected type before its second pass,
+        // e.g. `Comparator<Person>` for `compareBy { it.alter }` in `personen.sortedWith(…)` (RT-100).
+        arguments.forEachIndexed { i, argument ->
+            val nested = argument.value as? FunctionCallNode ?: return@forEachIndexed
+            if (nested.expectedReturnType != null) return@forEachIndexed
+            val expected = argumentInfos[callArgumentMappedIndexes[i]].type.toTypeNode()
+            if (isConcreteType(expected)) nested.expectedReturnType = expected
         }
 
         // revisit to resolve generic lambda type parameters
@@ -2771,10 +2924,12 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     it.returnTypeUpperBound = returnTypeUpperBound.returnType
                 }
                 it.visit(modifier = modifier)
+                addSmartCasts(smartCastsAfter(it))
             }
             if (format == FunctionBodyFormat.Expression) requireWhenValue(statements.singleOrNull())
 
             returnType = type()
+            blockEndSmartCasts = smartCasts.keys.mapNotNull { key -> activeSmartCast(key)?.let { key to SmartCastFact(key, it.type, it.isMutable) } }.toMap()
         }
 
         popScope()
@@ -2821,12 +2976,20 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
     private inline fun <T> inLoop(label: String?, visit: () -> T): T {
         loopLabels += label
+        loopBreaks += false
         try {
             return visit()
         } finally {
             loopLabels.removeLast()
+            lastLoopHadBreak = loopBreaks.removeLast()
         }
     }
+
+    /** Whether a `break` leaves the loop being visited, per entry of [loopLabels]. */
+    private val loopBreaks = mutableListOf<Boolean>()
+
+    /** Whether the loop visited last contains a `break` that leaves it. */
+    private var lastLoopHadBreak = false
 
     fun checkBreakOrContinueScope(statement: ASTNode, label: String = "") {
         if (label.isNotEmpty() && label !in loopLabels) {
@@ -2843,6 +3006,8 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
     fun BreakNode.visit(modifier: Modifier = Modifier()) {
         checkBreakOrContinueScope(this, returnToLabel)
+        val target = if (returnToLabel.isEmpty()) loopBreaks.lastIndex else loopLabels.lastIndexOf(returnToLabel)
+        if (target >= 0) loopBreaks[target] = true
     }
 
     fun ContinueNode.visit(modifier: Modifier = Modifier()) {
@@ -2853,25 +3018,39 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         condition.visit(modifier = modifier)
         val whenTrue = smartCastsWhenTrue(condition)
         val whenFalse = smartCastsWhenFalse(condition)
-        withSmartCasts(whenTrue) { trueBlock?.visit(modifier = modifier) }
-        withSmartCasts(whenFalse) { falseBlock?.visit(modifier = modifier) }
+        val trueEnd = withSmartCasts(whenTrue) { trueBlock?.visit(modifier = modifier); if (trueBlock != null) blockEndSmartCasts else null }
+        val falseEnd = withSmartCasts(whenFalse) { falseBlock?.visit(modifier = modifier); if (falseBlock != null) blockEndSmartCasts else null }
 
         // After `if (value == null) return ...`, Kotlin smart-casts value
         // for the remainder of the surrounding block (see BlockNode.visit).
         val trueBlockNeverCompletes = blockNeverCompletes(trueBlock)
         val falseBlockNeverCompletes = blockNeverCompletes(falseBlock)
-        if (trueBlockNeverCompletes && !falseBlockNeverCompletes) addSmartCasts(whenFalse)
-        if (falseBlockNeverCompletes && !trueBlockNeverCompletes) addSmartCasts(whenTrue)
+        // The narrowings at the end of a branch, not of its condition: the branch may assign (RT-99).
+        val trueFacts = trueEnd ?: whenTrue.associateBy { it.key }
+        val falseFacts = falseEnd ?: whenFalse.associateBy { it.key }
+        if (trueBlockNeverCompletes && !falseBlockNeverCompletes) addSmartCasts(falseFacts.values.toList())
+        if (falseBlockNeverCompletes && !trueBlockNeverCompletes) addSmartCasts(trueFacts.values.toList())
+        // A narrowing that holds at the end of both branches holds afterwards, e.g. after
+        // `if (s == null) s = "neu"` (RT-99).
+        if (!trueBlockNeverCompletes && !falseBlockNeverCompletes) {
+            addSmartCasts(trueFacts.values.filter { fact ->
+                val other = falseFacts[fact.key]
+                other != null && !fact.type.isNullable && !other.type.isNullable && fact.type.descriptiveName() == other.type.descriptiveName()
+            })
+        }
     }
 
     fun WhileNode.visit(modifier: Modifier = Modifier()) {
         condition.visit(modifier = modifier)
         inLoop(label) { withSmartCasts(smartCastsWhenTrue(condition)) { body?.visit(modifier = modifier) } }
+        // Left without `break`, the condition was false: `while (zahl == null) { zahl = … }` (RT-99)
+        if (!lastLoopHadBreak) addSmartCasts(smartCastsWhenFalse(condition))
     }
 
     fun DoWhileNode.visit(modifier: Modifier = Modifier()) {
         condition.visit(modifier = modifier)
         inLoop(label) { body?.visit(modifier = modifier) }
+        if (!lastLoopHadBreak) addSmartCasts(smartCastsWhenFalse(condition))
     }
 
     fun NavigationNode.visit(modifier: Modifier = Modifier(), lookupType: IdentifierClassifier = IdentifierClassifier.Property, isCheckWriteAccess: Boolean = false): DataType {
@@ -3703,6 +3882,13 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         // TODO provide receiver to scope if exists
 
         body.returnTypeUpperBound = returnTypeUpperBound
+        // `getOrPut(k) { mutableListOf() }`: the lambda's result takes its type arguments from the
+        // expected return type, like a declaration (RT-100)
+        val resultCall = body.statements.lastOrNull() as? FunctionCallNode
+        val expectedResult = returnTypeUpperBound
+        if (resultCall != null && resultCall.expectedReturnType == null && expectedResult != null && isConcreteType(expectedResult)) {
+            resultCall.expectedReturnType = expectedResult
+        }
         callableContexts += CallableContext(this, returnTypeUpperBound?.toDataType() ?: AnyType(true))
         try { body.visit(modifier = modifier) } finally { callableContexts.removeLast() }
 
@@ -4340,6 +4526,9 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
     fun NavigationNode.type(modifier: ResolveTypeModifier = ResolveTypeModifier(), lookupType: IdentifierClassifier = IdentifierClassifier.Property): TypeNode {
         type?.let { return it }
+        if (lookupType == IdentifierClassifier.Property && smartCasts.isNotEmpty()) {
+            propertySmartCastKey(this)?.let { activeSmartCast(it) }?.let { return it.type.also { type = it } }
+        }
         val subjectType = when(val type = subject.type(modifier = modifier)) {
             is FunctionTypeNode -> type.returnType
             is ClassTypeNode -> type.unboxClassTypeAsCompanion()
@@ -4504,6 +4693,9 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         val type2 = fallbackNode.type(modifier = modifier)
         return if (type1.name == "Nothing") {
             type2
+        } else if (neverCompletes(fallbackNode)) {
+            // `x ?: return 0` is of the type of `x`: the `return` is of type `Nothing` (RT-99)
+            type1
         } else {
             superTypeOf(type1.copy(isNullable = false), type2)
         }.also { type = it }

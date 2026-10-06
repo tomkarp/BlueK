@@ -287,6 +287,8 @@ open class ObjectType(val clazz: ClassDefinition, val arguments: List<DataType>,
                 // different case: its `T` is an unresolved placeholder while
                 // matching the callable and must be checked against its bound.
                 Variance.Invariant -> it.value == otherTypeArg
+                    // the provisional type of a call analyzed later, e.g. `mutableListOf()` (RT-100)
+                    || (otherTypeArg is RepeatedType && otherTypeArg.actualType == null && otherTypeArg.realTypeDescriptiveName.startsWith(PROVISIONAL_TYPE_PREFIX))
                     || (it.value is TypeParameterType && (it.value as TypeParameterType).upperBound.isConvertibleFrom(otherTypeArg))
                     || (otherTypeArg is TypeParameterType && it.value.isConvertibleFrom(otherTypeArg.upperBound))
             }
@@ -386,6 +388,12 @@ data object UnresolvedType : DataType {
     override val isNullable: Boolean = false
     override fun copyOf(isNullable: Boolean) = this
 }
+
+/**
+ * Names the placeholder of a type argument that a call nested in an argument cannot infer in the
+ * first pass of the enclosing call; it matches any argument of an invariant parameter (RT-100).
+ */
+const val PROVISIONAL_TYPE_PREFIX = "<provisional "
 
 data class RepeatedType(val realTypeDescriptiveName: String, override val isNullable: Boolean, var actualType: DataType? = null) : DataType {
     override val name: String = actualType?.name ?: "<Repeated<$realTypeDescriptiveName>>"

@@ -95,6 +95,8 @@
           class="popup-submenu"
           on:pointerenter={(event) =>
             fitPopupSubmenu(event.currentTarget as HTMLElement)}
+          on:focusin={(event) =>
+            fitPopupSubmenu(event.currentTarget as HTMLElement)}
         >
           <button class="popup-submenu-trigger" use:containClicks
             >inherited from {group[0]}<span>›</span></button

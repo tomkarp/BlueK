@@ -1478,4 +1478,65 @@ fails((await project({ 'Anzeige.kt': 'class Anzeige {\n    fun zeige(text: Strin
   assert.equal(p.output(), '600 300\n', 'RT-97 every throw counted once');
 }
 
+// Smart casts by Kotlin's contracts of `isNullOrEmpty()`/`isNullOrBlank()` (RT-98), reported
+// with a Blackjack project: `readLine()?.trim()` and `if (eingabe.isNullOrEmpty()) … else eingabe`.
+{
+  const p = await project({
+    'Spiel.kt': 'class Spiel {\n    fun waehle(eingabe: String?, standard: String): String {\n        return if (eingabe.isNullOrEmpty()) {\n            standard\n        } else {\n            eingabe\n        }\n    }\n    fun laenge(text: String?): Int {\n        if (text.isNullOrBlank()) return 0\n        return text.length\n    }\n}',
+  });
+  ok(p.result, 'RT-98 project');
+  const cases = [
+    ['Spiel().waehle(null, "s") + Spiel().waehle("", "s") + Spiel().waehle("e", "s")', 'sse'],
+    ['Spiel().laenge("  ") + Spiel().laenge("abc")', '3'],
+    ['fun groesse(l: List<Int>?): Int = if (!l.isNullOrEmpty()) l.size else 0; groesse(listOf(1, 2))', '2'],
+    ['fun beide(a: String?, b: String?): String = if (a.isNullOrEmpty() || b.isNullOrEmpty()) "-" else a + b; beide("a", "b")', 'ab'],
+    ['fun art(e: String?): Int = when { e.isNullOrBlank() -> 0; else -> e.length }; art("ab")', '2'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-98 ${source}`).display, expected, `RT-98 ${source}`);
+  // Only the `false` result proves non-null; the `true` branch keeps the nullable type.
+  fails(p.evaluate('fun falsch(e: String?): Int = if (e.isNullOrEmpty()) e.length else 0'), 'RT-98 true branch', /nullable receiver of type 'String\?'/);
+}
+
+// Smart casts checked systematically after RT-98 (RT-99): Kotlin accepts these, and rejects
+// the counterparts below. A `for` loop over a list with `null` elements crashed at runtime.
+{
+  const p = await project({
+    'Adresse.kt': 'class Adresse(val ort: String)',
+    'Person.kt': 'class Person(val name: String, val adresse: Adresse?, var spitzname: String?)',
+    'Util.kt': 'fun lies(eingaben: List<String>): Int {\n    var i = 0\n    var zahl: Int? = null\n    while (zahl == null) {\n        zahl = eingaben[i].toIntOrNull()\n        i++\n    }\n    return zahl + 1\n}',
+  });
+  ok(p.result, 'RT-99 project');
+  const cases = [
+    ['var r99 = ""; for (s in listOf("a", null, "b")) { if (s == null) continue; r99 += s.uppercase() }; r99', 'AB'],
+    ['fun n1(l: List<String?>): Int { var n = 0; for (s in l) if (s != null) n += s.length; return n }; n1(listOf("ab", null))', '2'],
+    ['fun n2(x: String?): Int { val y = x ?: return -1; return y.length }; n2("abc") + n2(null)', '2'],
+    ['fun n3(x: String?): Int { x ?: return -1; return x.length }; n3("ab")', '2'],
+    ['fun n4(x: String?): Int { requireNotNull(x); return x.length }; n4("ab")', '2'],
+    ['fun n5(x: String?): Int { require(x != null) { "fehlt" }; return x.length }; n5("ab")', '2'],
+    ['fun n6(x: Any): Int { check(x is String); return x.length }; n6("ab")', '2'],
+    ['fun n7(x: String?): Int { x!!; return x.length }; n7("ab")', '2'],
+    ['fun n8(x: Any): Int { x as String; return x.length }; n8("ab")', '2'],
+    ['fun n9(): Int { var s: String? = null; s = "abc"; return s.length }; n9()', '3'],
+    ['fun n10(x: String?): Int { var s = x; if (s == null) s = "neu"; return s.length }; n10(null)', '3'],
+    ['fun n11(c: Boolean): Int { var s: String?; if (c) { s = "a" } else { return 0 }; return s.length }; n11(true)', '1'],
+    ['lies(listOf("x", "41"))', '42'],
+    // `+=` on a smart-cast variable crashed (found by the official test strings/kt894.kt)
+    ['fun n14(): String? { var s: String? = ""; for (i in 0..2) s += "LOL "; return s }; n14()', 'LOL LOL LOL '],
+    ['fun n15(x: String?): String? { var s = x; if (s != null) s += "!"; return s }; n15("ja")', 'ja!'],
+    ['fun n12(p: Person): String = if (p.adresse != null) p.adresse.ort else "-"; n12(Person("Ada", Adresse("Mainz"), null))', 'Mainz'],
+    ['fun n13(l: List<Person>): Int { var n = 0; for (p in l) { if (p.adresse == null) continue; n += p.adresse.ort.length }; return n }; n13(listOf(Person("A", Adresse("Ulm"), null)))', '3'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-99 ${source}`).display, expected, `RT-99 ${source}`);
+  const rejected = [
+    'fun m1(): Int { var s: String? = "a"; s = null; return s.length }',
+    'fun m2(c: Boolean): Int { var s: String? = null; if (c) s = "a"; return s.length }',
+    'fun m3(x: String?): Int { var s = x; if (s != null) { s = null } else { return 0 }; return s.length }',
+    'fun m4(x: String?, c: Boolean): Int { var s = x; while (s == null) { if (c) break; s = "a" }; return s.length }',
+    'fun m5(x: String?): Int { x ?: println("leer"); return x.length }',
+    'fun m6(p: Person): Int = if (p.spitzname != null) p.spitzname.length else 0',
+    'fun m7(p: Person, q: Person): String = if (p.adresse != null) q.adresse.ort else "-"',
+  ];
+  for (const source of rejected) fails(p.evaluate(source), `RT-99 ${source}`, /nullable receiver of type/);
+}
+
 console.log('Curriculum Kotlin smoke test passed.');
