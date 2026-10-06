@@ -58,6 +58,8 @@ export interface BluePlayActorFrame {
 export interface BluePlayTextFrame { x: number; y: number; text: string }
 export interface BluePlayStage {
   frameVersion: number;
+  /** Number of `World.show()` calls; a new value reopens a closed world window. */
+  showCount: number;
   width: number;
   height: number;
   cellSize: number;

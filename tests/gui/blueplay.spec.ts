@@ -552,3 +552,25 @@ test('GUI-91 BluePlay help contains the exact reference API and stays compact', 
   await expect(help.getByRole('button', { name: 'Close', exact: true })).toBeInViewport();
   await page.screenshot({ path: '/tmp/blueplay-api-mobile.png' });
 });
+
+test('GUI-103 World.show() from the codepad reopens a closed world window every time', async ({ page }) => {
+  const stage = await loadBluePlay(page);
+  const input = page.getByLabel('Codepad input');
+  await input.fill('val codepadWorld = World(100, 100, 1); codepadWorld.show()');
+  await input.press('Enter');
+  await expect(input).toBeEnabled();
+  for (let round = 0; round < 3; round += 1) {
+    await expect(stage).toBeVisible();
+    await stage.getByRole('button', { name: 'Close BluePlay world' }).click();
+    await expect(stage).toBeHidden();
+    // Other codepad calls keep a closed window closed.
+    await input.fill('codepadWorld.width');
+    await input.press('Enter');
+    await expect(input).toBeEnabled();
+    await expect(stage).toBeHidden();
+    await input.fill('codepadWorld.show()');
+    await input.press('Enter');
+    await expect(input).toBeEnabled();
+  }
+  await expect(stage).toBeVisible();
+});

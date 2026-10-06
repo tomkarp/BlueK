@@ -246,6 +246,8 @@ internal class BluePlayEngine {
     private var clickActorId: String? = null
     private var nextActorId = 1
     private var frameVersion = 0
+    /** Counts World.show() calls, so the UI can reopen a closed world window. */
+    private var showCount = 0
     private var frame = ""
     private val pendingSounds = mutableListOf<String>()
     /** While a step or main() runs, intermediate states are not rendered. */
@@ -260,7 +262,7 @@ internal class BluePlayEngine {
     fun reset() {
         worlds.clear(); actors.clear(); shownWorld = null
         keysDown.clear(); clickX = null; clickY = null; clickActorId = null
-        nextActorId = 1; frameVersion = 0; frame = ""; pendingSounds.clear()
+        nextActorId = 1; frameVersion = 0; showCount = 0; frame = ""; pendingSounds.clear()
         batching = false; speed = 50; intent = ""
     }
 
@@ -383,6 +385,7 @@ internal class BluePlayEngine {
         }
         function("bluekShowWorld", "Unit", listOf(parameter("world"))) { _, args, _ ->
             shownWorld = world(args.instance(0))
+            showCount++
             intent = "stop"
             UnitValue
         }
@@ -695,7 +698,7 @@ internal class BluePlayEngine {
         val background = backgroundInstance?.let { instance ->
             world.backgroundImage?.takeIf { it.image === instance } ?: ImageModel(instance).also { world.backgroundImage = it }
         }
-        return "{\"stage\":{\"frameVersion\":${++frameVersion},\"width\":${world.width.int()},\"height\":${world.height.int()},\"cellSize\":${world.cellSize.int()},\"backgroundColor\":\"rgb(255,255,255)\",\"background\":${background?.frame() ?: PLACEHOLDER_IMAGE},\"speed\":$speed,\"simulation\":\"paused\",\"images\":$images,\"objects\":$objects,\"texts\":$texts}}"
+        return "{\"stage\":{\"frameVersion\":${++frameVersion},\"showCount\":$showCount,\"width\":${world.width.int()},\"height\":${world.height.int()},\"cellSize\":${world.cellSize.int()},\"backgroundColor\":\"rgb(255,255,255)\",\"background\":${background?.frame() ?: PLACEHOLDER_IMAGE},\"speed\":$speed,\"simulation\":\"paused\",\"images\":$images,\"objects\":$objects,\"texts\":$texts}}"
     }
 
     private companion object {
