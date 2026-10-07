@@ -7,6 +7,8 @@ export type SavedProjectFile = {
   path?: string;
   source: string;
   kind?: ProjectFile["kind"];
+  testTarget?: string;
+  isTestClass?: boolean;
 };
 
 export type SavedProject = {
@@ -20,6 +22,8 @@ export type SavedProject = {
   readme?: string;
   /** Optional project title. */
   projectName?: string;
+  /** The test class used by the object-bench fixture shortcuts. */
+  defaultTestClass?: string;
 };
 
 export type ProjectModel = {
@@ -29,6 +33,7 @@ export type ProjectModel = {
   cardPositions: Record<string, ProjectCardPosition>;
   readme: string;
   projectName?: string;
+  defaultTestClass?: string;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -48,7 +53,11 @@ function validateFiles(value: unknown): SavedProjectFile[] {
       throw new Error("Invalid Kotlin file in project.");
     if (item.kind !== undefined && item.kind !== "class" && item.kind !== "functions")
       throw new Error("Invalid Kotlin file kind in project.");
+    if (item.testTarget !== undefined && !isKotlinFileName(item.testTarget)) throw new Error("Invalid test attachment.");
+    if (item.isTestClass !== undefined && typeof item.isTestClass !== "boolean") throw new Error("Invalid test class marker.");
     return {
+      ...(typeof item.testTarget === "string" ? { testTarget: item.testTarget } : {}),
+      ...(item.isTestClass === true ? { isTestClass: true } : {}),
       fileName: item.fileName,
       path: typeof item.path === "string" ? item.path : undefined,
       source: item.source,
@@ -105,6 +114,13 @@ function validateProjectName(value: unknown): string | undefined {
   return value.trim() || undefined;
 }
 
+function validateDefaultTestClass(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !/^[A-Za-z_]\w*$/.test(value))
+    throw new Error("The project contains an invalid default test class.");
+  return value;
+}
+
 export function parseProject(value: unknown): SavedProject {
   if (!isRecord(value) || value.format !== "bluek-project" || value.version !== 1)
     throw new Error("Invalid BlueK project.");
@@ -117,6 +133,7 @@ export function parseProject(value: unknown): SavedProject {
     cardPositions: validateCardPositions(value.cardPositions),
     readme: validateReadme(value.readme),
     projectName: validateProjectName(value.projectName),
+    defaultTestClass: validateDefaultTestClass(value.defaultTestClass),
   };
 }
 
@@ -128,6 +145,7 @@ export function createProjectPayload(
   additionalCardFiles: ProjectFile[] = [],
   readme = "",
   projectName = "",
+  defaultTestClass = "",
 ): SavedProject {
   const positionedFiles = [...files, ...additionalCardFiles];
   return {
@@ -137,11 +155,14 @@ export function createProjectPayload(
     // A description nobody wrote is nothing to export; whitespace alone is none.
     ...(readme.trim() ? { readme } : {}),
     ...(projectName.trim() ? { projectName: projectName.trim() } : {}),
+    ...(defaultTestClass.trim() ? { defaultTestClass: defaultTestClass.trim() } : {}),
     files: files.map((file) => ({
       ...(file.path ? { path: file.path } : {}),
       fileName: file.fileName,
       kind: file.kind,
       source: file.source,
+      ...(file.testTarget ? { testTarget: file.testTarget } : {}),
+      ...(file.isTestClass ? { isTestClass: true } : {}),
     })),
     resources: resources.map(({ path, data }) => ({ path, data })),
     cardPositions: Object.fromEntries(
@@ -164,6 +185,8 @@ export function projectModelFromPayload(
     kind: file.kind === "functions" ? "functions" : "class",
     source: file.source,
     revision: 1,
+    ...(file.testTarget ? { testTarget: file.testTarget } : {}),
+    ...(file.isTestClass ? { isTestClass: true } : {}),
   } satisfies ProjectFile));
   const positions = payload.cardPositions ?? {};
   const bluePlayFrameworkNames = new Set([
@@ -178,6 +201,7 @@ export function projectModelFromPayload(
     resources: payload.resources ?? [],
     readme: payload.readme ?? "",
     projectName: payload.projectName,
+    defaultTestClass: payload.defaultTestClass,
     cardPositions: Object.fromEntries(
       files
         .filter((file) => positions[file.fileName])

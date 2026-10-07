@@ -59,23 +59,24 @@ export async function copyLink(url: string): Promise<boolean> {
 export async function copyFullProjectLink(
   payload: ProjectSource,
   readme: boolean,
+  state: boolean,
 ): Promise<boolean> {
   const url = new URL(window.location.protocol === "file:" ? "https://bluek.de/" : window.location.href);
   url.search = "";
-  url.hash = `bluek=${await encodeBlueKLink(payload)}${readme ? "&readme=1" : ""}`;
+  url.hash = `bluek=${await encodeBlueKLink(payload)}${readme ? "&readme=1" : ""}${state ? "&state=1" : ""}`;
   return copyLink(url.href);
 }
 
 export async function saveShortProjectLink(
   payload: ProjectSource,
   readme: boolean,
+  state: boolean,
 ): Promise<ShareLinkDialog> {
   const { code } = await saveProjectToServer(payload);
-  const url = new URL(
-    `/load/${code}${readme ? "?readme=1" : ""}`,
-    window.location.origin,
-  ).href;
-  return { url, code, copied: await copyLink(url) };
+  const url = new URL(`/load/${code}`, window.location.origin);
+  if (readme) url.searchParams.set("readme", "1");
+  if (state) url.searchParams.set("state", "1");
+  return { url: url.href, code, copied: await copyLink(url.href) };
 }
 
 export async function readSharedProject(code: string): Promise<unknown> {

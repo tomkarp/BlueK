@@ -6,6 +6,13 @@ import type { BluePlayStage, RuntimeEvent, RuntimeSnapshot, RuntimeValue, Simula
 class RequestError extends Error {}
 
 export interface KotliteSessionBridge {
+  setTestClassFiles?(filenames: string[]): void;
+  testState?(): string;
+  setTestCallback?(callback: (() => void) | null): void;
+  noteInteraction?(op: string, objectId: string, name: string, source: string, response: string): void;
+  testingAction(action: string, className: string, value: string, kind: string): string;
+  startTests(className: string, method: string, onInput: (id: number) => void, onComplete: (result: string) => void): string;
+  startFixture(className: string, onInput: (id: number) => void, onComplete: (result: string) => void): string;
   load(filename: string, source: string): string;
   manifest(): string;
   referenceSnapshot(): string;
@@ -81,6 +88,7 @@ export class RuntimeHost {
     this.snapshot = {
       ...this.snapshot,
       ...references,
+      testing: this.session?.testState ? JSON.parse(this.session.testState()) : undefined,
       revision: this.snapshot.revision + 1,
       inspections: includeInspections ? inspections : this.snapshot.inspections,
       simulation: this.simulation.state,
@@ -186,6 +194,9 @@ export class RuntimeHost {
         this.snapshot = { ...initialSnapshot(), generationId: command.generationId, phase: 'compiling' };
         this.session = this.createSession();
         this.session.configureBluePlay(command.library?.id === 'blueplay', command.generationId);
+        this.session.setTestClassFiles?.(command.files
+          .filter(file => file.isTestClass || file.testTarget)
+          .map(file => file.fileName));
         this.session.setBluePlayRunningQuery(() => this.simulation.state === 'running' || (this.simulation.state === 'waiting' && this.active?.automaticSimulation === true));
         // Every resource is announced, so the runtime can tell a missing image
         // from one whose pixel mask could not be prepared; only prepared images
@@ -217,7 +228,10 @@ export class RuntimeHost {
         return;
       }
       if (!this.session || command.generationId !== this.snapshot.generationId) throw new RequestError('Stale or missing runtime generation.');
-      if (command.op === 'simulation') { this.dispatchSimulation(id, command, emit); return; }
+      if (command.op === 'simulation') {
+        if (command.action === 'step' || command.action === 'start' || command.action === 'reset') this.session.noteInteraction?.('main', '', '', '', '{"kind":"unit"}');
+        this.dispatchSimulation(id, command, emit); return;
+      }
       if (command.op === 'key') { emit(this.publishInputState(id, JSON.parse(this.session.setKey(command.key, !!command.pressed)))); return; }
       if (command.op === 'click') { emit(this.publishInputState(id, JSON.parse(this.session.setClick(command.x, command.y, command.actorId || '')))); return; }
       if (command.op === 'input') {
@@ -231,7 +245,12 @@ export class RuntimeHost {
       if (this.active || this.snapshot.phase !== 'ready' || (this.simulation.state !== 'inactive' && this.simulation.state !== 'paused')) throw new RequestError('Another runtime command is running.');
       if (command.op === 'inspect') { emit(this.publish(id, JSON.parse(this.session.inspect(command.objectId)))); return; }
       if (command.op === 'inspectField') { emit(this.publish(id, JSON.parse(this.session.inspectField(command.objectId, command.property)))); return; }
-      if (command.op === 'bind') { emit(this.publish(id, JSON.parse(this.session.bind(command.objectId, command.name)))); return; }
+      if (command.op === 'testing') { emit(this.publish(id, JSON.parse(this.session.testingAction(command.action, command.className || '', command.value || '', command.kind || 'equals')))); return; }
+      if (command.op === 'bind') {
+        const result = this.session.bind(command.objectId, command.name);
+        this.session.noteInteraction?.('bind', command.objectId, command.name, '', result);
+        emit(this.publish(id, JSON.parse(result))); return;
+      }
       if (command.op === 'remove') { emit(this.publish(id, JSON.parse(this.session.remove(command.objectId, command.name)))); return; }
 
       const args = ('args' in command ? command.args : []).join(', ');
@@ -248,6 +267,7 @@ export class RuntimeHost {
       this.active = { executionId }; this.snapshot.phase = 'running';
       this.lastOutputPublishAt = -Infinity;
       this.session.setOutputCallback(() => this.emitStreamingOutput(executionId, emit));
+      this.session.setTestCallback?.(() => this.emitEvent(executionId, 'snapshot', emit));
       // Synchronous inspection reads complete in this dispatch; publish their
       // final snapshot directly instead of flickering the UI into running.
       if (command.op !== 'inspectGet') this.emitEvent(executionId, 'started', emit);
@@ -258,7 +278,12 @@ export class RuntimeHost {
       };
       const onComplete = (result: string) => {
         if (!this.active || this.active.executionId !== executionId) return;
-        this.session!.setOutputCallback(null); this.active = null;
+        this.session!.setOutputCallback(null); this.session!.setTestCallback?.(null); this.active = null;
+        const interactionSource = command.op === 'create' ? `${command.className}${suffix}(${args})`
+          : command.op === 'invoke' ? `\`${command.name}\`${suffix}(${args})`
+          : command.op === 'get' || command.op === 'inspectGet' ? `\`${command.property}\``
+          : command.op === 'set' ? `\`${command.property}\` = ${command.value}` : source;
+        this.session!.noteInteraction?.(command.op, 'objectId' in command ? command.objectId : '', 'name' in command ? command.name : 'property' in command ? command.property : '', interactionSource, result);
         const response = JSON.parse(result) as RuntimeValue;
         this.snapshot.phase = response.fatal ? 'faulted' : 'ready';
         const intent = this.session!.takeBluePlayIntent();
@@ -266,7 +291,10 @@ export class RuntimeHost {
         if (intent === 'stop') this.simulation.state = 'paused';
         emit(this.publish(id, response, true, command.op !== 'inspectGet' || !!response.fatal));
       };
-      const started = command.op === 'create'
+      const started = command.op === 'tests'
+        ? this.session.startTests(command.className || '', command.method || '', onInput, onComplete)
+        : command.op === 'fixture' ? this.session.startFixture(command.className, onInput, onComplete)
+        : command.op === 'create'
         ? this.session.startCreate(command.className + suffix, args, command.name, onInput, onComplete)
         : command.op === 'invoke'
           ? this.session.startInvoke(command.objectId, command.name + suffix, args, onInput, onComplete)

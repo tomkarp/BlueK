@@ -115,11 +115,11 @@ bei Verweisen die Beschreibung mitnennen.
 | GUI-60 | Ein BlueJ-Projekt als ZIP (auch mit umschließendem Ordner, `__MACOSX`, `.ctxt`) öffnet mit allen Kotlin-Klassen und den Kartenpositionen aus `package.bluej`; private Methoden erscheinen nicht im Objekt-Kontextmenü | Chromium-GUI-Test mit ZIP-Fixture, per Drop auf das Open/Import-Feld (die Dateiauswahl bietet nur JSON) (Karten, Codepad, Kontextmenü ohne `zieheKarte`); echte inf-schule-ZIPs Blackjack, Goldrausch, Ausgebüxt einmalig per Playwright geöffnet und ausgeführt | Abgesichert |
 | GUI-61 | Ein BlueJ-BluePlay-Projekt nutzt die eingebaute Library: `World.kt`/`Actor.kt`/`Image.kt`/`BluePlayFunctions.kt` werden ersetzt, `images/`/`sounds/` werden Projektressourcen. Seit 08963a8 (vom Nutzer als beabsichtigt bestätigt) bietet der Open/Import-Dialog nur JSON und keine Ordnerwahl; ZIPs und Ordner erreichen BlueK nur noch durch Ablegen auf dem Drop-Feld | Chromium-GUI-Test mit BluePlay-ZIP per Drop und `main()`; Ablegen eines Ordners nicht automatisiert | Ordner-Drop visuell abnehmen |
 | GUI-62 | `npm run build:offline` erzeugt eine einzelne `BlueK.html` plus Anleitung/ZIP; per Doppelklick (`file://`) laufen dieselbe Svelte-IDE und Runtime ohne Server, einschließlich Projektvorlagen, Formatter, BluePlay und HTML-Programmexport. Kurzlink-Aktion und Drei-Wort-Code fehlen | `smoke-offline-build` prüft HTML/ZIP; `offline.spec.ts` prüft die echte IDE mit blockiertem HTTP-Netzwerk in Chromium und den Worker in WebKit | 2026-10-01: 4/4 echte Offline-Browsertests grün (Chromium und WebKit); Benutzerbestätigung und visuelle Abnahme offen. Der frühere Server-/Startskript-Test ist durch die serverlose Paketprüfung ersetzt |
-| GUI-63 | Unten links in der Seitenleiste bietet BlueK die Offline-Version als ZIP an; `npm run build` und `npm run dev` (predev) legen die Datei immer an, im Offline-Build selbst fehlt der Link | Chromium-GUI-Test (Link sichtbar, `download`-Attribut, ZIP per Request geladen), `smoke-offline-build` (ZIP veröffentlicht, nicht im Offline-Paket selbst) | Abgesichert |
+| GUI-63 | Oben rechts bietet BlueK die Offline-Version als textfreies ZIP-Icon an; `npm run build` und `npm run dev` (predev) legen die Datei immer an, im Offline-Build selbst fehlt der Button. Das Icon öffnet zuerst einen Hinweisdialog; erst Download ZIP lädt die Datei | Chromium-GUI-Test (kein Download beim Öffnen, Anleitung, Cancel/Escape, `download`-Attribut, ZIP per Request und echter Download, sichtbare Aktionen bei 800×600), `smoke-offline-build` (ZIP veröffentlicht, nicht im Offline-Paket selbst) | Abgesichert |
 | GUI-64 | Compilerfehler erscheinen nicht mehr im zentralen Dialog, sondern am Ort des Fehlers: der Editor der betroffenen Datei öffnet sich, markiert die Zeile (roter Hintergrund, Wellenlinie) und meldet den Text unter dem Editor wie die Parser-Meldungen des Formatierers; Tippen löscht die Markierung, der nächste Compile setzt sie neu. Der Dialog bleibt nur für Fehler ohne Quelltextstelle (z. B. fehlgeschlagener Methodenaufruf) | Chromium-GUI-Test GUI-64 (Markierung, Meldung unter dem Editor, kein Dialog, Löschen beim Tippen, erneutes Melden, Verschwinden nach der Korrektur) und GUI-24 (Fehler in `Actions.kt`) | Abgesichert |
 | GUI-65 | Compilerfehler lesen sich kompakt (kein `Token(...)`-Dump, keine wiederholte Position), lassen sich wie die Formatierer-Meldung per Kreuz schließen (samt Markierung), und ein Parser-Fehler des Formatierers markiert und zeigt seine Zeile ebenfalls | Chromium-GUI-Test GUI-65 (kompakter Text `Line 4: Unexpected token `fn``, Schließkreuz, markierte Zeile nach Format, Markierung verschwindet beim Schließen) | Abgesichert |
 | GUI-66 | Projekte mit Dateien, Ressourcen oder einer README zeigen das dezente README-Blatt links oben im Diagramm; ein vollständig leeres Projekt bleibt leer. Im Fenster wird Markdown direkt beim Tippen formatiert dargestellt, die Marker sind nur auf der Cursor-Zeile sichtbar, bei Codeblöcken und Zitaten im ganzen Block (inkl. der Zaunzeilen), Kotlin in Codeblöcken wird eingefärbt; beim Öffnen liegt der Fokus nicht im Text, erstes Escape verlässt den Text, zweites schließt das Fenster; das Fragezeichen oben rechts zeigt die Syntax am Minimalbeispiel und verschwindet beim Klick daneben; Export/Autosave enthalten die README nur, wenn sie nicht leer ist, beim Import ist sie optional (BlueJ-`README.TXT` wird übernommen) | Chromium-GUI-Test GUI-66 (Blatt sichtbar bei vorhandenem Inhalt, leer nicht gespeichert, kein Fokus beim Öffnen, Formatierung beim Tippen, Marker auf der Cursor-Zeile, Hilfe inkl. Schließen daneben, Codeblock mit Zäunen und Einfärbung, Escape-Folge, Wiederöffnen) und `smoke-project-format` (Export nur bei Inhalt, optionaler Import, Formatierungsmarken, Block-Regionen, Kotlin-Token, BlueJ-README); GUI-01 prüft Empty Project ohne README-Blatt | Abgesichert |
-| GUI-67 | Ein Projektlink kann die README beim Start öffnen (`readme=1` im Hash des vollen Links bzw. in der Query des Kurzlinks); der Save/Export-Dialog trägt die Option als Häkchen am rechten Rand beider Link-Kästen, nur bei nicht-leerer README wählbar, und listet zuerst die beiden Links, dann JSON, dann „Export as HTML (Beta)“ (EXP-08), dann das BlueJ-ZIP | Chromium-GUI-Test GUI-67 (ohne Flag kein Fenster, mit Flag gerenderte README, Reihenfolge der Einträge, beide Häkchen gemeinsam, Flag im kopierten Link, bei leerer README deaktiviert); 2026-09-25 veraltete Erwartung ohne „(Beta)“ korrigiert, 1/1 grün | Abgesichert |
+| GUI-67 | Ein Projektlink kann die README beim Start öffnen (`readme=1` im Hash des vollen Links bzw. in der Query des Kurzlinks); der Save/Export-Dialog trägt die Option einmal gemeinsam mit Load state rechts neben den beiden Link-Buttons, nur bei nicht-leerer README wählbar, und listet zuerst die beiden Links, dann JSON, dann „Export as HTML (Beta)“ (EXP-08), dann das BlueJ-ZIP | Chromium-GUI-Test GUI-67 (ohne Flag kein Fenster, mit Flag gerenderte README, Reihenfolge der Einträge, eine gemeinsame README-Checkbox, Flag im kopierten Link, bei leerer README deaktiviert); 2026-09-25 veraltete Erwartung ohne „(Beta)“ korrigiert, 1/1 grün | Abgesichert |
 | GUI-68 | Der Code-Editor hat einen Vim-Modus: standardmäßig aus, umschaltbar über Cmd/Ctrl+Shift+V oder die Einstellungen; im Modus zeigt der Editor unten die Vim-Statuszeile, Normal-Mode-Befehle (`j`, `dd`, `u`) wirken, ausgeschaltet tippt der Editor wieder normal | Chromium-GUI-Test GUI-68 (ohne Modus tippt `j` ein `j`, Kürzel schaltet ein, `--NORMAL--`, `dd`/`u`, Einstellungs-Checkbox synchron, Ausschalten beendet den Modus) | Abgesichert |
 | GUI-69 | BlueK liefert die BluePlay-Standardgrafiken mit (`assets/standard-images/`, im Bundle erzeugt): `Image("duck.png")` und `setBackground("pizza.png")` sind ohne Projektimport nutzbar, die Grafik wird auf die Weltfläche gezeichnet; eine gleichnamige Projektressource hat Vorrang; die Grafiken stehen nicht im Projekt und werden nicht gespeichert | Chromium-GUI-Test GUI-69 (Standardgrafik im Codepad und auf dem Canvas) und `smoke-blueplay-browser` (Auflösung über `images/`, Vorrang der Projektressource) | Abgesichert |
 | GUI-70 | Die im Build erzeugten Pixelmasken der Standardgrafiken stimmen mit der Browserdekodierung überein (Größe und Alphakanal), damit pixelgenaue Klicks und `isTouching` für sie stimmen | Chromium-GUI-Test GUI-70 über alle mitgelieferten Grafiken | Abgesichert |
@@ -258,8 +258,170 @@ bei Verweisen die Beschreibung mitnennen.
 | GUI-101 | Klassenkarten (180 × 108 px), Objekte der Bench (144 × 88 px), Seitenleisten- und Toolbar-Buttons sind etwa eine Browser-Zoomstufe kleiner; Schriftgrößen einzeln angepasst, kein globaler Skalierungsfaktor | Agent-Sichtprüfung im Dev-Server (Karten, Bench mit eingefügten Test-Objekten); Seitenleiste und Toolbar nur kurz gesehen; automatisierte Tests nicht ausgeführt | Visuelle Benutzerabnahme offen |
 | GUI-102 | Klassenkarten lassen sich auch über den sichtbaren Bereich des Diagramms hinaus nach rechts/unten ziehen; das Diagramm scrollt dann (am Rand scrollt das Ziehen zeitgesteuert mit höchstens 3 px je Frame weiter, unabhängig von der Mausgeschwindigkeit). Raster von 20 px bleibt, Positionen bleiben ≥ 0 | Chromium-Test GUI-102 (Ziehen an den rechten Rand, Position jenseits der Breite, Scrollbreite > Sichtbreite, Scrollweg nach 0,5 s begrenzt); GUI-75 und GUI-58 weiterhin grün; Typecheck 0 Fehler/0 Warnungen | Automatisiert abgesichert; Benutzerabnahme offen |
 | GUI-103 | `World.show()` öffnet ein vom Nutzer geschlossenes Weltfenster jedes Mal wieder, auch aus dem Codepad (vorher nur einmal; über das Objektmenü ging es schon). Andere Aufrufe lassen ein geschlossenes Fenster zu. Die Laufzeit zählt `show()`-Aufrufe (`BluePlayStage.showCount`), die Oberfläche öffnet bei neuem Zählerstand | Chromium-Test GUI-103 (dreimal schließen und über das Codepad wieder zeigen, `width`-Abfrage lässt es zu) grün, ohne die UI-Änderung rot; alle 19 BluePlay-GUI-Tests grün; `test:blueplay-stage`, `test:player-worker`, Typecheck grün; `npm run build:kotlite` erfolgreich | Automatisiert abgesichert; Benutzerabnahme offen |
+| RT-101 | Reduzierte portable `kotlin.test`-API: Test/BeforeTest/AfterTest/Ignore, sieben Assertions, frische Testinstanzen, Setup-/Teardown-Fehler, ignorierte Tests, Quellpositionen und Abbruch bei Eingabe | `test:testing` gegen echten Client/Host/Bundle grün; exakt erzeugter Quelltext unter Kotlin 2.2.21 und JUnit Jupiter 6.0.0 grün (`test:testing:portable`); `test:kotlin-surface`: 264 Ausdrücke, 5 bekannte Lücken, 20 Meldungen grün | Automatisierte Runtime-/JVM-Prüfung; keine Benutzerabnahme |
+| RT-102 | Objektleiste ↔ gespeicherter Zustand erhält rekonstruierbare Änderungen durch Konstruktor-/Aufruf-Replay; automatische Getter-Auswertungen bleiben außen vor, explizite Property-Lesezugriffe bleiben erhalten; ungenutzte Rückgabewerte und unbenutzte, von der Objektleiste entfernte Objekte werden nicht als lokale Variablen gespeichert; benötigte lokale Objekte und später verwendete Ergebnisse bleiben gebunden; Recording erzeugt gewöhnliche Kotlin-Testmethoden mit Assertions und einmaliger Resultatauswertung; Cancel entfernt Assertion-Entwürfe | `test:testing` prüft, dass `inspectGet` nicht im Journal landet und explizite `get`-Aufrufe erhalten bleiben, entfernt unbenutzte Objektdeklarationen und behält nachträglich verwendete lokale Objekte sowie Roundtrip, wiederholtes Speichern, formatierte Marker, mehrzeilige Argumente, handgeschriebenen Zustand, Recording, Cancel und ungültige Annotationen; `test:project-format` erhält `testTarget` in Export/Import | Runtime-/Formatprüfung grün; allgemeine Serialisierung und Simulationen ausgeschlossen |
+| GUI-104 | Eine angehängte grüne Testkarte ohne UML-Stereotyp erscheint fest und näher oben rechts hinter der Produktionsklasse; sie ist nicht einzeln verschiebbar, folgt aber beim Ziehen der Produktionsklasse; keine Verbindungslinie | Echter Chromium-Test GUI-104 prüft Erstellung, fehlendes Stereotyp, feste Lage, fehlende Linie, ignoriertes Ziehen der Testkarte und gemeinsames Bewegen; 1/1 grün am 2026-10-07 | Manuelle Abnahme im eingebauten Browser offen |
+| GUI-105 | „Save State from Object Bench“ zeigt eine editierbare, syntaxhervorgehobene CodeMirror-Vorschau mit Formatier-/Kommentaraktionen sowie „Cancel“ zum Verwerfen; bei engem Viewport scrollt der Inhalt, während Cancel erreichbar bleibt; „Load State to Object Bench“ rekonstruiert den gespeicherten Zustand; Recording mit Assertion speichert einen ausführbaren Test; Run All Tests zeigt bestanden | Echter Chromium-Test prüft beide State-Aktionen im Klassenmenü, Kotlin-Highlighting, Editoraktion sowie „Cancel“ bei 800 × 600 px mit langem Editorinhalt; durchläuft Konstruktor, Methodenaufrufe, beide Transfers, Vorschau, Save & Compile, Recording und Ergebnis; Screenshot `kotlin-tests-workspace.png` | Benutzerbestätigung und manuelle Abnahme im eingebauten Browser offen |
+| GUI-106 | Testfenster unterscheidet bestanden/fehlgeschlagen/ignoriert, zeigt Fehlerdetails, öffnet Quelltext, wiederholt einen einzelnen Test und bricht eine Aufzeichnung ab | Echter Chromium-Test mit drei Testmethoden, Fehlernavigation, Wiederholung und Cancel; grün | Benutzerbestätigung und manuelle Abnahme im eingebauten Browser offen |
+| GUI-107 | Rechtsklick auf eine Produktionsklasse zeigt „Create Test Class“ als letzten Eintrag unter einer Trennlinie im Kontextmenü | GUI-104 prüft letzten Eintrag, genaue Beschriftung und vorgeschaltetes `hr`; Klassenmenü im eingebauten Browser geprüft | Benutzerabnahme offen |
+| GUI-108 | Ein Klick auf eine Klassenkarte bringt sie sofort nach vorne; bei angehängten Testkarten wird das Paar angehoben und die Produktionsklasse bleibt vor der Testkarte | Echter Chromium-Test GUI-104 prüft Layerwechsel beim einfachen Klick und Reihenfolge des Testkartenpaars; 1/1 grün am 2026-10-07 | Manuelle Abnahme im eingebauten Browser offen |
+| GUI-109 | New File bietet direkt oberhalb von Kotlin Functions den Typ Test Class; die erzeugte grüne Testklasse ist keiner Produktionsklasse angehängt und kann als Standardklasse für Speichern/Laden des Objektzustands dienen, auch ohne `@Test`-Methode | Echter Chromium-Test GUI-109 prüft Optionsreihenfolge, Kartenkennzeichnung, fehlende Zuordnung, Test-/State-Aktionen auch ohne Testmethoden, Auswahl als Standardklasse und Speichern/Laden eines Zustands; `test:project-format` prüft Marker-Export/Import | Gezielter Lauf `testing.spec.ts` 7/7 grün am 2026-10-07; manuelle Abnahme im eingebauten Browser offen |
+| GUI-110 | Download und Hilfe sind textfreie gleich große Aktionsicons oben rechts; Testaktionen stehen unten in der Seitenleiste und sind zunächst eingeklappt. Ein einzelner Pfeil ohne Beschriftung zeigt eingeklappt nach oben und geöffnet nach unten; die Aktionen klappen nach oben auf. Nur im geöffneten Zustand steht oberhalb der Buttons zweizeilig „Testing is still in / the alpha stage.“ | Echter Chromium-Test GUI-110 prüft Einklappen, beide Testaktionen, Position und zweizeiligen Alpha-Hinweis nur im geöffneten Zustand, Textfreiheit und Größenvergleich mit Settings | GUI-110, Typecheck und `git diff --check` grün am 2026-10-07; visuelle Abnahme offen |
+| GUI-111 | Ein schlichtes Checklisten-Icon mit zwei gut erkennbaren Haken blendet alle Testklassen ein/aus; die Iconform bleibt gleich und nur die Farbe zeigt den Zustand; Produktionsklassen bleiben sichtbar | Echter Chromium-Test GUI-111 prüft beide Haken, identische Pfadgeometrie in beiden Zuständen, Farbwechsel und die sichtbare Produktionsklasse | Benutzerabnahme offen; neue Iconfassung im eingebauten Browser noch nicht geprüft |
+| GUI-112 | Drei gleich breite, textfreie dezente Aktionen rechts in der Statuszeile unter dem Objektbereich heißen „Save state“, „Load state“ und „Choose default test class“. Das erste Speichern schlägt `StateTest` vor, erstellt nach Namenseingabe eine unabhängige Testklasse und zeigt die Vorschau; im Klassenmenü heißen die Transfers „Load State to Object Bench“ und „Save State from Object Bench“ | Echter Chromium-Test prüft Position unter dem Bench, Buttonbreiten/Textfreiheit, Namensvorschlag, ersten gespeicherten Zustand, Autosave der Standardklasse, Laden und Wechsel der Standardklasse; `test:project-format` prüft Export/Import des Felds; Statuszeile im eingebauten Browser visuell geprüft | GUI-112 1/1, alle 7 Tests aus `testing.spec.ts`, `test:project-format`, `test:testing`, Typecheck und `build:kotlite` grün am 2026-10-07; Benutzerabnahme offen |
+| GUI-113 | Laden eines gespeicherten Zustands per Statusleistenaktion oder Testklassen-Kontextmenü öffnet weder Testfenster noch Editor; Speichern in eine Testklasse mit Attributen oder `@BeforeTest` warnt, ersetzt alle Klassenattribute und Setup-Methoden, lässt andere Methoden stehen und verwendet `val`. Aufzeichnung und Testlauf behalten ihr Testfenster | GUI-112 prüft beide Ladewege, geschlossenen Testeditor, Warnung nur bei vorhandenem Zustand, Ersetzen des Setups und Erhalt von Test-/Hilfsmethoden; GUI-105 prüft das Testfenster für Aufzeichnung und Run All Tests; `test:testing` prüft den Runtime-Roundtrip | `build:kotlite`, `test:testing`, Chromium GUI-112, Typecheck und `git diff --check` grün am 2026-10-07 |
+| GUI-114 | Die Vorschau des gespeicherten Zustands verwendet den eingebetteten normalen Kotlin-Editor mit Syntax-Highlighting, Font-/Dark-/Vim-Einstellungen sowie Kommentieren und Formatieren; Änderungen gehen weiterhin in die Speichervorschau ein | GUI-105 prüft CodeMirror-Highlighting, Editoraktionen und speichert eine im Editor vorgenommene Änderung erfolgreich | GUI-105 und GUI-112 grün am 2026-10-07; Typecheck 0 Fehler/0 Warnungen; manuelle Abnahme offen |
+| GUI-115 | Wenn der Objektbereich mehr Objekte enthält, als in den sichtbaren Bereich passen, kann man vertikal scrollen, um alle Objekte zu erreichen | Chromium-GUI-Test GUI-115 legt 12 Objekte an, prüft Overflow und scrollt das letzte Objekt sichtbar; 1/1 grün am 2026-10-07 | Automatisiert abgesichert; Nutzerabnahme offen |
+| RT-103 | State-Replay erhält die Reihenfolge zwischen Konstruktoren, Aufrufen und Rückgabeobjekten; `val`-Initialisierung im `init`-Block bei notwendigen Zwischenschritten. Bindung typisierter Codepad-Objekte dupliziert keine Deklaration; entfernte Konstruktorresultate behalten ihre Effekte; Legacy-Marker werden entfernt, String-Inhalte und andere Kommentare bleiben unverändert | Erweitertes `test:testing` prüft zwei Roundtrips mit Zustandsabhängigkeit, gemeinsamem Objekt, entferntem Mutator, Raw-String, Codepad-Bindung und aliastem/qualifiziertem Setup; nicht als `val` rekonstruierbare Referenzzuweisungen und lokale Namensüberschattung werden ausdrücklich gemeldet. JVM-Prüfung führt geordneten Zustand ebenfalls aus | Runtime-/JVM-Prüfung erfolgreich; Wiederholung statt allgemeiner Serialisierung |
+| GUI-116 | Alle Testklassen erscheinen im Testfenster und seiner Auswahl, auch ohne Testmethoden und vor dem ersten Compile. Jede Klasse bietet Record Test; leere Klassen bleiben auch nach Testläufen sichtbar | Chromium-Test legt BlankTest über New File an, prüft leere angehängte und freie Klassen, zeichnet den ersten Test mit Assertion auf und führt ihn erfolgreich aus; Save state während Recording deaktiviert. Im eingebauten Browser ebenfalls von leerer Klasse bis erfolgreichem Test bedient | Gezielter Browserlauf erfolgreich; Benutzerabnahme offen |
+| GUI-117 | Ersetzen eines Zustands mit `init`-Blöcken nennt diese in der Warnung und erhält den Zustand beim erneuten Laden; Laufzeitfehler beim Laden erscheinen im normalen Exception-Dialog und öffnen kein Testfenster | Chromium-Test lädt, überschreibt und lädt einen Init-Zustand; anschließend lädt er eine Klasse mit fehlschlagendem Setup und prüft Exception-Dialog und geschlossenes Testfenster | Gezielter Browserlauf erfolgreich; Benutzerabnahme offen |
+| GUI-118 | Volle Projektlinks laden optional den Standard-Testzustand, kombinierbar mit README; ohne Flag bleibt das Projekt unkompiliert und der Objektbereich leer | Chromium prüft die gemeinsame Optionsspalte und identische Buttonbreiten bei 800×700, kopierten Link, automatisches Compile/Load, Objektwert und geschlossenes Testfenster/Editor | Gezielter Browserlauf bestanden; Nutzerabnahme offen |
+| GUI-119 | Kurzlinks tragen die State-Option allein oder zusammen mit README; fehlender Default deaktiviert die Option und fehlerhafte Ladeaktionen zeigen einen Fehlerdialog | Chromium mit gemocktem Share-HTTP prüft erzeugten und geöffneten Kurzlink, gespeicherten Default, beide Query-Varianten sowie fehlenden Default und Setup-Exception | Gezielter Browserlauf bestanden; Nutzerabnahme offen |
 
 ## Prüfprotokoll
+
+### Keine Größenänderungsanzeige in der Codevorschau (2026-10-07)
+
+- Die eingebettete Kotlin-Vorschau beim Speichern eines Zustands oder einer
+  Testaufzeichnung hat `resize: none`. Der irreführende native Griff unten rechts
+  entfällt; die Höhe wird weiterhin durch den Dialog und die Fenstergröße bestimmt.
+- GUI-105 prüft die tatsächliche CSS-Eigenschaft; 1/1 bestanden einschließlich
+  Editieren, Speichern/Laden und Aufzeichnen. Nutzerabnahme offen.
+
+### Hinweisfenster vor dem BlueK-Download (2026-10-07)
+
+- Das Download-Icon ist ein Button und öffnet „BlueK Offline“. Der englische
+  Hinweis erklärt Entpacken, BlueK.html, JSON-Projektdateien, den lokalen Autosave
+  und das Fehlen von Kurzlinks. Es betont, dass für die Online-Nutzung kein
+  Download nötig ist. Erst „Download ZIP“ startet den Download.
+- GUI-63 prüft ausbleibenden Download beim Öffnen, Cancel, Escape, ZIP-Verfügbarkeit
+  und einen echten Download. GUI-110 prüft weiterhin Icongröße und Position.
+  Abschließender gezielter Lauf: 5/5 bestanden; Cancel bleibt bei 800×600 erreichbar.
+  Offline-Prüfung 4/4 (Chromium/WebKit), Typecheck 0 Fehler/0 Warnungen,
+  Svelte-Architekturprüfung und Produktionsbuild erfolgreich. Kein Commit/Push.
+
+### Gemeinsame Linkoptionen im Exportdialog (2026-10-07)
+
+- Die beiden Linkbuttons sind gleich breit; die drei Dateiexportbuttons
+  darunter gehen über die volle Dialog-Inhaltsbreite. „Open README“
+  und „Load state“ erscheinen jeweils einmal in einer gemeinsamen, beschrifteten
+  Optionsspalte „When opening a link:“ rechts neben den beiden Linkbuttons. Keine unterschiedlich breiten Pills;
+  die Zeile kann bei wenig Platz umbrechen und wird im dunklen Design angepasst.
+- GUI-118 prüft eine einzige State-Checkbox, gleich breite Linkbuttons,
+  volle Breite der Dateiexportbuttons und gleiche linke Kanten bei 800×700,
+  mit erreichbarem Cancel. GUI-67 prüft eine einzige
+  README-Checkbox; Linkerzeugung und Ladeverhalten werden weiterhin geprüft.
+  Der bisherige gezielte Lauf bestand 5/5; GUI-118 nach der Breitenkorrektur
+  erneut 1/1 bestanden, einschließlich tatsächlicher DOM-Breitenmessung.
+  Nutzerabnahme offen.
+
+### Projektlinks mit gespeichertem Standardzustand (2026-10-07)
+
+- Save/Export bietet „Load state“ für vollständige und kurze Links, deaktiviert
+  ohne vorhandene Standardklasse. Beide Linkoptionen sind getrennt von den
+  Projekt-JSON-Daten und lassen sich mit „Open README“ kombinieren.
+- Vollständige Links unterstützen `#bluek=…&state=1`, Kurzlinks `?state=1`;
+  nach Import wird über die normale TestWorkspace-Aktion kompiliert und geladen.
+  Fehlender Default und Setup-Exceptions bleiben im normalen Fehlerdialog sichtbar.
+- GUI-118/GUI-119 prüfen Flag-Ausgabe, Standardverhalten ohne Flag, automatische
+  Ausführung samt Objektzustand, README-Kombination, beide Kurzlinkvarianten sowie
+  fehlenden Default und fehlerhaftes Setup. Abschließend **11/11** Browserfälle
+  in `testing.spec.ts` bestanden; GUI-67 für die bisherige README-Linkoption
+  zusätzlich bestanden. Der erste gezielte Lauf scheiterte nur an einem falschen
+  Test-Locator für den Ergebnisdialog; nach Korrektur bestanden alle vier
+  gezielt geprüften Fälle.
+- Typecheck: 0 Fehler/0 Warnungen; `test:workspace`, `test:project-format`,
+  Svelte-Architekturprüfung und Produktionsbuild erfolgreich.
+  `test:offline`: **4/4**, einschließlich Chromium und WebKit unter `file://`.
+- Eingebauter Browser: Exportdialog und gekoppelte State-Checkboxen visuell
+  geprüft. Screenshot: `test-results/project-link-state-option.png`.
+  Noch keine Benutzerabnahme; weder committed noch gepusht.
+
+### Gesamtprüfung der Testfunktionen und GUI-Änderungen (2026-10-07)
+
+- Korrigiert: Klassenauswahl ohne Testmethoden, Aufzeichnung in leeren Klassen,
+  Reihenfolge von Konstruktoren und Aufrufen, Bindung von Methodenresultaten und
+  typisierten Codepad-Referenzen, Raw-String-Inhalte, vollständiges Ersetzen
+  von Properties/Setup mit Aliasannotation und Getter sowie obsolete Marker.
+- Für chronologisch verflochtene Vorbereitungen erzeugt der Runtime-Tester
+  gewöhnliche `val`-Felder mit Zuweisungen im `init`-Block. Die Vorschau warnt
+  auch vor dem Ersetzen vorhandener `init`-Blöcke. Entfernte Objektnamen
+  entfallen; Konstruktoren mit möglichen Effekten bleiben als Aufruf erhalten.
+- Projektaktionen folgen weiterhin dem zuständigen Controller. Umbenennung
+  des Standardtests passt den Default an; Löschen der Produktionsklasse löst
+  ihre Testkarte und erhält die Testkennzeichnung; Duplikate sind unabhängig.
+  `test:workspace` prüft diese Aktionen mit echten Svelte-Runes.
+- Vererbungspfeile leiten ihre Ebene direkt von den Karten ab, auch bei einem
+  einfachen Klick nach dem Ziehen (GUI-58). Die Aufzeichnung kann keine
+  konkurrierende State-Speicherung starten. Fehler bei verborgenem Testfenster
+  bleiben sichtbar; Testnamen mit gewöhnlichen Bezeichnern brauchen keine Backticks.
+- Erster Gesamtlauf: alle Helper-/Runtime-/Format-/Player-/Offline-Prüfungen
+  bestanden; GUI 160/166. GUI-58 deckte den Ebenenfehler auf. GUI-117 verwendete
+  fälschlich eine reine Hash-Navigation zum erneuten Laden und suchte den
+  Exception-Dialog als Alert. Beide Ursachen korrigiert. Die übrigen vier
+  Ausfälle traten während Änderungen mit automatischem Vite-Reload auf.
+  Gezielte Wiederholung aller sechs Ausfälle und der Test-GUI: **14/14 bestanden**.
+- `test:testing:portable` erfolgreich: genau generierter Quelltext läuft mit
+  Kotlin 2.2.21, `kotlin-test-junit5` und JUnit Jupiter 6.0.0; HundTest 2 Tests,
+  TextTest 2 Tests, ApiTest 2 Tests (1 ignoriert), EmptyState 1 Test, keine Fehler.
+  `browser-smoke`, `test:generics` (49 Grenzfälle), `test:conformance`
+  (alle 819 Baseline-Fälle; 820 erfolgreiche Fälle insgesamt), Typecheck
+  (0 Fehler/0 Warnungen), Produktionsbuild und `git diff --check` erfolgreich.
+  Die weiteren Konformitätsfehler/-Timeouts außerhalb der Baseline sind bekannte
+  Sprachgrenzen; die Baseline wurde nicht erweitert.
+- Eingebauter Browser: New File → leere freie Testklasse → Aufzeichnung;
+  Konstruktor, Methodenaufruf und Codepad-Abfrage; Vorschau und Speichern;
+  ausgeführter Test bestanden. Nach dem Lauf bleibt die andere leere Testklasse
+  im Testfenster sichtbar. Bei schmaler Ansicht kann das Testfenster für die
+  Objektarbeit geschlossen und über „Recording…“ wieder geöffnet werden;
+  die Aufzeichnung bleibt dabei erhalten. Keine Benutzerabnahme daraus abgeleitet.
+- Zusätzlich korrigiert: Load state bleibt nach einem Seiten-Neuladen verfügbar
+  und kompiliert bei Bedarf automatisch. GUI-112 prüft diesen Weg; im eingebauten
+  Browser wurde der gespeicherte Hund ohne manuellen Compile-Schritt geladen
+  und sein Alter im Objektinspektor geprüft. Weder Testfenster noch Editor öffneten sich.
+- Abschließender `npm run test:regression` auf unverändertem Code vollständig
+  erfolgreich: Helper-/Runtime-/Format-/Player-/Offline-Prüfungen sowie
+  **166/166 Chromium-GUI-Tests**, davon alle **9/9** in `testing.spec.ts`.
+  `browser-smoke` und die JVM-Portabilitätsprüfung nochmals erfolgreich.
+  Screenshot: `test-results/kotlin-tests-empty-classes.png` zeigt eine weiterhin
+  leere angehängte Testklasse neben dem ersten erfolgreich aufgezeichneten Test.
+  Es wurde weder committed noch gepusht.
+
+### GUI-114: Kotlin-Editor in der Fixture-Vorschau (2026-10-07)
+
+- Das einfache Textfeld ist durch den wiederverwendeten CodeMirror-Editor ersetzt.
+  Er übernimmt Schriftgröße, Dark Mode und Vim-Einstellung des normalen Editors;
+  Kommentieren, Formatieren und der Format-Shortcut sind ebenfalls verfügbar.
+- GUI-105 prüft Syntax-Token, Toolbar und eine editierte Vorschau, die danach
+  kompiliert wird; GUI-112 bleibt ebenfalls grün. Typecheck und
+  `git diff --check` sind grün.
+
+### RT-102: Unbenutzte Fixture-Ergebnisse (2026-10-07)
+
+- Das Fixture-Journal erfasst weiterhin automatisch Rückgabewerte für Assertions
+  und spätere Aufrufe. Bei der Codegenerierung entfallen aber ungenutzte
+  `resultN`-Variablen; der ursprüngliche Aufruf bleibt erhalten. Wird ein
+  zurückgegebenes Objekt später verwendet, bleibt seine Bindung bestehen.
+- Der Inspektor sendet `inspectGet` nicht mehr ins Fixture-Journal. Ein
+  ausdrücklich über die Objektaktion ausgelöster `get`-Aufruf bleibt erfasst.
+- Der Runtime-Smoke deckt automatische und ausdrückliche Getter-Lesezugriffe,
+  ungenutzte Skalarresultate und später verwendete Objektergebnisse ab.
+  `npm run build:kotlite` und `npm run test:testing` am 2026-10-07 grün;
+  vorhandene Kotlin-Casts- und Bundlegrößen-Warnungen.
+- Beim Erzeugen des gespeicherten Zustands werden nicht mehr auf der Objektleiste
+  liegende Objektbindungen nur dann weggelassen, wenn keine späteren
+  Replay-Schritte sie referenzieren. Der Runtime-Smoke prüft ein gelöschtes,
+  unbenutztes Objekt und ein gelöschtes Objekt mit weiterem aufgezeichnetem
+  Methodenaufruf; `npm run test:testing` nach Ergänzung 2026-10-07 grün.
+- `git diff --check` grün.
+
+### GUI-110: Hinweis zum Alpha-Stand der Tests
+
+- Im ausgeklappten Bereich steht oberhalb der Buttons dezent und zweizeilig:
+  „Testing is still in / the alpha stage.“ Im eingeklappten Zustand ist der
+  Hinweis nicht sichtbar.
+- GUI-110 prüft Sichtbarkeit in beiden Zuständen; Browserlauf und Typecheck
+  stehen nach Ausführung in der Prüfnotiz.
 
 ### BluePlay-API gegen das GitHub-BlueJ-Projekt geprüft (2026-09-30)
 
@@ -3082,3 +3244,121 @@ KI-Code (`sortedWith(compareBy({ … }, { … }))`, `getOrPut(k) { mutableListOf
 - Vollständiger Lauf grün: Typecheck 0 Fehler/0 Warnungen, alle Node-Suiten
   grün, PERF-06 162–340 ms je Fall, `test:offline` 4/4, Chromium 154/154;
   PERF-01 324 Frames, p95 15,1 ms, max. 17,5 ms.
+
+### RT-101/RT-102 und GUI-104–106: Kotlin-Tests und BlueJ-Bedienideen (2026-10-06)
+
+Auf Wunsch des Nutzers auf Branch `codex/kotlin-tests`. Eigene `kotlin.test`-
+Oberfläche im vorhandenen Interpreter; Fixture-Transfer in beide Richtungen,
+interaktive Aufzeichnung mit Assertions, angehängte Testkarten und Ergebnisse.
+
+- `npm run build:kotlite` erfolgreich; Typecheck: 0 Fehler, 0 Warnungen;
+  `build:svelte` erfolgreich (bekannte Warnung zur Größe des Frontend-Chunks).
+- Abschließendes `npm run build` erfolgreich: finales Interpreter-Bundle,
+  Programmexport, Offline-Version und Svelte-Produktion gemeinsam aktualisiert.
+- Neuer Runtime-Smoke grün. Exakt der darin erzeugte Fixture-/Testquelltext
+  besteht außerhalb BlueKs unter Kotlin 2.2.21, `kotlin-test-junit5` und
+  JUnit Jupiter 6.0.0. Drei Tests bestanden, ein weiterer wurde ignoriert;
+  null Fehler. Enthält benannte Assertion-Argumente, Smartcasts, NaN und signed
+  zero sowie eine zweimal gespeicherte Fixture mit mehrzeiligem String-Argument.
+- Die neuen tatsächlichen Chromium-GUI-Tests bestehen 3/3, einschließlich
+  Kartenbewegung, sichtbarer Verbindung, Roundtrip, Recording, Fehlerdetails,
+  Quellnavigation und einzelnem Wiederholen.
+- Zwischenstände waren rot: Svelte-Dialogreaktivität, delegierte Klicks,
+  Auswahl nach Compile und unveränderte CodeMirror-Rückmeldungen wurden
+  korrigiert. Screenshot-Prüfung fand eine verdeckte Verbindung; Linienprüfung
+  ergänzt, nach Korrektur grün. Ein bestehender Sprachfehler verlor das Vorzeichen
+  von `-0.0`; korrigiert und in der Assertion-Prüfung abgesichert. Ein zunächst
+  auf Top-Level angewendeter Smartcast-Smoke wurde auf einen regulären
+  Funktionsrumpf korrigiert (bestehende Smartcast-Unterstützung gilt dort).
+- Manuelle Prüfung im **eingebauten Browser** blockiert: Nach „New Project →
+  Empty Project“ erschien der native Bestätigungsdialog zum Ersetzen des
+  vorhandenen Projekts. Die Dialog-API lieferte keinen erreichbaren Dialog;
+  weitere Tab-Aktionen blieben ohne Wirkung oder liefen in Timeouts, auch nach
+  Escape. Dies ist kein bestandener Usability-Durchlauf. Zugriff auf die native
+  Codex-App wurde vom Computer-Use-Werkzeug abgelehnt; keine Umgehung versucht.
+  Die separaten Chromium-Prüfungen sind davon getrennt.
+- Weitere tatsächlich gefundene Zwischenstände: Die Konformität verlor
+  `when/whenSubjectVariable/ieee754Equality.kt`, nachdem negative Null erhalten
+  blieb; numerische Vergleichsoperatoren sind auf IEEE-Semantik korrigiert.
+  Fixture-Erzeugung rückte zunächst auch Raw-String-Inhalte ein; Parser-Spannen
+  und Einrücken nur der ersten Anweisungszeile beheben das. Der erweiterte
+  Roundtrip und derselbe JVM-Test bestehen. Ein JVM-Lauf scheiterte an einer
+  zusätzlichen alten `ApiTest 2.class` mit falschem internen Klassennamen; nach
+  sauberem `clean test` ist der gesamte Build grün.
+- Ein GUI-Lauf wurde durch eigenes Bearbeiten während des Laufs unterbrochen
+  (HMR ersetzte die Runtime, GUI-99 wartete vergeblich). Der vollständige neue
+  Lauf ohne UI-Änderungen besteht: `npm run test:regression` Exit 0, alle
+  Node-Suiten grün, `test:offline` 4/4, echte Browserfälle 159/159. PERF-06:
+  163–358 ms; PERF-01: 323 Frames, p95 15,1 ms, maximal 18,1 ms.
+- Zusätzlich `browser-smoke` (inklusive Curriculum) und `test:generics`
+  (49 Grenzfälle und suspendierter Inline-Return) grün. Die abschließende
+  `test:conformance`-Prüfung bleibt bei allen 819 Baseline-Fällen grün; ein
+  weiterer Fall besteht jetzt. Die übrigen Konformitätslücken bleiben
+  unverändert erfasst (13 falsche Resultate, 1616 Fehler, vier Timeouts im
+  breiteren Korpus von 2453 Fällen innerhalb des Untersuchungsbereichs).
+- Benutzerabnahme und manueller Durchlauf im eingebauten Browser bleiben offen.
+
+### GUI-104/GUI-108: Testkartenlayout und Klick-Stapelung (2026-10-07)
+
+- Testkarte liegt nun fest 30 px rechts und 30 px oberhalb ihrer Produktionsklasse;
+  sie kann nicht separat gezogen werden, folgt der Klasse und hat keine
+  Verbindungslinie. Bei niedriger Position wird sie am oberen Canvasrand
+  gehalten. Produktionsklasse und Testkarte werden als Paar angehoben, die
+  Produktionsklasse bleibt im Vordergrund.
+- Auf Nutzerhinweis entfällt die generische UML-Markierung `«test»`; die Karte
+  rückt entsprechend näher an die Produktionsklasse.
+- Ein erster Chromium-Lauf zeigte, dass ein Klick den gespeicherten Layer änderte,
+  die Kartenkomponente den Layerwechsel aber erst nach einem anderen Renderanlass
+  sichtbar machte. Die Layerliste ist jetzt ein abgeleiteter Workspace-Wert und
+  aktualisiert die Karte direkt beim Klick.
+- Zwischenläufe deckten außerdem die Randbegrenzung oben und den nicht anklickbaren
+  verdeckten Bereich der Testkarte auf. Testinteraktionen verwenden jetzt den
+  sichtbaren oberen rechten Bereich; die fest gebundene Karte ignoriert Ziehen.
+- `npm run test:gui -- tests/gui/testing.spec.ts`: final 3/3 grün (GUI-104–106).
+  Der abschließende Lauf nach Entfernung der Markierung und dem Versatz von
+  30 × 30 px prüft in GUI-104 auch deren Abwesenheit. GUI-104 prüft feste Lage,
+  keine Verbindungslinie,
+  Klick-Stapelung, kein Einzelziehen und gemeinsames Ziehen; GUI-105/106 bleiben
+  ebenfalls grün.
+  Der erste Lauf war wegen fehlendem lokalen Portzugriff sandboxbedingt blockiert;
+  der Lauf mit Netzwerkfreigabe bestand. Eingebauter Browser weiterhin nicht
+  manuell abgenommen.
+- Ergänzung GUI-109: unabhängige Testklasse über New File, grüne Karte und
+  Marker `isTestClass` ohne `testTarget`, direkt oberhalb von Kotlin Functions.
+  Typecheck 0 Fehler/0 Warnungen, `test:project-format` grün; abschließender
+  gezielter GUI-Lauf 4/4 grün (GUI-104–106 und GUI-109).
+- Die Schaltfläche in der Fixture-Vorschau heißt jetzt „Cancel“; GUI-105 prüft
+  die Beschriftung. `npm run test:gui -- tests/gui/testing.spec.ts`: 7/7 grün
+  (der erste Versuch war durch `EPERM` beim lokalen Serverstart blockiert; der
+  Lauf mit Netzwerkfreigabe bestand). `git diff --check` grün.
+- Die Vorschau begrenzt ihre Höhe auf den Viewport, scrollt den Inhalt separat
+  und hält die Aktionen sichtbar. GUI-105 prüft „Cancel“ bei 800 × 600 px trotz
+  langem Inhalt am unteren Viewportrand. GUI 7/7 und Typecheck (0 Fehler,
+  0 Warnungen) erfolgreich; `git diff --check` sauber.
+- Die Objektleisten-Aktionen und das Klassenmenü verwenden jetzt „Save State“
+  und „Load State“ statt „fixture“. Die Vorschau und Warnung sprechen ebenfalls
+  vom gespeicherten Zustand. `npm run test:gui -- tests/gui/testing.spec.ts`:
+  7/7 grün; Typecheck 0 Fehler/0 Warnungen; `git diff --check` grün.
+- Im Klassenmenü zeigen „Load State to Object Bench“ und „Save State from
+  Object Bench“ beide Transferrichtungen. Als erster Klassenname wird
+  „StateTest“ vorgeschlagen. GUI-112 gezielt erneut ausgeführt: 1/1 grün.
+- GUI-115 macht den Objektbereich vertikal scrollbar. Der erste Browserlauf
+  scrollte nur um eine Fensterhöhe und erreichte das letzte Objekt nicht; mit
+  einem Scrollschritt bis zum Ende besteht GUI-115 1/1. Auch GUI-105 und GUI-112
+  bestehen nach den Menütextänderungen 2/2. Typecheck: 0 Fehler/0 Warnungen.
+
+### GUI-109: New File-Testklasse als State-Ziel (2026-10-07)
+
+- Projektdateien mit `isTestClass` oder `testTarget` werden dem Runtime-Tester
+  als explizite Testklassen gemeldet. Dadurch kann auch eine leere Klasse als
+  Objektzustand dienen und erscheint nach dem Kompilieren in der Runtime.
+- Die Standardklassen-Auswahl berücksichtigt den Projektmarker schon vor dem
+  Kompilieren. Die damalige Einschränkung, Klassen ohne `@Test` aus der Testsuite-Auswahl und
+  dem Run-Tests-Menü auszublenden, ist durch GUI-116 aufgehoben: Alle Testklassen
+  stehen für State-Aktionen, Aufzeichnung und spätere Testmethoden bereit.
+- GUI-109 legt über New File eine unabhängige Testklasse an, wählt sie als
+  Standard, kompiliert, speichert den Objektbereich hinein und lädt ihn zurück.
+  `npm run build:kotlite`, `npm run test:testing`, `npm run typecheck`,
+  `npm run test:gui -- tests/gui/testing.spec.ts` (7/7) und
+  `git diff --check` erfolgreich. Der erste Browserlauf scheiterte an der
+  Sandbox-Portfreigabe; der Lauf mit Netzwerkfreigabe war erfolgreich.

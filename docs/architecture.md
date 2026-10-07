@@ -61,6 +61,10 @@ Der Worker hält genau eine `KotliteSession` mit genau einem lebenden
 - `workspace/ProjectWorkspace.svelte.ts`: besitzt Projektdateien, Library,
   Ressourcen, README, Projektname, Kartengeometrie und Projekt-/Transferdialoge.
   Verantwortet Laden, Vorlagen, Autosave, Quelltextänderungen und Export.
+  Linkoptionen für README und Standard-Testzustand gehören zum Projekttransfer;
+  nach erfolgreichem Linkimport delegiert der Controller das Zustandsladen über
+  `TestWorkspace.loadDefaultFixture`. Diese Aktion nutzt den bestehenden
+  Compile-/Fixture-Weg und öffnet kein Testfenster.
   `EditorWorkspace.svelte.ts`: besitzt Editorfenster, Tabs, Diagnosemarkierungen
   und CodeMirror-Registrierungen. `ObjectWorkspace.svelte.ts`: besitzt
   Aufrufdialoge, Menüs und Inspektorfenster; Objektbank und Inspektorwerte
@@ -114,6 +118,14 @@ Der Worker hält genau eine `KotliteSession` mit genau einem lebenden
   ersetzt ausschließlich die IDE-Worker-Fabrik durch
   `offlineRuntimeWorkerFactory.ts` (Blob-Worker mit eingebettetem Interpreter);
   Client, Protokoll, RuntimeHost und autoritativer Zustand bleiben gleich.
+- `workspace/TestWorkspace.svelte.ts` und `components/TestPanel.svelte`: Testauswahl,
+  Dialogentwürfe, Quelltextvorschau und Ergebnisdarstellung. Discovery, Ergebnisse,
+  Fixture-Rezept und Aufzeichnung gehören `BlueKTesting` in der vorhandenen
+  `KotliteSession`; sie werden über denselben Worker/Client als typisierte
+  `testing`-Snapshotdaten und Test-/Fixture-Befehle veröffentlicht. Kein zweiter
+  Interpreter oder Runtime-Store. Quelltext wird anhand des Kotlin-AST im Worker
+  erzeugt; `ProjectWorkspace` übernimmt bestätigte Quellen und besitzt die
+  optionale Kartenverbindung `testTarget`. Details: [testing.md](testing.md).
 - `codepadFlow.ts`: Compile-on-demand und Codepad-Auswertung. Nutzt nur die
   benötigten Client-Fähigkeiten, liefert typisierte Ergebnisse und verwirft
   Antworten nach einem Generationswechsel. History gehört `ExecutionWorkspace`,
@@ -129,8 +141,8 @@ Der Worker hält genau eine `KotliteSession` mit genau einem lebenden
 - `projectTemplates.ts`: lädt statische JSON-Vorlagen über HTTP; im Offline-Build
   liefert es frische Kopien der eingebetteten Vorlagen, auch unter `file://`.
 - `projectFormat.ts`: typisiertes `.bluek.json`-Format. Validiert externe
-  `unknown`-Payloads und wandelt Dateien, Ressourcen und Kartenpositionen in
-  das interne `ProjectFile`-Modell. Keine DOM-, Svelte- oder
+  `unknown`-Payloads und wandelt Dateien, Ressourcen, Kartenpositionen sowie
+  die optionale Standard-Testklasse in das interne Projektmodell. Keine DOM-, Svelte- oder
   Runtime-Abhängigkeit; IDs injiziert die Oberfläche.
 - `blueJImport.ts`: BlueJ-Projekt (ZIP oder Ordner) → BlueK-Projekt. Wurzel
   ist das flachste `package.bluej`; Kotlin-Dateien werden Karten,

@@ -3,6 +3,8 @@
 
   import type { BenchObject } from "../uiTypes";
   import type { CardPosition, InheritanceEdge } from "../uiTypes";
+  export let testFileIds: string[] = [];
+  export let showTestClasses = true;
   export let inheritanceMode: boolean;
   export let inheritanceSelection: string;
   export let showInheritance: boolean;
@@ -11,8 +13,8 @@
   export let readme: string;
   export let displayFiles: ProjectFile[];
   export let displayCardPositions: CardPosition[];
+  export let displayCardLayers: number[];
   export let uncompiled: boolean;
-  export let cardLayer: (file: ProjectFile, index: number) => number;
   export let selectCard: (file: ProjectFile, index: number) => void;
   export let beginCardDrag: (
     event: MouseEvent | PointerEvent,
@@ -45,11 +47,11 @@
         : "Select a subclass, then its superclass."}
     </div>{/if}
   {#if showInheritance}
-    {#each inheritanceEdges as edge, index}
+    {#each inheritanceEdges.filter((edge) => showTestClasses || (!testFileIds.includes(edge.id) && !testFileIds.includes(edge.parentId))) as edge, index}
       <svg
         class="inheritance-edge"
         aria-hidden="true"
-        style={`z-index:${edge.zIndex}`}
+        style={`z-index:${Math.max(displayCardLayers[displayFiles.findIndex((file) => file.id === edge.id)] ?? edge.zIndex, displayCardLayers[displayFiles.findIndex((file) => file.id === edge.parentId)] ?? edge.zIndex)}`}
         ><defs
           ><marker
             id={`svelte-inheritance-arrow-${index}`}
@@ -103,12 +105,16 @@
       {@const position = displayCardPositions[index]}
       <div
         role="button"
-        tabindex="0"
         aria-label={file.fileName.replace(".kt", "")}
+        aria-hidden={!showTestClasses && testFileIds.includes(file.id)}
+        tabindex={!showTestClasses && testFileIds.includes(file.id) ? -1 : 0}
+        class:test-card={testFileIds.includes(file.id)}
+        class:hidden-test-card={!showTestClasses && testFileIds.includes(file.id)}
+        class:attached-test={Boolean(file.testTarget)}
         class:uncompiled
         class:inheritance-selected={inheritanceSelection === file.id}
         class="classcard"
-        style={`left:${position.x}px;top:${position.y}px;z-index:${cardLayer(file, index)};--card-left:${position.x}px;--card-top:${position.y}px`}
+        style={`left:${position.x}px;top:${position.y}px;z-index:${displayCardLayers[index]};--card-left:${position.x}px;--card-top:${position.y}px`}
         on:mousedown={(event) => {
           if (!inheritanceMode) beginCardDrag(event, file);
         }}
@@ -128,7 +134,7 @@
             selectCard(file, index);
           }
         }}
-      >
+        >
         <div class="card-header">
           {#if file.kind === "functions"}<small>«functions»</small>{/if}<strong
             >{file.fileName.replace(".kt", "")}</strong

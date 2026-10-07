@@ -121,6 +121,7 @@ export type EditorOptions = {
   diagnosticsRun: number;
   vim: boolean;
   dark: boolean;
+  editable?: boolean;
 };
 
 export function createEditorActions(host: EditorActionHost) {
@@ -180,11 +181,13 @@ export function createEditorActions(host: EditorActionHost) {
     const vimKeys = new Compartment();
     const editorTheme = new Compartment();
     const editorHighlight = new Compartment();
+    const editorEditable = new Compartment();
     view = new EditorView({
       state: EditorState.create({
         doc: current.value,
         extensions: [
           vimKeys.of(current.vim ? vim({ status: true }) : []),
+          editorEditable.of(EditorView.editable.of(current.editable !== false)),
           editorTheme.of(current.dark ? darkEditorTheme : []),
           editorHighlight.of(
             syntaxHighlighting(
@@ -266,6 +269,7 @@ export function createEditorActions(host: EditorActionHost) {
         const previousId = current.id;
         const vimChanged = next.vim !== current.vim;
         const darkChanged = next.dark !== current.dark;
+        const editableChanged = next.editable !== current.editable;
         current = next;
         if (vimChanged) {
           view.dispatch({
@@ -284,6 +288,12 @@ export function createEditorActions(host: EditorActionHost) {
                 ),
               ),
             ],
+          });
+        if (editableChanged)
+          view.dispatch({
+            effects: editorEditable.reconfigure(
+              EditorView.editable.of(next.editable !== false),
+            ),
           });
         if (previousId !== next.id) {
           host.formatters.delete(previousId);

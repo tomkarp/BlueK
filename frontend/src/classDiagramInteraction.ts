@@ -16,6 +16,7 @@ export function createDiagramInteraction(host: DiagramInteractionHost) {
   const cardGridSize = 20;
   function beginCardDrag(event: MouseEvent | PointerEvent, file: ProjectFile) {
     if (
+      file.testTarget ||
       event.button !== 0 ||
       ("pointerType" in event && event.pointerType === "touch")
     )
@@ -161,6 +162,7 @@ export function measureInheritanceEdges(
       end = cardBorderPoint(b, bc, ac);
     next.push({
       id: child.id,
+      parentId: displayFiles[parentIndex].id,
       x1: start.x,
       y1: start.y,
       x2: end.x,

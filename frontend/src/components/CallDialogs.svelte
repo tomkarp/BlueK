@@ -11,6 +11,22 @@
   } from "../uiTypes";
   import { missingRequired, missingTypeArgument } from "../uiParity";
   import CallArguments from "./CallArguments.svelte";
+  export let recording = false;
+  export let assertionAvailable = false;
+  export let suggestedExpected: string | null = null;
+  export let assertionError = "";
+  export let addAssertion: (
+    expected: string,
+    kind: "equals" | "null" | "notNull",
+  ) => Promise<void> = async () => {};
+  let expected = "";
+  let assertionKind: "equals" | "null" | "notNull" = "equals";
+  let previousResult: ResultDialog | null = null;
+  $: if (resultDialog !== previousResult) {
+    previousResult = resultDialog;
+    expected = suggestedExpected || "";
+  }
+
   export let createDialog: CreateDialog | null;
   export let invokeDialog: InvokeDialog | null;
   export let resultDialog: ResultDialog | null;
@@ -156,6 +172,31 @@
       <h3>Method result</h3>
       <div class="result-method">{resultDialog.method}</div>
       <output class="result-value">{resultDialog.value}</output>
+      {#if recording && assertionAvailable}<div class="test-assertion">
+          <label
+            >Test assertion<select bind:value={assertionKind}
+              ><option value="equals">Equals expected value</option><option
+                value="null">Is null</option
+              ><option value="notNull">Is not null</option></select
+            ></label
+          >
+          {#if assertionKind === "equals"}<label
+              >Expected Kotlin expression<input
+                bind:value={expected}
+                spellcheck="false"
+              /></label
+            >{/if}
+          {#if assertionError}<p class="dialog-error" role="alert">
+              {assertionError}
+            </p>{/if}
+          <button
+            disabled={!canExecute ||
+              (assertionKind === "equals" && !expected.trim())}
+            on:click={async () => {
+              await addAssertion(expected, assertionKind);
+            }}>Add Assertion</button
+          >
+        </div>{:else if recording}<p>Result recorded.</p>{/if}
       <div class="result-actions">
         {#if resultDialog.objectId}<button
             on:click={() => {

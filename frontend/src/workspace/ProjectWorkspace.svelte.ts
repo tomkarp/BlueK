@@ -52,8 +52,10 @@ import type { ObjectWorkspace } from "./ObjectWorkspace.svelte";
 import type { ExecutionWorkspace } from "./ExecutionWorkspace.svelte";
 import type { WorkspaceUi } from "./WorkspaceUi.svelte";
 import type { EditorWorkspace } from "./EditorWorkspace.svelte";
+import type { TestWorkspace } from "./TestWorkspace.svelte";
 
 interface ProjectWorkspaceHost {
+  tests: () => Pick<TestWorkspace, "loadDefaultFixture">;
   objects: () => Pick<ObjectWorkspace, "dismissMenu">;
   session: () => Readonly<
     Pick<
@@ -81,6 +83,8 @@ export class ProjectWorkspace {
     x: 80 + (index % 4) * 280,
     y: 40 + Math.floor(index / 4) * 160,
   });
+  private testClassSource = (name: string) =>
+    `import kotlin.test.*\n\nclass ${name} {\n    // Add @Test methods here, or choose Record Test from the class menu.\n}\n`;
   files: ProjectFile[] = $state.raw([]);
   library: ProjectLibrary | undefined = $state.raw(undefined);
   resources: Resource[] = $state.raw([]);
@@ -91,14 +95,24 @@ export class ProjectWorkspace {
   newClassOpen = $state(false);
   newClassName = $state("");
   newClassType:
-    "class" | "interface" | "open" | "abstract" | "data" | "functions" =
-    $state("class");
+    | "class"
+    | "interface"
+    | "open"
+    | "abstract"
+    | "data"
+    | "test"
+    | "functions" = $state("class");
   inheritanceMode = $state(false);
   inheritanceSelection = $state("");
   showInheritance = $state(true);
+  showTestClasses = $state(true);
   bluePlayApiFile: ProjectFile | null = $state(null);
   readme = $state("");
   projectName = $state("");
+  defaultTestClass = $state("");
+  setDefaultTestClass = (name: string) => {
+    this.defaultTestClass = name;
+  };
   readmeOpen = $state(false);
   readmeHelp = $state(false);
   imageLibraryOpen = $state(false);
@@ -110,6 +124,11 @@ export class ProjectWorkspace {
   shareCodeInput = $state("");
   shareCodeError = $state("");
   shareWithReadme = $state(false);
+  shareWithState = $state(false);
+  canShareState = $derived.by(() =>
+    Boolean(this.defaultTestClass) &&
+    this.files.some((file) => file.fileName === `${this.defaultTestClass}.kt`),
+  );
   autosaveReady = $state(false);
   inheritanceEdges: InheritanceEdge[] = $state([]);
   cardLayers: Record<string, number> = $state({});
@@ -119,6 +138,9 @@ export class ProjectWorkspace {
       this.cardPosition(file, index),
     );
   });
+  displayCardLayers: number[] = $derived.by(() =>
+    this.displayFiles.map((file, index) => this.cardLayer(file, index)),
+  );
   htmlExporting = $state(false);
   displayFiles = $derived.by(() => {
     return this.library?.id === "blueplay"
@@ -148,17 +170,46 @@ export class ProjectWorkspace {
     );
   };
   cardPosition = (file: ProjectFile, index: number) => {
+    if (file.testTarget) {
+      const targetIndex = this.displayFiles.findIndex(
+        (candidate) => candidate.fileName === file.testTarget,
+      );
+      const target = this.displayFiles[targetIndex];
+      if (target && !target.testTarget) {
+        const targetPosition =
+          this.cardPositions[target.id] ||
+          this.defaultCardPosition(targetIndex);
+        return {
+          x: targetPosition.x + 30,
+          y: Math.max(0, targetPosition.y - 30),
+        };
+      }
+    }
     return this.cardPositions[file.id] || this.defaultCardPosition(index);
   };
   cardLayer = (file: ProjectFile, index: number) => {
+    if (file.testTarget) {
+      const targetIndex = this.displayFiles.findIndex(
+        (candidate) => candidate.fileName === file.testTarget,
+      );
+      const target = this.displayFiles[targetIndex];
+      if (target && !target.testTarget)
+        return (this.cardLayers[target.id] ?? targetIndex + 1) - 1;
+    }
     return this.cardLayers[file.id] ?? index + 1;
   };
   bringCardToFront = (file: ProjectFile) => {
+    const target = file.testTarget
+      ? this.displayFiles.find(
+          (candidate) => candidate.fileName === file.testTarget,
+        )
+      : file;
+    if (!target) return;
     this.nextCardLayer = Math.max(
       this.nextCardLayer + 1,
       this.displayFiles.length + 1,
     );
-    this.cardLayers = { ...this.cardLayers, [file.id]: this.nextCardLayer };
+    this.cardLayers = { ...this.cardLayers, [target.id]: this.nextCardLayer };
   };
   openBluePlayApi = (file: ProjectFile) => {
     this.bluePlayApiFile = file;
@@ -173,6 +224,7 @@ export class ProjectWorkspace {
       this.library?.id === "blueplay" ? bluePlayFrameworkFiles : [],
       this.readme,
       this.projectName,
+      this.defaultTestClass,
     );
   };
   commitProjectName = (event: KeyboardEvent) => {
@@ -215,6 +267,9 @@ export class ProjectWorkspace {
     if (this.showInheritance)
       window.setTimeout(this.refreshInheritanceEdges, 50);
   };
+  toggleTestClasses = () => {
+    this.showTestClasses = !this.showTestClasses;
+  };
   newFile = (kind: "class" | "functions", name: string) => {
     const source =
       kind === "functions"
@@ -231,6 +286,55 @@ export class ProjectWorkspace {
     this.selected = this.files.length - 1;
     this.host.session().markUncompiled();
   };
+  addTestClass = (target: ProjectFile, name: string): ProjectFile => {
+    if (this.files.some((file) => file.testTarget === target.fileName))
+      throw new Error(
+        "This class already has an attached test class. Use New File to create an independent test class.",
+      );
+    if (
+      !/^[A-Za-z_]\w*$/.test(name) ||
+      this.files.some((file) => file.fileName === `${name}.kt`)
+    )
+      throw new Error("Choose a unique Kotlin class name.");
+    const file: ProjectFile = {
+      id: crypto.randomUUID(),
+      fileName: `${name}.kt`,
+      kind: "class",
+      revision: 1,
+      testTarget: target.fileName,
+      isTestClass: true,
+      source: this.testClassSource(name),
+    };
+    this.files = [...this.files, file];
+    this.selected = this.files.length - 1;
+    this.host.session().markUncompiled();
+    return file;
+  };
+  addIndependentTestClass = (
+    name: string,
+    source = this.testClassSource(name),
+  ): ProjectFile => {
+    if (
+      !/^[A-Za-z_]\w*$/.test(name) ||
+      this.files.some((file) => file.fileName === `${name}.kt`)
+    )
+      throw new Error("Choose a unique Kotlin class name.");
+    const file: ProjectFile = {
+      id: crypto.randomUUID(),
+      fileName: `${name}.kt`,
+      kind: "class",
+      revision: 1,
+      isTestClass: true,
+      source,
+    };
+    this.files = [...this.files, file];
+    this.selected = this.files.length - 1;
+    this.host.session().markUncompiled();
+    return file;
+  };
+  applyGeneratedSource = (id: string, source: string) => {
+    this.updateSource(id, source);
+  };
   confirmNewClass = () => {
     const name = this.newClassName.trim();
     if (
@@ -243,6 +347,12 @@ export class ProjectWorkspace {
     }
     if (this.newClassType === "functions") {
       this.newFile("functions", name);
+      this.newClassOpen = false;
+      this.host.ui().error = "";
+      return;
+    }
+    if (this.newClassType === "test") {
+      this.addIndependentTestClass(name);
       this.newClassOpen = false;
       this.host.ui().error = "";
       return;
@@ -279,7 +389,7 @@ export class ProjectWorkspace {
   updateSource = (fileId: string, value: string) => {
     if (!this.currentFile) return;
     const file = this.files.find((item) => item.id === fileId);
-    if (!file) return;
+    if (!file || file.source === value) return;
     const oldName = sourceDeclarationName(file.source);
     const newName = sourceDeclarationName(value);
     const fileStem = file.fileName.replace(/\.kt$/, "");
@@ -301,12 +411,33 @@ export class ProjectWorkspace {
             source: value,
             revision: file.revision + 1,
           }
-        : file,
+        : file.testTarget ===
+            this.files.find((item) => item.id === fileId)?.fileName
+          ? { ...file, testTarget: renamedFileName }
+          : file,
     );
+    if (this.defaultTestClass === fileStem)
+      this.defaultTestClass = renamedFileName.replace(/\.kt$/, "");
     this.host.session().sourceEdited();
   };
   deleteFile = (file: ProjectFile) => {
-    this.files = this.files.filter((item) => item.id !== file.id);
+    const attached = this.files.filter(
+      (item) => item.testTarget === file.fileName,
+    );
+    for (const item of attached)
+      this.cardPositions = {
+        ...this.cardPositions,
+        [item.id]: this.cardPosition(item, this.displayFiles.indexOf(item)),
+      };
+    this.files = this.files
+      .filter((item) => item.id !== file.id)
+      .map((item) =>
+        item.testTarget === file.fileName
+          ? { ...item, testTarget: undefined, isTestClass: true }
+          : item,
+      );
+    if (this.defaultTestClass === file.fileName.replace(/\.kt$/, ""))
+      this.defaultTestClass = "";
     this.selected = Math.max(0, Math.min(this.selected, this.files.length - 1));
     this.host.objects().dismissMenu();
     this.host.editor().removeFile(file.id);
@@ -320,6 +451,8 @@ export class ProjectWorkspace {
       name = `${stem}${++number}`;
     const duplicate = {
       ...file,
+      testTarget: undefined,
+      isTestClass: file.isTestClass || Boolean(file.testTarget) || undefined,
       id: `svelte-${Date.now()}`,
       fileName: `${name}.kt`,
       revision: 1,
@@ -330,6 +463,7 @@ export class ProjectWorkspace {
     this.host.session().markUncompiled();
   };
   selectCard = (file: ProjectFile, index: number) => {
+    this.bringCardToFront(file);
     if (!this.inheritanceMode) {
       if (!this.isBluePlayFrameworkFile(file))
         this.selected = this.files.findIndex((item) => item.id === file.id);
@@ -446,6 +580,7 @@ export class ProjectWorkspace {
     const copied = await copyFullProjectLink(
       this.projectPayload(),
       this.shareWithReadme,
+      this.shareWithState && this.canShareState,
     );
     if (copied) this.host.ui().status = "Project link copied";
     this.shareNotice = copied
@@ -458,6 +593,7 @@ export class ProjectWorkspace {
       this.shareLinkDialog = await saveShortProjectLink(
         this.projectPayload(),
         this.shareWithReadme,
+        this.shareWithState && this.canShareState,
       );
       if (this.shareLinkDialog.copied)
         this.host.ui().status = "Short project link copied";
@@ -513,6 +649,13 @@ export class ProjectWorkspace {
     this.cardPositions = imported.cardPositions;
     this.readme = imported.readme;
     this.projectName = imported.projectName ?? "";
+    this.defaultTestClass =
+      imported.defaultTestClass &&
+      this.files.some(
+        (file) => file.fileName === `${imported.defaultTestClass}.kt`,
+      )
+        ? imported.defaultTestClass
+        : "";
     this.closeReadme();
     this.selected = 0;
     this.host.editor().resetWindows();
@@ -677,6 +820,13 @@ export class ProjectWorkspace {
     const linkOpensReadme =
       (new URLSearchParams(window.location.hash.slice(1)).get("readme") ??
         new URLSearchParams(window.location.search).get("readme")) === "1";
+    const linkLoadsState =
+      (new URLSearchParams(window.location.hash.slice(1)).get("state") ??
+        new URLSearchParams(window.location.search).get("state")) === "1";
+    const applyLinkOptions = async () => {
+      if (linkLoadsState) await this.host.tests().loadDefaultFixture();
+      if (linkOpensReadme) this.openReadme();
+    };
     const loadExample = async () => {
       const serverMatch = window.location.pathname.match(
         /^\/load\/((?:[a-z]{4,6}-){2,3}[a-z]{4,6})\/?$/,
@@ -688,7 +838,7 @@ export class ProjectWorkspace {
             "Shared BlueK project loaded. Compile the project.",
           );
           window.history.replaceState(window.history.state, "", "/");
-          if (linkOpensReadme) this.openReadme();
+          await applyLinkOptions();
         } catch (reason) {
           this.host.ui().status = "Project error";
           this.host.ui().error =
@@ -707,8 +857,12 @@ export class ProjectWorkspace {
             await decodeProjectLink(shared),
             "Shared BlueK project loaded. Compile the project.",
           );
-          window.history.replaceState(window.history.state, "", window.location.pathname);
-          if (linkOpensReadme) this.openReadme();
+          window.history.replaceState(
+            window.history.state,
+            "",
+            window.location.pathname,
+          );
+          await applyLinkOptions();
         } catch (reason) {
           this.host.ui().status = "Project error";
           this.host.ui().error =
@@ -763,6 +917,7 @@ export class ProjectWorkspace {
   connect = () => {
     $effect(() => {
       if (!this.readme.trim()) this.shareWithReadme = false;
+      if (!this.canShareState) this.shareWithState = false;
     });
     $effect(() => {
       const payload = this.projectPayload();

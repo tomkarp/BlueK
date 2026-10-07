@@ -11,6 +11,9 @@
   export let shareCodeInput: string;
   export let shareCodeError: string;
   export let shareWithReadme: boolean;
+  export let shareWithState: boolean;
+  export let canShareState: boolean;
+  export let defaultTestClass: string;
   export let readme: string;
   export let files: ProjectFile[];
   export let htmlExportBlocked: boolean;
@@ -97,22 +100,37 @@
       <h3 id="save-export-title">Save / Export</h3>
       <p>Choose how to save or share this project:</p>
       <div class="project-choice-list toolbar-project-choice-list">
-        <!-- Only a link carries it: a file is opened, a link is followed, and
-               what it opens with is what the sender ticked here — in the box of
-               the link it belongs to. -->
-        <div class="project-choice-row">
-          <button
+        <button
+          on:click={() => {
+            shareProject();
+            toolbarDialog = null;
+          }}
+          disabled={!files.length}
+          ><strong>Copy Full Project Link</strong><span
+            >Share the complete project encoded in the URL.</span
+          ></button
+        >
+        {#if serverFeatures}<button
             on:click={() => {
-              shareProject();
+              void saveShortProject();
               toolbarDialog = null;
             }}
             disabled={!files.length}
-            ><strong>Copy Full Project Link</strong><span
-              >Share the complete project encoded in the URL.</span
+            ><strong>Copy Short Link</strong><span
+              >Save the project for 30 days and copy a short link.</span
             ></button
+          >{/if}
+        <div
+          class="share-link-options"
+          class:single-link={!serverFeatures}
+          role="group"
+          aria-labelledby="link-options-label"
+        >
+          <span id="link-options-label"
+            >When opening a link:</span
           >
           <label
-            class="share-readme-option"
+            class="share-link-option"
             class:disabled={!readme.trim()}
             title={readme.trim()
               ? "Show README.md right away when this link is opened"
@@ -124,33 +142,22 @@
               disabled={!readme.trim()}
             /><span>Open README</span></label
           >
+          <label
+            class="share-link-option"
+            class:disabled={!canShareState}
+            title={canShareState
+              ? `Load state from ${defaultTestClass} into the object bench when this link is opened`
+              : "Choose a default test class first"}
+            ><input
+              type="checkbox"
+              aria-label="Load default test class state with the link"
+              bind:checked={shareWithState}
+              disabled={!canShareState}
+            /><span>Load state</span></label
+          >
         </div>
-        {#if serverFeatures}<div class="project-choice-row">
-            <button
-              on:click={() => {
-                void saveShortProject();
-                toolbarDialog = null;
-              }}
-              disabled={!files.length}
-              ><strong>Copy Short Link</strong><span
-                >Save the project for 30 days and copy a short link.</span
-              ></button
-            >
-            <label
-              class="share-readme-option"
-              class:disabled={!readme.trim()}
-              title={readme.trim()
-                ? "Show README.md right away when this link is opened"
-                : "The README is still empty — there is nothing to show"}
-              ><input
-                type="checkbox"
-                aria-label="Open README.md with the link"
-                bind:checked={shareWithReadme}
-                disabled={!readme.trim()}
-              /><span>Open README</span></label
-            >
-          </div>{/if}
         <button
+          class="file-export-choice"
           on:click={() => {
             exportProject();
             toolbarDialog = null;
@@ -161,6 +168,7 @@
           ></button
         >
         <button
+          class="file-export-choice"
           on:click={() => {
             toolbarDialog = null;
             void exportHtml();
@@ -172,7 +180,7 @@
               : "A single web page that runs the program, without BlueK."}</span
           ></button
         >
-        <button disabled
+        <button class="file-export-choice" disabled
           ><strong>Export BlueJ Project (.zip)</strong><span
             >Export for BlueJ (not implemented yet).</span
           ></button

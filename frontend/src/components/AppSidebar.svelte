@@ -17,13 +17,13 @@
   export let inputReady: boolean;
   export let canExecute: boolean;
   export let mainEntries: string[];
-  export let offlineBuild: boolean;
-  export let OFFLINE_DOWNLOAD: string;
-  export let shortcutsHelpOpen: boolean;
   export let compileShortcutLabel: string;
   export let runShortcutLabel: string;
   export let exportProject: () => void;
   export let compile: () => Promise<boolean>;
+  export let recording = false;
+  export let openTests: () => void = () => {};
+  export let runTests: () => void = () => {};
   export let runMain: () => Promise<void>;
 </script>
 
@@ -70,18 +70,27 @@
     disabled={!canExecute || !mainEntries.length}>Start main</button
   >
   <div class="side-spacer"></div>
-  {#if !offlineBuild}
-    <a
-      class="offline-download"
-      href={OFFLINE_DOWNLOAD}
-      download="BlueK-offline.zip"
-      title="Download BlueK as a ZIP and run it without internet access"
-      >Offline Version<span>ZIP, no installation</span></a
+  <details class="sidebar-testing">
+    <summary
+      class="sidebar-testing-toggle"
+      aria-label="Show or hide testing actions"
+      title="Show or hide testing actions"
     >
-  {/if}
-  <button
-    on:click={() => (shortcutsHelpOpen = true)}
-    aria-label="Help"
-    title="Help">Help</button
-  >
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2 13 8 3 14Z" /></svg>
+    </summary>
+    <div class="sidebar-testing-actions" id="sidebar-testing-actions">
+        <p class="sidebar-testing-notice">Testing is still in
+the alpha stage.</p>
+        <button on:click={openTests}
+          >{recording ? "● Recording…" : "Tests…"}</button
+        >
+        <button
+          on:click={runTests}
+          disabled={recording ||
+            phase === "running" ||
+            phase === "compiling" ||
+            inputReady}>Run All Tests</button
+        >
+    </div>
+  </details>
 </nav>

@@ -77,6 +77,8 @@ data class UnaryOpNode(override val position: SourcePosition, var node: ASTNode?
 data class ImportDirective(val position: SourcePosition, val path: String, val alias: String?)
 
 data class ScriptNode(override val position: SourcePosition, val nodes: List<ASTNode>, val imports: List<ImportDirective> = emptyList()) : ASTNode {
+    /** Original top-level statement spans, before flattening nested declarations. */
+    var sourceRanges: List<IntRange> = emptyList()
     override fun toMermaid(): String {
         val self = "${generateId()}[\"Script\"]"
         return nodes.map { "$self-->${it.toMermaid()}\n" }.joinToString("\n")
@@ -169,6 +171,10 @@ data class PropertyDeclarationNode(
     @ModifyByAnalyzer var inferredType: TypeNode? = null,
     @ModifyByAnalyzer val inferredModifiers: MutableSet<PropertyModifier> = mutableSetOf(),
 ) : ASTNode {
+    /** Exact parsed declaration and initializer spans for source-preserving host tools. */
+    var sourceStart: Int = position.index
+    var sourceEnd: Int = 0
+    var initialValueSourceRange: IntRange? = null
     val type: TypeNode
         get() = declaredType ?: inferredType ?: throw SemanticException(position, "Could not infer type for property `$name`")
     val modifiers: Set<PropertyModifier>
@@ -311,6 +317,10 @@ open class FunctionDeclarationNode(
     @ModifyByAnalyzer var isVararg: Boolean = false,
     @ModifyByAnalyzer val inferredModifiers: MutableSet<FunctionModifier> = mutableSetOf(),
 ) : ASTNode, CallableNode {
+    /** Parsed kotlin.test annotations; execution belongs to the host runner. */
+    var annotations: Set<String> = emptySet()
+    var sourceStart: Int = position.index
+    var sourceEnd: Int = 0
     override val returnType: TypeNode
         get() = declaredReturnType ?: inferredReturnType ?: inferReturnTypeOnDemand()
             ?: throw CannotInferTypeException(position, "return type of function $name" + if (isInferringReturnType) ", because it depends on itself" else "")
@@ -543,6 +553,7 @@ data class ClassPrimaryConstructorNode(override val position: SourcePosition, va
 }
 
 data class ClassInstanceInitializerNode(override val position: SourcePosition, val block: BlockNode) : ASTNode {
+    var sourceEnd: Int = 0
     override fun toMermaid(): String {
         return "${generateId()}[\"Class Init Node\"]-->${block.toMermaid()}\n"
     }
@@ -572,6 +583,8 @@ data class ClassDeclarationNode(
     /** An inner class: its objects belong to an object of [outerClassName], kept as constructor property `this/<Outer>` (RT-92). */
     val isInner: Boolean = false,
 ) : ASTNode {
+    var annotations: Set<String> = emptySet()
+    var sourceEnd: Int = 0
     @ModifyByAnalyzer val inferredModifiers: MutableSet<ClassModifier> = mutableSetOf()
     val modifiers: Set<ClassModifier>
         get() = declaredModifiers + inferredModifiers

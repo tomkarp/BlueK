@@ -371,19 +371,32 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
             "/" -> castType<NumberValue<*>, NumberValue<*>>(node1.eval(), node2.eval()) { a, b -> a / b }
             "%" -> castType<NumberValue<*>, NumberValue<*>>(node1.eval(), node2.eval()) { a, b -> a % b }
 
-            "<" -> {
-//                val r1 = node1.eval() as RuntimeValue
-//                val r2 = node2.eval() as RuntimeValue
-//                val r1 = node1.eval() as ComparableRuntimeValue<Comparable<Comparable<*>>>
-//                val r2 = node2.eval() as ComparableRuntimeValue<Comparable<Comparable<*>>>
-//                BooleanValue(r1 < r2)
-                BooleanValue(node1.eval() as ComparableRuntimeValue<Comparable<Comparable<*>>, Comparable<Comparable<*>>> < node2.eval() as ComparableRuntimeValue<Comparable<Comparable<*>>, Comparable<Comparable<*>>>)
-//                if (r1 is )
-//                castType<NumberValue<*>, BooleanValue>(node1.eval(), node2.eval()) { a, b -> BooleanValue(a < b) }
+            "<", "<=", ">", ">=" -> {
+                val left = node1.eval() as RuntimeValue
+                val right = node2.eval() as RuntimeValue
+                // Numeric operators use IEEE comparisons, whereas an explicit
+                // Double.compareTo uses total ordering (NaN and signed zeros).
+                if (left is NumberValue<*> && right is NumberValue<*> &&
+                    (left is DoubleValue || right is DoubleValue)) {
+                    val a = left.value.toDouble()
+                    val b = right.value.toDouble()
+                    BooleanValue(when (operator) {
+                        "<" -> a < b
+                        "<=" -> a <= b
+                        ">" -> a > b
+                        else -> a >= b
+                    })
+                } else {
+                    val comparison = (left as ComparableRuntimeValue<Comparable<Comparable<*>>, Comparable<Comparable<*>>>).compareTo(
+                        right as ComparableRuntimeValue<Comparable<Comparable<*>>, Comparable<Comparable<*>>>)
+                    BooleanValue(when (operator) {
+                        "<" -> comparison < 0
+                        "<=" -> comparison <= 0
+                        ">" -> comparison > 0
+                        else -> comparison >= 0
+                    })
+                }
             }
-            "<=" -> BooleanValue(node1.eval() as ComparableRuntimeValue<Comparable<Comparable<*>>, Comparable<Comparable<*>>> <= node2.eval() as ComparableRuntimeValue<Comparable<Comparable<*>>, Comparable<Comparable<*>>>)
-            ">" -> BooleanValue(node1.eval() as ComparableRuntimeValue<Comparable<Comparable<*>>, Comparable<Comparable<*>>> > node2.eval() as ComparableRuntimeValue<Comparable<Comparable<*>>, Comparable<Comparable<*>>>)
-            ">=" -> BooleanValue(node1.eval() as ComparableRuntimeValue<Comparable<Comparable<*>>, Comparable<Comparable<*>>> >= node2.eval() as ComparableRuntimeValue<Comparable<Comparable<*>>, Comparable<Comparable<*>>>)
             "==" -> {
                 val r1 = node1.eval() as RuntimeValue
                 val r2 = node2.eval() as RuntimeValue
@@ -451,8 +464,8 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
         return when (result) {
             is NumberValue<*> -> when (operator) {
-                "+" -> IntValue(0) + result
-                "-" -> IntValue(0) - result
+                "+" -> if (result is DoubleValue) result else IntValue(0) + result
+                "-" -> if (result is DoubleValue) DoubleValue(-result.value, callStack.currentSymbolTable()) else IntValue(0) - result
                 "pre++" -> {
                     val newValue = result + IntValue(1)
                     node!!.write(newValue)

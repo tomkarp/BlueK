@@ -59,10 +59,11 @@ export type MainAction = "start" | "reset" | "export";
 export type MainDialog = { action: MainAction; generationId: string };
 export type ShareLinkDialog = { url: string; code: string; copied: boolean };
 export type NewClassType =
-  "class" | "interface" | "open" | "abstract" | "data" | "functions";
+  "class" | "interface" | "open" | "abstract" | "data" | "test" | "functions";
 export type CardPosition = { x: number; y: number };
 export type InheritanceEdge = {
   id: string;
+  parentId: string;
   x1: number;
   y1: number;
   x2: number;

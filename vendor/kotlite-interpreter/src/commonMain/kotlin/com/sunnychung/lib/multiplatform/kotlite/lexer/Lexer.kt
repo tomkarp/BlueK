@@ -398,6 +398,19 @@ open class Lexer(val filename: String, val code: String, val isParseComment: Boo
                         )
 
                         c in setOf(';') -> return Token(TokenType.Semicolon, c.toString(), makeSourcePosition(), makeNextCharSourcePosition())
+                        c == '`' -> {
+                            val position = makeSourcePosition()
+                            val identifier = StringBuilder()
+                            while (nextChar() != '`') {
+                                val next = nextChar() ?: throw RuntimeException("Unterminated escaped identifier at $position")
+                                if (next == '\n' || next == '\r') throw RuntimeException("Invalid escaped identifier at $position")
+                                advanceChar()
+                                identifier.append(next)
+                            }
+                            advanceChar()
+                            if (identifier.isEmpty()) throw RuntimeException("Empty escaped identifier at $position")
+                            return Token(TokenType.Identifier, identifier.toString(), position, makeNextCharSourcePosition())
+                        }
                         c.isIdentifierChar() -> {
                             val position = makeSourcePosition()
                             val identifier = readIdentifier()

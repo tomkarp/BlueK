@@ -99,7 +99,9 @@ Oberfläche, Interpreter, BluePlay-Grafiken, Projektvorlagen, Kotlin-Formatter
 und HTML-Exportvorlage sind vollständig eingebettet.
 
 Das ZIP wird zusätzlich nach `frontend/public/downloads/` kopiert; die
-Online-Version verlinkt es in der Seitenleiste. `npm run build` baut es jedes
+Online-Version bietet es über den Download-Button oben rechts an. Dieser öffnet
+zunächst eine kurze Anleitung mit Hinweisen; erst „Download ZIP“ lädt die Datei.
+`npm run build` baut es jedes
 Mal neu, `npm run dev` nur, falls es fehlt (ein veraltetes ZIP bleibt dort
 also liegen). Im Offline-Build sind die Kurzlink-Funktionen ausgeblendet;
 JSON-Export/-Import und HTML-Programmexport funktionieren. „Copy Full Project
@@ -128,7 +130,7 @@ Betrieb auf dem Server: [docs/deployment.md](docs/deployment.md).
 
 ## Aktuelle Grenzen
 
-Stand: 2. Oktober 2026, geprüft gegen das eingecheckte Interpreter-Bundle.
+Stand: 6. Oktober 2026, geprüft gegen das eingecheckte Interpreter-Bundle.
 Der Objektinspektor wertet alle Properties automatisch aus und zeigt gewöhnliche
 Getter-Exceptions in der jeweiligen Zeile. `Actor.world` hat den Typ `World`
 und wirft ohne Welt `IllegalStateException`; der Inspektor zeigt den Fehler
@@ -139,6 +141,18 @@ Interface oder Enum) oder Top-Level-Funktionen und -Properties. Direkte
 Anweisungen auf oberster Ebene sind ein Compilefehler (im Codepad erlaubt).
 Imports sind nur aus `kotlin.*` zulässig; `java.*`/`javax.*` werden mit Datei
 und Zeile abgewiesen. `package`-Deklarationen gibt es nicht.
+
+**Tests.** Eine portable Teilmenge von `kotlin.test` ist eingebaut: `@Test`,
+`@BeforeTest`, `@AfterTest`, `@Ignore` und sieben grundlegende Assertions.
+Separate Testklassen, einzelne/gesamte Testläufe, Zustandstransfer zur Objektleiste
+und interaktive Aufzeichnung erzeugen gewöhnlichen Kotlin-Code. Eine
+projektgespeicherte Standard-Testklasse ermöglicht „Save state“/„Load state“ direkt
+unter der Objektleiste. Vererbung von
+Testklassen, parametrisierte Tests und weitere Assertion-Overloads fehlen.
+Auch Testklassen ohne Testmethoden sind für Zustandstransfer und Aufzeichnung
+verfügbar. Der Zustand wird durch Aufrufwiederholung in ursprünglicher Reihenfolge
+rekonstruiert; beliebige Graphen
+werden nicht serialisiert. Details und Grenzen: [docs/testing.md](docs/testing.md).
 
 **Sprache.** BlueK unterstützt die Kotlite-Teilmenge von Kotlin plus die
 Erweiterungen des eigenen Forks (siehe [docs/kotlite.md](docs/kotlite.md)).
@@ -367,6 +381,7 @@ weder auf `addObject`/`removeObject` noch auf Kollisionsabfragen aus.
 | [docs/blueplay.md](docs/blueplay.md) | BluePlay-Bibliothek, Scheduler, Rendering, Kollision, Performance, API |
 | [docs/blueplay-api-audit.md](docs/blueplay-api-audit.md) | Abgleich mit der GitHub-API und dem BlueJ-Projekt; reproduzierte Abweichungen |
 | [docs/kotlin-surface.md](docs/kotlin-surface.md) | Zugesagte Standardbibliothek und bekannte Lücken |
+| [docs/testing.md](docs/testing.md) | kotlin.test-API, Testkarten, Fixture-Transfer, Aufzeichnung und JVM-Portabilität |
 | [docs/terminal.md](docs/terminal.md) | Für Nutzer: Farben, Schriftgröße und Steuerzeichen im Terminal (ANSI-Escape-Sequenzen, kitty-Textgrößen) |
 | [docs/kotlite-generics.md](docs/kotlite-generics.md) | Generics, `reified`, Inline-Lambdas und Host-Funktionen |
 | [docs/regression-checklist.md](docs/regression-checklist.md) | Regressionsliste mit stabilen IDs und Prüfprotokoll |

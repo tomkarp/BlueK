@@ -73,6 +73,12 @@ test('GUI-58 BluePlay library cards are normal movable cards with per-file API d
   );
   expect(worldZ).toBeGreaterThan(Math.max(...initialEdgeZ));
   expect(edgeZ).toContain(worldZ);
+  await world.click();
+  const clickedWorldZ = await world.evaluate((element) => Number(getComputedStyle(element).zIndex));
+  expect(clickedWorldZ).toBeGreaterThan(worldZ);
+  expect(await page.locator('.inheritance-edge').evaluateAll((elements) =>
+    elements.map((element) => Number(getComputedStyle(element).zIndex)),
+  )).toContain(clickedWorldZ);
   const topCard = await page.evaluate(({ x, y }) =>
     document.elementFromPoint(x, y)?.closest('.classcard')?.getAttribute('aria-label'), {
       x: targetCenter.x,

@@ -16,7 +16,7 @@ Architektur und Zuständigkeiten stehen verbindlich in
 | --- | --- |
 | `frontend/src/` | Svelte-Oberfläche, Runtime-Client, Worker, Runtime-Host, Projektformat, HTML-Export, Player |
 | `frontend/src/components/` | Darstellung von Fenstern, Dialogen, Diagramm und Hauptbedienelementen; typisierte Props und Rückruffunktionen |
-| `frontend/src/workspace/` | reaktive Svelte-Controller mit eigenem UI-Zustand für Projekt, Editor, Ausführung, Objekte, BluePlay und Terminal; Verdrahtung in `SvelteApp.svelte` |
+| `frontend/src/workspace/` | reaktive Svelte-Controller mit eigenem UI-Zustand für Projekt, Editor, Ausführung, Objekte, Tests, BluePlay und Terminal; Verdrahtung in `SvelteApp.svelte` |
 | `frontend/public/` | statische Assets: Interpreter-Bundle (`kotlite/`, eingecheckt), Vorlagen (`examples/`), generierte Player-Vorlage (`player/`) und Offline-ZIP (`downloads/`) |
 | `frontend/build/` | Build-Helfer für einzelne HTML-Dateien und das gzip+base64-Interpreter-Bundle |
 | `runtime-contract/src/index.ts` | gemeinsame Typen von Oberfläche, Worker und Runtime-Host |
@@ -85,10 +85,12 @@ Runtime-State-Tests und GUI-Tests verwenden das gebaute Bundle unter
 
 | Befehl | Prüft |
 | --- | --- |
-| `npm run test:regression` | Sammellauf: Typecheck, UI-Helfer, Runtime-State, Referenzen, Kotlin-Oberfläche, Inspektor, BluePlay-Stage, Projekt- und Exportformat, Player-Worker, Codepad-Ablauf, Offline-Paket und alle GUI-Tests |
+| `npm run test:regression` | Sammellauf: Typecheck, UI-Helfer, Runtime-State, Referenzen, Kotlin-Tests, Kotlin-Oberfläche, Inspektor, BluePlay-Stage, Projekt- und Exportformat, Player-Worker, Codepad-Ablauf, Offline-Paket und alle GUI-Tests |
 | `npm run typecheck` | `tsc` und `svelte-check` (nur Fehler brechen ab) |
 | `npm run browser-smoke` | Architekturregeln (statisch), Kotlite-Bundle, BluePlay-Runtime, Curriculum-Kotlin und Runtime-State |
 | `npm run test:runtime-state` | echter Client und Host mit dem gebauten Bundle und Worker-Ersatz: Identität, passive Inspektion, Phasen, Eingabe, konkurrierende Befehle, veraltete Antworten |
+| `npm run test:testing` | kotlin.test-Runner, Lifecycle, Fixtures, Recording und Abbruch am echten Client/Host/Bundle |
+| `npm run test:testing:portable` | Zusätzlich unveränderten generierten Kotlin-Testcode unter echtem kotlin.test/JUnit Jupiter ausführen (Java/Gradle/Maven Central) |
 | `npm run test:references` | Referenz- und Erreichbarkeitsmodell direkt an der Session |
 | `npm run test:generics` | Generics, `reified`, Inline-Lambdas, Analysegrenzen |
 | `npm run test:kotlin-surface` | zugesagte Stdlib-Oberfläche und bekannte Lücken (siehe `docs/kotlin-surface.md`) |

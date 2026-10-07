@@ -1,3 +1,4 @@
+import { on } from "svelte/events";
 import { tick } from "svelte";
 
 export function focusOnMount(node: HTMLElement, enabled = true) {
@@ -11,12 +12,8 @@ export function focusOnMount(node: HTMLElement, enabled = true) {
 }
 export function containClicks(node: HTMLElement) {
   const stop = (event: MouseEvent) => event.stopPropagation();
-  node.addEventListener("click", stop);
-  return {
-    destroy() {
-      node.removeEventListener("click", stop);
-    },
-  };
+  // Dispatch delegated Svelte handlers before containing the click.
+  return { destroy: on(node, "click", stop) };
 }
 
 export function fitPopup(

@@ -32,6 +32,26 @@ assert.throws(() => parseProject({ format: 'bluek-project', version: 1, files: [
 assert.throws(() => parseProject({ format: 'bluek-project', version: 1, files: [{ fileName: 'A.kt', source: '' }, { fileName: 'A.kt', source: '' }] }), /duplicate Kotlin/);
 assert.throws(() => parseProject({ format: 'bluek-project', version: 1, files: [{ fileName: 'A.kt', source: '' }], resources: [{ path: '../x', data: 'data:image/png;base64,AAAA' }] }), /invalid media/);
 
+// Test-card attachments are optional and survive export/import independently of runtime metadata.
+const attached = createProjectPayload([...files, { id:'test',fileName:'HundTest.kt',kind:'class',source:'class HundTest {}',revision:1,testTarget:'Hund.kt' }],[],{test:{x:70,y:210}});
+assert.equal(attached.files[1].testTarget,'Hund.kt');
+const attachedModel = projectModelFromPayload(attached,index=>`attached-${index}`);
+assert.equal(attachedModel.files[1].testTarget,'Hund.kt');
+assert.deepEqual(attachedModel.cardPositions['attached-1'],{x:70,y:210});
+assert.throws(()=>parseProject({format:'bluek-project',version:1,files:[{fileName:'T.kt',source:'',testTarget:42}]}),/Invalid test attachment/);
+
+// Independent test classes retain their marker without an attached production class.
+const standalone = createProjectPayload([{id:'standalone',fileName:'AllgemeinTest.kt',kind:'class',source:'class AllgemeinTest {}',revision:1,isTestClass:true}],[],{});
+assert.equal(standalone.files[0].isTestClass,true);
+assert.equal('testTarget' in standalone.files[0],false);
+const standaloneModel = projectModelFromPayload(standalone,index=>`standalone-${index}`);
+assert.equal(standaloneModel.files[0].isTestClass,true);
+assert.equal('testTarget' in standaloneModel.files[0],false);
+const withDefaultTest = createProjectPayload([{id:'standalone',fileName:'ObjectBenchTest.kt',kind:'class',source:'class ObjectBenchTest {}',revision:1,isTestClass:true}], [], {}, undefined, [], '', '', 'ObjectBenchTest');
+assert.equal(parseProject(withDefaultTest).defaultTestClass, 'ObjectBenchTest');
+assert.equal(projectModelFromPayload(withDefaultTest,index=>`default-test-${index}`).defaultTestClass,'ObjectBenchTest');
+assert.throws(()=>parseProject({format:'bluek-project',version:1,files:standalone.files,defaultTestClass:'Not A Class'}),/invalid default test class/);
+
 // README.md: exported only when it says something, optional on the way back in.
 assert.equal('readme' in createProjectPayload(files, [], {}, undefined, [], ''), false);
 assert.equal('readme' in createProjectPayload(files, [], {}, undefined, [], '   \n  '), false);

@@ -1183,6 +1183,35 @@ test('GUI-07 every value can be placed on the bench', async ({ page }) => {
   }
 });
 
+test('GUI-115 object bench scrolls to objects beyond its visible area', async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 600 });
+  await project(page, 'class Hund {}');
+  for (let index = 1; index <= 12; index++) {
+    const entry = await evaluate(page, 'Hund()');
+    await entry.getByRole('button').click();
+    await page.getByLabel('Name of instance').fill(`hund${index}`);
+    await page.getByRole('button', { name: 'OK', exact: true }).click();
+  }
+
+  const bench = page.locator('.bench');
+  const objects = bench.locator('.object');
+  await expect(objects).toHaveCount(12);
+  await expect.poll(() => bench.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+  const benchBox = (await bench.boundingBox())!;
+  const last = objects.last();
+  const lastBox = (await last.boundingBox())!;
+  expect(lastBox.y + lastBox.height).toBeGreaterThan(benchBox.y + benchBox.height);
+
+  await page.mouse.move(benchBox.x + benchBox.width / 2, benchBox.y + benchBox.height / 2);
+  await page.mouse.wheel(0, 2000);
+  await expect.poll(() => bench.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+  await expect.poll(() => last.evaluate(element => {
+    const item = element.getBoundingClientRect();
+    const viewport = element.closest('.bench')!.getBoundingClientRect();
+    return item.top >= viewport.top && item.bottom <= viewport.bottom;
+  })).toBe(true);
+});
+
 test('GUI-18 primitive inspectors stay compact, show their type and the active inspector is on top', async ({ page }) => {
   await project(page);
   for (const [code, name] of [['5', 'zahl'], ['"Hallo"', 'text']]) {
@@ -1704,9 +1733,24 @@ test('GUI-14 output is visible before a long loop finishes', async ({ page }) =>
   await expect(page.getByLabel('Codepad input')).toBeEnabled();
 });
 
-test('GUI-63 the sidebar links the offline bundle, which the build always provides', async ({ page }) => {
+test('GUI-63 the toolbar explains the offline version before downloading it', async ({ page }) => {
   await project(page);
-  const link = page.getByRole('link', { name: /Offline Version/ });
+  let downloads = 0;
+  page.on('download', () => { downloads++; });
+  const downloadButton = page.locator('.toolbar-options').getByRole('button', { name: /Offline Version/ });
+  await downloadButton.click();
+  const dialog = page.getByRole('dialog', { name: 'BlueK Offline' });
+  await expect(dialog).toContainText('without downloading anything');
+  await expect(dialog).toContainText('BlueK.html');
+  await expect(dialog).toContainText('Autosave');
+  expect(downloads).toBe(0);
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await downloadButton.click();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await downloadButton.click();
+  const link = dialog.getByRole('link', { name: 'Download ZIP', exact: true });
   await expect(link).toBeVisible();
   await expect(link).toHaveAttribute('download', 'BlueK-offline.zip');
 
@@ -1715,6 +1759,15 @@ test('GUI-63 the sidebar links the offline bundle, which the build always provid
   const zip = await page.request.get(new URL(href, page.url()).toString());
   expect(zip.status()).toBe(200);
   expect((await zip.body()).byteLength).toBeGreaterThan(100_000);
+  await page.setViewportSize({ width: 800, height: 600 });
+  const cancelBounds = await dialog.getByRole('button', { name: 'Cancel', exact: true }).boundingBox();
+  expect(cancelBounds!.y + cancelBounds!.height).toBeLessThanOrEqual(600);
+  await page.screenshot({ path: 'test-results/offline-download-notice.png' });
+  const download = page.waitForEvent('download');
+  await link.click();
+  expect((await download).suggestedFilename()).toBe('BlueK-offline.zip');
+  expect(downloads).toBe(1);
+  await expect(dialog).toHaveCount(0);
 });
 
 test('GUI-64 a compiler error is marked in the source and reported below the editor', async ({ page }) => {
@@ -1925,10 +1978,9 @@ test('GUI-67 a link can open the README, and the export dialog attaches that to 
   await expect(save.locator('.project-choice-list button strong')).toHaveText([
     'Copy Full Project Link', 'Copy Short Link', 'Export Project JSON', 'Export as HTML (Beta)', 'Export BlueJ Project (.zip)',
   ]);
-  // Each link box carries the option at its right edge; both mean the same.
-  await expect(save.getByLabel(/Open README.md with the link/)).toHaveCount(2);
-  await save.getByLabel(/Open README.md with the link/).first().check();
-  await expect(save.getByLabel(/Open README.md with the link/).last()).toBeChecked();
+  // One shared option row applies to both kinds of project links.
+  await expect(save.getByLabel(/Open README.md with the link/)).toHaveCount(1);
+  await save.getByLabel(/Open README.md with the link/).check();
   // Headless Chromium may refuse the clipboard; then the app offers the link in
   // a prompt instead. Either way it is the link that has to carry the flag.
   let prompted = '';
@@ -2202,7 +2254,7 @@ test('GUI-80 project name field does not intercept clicks on project actions', a
 
   await page.getByRole('button', { name: 'Help', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Keyboard Shortcuts' })).toBeVisible();
-  await expect(page.getByRole('link', { name: /Offline Version/ })).toBeVisible();
+  await expect(page.locator('.toolbar-options').getByRole('link', { name: /Offline Version/ })).toBeVisible();
 });
 
 test('GUI-78 selected Kotlin lines can be commented and uncommented by button and slash shortcut', async ({ page }) => {

@@ -221,3 +221,15 @@ bleibt „unknown“.
 
 Die Lückentabelle oben, die `gaps`-Liste im Smoke-Test und diese Meldungen
 stammen aus derselben Quelle und werden vom Test zusammengehalten.
+
+## kotlin.test (2026-10-06)
+
+Native skalare Assertions in `BlueKStdlibModule`: `assertEquals<T>`,
+`assertNotEquals<T>`, `assertTrue(Boolean)`, `assertFalse(Boolean)`, `assertNull`,
+`assertNotNull<T>` und `fail`, jeweils mit optionaler Nachricht.
+Double-Gleichheit entspricht dem generischen Vergleich (NaN gleich,
+positive/negative Null verschieden). Nullable-Smartcasts nach `assertNotNull`
+und bedingte Smartcasts nach `assertTrue`/`assertFalse` sind im Analyzer ergänzt.
+Annotationen, Runner und Fixture-/Recording-Grenzen: [testing.md](testing.md).
+Nachweise: `smoke-kotlin-surface.mjs`, `smoke-testing.mjs`; externer JVM-Lauf
+mit `npm run test:testing:portable`.

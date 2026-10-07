@@ -29,7 +29,7 @@
       >
       <fieldset>
         <legend>Type</legend
-        >{#each [["class", "Class"], ["interface", "Interface"], ["open", "Open Class"], ["abstract", "Abstract Class"], ["data", "Data Class"], ["functions", "Kotlin Functions"]] as option}<label
+        >{#each [["class", "Class"], ["interface", "Interface"], ["open", "Open Class"], ["abstract", "Abstract Class"], ["data", "Data Class"], ["test", "Test Class"], ["functions", "Kotlin Functions"]] as option}<label
             class="new-class-option"
             ><input
               type="radio"

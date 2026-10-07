@@ -16,6 +16,14 @@
     directPopupMethods,
     popupObjectMethodLabel,
   } from "../objectMenuMethods";
+  export let isTestFile: (file: ProjectFile) => boolean = () => false;
+  export let createTestClass: (file: ProjectFile) => void = () => {};
+  export let runTests: (name: string, method?: string) => void = () => {};
+  export let loadFixture: (name: string) => void = () => {};
+  export let saveFixture: (name: string) => void = () => {};
+  export let recordTest: (name: string) => void = () => {};
+  export let recording = false;
+  export let canCapture = false;
   export let menu: ObjectMenu | null;
   export let classes: ClassMeta[];
   export let canExecute: boolean;
@@ -37,6 +45,14 @@
     preserveReferenceName?: boolean,
   ) => Promise<void>;
   export let removeObject: (object: BenchObject) => Promise<void>;
+  const testClassName = (file: ProjectFile) =>
+    classes.find((item) => item.testing?.fileName === file.fileName)?.name ||
+    file.fileName.replace(".kt", "");
+  $: testActionBusy =
+    recording ||
+    phase === "running" ||
+    phase === "compiling" ||
+    phase === "waitingForInput";
 </script>
 
 {#if menu}
@@ -54,21 +70,65 @@
         >Show API documentation</button
       >
     {:else if menu.file}
-      {#each classes.find((item) => item.name === menu!.file!.fileName.replace(".kt", ""))?.constructors || [] as constructor, index}
+      {#if isTestFile(menu.file)}
         <button
-          class="constructor-menu-item"
-          disabled={!canExecute}
-          on:click={() =>
-            createObject(menu!.file!.fileName.replace(".kt", ""), index)}
+            disabled={testActionBusy}
+            on:click={() => {
+              const name = testClassName(menu!.file!);
+              menu = null;
+              runTests(name);
+            }}>Run Tests</button
+          >
+        {#each classes.find((item) => item.testing?.fileName === menu!.file!.fileName)?.testing?.methods || [] as method}<button
+            disabled={testActionBusy}
+            on:click={() => {
+              const name = testClassName(menu!.file!);
+              menu = null;
+              runTests(name, method.name);
+            }}>▶ {method.name}()</button
+          >{/each}
+        <hr />
+        <button
+          disabled={testActionBusy}
+          on:click={() => {
+            const name = testClassName(menu!.file!);
+            menu = null;
+            loadFixture(name);
+          }}>Load State to Object Bench</button
         >
-          {menu.file.fileName.replace(".kt", "")}({constructor.parameters
-            ?.map(
-              (parameter: any) =>
-                `${parameter.name}: ${parameter.type?.displayName || "Any?"}`,
-            )
-            .join(", ")})
-        </button>
-      {/each}
+        <button
+          disabled={!canExecute || !canCapture || recording}
+          on:click={() => {
+            const name = testClassName(menu!.file!);
+            menu = null;
+            saveFixture(name);
+          }}>Save State from Object Bench</button
+        >
+        <button
+          disabled={testActionBusy}
+          on:click={() => {
+            const name = testClassName(menu!.file!);
+            menu = null;
+            recordTest(name);
+          }}>Record Test…</button
+        >
+      {:else}
+        {#each classes.find((item) => item.name === menu!.file!.fileName.replace(".kt", ""))?.constructors || [] as constructor, index}
+          <button
+            class="constructor-menu-item"
+            disabled={!canExecute}
+            on:click={() =>
+              createObject(menu!.file!.fileName.replace(".kt", ""), index)}
+          >
+            {menu.file.fileName.replace(".kt", "")}({constructor.parameters
+              ?.map(
+                (parameter: any) =>
+                  `${parameter.name}: ${parameter.type?.displayName || "Any?"}`,
+              )
+              .join(", ")})
+          </button>
+        {/each}
+      {/if}
       {#each fileMethods(menu.file, classes) as method}
         <button
           disabled={!canExecute}
@@ -88,6 +148,11 @@
       >
       <button on:click={() => deleteFile(menu!.file!)}>Delete</button>
       <button on:click={() => duplicateFile(menu!.file!)}>Duplicate…</button>
+      {#if menu.file.kind === "class" && !isTestFile(menu.file)}<hr />
+        <button
+          on:click={() => createTestClass(menu!.file!)}
+          >Create Test Class</button
+        >{/if}
     {:else if menu.object}
       {#each inheritedPopupGroups(menu.object, classes) as group}
         <div

@@ -1,4 +1,7 @@
 <script lang="ts">
+  import OfflineDownloadDialog from "./components/OfflineDownloadDialog.svelte";
+  import TestPanel from "./components/TestPanel.svelte";
+  import { TestWorkspace } from "./workspace/TestWorkspace.svelte";
   import BluePlayWindow from "./components/BluePlayWindow.svelte";
   import TerminalWindow from "./components/TerminalWindow.svelte";
   import EditorWindows from "./components/EditorWindows.svelte";
@@ -31,6 +34,7 @@
   import { onMount, untrack } from "svelte";
   const ui: WorkspaceUi = new WorkspaceUi();
   const project: ProjectWorkspace = new ProjectWorkspace({
+    tests: () => tests,
     objects: () => objects,
     session: () => session,
     ui: () => ui,
@@ -66,6 +70,23 @@
     ui: () => ui,
     session: () => session,
   });
+  const tests: TestWorkspace = new TestWorkspace({
+    session: () => session,
+    project: () => project,
+    editor: () => editor,
+    objects: () => objects,
+  });
+  const isTestFile = (
+    file: import("../../runtime-contract/src/index").ProjectFile,
+  ) =>
+    Boolean(
+      file.isTestClass ||
+      file.testTarget ||
+      session.classes.some((item) => item.testing?.fileName === file.fileName),
+    );
+  const testFileIds = $derived(
+    project.files.filter(isTestFile).map((file) => file.id),
+  );
   const offlineBuild = import.meta.env.VITE_BLUEK_OFFLINE === "1";
   const OFFLINE_DOWNLOAD = `${import.meta.env.BASE_URL}downloads/BlueK-offline.zip`;
 
@@ -179,6 +200,10 @@
       return () => {
         project.newClassOpen = false;
       };
+    if (ui.offlineDownloadOpen)
+      return () => {
+        ui.offlineDownloadOpen = false;
+      };
     if (ui.shortcutsHelpOpen)
       return () => {
         ui.shortcutsHelpOpen = false;
@@ -219,6 +244,14 @@
       return () => {
         play.stageWindowOpen = false;
         play.stageMaximized = false;
+      };
+    if (tests.preview)
+      return () => {
+        tests.preview = null;
+      };
+    if (tests.newClass)
+      return () => {
+        tests.newClass = null;
       };
     if (objects.menu)
       return () => {
@@ -355,8 +388,14 @@
     bind:terminalSplit={terminal.terminalSplit}
     bind:activeWindow={ui.activeWindow}
     showInheritance={project.showInheritance}
+    showTestClasses={project.showTestClasses}
+    hasTestClasses={testFileIds.length > 0}
     bind:settingsNotice={ui.settingsNotice}
+    {offlineBuild}
+    bind:offlineDownloadOpen={ui.offlineDownloadOpen}
+    bind:shortcutsHelpOpen={ui.shortcutsHelpOpen}
     toggleInheritance={project.toggleInheritance}
+    toggleTestClasses={project.toggleTestClasses}
     commitProjectName={project.commitProjectName}
   />
   <div class="body">
@@ -373,13 +412,13 @@
       inputReady={session.inputReady}
       canExecute={session.canExecute}
       mainEntries={session.mainEntries}
-      {offlineBuild}
-      {OFFLINE_DOWNLOAD}
-      bind:shortcutsHelpOpen={ui.shortcutsHelpOpen}
       compileShortcutLabel={ui.compileShortcutLabel}
       runShortcutLabel={ui.runShortcutLabel}
       exportProject={project.exportProject}
       compile={session.compile}
+      recording={Boolean(tests.state?.recording)}
+      openTests={() => (tests.open = true)}
+      runTests={() => tests.run()}
       runMain={session.runMain}
     />
     <section
@@ -388,6 +427,8 @@
     >
       <div class="panels">
         <ClassDiagram
+          {testFileIds}
+          showTestClasses={project.showTestClasses}
           inheritanceMode={project.inheritanceMode}
           inheritanceSelection={project.inheritanceSelection}
           showInheritance={project.showInheritance}
@@ -400,8 +441,8 @@
           readme={project.readme}
           displayFiles={project.displayFiles}
           displayCardPositions={project.displayCardPositions}
+          displayCardLayers={project.displayCardLayers}
           uncompiled={session.runtime.phase === "uncompiled"}
-          cardLayer={project.cardLayer}
           selectCard={project.selectCard}
           beginCardDrag={project.beginCardDrag}
           moveCard={project.moveCard}
@@ -447,6 +488,14 @@
         programActive={session.programActive}
         phase={session.runtime.phase}
         resetRuntime={session.resetRuntime}
+        defaultTestClass={tests.defaultClass}
+        captureError={tests.state?.captureError || ""}
+        canSaveFixture={tests.ready && objects.bench.length > 0 && Boolean(tests.state?.canCapture) && !tests.state?.recording}
+        canLoadFixture={Boolean(tests.defaultClass) && tests.canRun}
+        canChooseTestClass={tests.stateClasses.length > 0}
+        saveFixture={tests.saveBench}
+        loadFixture={tests.loadDefaultFixture}
+        chooseTestClass={tests.openDefaultClassPicker}
       />
     </section>
   </div>
@@ -535,7 +584,26 @@
     inspectFieldReference={objects.inspectFieldReference}
     beginFieldEdit={objects.beginFieldEdit}
   />
+  <TestPanel
+    {tests}
+    stop={() => session.client.stop()}
+    codeMirror={editor.codeMirror}
+    editorFontSize={ui.editorFontSize}
+    vimMode={ui.vimMode}
+    darkMode={ui.darkMode}
+    commentShortcutLabel={ui.commentShortcutLabel}
+    formatShortcutLabel={ui.formatShortcutLabel}
+    toggleEditorComments={editor.toggleEditorComments}
+    formatEditor={editor.formatEditor}
+    dialogError={ui.dialogError}
+    closeFormatError={editor.closeFormatError}
+  />
   <CallDialogs
+    recording={Boolean(tests.state?.recording)}
+    assertionAvailable={Boolean(tests.state?.lastResult)}
+    suggestedExpected={tests.state?.suggestedExpected || null}
+    assertionError={tests.error}
+    addAssertion={tests.assertion}
     bind:createDialog={objects.createDialog}
     bind:invokeDialog={objects.invokeDialog}
     bind:resultDialog={objects.resultDialog}
@@ -577,6 +645,14 @@
     confirmNewClass={project.confirmNewClass}
   />
   <ObjectContextMenu
+    {isTestFile}
+    createTestClass={tests.requestCreate}
+    runTests={tests.run}
+    loadFixture={tests.fixture}
+    saveFixture={tests.capture}
+    recordTest={tests.record}
+    recording={Boolean(tests.state?.recording)}
+    canCapture={Boolean(tests.state?.canCapture)}
     bind:menu={objects.menu}
     classes={session.classes}
     canExecute={session.canExecute}
@@ -593,12 +669,19 @@
     inspectObject={objects.inspectObject}
     removeObject={objects.removeObject}
   />
+  <OfflineDownloadDialog
+    bind:open={ui.offlineDownloadOpen}
+    downloadUrl={OFFLINE_DOWNLOAD}
+  />
   <ProjectTransferDialogs
     bind:toolbarDialog={project.toolbarDialog}
     bind:shareLinkDialog={project.shareLinkDialog}
     bind:shareCodeInput={project.shareCodeInput}
     shareCodeError={project.shareCodeError}
     bind:shareWithReadme={project.shareWithReadme}
+    bind:shareWithState={project.shareWithState}
+    canShareState={project.canShareState}
+    defaultTestClass={project.defaultTestClass}
     readme={project.readme}
     files={project.files}
     htmlExportBlocked={session.htmlExportBlocked}

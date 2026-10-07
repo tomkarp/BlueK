@@ -14,7 +14,13 @@
   export let activeWindow: ActiveWindow;
   export let showInheritance: boolean;
   export let settingsNotice: boolean;
+  export let offlineBuild: boolean;
+  export let offlineDownloadOpen: boolean;
+  export let shortcutsHelpOpen: boolean;
+  export let showTestClasses: boolean;
+  export let hasTestClasses: boolean;
   export let toggleInheritance: () => void;
+  export let toggleTestClasses: () => void;
   export let commitProjectName: (event: KeyboardEvent) => void;
 </script>
 
@@ -129,6 +135,45 @@
           class="toolbar-arrowhead"
           d="M5.5 7.5L10 5.5 9 10z"
         /></svg
+    >
+    </button>
+    <button
+      class:active={showTestClasses}
+      class="toolbar-icon-button test-classes-button"
+      on:click={toggleTestClasses}
+      disabled={!hasTestClasses}
+      aria-label={showTestClasses ? "Hide test classes" : "Show test classes"}
+      title={showTestClasses ? "Hide test classes" : "Show test classes"}
+    >
+      <svg class="test-classes-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 3h11l4 4v14H3z" />
+        <path d="M14 3v4h4" />
+        <path class="test-check-row-one" d="m6 11 1.5 1.5L10 10" />
+        <path class="test-check-row-two" d="m6 16 1.5 1.5L10 15" />
+      </svg>
+    </button>
+    {#if !offlineBuild}<button
+        class="toolbar-icon-button toolbar-download-button"
+        on:click={() => (offlineDownloadOpen = true)}
+        aria-label="Offline Version"
+        title="Download BlueK for offline use"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"
+          ><path d="M12 3v11m-4-4 4 4 4-4" /><path
+            d="M4 17v4h16v-4"
+          /></svg
+        >
+      </button>{/if}
+    <button
+      class="toolbar-icon-button toolbar-help-button"
+      on:click={() => (shortcutsHelpOpen = true)}
+      aria-label="Help"
+      title="Help"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true"
+        ><circle cx="12" cy="12" r="9" /><path
+          d="M9.7 9a2.4 2.4 0 1 1 3.9 1.9c-1.1.8-1.6 1.1-1.6 2.6"
+        /><circle cx="12" cy="17.2" r=".7" /></svg
       >
     </button>
     <button

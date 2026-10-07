@@ -172,7 +172,11 @@ export class LocalRuntimeClient {
   async simulation(action: 'step' | 'start' | 'stop' | 'reset' | 'setSpeed', speed?: number) {
     return this.execute(action === 'reset' ? { op: 'simulation', action } : { op: 'simulation', action, speed });
   }
-  async stop() { this.invalidate(); }
+  async stop() {
+    const testing = this.snapshot.testing;
+    this.invalidate('Execution stopped.');
+    if (testing?.status === 'running') this.update({ ...this.snapshot, testing: { ...testing, status: 'aborted', recording: null, canCapture: false, lastResult: null, cases: testing.cases.map(result => ({ ...result, status: result.status === 'pending' || result.status === 'running' ? 'aborted' : result.status })) } });
+  }
   async reset(fileName?: string) {
     if (this.library?.id === 'blueplay') return this.execute({ op: 'simulation', action: 'reset', fileName });
     return this.compile(this.project, Date.now(), this.library, this.resources);
