@@ -5,9 +5,10 @@ User API: [blueplay.md](blueplay.md). Binding ownership:
 
 ## Library and engine
 
-BluePlay is `{ id: "blueplay", version: 1 }`, not editable framework source.
+BluePlay is the built-in, versioned library `{ id: "blueplay", version: 1 }`,
+not editable project source.
 Reject unknown/missing library versions. Imports migrate explicitly marked old
-framework files to the library without duplicating them.
+library source files to the built-in library without duplicating them.
 
 `BluePlayLibrary.kt` supplies interpreted World/Actor/Image classes and public
 functions ahead of project source. They are normal Kotlite classes, supporting

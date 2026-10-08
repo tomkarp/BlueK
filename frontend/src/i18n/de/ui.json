@@ -89,14 +89,15 @@
     "closeBluePlayWorld": "BluePlay-Welt schließen",
     "bluePlayWorld2": "BluePlay-Welt",
     "bluePlayControls": "BluePlay-Steuerung",
-    "resetBluePlayWorld": "BluePlay-Welt zurücksetzen",
-    "actOnce": "Einen Schritt ausführen",
-    "act": "Schritt",
-    "runBluePlayWorld": "BluePlay-Welt starten",
-    "run": "Starten",
-    "pauseBluePlayWorld": "BluePlay-Welt pausieren",
+    "resetBluePlayWorld": "Reset BluePlay world",
+    "reset": "Reset",
+    "actOnce": "Act once",
+    "act": "Act",
+    "runBluePlayWorld": "Run BluePlay world",
+    "run": "Run",
+    "pauseBluePlayWorld": "Pause BluePlay world",
     "pause": "Pause",
-    "speed": "Geschwindigkeit"
+    "speed": "Speed"
   },
   "objects": {
     "call": "Aufruf",
@@ -232,7 +233,7 @@
     "spaceInvadersDemo": "Space-Invaders-Demo",
     "playASimplifiedBluePlayGameWithAMovable": "Ein vereinfachtes BluePlay-Spiel mit steuerbarem Verteidiger und Angreifern spielen.",
     "closeBluePlayInformation": "BluePlay-Information schließen",
-    "bluePlayIsALightweightKotlinFrameworkForCreating": "BluePlay ist ein Kotlin-Framework für grafische Spiele und Simulationen mit Welten, Akteuren und Bildern.",
+    "bluePlayIsALightweightKotlinLibraryForCreating": "BluePlay ist eine kleine Kotlin-Bibliothek für interaktive Programme und Spiele. Sie bietet Welten, Akteure, Bilder und Sounds und ruft beim Ausführen wiederholt deine act()-Methoden auf.",
     "theTemplateProvidesAnEmptyStartingPoint": "Die Vorlage bietet einen leeren Ausgangspunkt.",
     "theExampleDemonstratesASmallWorldAndActor": "Das Beispiel zeigt ein kleines Projekt mit World und Actor.",
     "viewBluePlayOnGitHub": "BluePlay auf GitHub ansehen"

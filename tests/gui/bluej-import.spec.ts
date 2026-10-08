@@ -56,12 +56,12 @@ test('GUI-60 a BlueJ ZIP project opens with its classes, positions and hidden pr
 });
 
 test('GUI-61 a BlueJ BluePlay project uses the built-in library and its images', async ({ page }) => {
-  const framework = strToU8('// historical framework source, replaced by BlueK\n');
+  const librarySource = strToU8('// historical BluePlay library source, replaced by BlueK\n');
   const zip = zipSync({
-    'Ausgebuext/World.kt': framework,
-    'Ausgebuext/Actor.kt': framework,
-    'Ausgebuext/Image.kt': framework,
-    'Ausgebuext/BluePlayFunctions.kt': framework,
+    'Ausgebuext/World.kt': librarySource,
+    'Ausgebuext/Actor.kt': librarySource,
+    'Ausgebuext/Image.kt': librarySource,
+    'Ausgebuext/BluePlayFunctions.kt': librarySource,
     'Ausgebuext/Ausreisser.kt': strToU8('class Ausreisser : Actor() {\n    init {\n        image = Image("cat.png")\n    }\n}\n'),
     'Ausgebuext/Main.kt': strToU8('fun main() {\n    val welt = World(200, 100, 1)\n    welt.addObject(Ausreisser(), 50, 50)\n    welt.show()\n}\n'),
     'Ausgebuext/package.bluej': strToU8('#BlueJ package file\n'),

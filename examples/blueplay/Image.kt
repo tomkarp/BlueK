@@ -29,7 +29,7 @@ class Image {
         private set
 
     // Current drawing color. Set it with setColor(...). The accessors are @JvmSynthetic
-    // so the java.awt.Color type does not leak into the BlueJ menus; internal framework
+    // so the java.awt.Color type does not leak into the BlueJ menus; internal library
     // code (World, BluePlay) still uses this property from Kotlin.
     @get:JvmSynthetic @set:JvmSynthetic
     var color: Color = Color.BLACK

@@ -488,3 +488,30 @@ rather than repeated step-by-step narratives. Recorded checks included:
 
 Future entries should record date, exact affected checks, result and limits;
 keep detailed cases in tests and avoid accumulating duplicate narratives.
+
+### BluePlay labels — 2026-10-08
+
+- Issue 23: German UI now keeps the English names of BluePlay controls
+  (Reset, Act, Run, Pause, Speed), including accessible button labels and the
+  German help references. Localization smoke asserts the required labels;
+  `npm run test:i18n` passed (599 messages), and `npm run typecheck` passed
+  with zero errors and warnings. Browser visual acceptance not performed.
+- Follow-up: the visible reset button had still used the shared German
+  `Zurücksetzen` label. It now uses the BluePlay-specific English `Reset`;
+  localization smoke asserts it. `npm run test:i18n` passed (600 messages),
+  and `npm run typecheck` passed with zero errors and warnings. Browser visual
+  acceptance not performed.
+
+### BluePlay terminology — 2026-10-08
+
+- BluePlay product copy, import/runtime explanations and the New Project
+  information dialog now describe BluePlay as a library, including its
+  worlds, actors, images, sounds and `act()` simulation loop. `npm run
+  test:i18n` passed (600 messages), `npm run typecheck` passed with zero
+  errors/warnings, and `npm run build:kotlite` passed. BluePlay UI source names
+  and serialized element IDs now use library terminology. The archived BlueJ
+  reference fixture remains verbatim as source material for its separate import
+  test; it does not define BlueK's BluePlay terminology. Generic test-framework
+  wording is unrelated and unchanged. After renaming the IDs,
+  `npm run test:project-format` passed and the repeated typecheck passed with
+  zero errors/warnings.

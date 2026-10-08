@@ -512,7 +512,7 @@ class KotliteSession {
             bluePlayEnabled = true
         }
         if (bluePlayEnabled && filenames.any { it in setOf("World.kt", "Actor.kt", "Image.kt", "BluePlayFunctions.kt") }) {
-            return errorMessage("BluePlay supplies World.kt, Actor.kt, Image.kt and BluePlayFunctions.kt as a built-in library. Remove the framework source files from this project.", "analysis")
+            return errorMessage("BluePlay supplies World.kt, Actor.kt, Image.kt and BluePlayFunctions.kt as a built-in library. Remove the BluePlay library source files from this project.", "analysis")
         }
         val mainFiles = mutableListOf<String>()
         mainArgumentFiles.clear()

@@ -92,7 +92,7 @@
           >
           <h4>{t("ui.projects.whatIsBluePlay")}</h4>
           <p>
-            {t("ui.projects.bluePlayIsALightweightKotlinFrameworkForCreating")}
+            {t("ui.projects.bluePlayIsALightweightKotlinLibraryForCreating")}
           </p>
           <p>
             {projectInfo === "template"

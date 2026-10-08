@@ -90,6 +90,7 @@
     "bluePlayWorld2": "BluePlay world",
     "bluePlayControls": "BluePlay controls",
     "resetBluePlayWorld": "Reset BluePlay world",
+    "reset": "Reset",
     "actOnce": "Act once",
     "act": "Act",
     "runBluePlayWorld": "Run BluePlay world",
@@ -232,7 +233,7 @@
     "spaceInvadersDemo": "Space Invaders Demo",
     "playASimplifiedBluePlayGameWithAMovable": "Play a simplified BluePlay game with a movable defender and invaders.",
     "closeBluePlayInformation": "Close BluePlay information",
-    "bluePlayIsALightweightKotlinFrameworkForCreating": "BluePlay is a lightweight Kotlin framework for creating graphical games and simulations with worlds, actors and images.",
+    "bluePlayIsALightweightKotlinLibraryForCreating": "BluePlay is a lightweight Kotlin library for creating interactive programs and games. It provides worlds, actors, images and sounds, and calls your act() methods repeatedly when you run the simulation.",
     "theTemplateProvidesAnEmptyStartingPoint": "The template provides an empty starting point.",
     "theExampleDemonstratesASmallWorldAndActor": "The example demonstrates a small World and Actor project.",
     "viewBluePlayOnGitHub": "View BluePlay on GitHub"

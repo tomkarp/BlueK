@@ -4,8 +4,8 @@ import type { SavedProject, SavedProjectFile, ProjectResource, ProjectCardPositi
 /** One file of a BlueJ project, e.g. from a ZIP archive or a chosen directory. */
 export type ImportEntry = { path: string; bytes: Uint8Array };
 
-// The built-in BluePlay library replaces these historical framework sources.
-const BLUEPLAY_FRAMEWORK = new Set(["World.kt", "Actor.kt", "Image.kt", "BluePlayFunctions.kt", "BluePlayHelpers.kt"]);
+// The built-in BluePlay library replaces these historical library sources.
+const BLUEPLAY_LIBRARY_SOURCES = new Set(["World.kt", "Actor.kt", "Image.kt", "BluePlayFunctions.kt", "BluePlayHelpers.kt"]);
 const MEDIA_TYPES: Record<string, string> = {
   png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp",
   wav: "audio/wav", mp3: "audio/mpeg", ogg: "audio/ogg",
@@ -65,7 +65,7 @@ export function blueJProjectFromEntries(entries: ImportEntry[]): SavedProject {
   const kotlin = inRoot.filter((entry) => /^[A-Za-z0-9_.-]+\.kt$/.test(entry.path));
   const blueplay = ["World.kt", "Actor.kt"].every((name) => kotlin.some((entry) => entry.path === name));
   const files: SavedProjectFile[] = kotlin
-    .filter((entry) => !(blueplay && BLUEPLAY_FRAMEWORK.has(entry.path)))
+    .filter((entry) => !(blueplay && BLUEPLAY_LIBRARY_SOURCES.has(entry.path)))
     .map((entry) => {
       const source = decoder.decode(entry.bytes);
       const kind: SavedProjectFile["kind"] = CLASS_DECLARATION.test(source) ? "class" : "functions";

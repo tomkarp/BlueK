@@ -7,7 +7,7 @@ object BluePlayLibrary {
     const val id = "blueplay"
     const val version = 1
 
-    // Keep this source in the browser bundle instead of adding framework files
+    // Keep this source in the browser bundle instead of adding library source files
     // to a student's project. The stage is rendered by the session whenever a
     // command completes, so state changes here do not render individually.  It is analyzed together with the project, so
     // inheritance, overriding and generic calls use Kotlite's normal rules.

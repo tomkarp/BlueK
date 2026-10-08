@@ -27,6 +27,18 @@ for (const locale of locales) {
   assert.ok(!Object.values(messages).includes('Offene Klasse'));
   assert.ok(!Object.values(messages).includes('Datenklasse'));
 }
+const germanUi = catalog('de');
+for (const [key, label] of Object.entries({
+  resetBluePlayWorld: 'Reset BluePlay world',
+  reset: 'Reset',
+  actOnce: 'Act once',
+  act: 'Act',
+  runBluePlayWorld: 'Run BluePlay world',
+  run: 'Run',
+  pauseBluePlayWorld: 'Pause BluePlay world',
+  pause: 'Pause',
+  speed: 'Speed',
+})) assert.equal(germanUi[`ui.blueplay.${key}`], label, `German BluePlay label: ${key}`);
 const bundle = await rolldown({input:new URL('../frontend/src/i18n/catalog.ts',import.meta.url).pathname});
 const {output} = await bundle.generate({format:'esm'});
 const {richText, browserLocale} = await import(`data:text/javascript;base64,${Buffer.from(output[0].code).toString('base64')}`);

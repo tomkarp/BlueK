@@ -75,7 +75,7 @@ Supporting modules:
   `projectTemplates.ts`: HTTP templates online, fresh embedded copies offline.
 - `blueJImport.ts`: chooses the shallowest `package.bluej` in a ZIP/folder,
   imports Kotlin/resources/positions and substitutes the built-in library for
-  historical BluePlay framework files.
+  historical BluePlay library source files.
 - `kotlinFormatterClient.ts`: bundled ktfmt WASM, independent of runtime state.
   Offline builds provide embedded gzip bytes; no CDN dependency.
 - `terminalText.ts`: interprets raw output control sequences for IDE and player;

@@ -34,7 +34,7 @@
     file?: ProjectFile,
     object?: BenchObject,
   ) => void;
-  export let isBluePlayFrameworkFile: (file: ProjectFile) => boolean;
+  export let isBluePlayLibraryFile: (file: ProjectFile) => boolean;
   export let openBluePlayApi: (file: ProjectFile) => void;
   export let openReadme: () => void;
 </script>
@@ -128,7 +128,7 @@
         on:click={() => selectCard(file, index)}
         on:dblclick={() => {
           if (inheritanceMode) return;
-          if (isBluePlayFrameworkFile(file)) openBluePlayApi(file);
+          if (isBluePlayLibraryFile(file)) openBluePlayApi(file);
           else openEditor(file);
         }}
         on:contextmenu={(event) => openMenu(event, file)}

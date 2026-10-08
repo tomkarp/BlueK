@@ -80,7 +80,7 @@
           on:click={resetGame}
           disabled={!canExecute}
           aria-label={t("ui.blueplay.resetBluePlayWorld")}
-          >{t("ui.common.reset")}</button
+          >{t("ui.blueplay.reset")}</button
         >{/if}
       <button
         on:click={() => bluePlayAction("step")}

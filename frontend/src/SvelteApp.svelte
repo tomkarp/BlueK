@@ -456,7 +456,7 @@
           endCardDrag={project.endCardDrag}
           openEditor={editor.openEditor}
           openMenu={objects.openMenu}
-          isBluePlayFrameworkFile={project.isBluePlayFrameworkFile}
+          isBluePlayLibraryFile={project.isBluePlayLibraryFile}
           openBluePlayApi={project.openBluePlayApi}
           openReadme={project.openReadme}
         />
@@ -683,7 +683,7 @@
     classes={session.classes}
     canExecute={session.canExecute}
     phase={session.runtime.phase}
-    isBluePlayFrameworkFile={project.isBluePlayFrameworkFile}
+    isBluePlayLibraryFile={project.isBluePlayLibraryFile}
     openBluePlayApi={project.openBluePlayApi}
     createObject={objects.createObject}
     invokeClassMethod={objects.invokeClassMethod}

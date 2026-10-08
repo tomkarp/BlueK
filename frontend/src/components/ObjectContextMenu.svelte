@@ -31,7 +31,7 @@
   export let classes: ClassMeta[];
   export let canExecute: boolean;
   export let phase: RuntimeSnapshot["phase"];
-  export let isBluePlayFrameworkFile: (file: ProjectFile) => boolean;
+  export let isBluePlayLibraryFile: (file: ProjectFile) => boolean;
   export let openBluePlayApi: (file: ProjectFile) => void;
   export let createObject: (className: string, index?: number) => void;
   export let invokeClassMethod: (
@@ -68,7 +68,7 @@
     <div class="popup-title">
       {menu.object?.className || menu.file?.fileName.replace(".kt", "")}
     </div>
-    {#if menu.file && isBluePlayFrameworkFile(menu.file)}
+    {#if menu.file && isBluePlayLibraryFile(menu.file)}
       <button on:click={() => openBluePlayApi(menu!.file!)}
         >{t("ui.objects.showAPIDocumentation")}</button
       >

@@ -87,7 +87,7 @@ you need to retain.
 ## Import, export and links
 
 **Open / Import** accepts `.bluek.json` files and BlueJ projects as ZIPs or
-folders. Historical BluePlay framework files are replaced by the built-in
+folders. Historical BluePlay library source files are replaced by the built-in
 library when applicable; Kotlin files, card positions, images and sounds are
 imported. Java source is not interpreted.
 

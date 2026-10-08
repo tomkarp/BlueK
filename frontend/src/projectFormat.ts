@@ -189,7 +189,7 @@ export function projectModelFromPayload(
     ...(file.isTestClass ? { isTestClass: true } : {}),
   } satisfies ProjectFile));
   const positions = payload.cardPositions ?? {};
-  const bluePlayFrameworkNames = new Set([
+  const bluePlayLibraryNames = new Set([
     "BluePlayFunctions.kt",
     "World.kt",
     "Actor.kt",
@@ -206,16 +206,16 @@ export function projectModelFromPayload(
       files
         .filter((file) => positions[file.fileName])
         .map((file) => [
-          payload.library?.id === "blueplay" && bluePlayFrameworkNames.has(file.fileName)
-            ? `blueplay-framework-${file.fileName}`
+          payload.library?.id === "blueplay" && bluePlayLibraryNames.has(file.fileName)
+            ? `blueplay-library-${file.fileName}`
             : file.id,
           positions[file.fileName],
         ])
         .concat(
           payload.library?.id === "blueplay"
-            ? Array.from(bluePlayFrameworkNames)
+            ? Array.from(bluePlayLibraryNames)
                 .filter((fileName) => positions[fileName])
-                .map((fileName) => [`blueplay-framework-${fileName}`, positions[fileName]] as const)
+                .map((fileName) => [`blueplay-library-${fileName}`, positions[fileName]] as const)
             : [],
         ),
     ),

@@ -6,4 +6,5 @@ Unmodified files from tomkarp/BluePlay's BlueJ project at GitHub commit
 
 These files are an independent external test reference. Do not regenerate
 from BlueK's implementation. Three student files run unchanged against the
-built-in library; framework files supply the independent signature comparison.
+built-in library; the original library source files supply the independent
+signature comparison.

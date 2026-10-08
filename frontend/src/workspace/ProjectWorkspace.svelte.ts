@@ -21,8 +21,8 @@ import {
 } from "../uiParity";
 
 import {
-  bluePlayFrameworkNames,
-  bluePlayFrameworkFiles,
+  bluePlayLibraryNames,
+  bluePlayLibraryFiles,
 } from "../bluePlayCards";
 import { mainFiles } from "../mainEntries";
 
@@ -226,7 +226,7 @@ export class ProjectWorkspace {
   htmlExporting = $state(false);
   displayFiles = $derived.by(() => {
     return this.library?.id === "blueplay"
-      ? [...bluePlayFrameworkFiles, ...this.orderedBluePlayFiles(this.files)]
+      ? [...bluePlayLibraryFiles, ...this.orderedBluePlayFiles(this.files)]
       : this.files;
   });
   currentFile = $derived.by(() => {
@@ -245,10 +245,10 @@ export class ProjectWorkspace {
     };
     return [...projectFiles].sort((a, b) => rank(a) - rank(b));
   };
-  isBluePlayFrameworkFile = (file: ProjectFile) => {
+  isBluePlayLibraryFile = (file: ProjectFile) => {
     return (
       this.library?.id === "blueplay" &&
-      bluePlayFrameworkNames.includes(file.fileName)
+      bluePlayLibraryNames.includes(file.fileName)
     );
   };
   cardPosition = (file: ProjectFile, index: number) => {
@@ -303,7 +303,7 @@ export class ProjectWorkspace {
       this.resources,
       this.cardPositions,
       this.library,
-      this.library?.id === "blueplay" ? bluePlayFrameworkFiles : [],
+      this.library?.id === "blueplay" ? bluePlayLibraryFiles : [],
       this.readme,
       this.projectName,
       this.defaultTestClass,
@@ -552,13 +552,13 @@ export class ProjectWorkspace {
   selectCard = (file: ProjectFile, index: number) => {
     this.bringCardToFront(file);
     if (!this.inheritanceMode) {
-      if (!this.isBluePlayFrameworkFile(file))
+      if (!this.isBluePlayLibraryFile(file))
         this.selected = this.files.findIndex((item) => item.id === file.id);
       return;
     }
     if (file.kind !== "class") return;
     if (!this.inheritanceSelection) {
-      if (this.isBluePlayFrameworkFile(file)) return;
+      if (this.isBluePlayLibraryFile(file)) return;
       this.inheritanceSelection = file.id;
       this.host.ui().status = "Select superclass";
       return;
@@ -730,7 +730,7 @@ export class ProjectWorkspace {
     );
     this.saveAutosave();
     this.savedProjectsNotice = false;
-    const frameworkFiles = new Set([
+    const librarySourceFiles = new Set([
       "World.kt",
       "Actor.kt",
       "Image.kt",
@@ -739,7 +739,7 @@ export class ProjectWorkspace {
     ]);
     this.files =
       imported.library?.id === "blueplay"
-        ? imported.files.filter((file) => !frameworkFiles.has(file.fileName))
+        ? imported.files.filter((file) => !librarySourceFiles.has(file.fileName))
         : imported.files;
     this.library = imported.library;
     this.resources = imported.resources;
