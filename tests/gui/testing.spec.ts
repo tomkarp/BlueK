@@ -752,7 +752,7 @@ test("GUI-110 testing actions collapse by default and utility icons stay below t
   await expect(help).toBeVisible();
   await expect(settings).toBeVisible();
   await help.click();
-  await expect(page.getByRole("dialog", { name: "Keyboard Shortcuts" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "BlueK Help" })).toBeVisible();
   await page.keyboard.press("Escape");
   await settings.click();
   await expect(page.getByRole("dialog", { name: "Settings", exact: true })).toBeVisible();

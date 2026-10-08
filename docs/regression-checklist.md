@@ -272,8 +272,49 @@ Unless explicitly stated, visual user acceptance remains pending.
 | GUI-126 | Drafts survive full browser-process restart | 9/9 draft cases passed; included in final affected 18/18 run (2026-10-07); manual acceptance pending |
 | GUI-127 | Confirm/cancel individual draft deletion and cross-tab lists | 9/9 draft cases passed; included in final affected 18/18 run (2026-10-07); manual acceptance pending |
 | GUI-128 | Confirm/cancel Delete all, settings retained, no unchanged resurrection | 9/9 draft cases passed; included in final affected 18/18 run (2026-10-07); manual acceptance pending |
+| GUI-129 | Bundled user manual, section navigation, adaptive shortcuts, small viewports, dark mode and offline use | Hosted selection 3/3 and offline manual 1/1 passed (2026-10-08); screenshots inspected; user acceptance pending |
 
 ## Recorded verification
+
+### Bundled user manual — 2026-10-08
+
+The Help action opens a nine-section English manual with a brief introduction,
+workflow instructions, examples and reference entries. Platform-aware shortcuts
+remain supplied by the existing UI owner. Frequently encountered Kotlin limits
+are included; detailed maintained references link to GitHub. The manual is
+compiled into hosted and offline apps. Content scrolls independently of Close;
+navigation adapts to narrow windows. No runtime/state behavior was changed.
+
+GUI-129 covers every section, terminology, state replacement rules, examples,
+links, shortcuts, scroll reset, Close/Escape, reopening, focus and dark mode.
+The affected hosted Chromium selection (GUI-80, GUI-110, GUI-129) passed 3/3;
+the freshly built file:// manual test passed 1/1 with HTTP blocked. Svelte check
+passed with 0 errors and 0 warnings. Desktop 800×600, narrow 390×600 and dark
+screenshots were inspected. The initial typecheck found an unescaped literal
+brace in the Svelte text; it was fixed, and all affected checks were rerun.
+That initial browser run had one startup failure from the same compile error.
+This is targeted verification, not a rerun of the complete regression suite.
+User visual acceptance is pending.
+Production frontend build and diff whitespace check passed. Vite reported
+warnings about the runtime-resolved interpreter URL, formatter's externalized
+Node module and bundle size; no build errors occurred.
+
+Editorial follow-up: removed obvious scrolling/window/read-only instructions
+and repeated explanations of Get, settings, state preview and test actions.
+Compressed draft and compatibility wording; retained preparation replacement,
+replay, autosave and runtime caveats. Text-only changes were reviewed and the
+diff whitespace check passed; browser checks were not repeated for this edit.
+Second editorial pass removed internet-link and large-world scrolling reminders,
+the supported-language feature inventory and advanced numeric/callback details
+covered by the references. Compressed resource, default-class and preview
+instructions. Formatting and diff whitespace checks passed; no behavior changes.
+Help geometry follow-up: removed the subtitle and made dialog height depend
+only on viewport height (24 px total outside margin), keeping section changes
+from resizing or recentering it. Extended GUI-129 checks identical bounds across
+all desktop sections, narrow viewport bounds and absent subtitle. Affected
+Chromium test passed 1/1; diff whitespace check passed. User acceptance pending.
+Editorial follow-up: removed the Outside BlueK/JVM setup subsection from the
+built-in manual at the user's request. Diff whitespace check passed; text only.
 
 ### View controls and application utilities — 2026-10-08
 

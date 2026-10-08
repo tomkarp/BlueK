@@ -2,6 +2,15 @@
 
 [Back to the overview](../README.md)
 
+## Built-in manual
+
+The **Help** icon at the bottom left opens the bundled user manual. Choose a
+section for quick start, objects/codepad, projects/saving, saved state, testing,
+Kotlin compatibility, BluePlay, keyboard shortcuts or troubleshooting. The
+contents are available offline; links to GitHub require internet. Shortcuts
+show Cmd on macOS and Ctrl elsewhere. Long sections scroll within the dialog,
+leaving Close available.
+
 ## Projects and editing
 
 **New Project** offers an empty project, BluePlay templates and demo projects.

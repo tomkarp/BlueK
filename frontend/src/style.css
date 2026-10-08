@@ -885,3 +885,33 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 .sidebar-utilities .settings-button svg{fill:currentColor;stroke:none}
 .sidebar-utilities .utility-icon-button:hover,.sidebar-utilities .utility-icon-button:focus-visible{border-color:#08a6d2;background:#e2f2f7;color:#075b70}
 .dark .sidebar-utilities .utility-icon-button:hover,.dark .sidebar-utilities .utility-icon-button:focus-visible{background:#45454a;color:#fff}
+
+/* The manual is bundled with the app, including the offline edition. */
+.user-help-dialog{width:min(960px,calc(100vw - 24px));min-width:0;height:calc(100dvh - 24px);max-height:calc(100dvh - 24px);display:flex;flex-direction:column;padding:20px;overflow:hidden}
+.user-help-dialog header{flex:none;margin-bottom:16px}
+.user-help-dialog header h3{margin:0 0 6px}
+.user-help-dialog header p{margin:0;color:#666;line-height:1.4}
+.user-help-layout{display:grid;grid-template-columns:180px minmax(0,1fr);gap:20px;min-height:0;flex:1;overflow:hidden}
+.user-help-layout nav{overflow:auto;display:flex;flex-direction:column;gap:4px}
+.user-help-layout nav button{margin:0;text-align:left;padding:9px 10px;border:1px solid transparent;border-radius:5px;background:transparent;color:inherit;font-size:14px;cursor:pointer}
+.user-help-layout nav button:hover{background:#e1e3e4}
+.user-help-layout nav button[aria-current="page"]{background:#d1edf4;border-color:#89bac8;color:#075b70}
+.user-help-layout article{overflow:auto;min-height:0;padding:0 12px 10px 2px;line-height:1.5;font-size:14px}
+.user-help-layout h4{font-size:20px;margin:0 0 12px}
+.user-help-layout h5{font-size:15px;margin:20px 0 6px}
+.user-help-layout p{margin:0 0 12px}
+.user-help-layout ul,.user-help-layout ol{padding-left:22px;margin:0 0 12px}
+.user-help-layout li{margin:5px 0}
+.user-help-layout dt{font-weight:bold;margin-top:10px}
+.user-help-layout dd{margin:2px 0 10px}
+.user-help-layout pre{white-space:pre;overflow:auto;background:#fff;border:1px solid #ccc;border-radius:5px;padding:12px;font-size:13px;line-height:1.5}
+.user-help-layout code{font-family:Menlo,Consolas,monospace;font-size:.95em}
+.user-help-layout a{color:#075b70}
+.user-help-dialog>.dialog-actions{flex:none;padding-top:12px;margin-top:10px;border-top:1px solid #ccc}
+.dark .user-help-dialog header p{color:#aaa}
+.dark .user-help-layout nav button:hover{background:#333}
+.dark .user-help-layout nav button[aria-current="page"]{background:#174b59;color:#d1edf4;border-color:#478b9e}
+.dark .user-help-layout pre{background:#1e1e1e;border-color:#555}
+.dark .user-help-layout a{color:#8dd8ee}
+.dark .user-help-dialog>.dialog-actions{border-color:#555}
+@media(max-width:600px){.user-help-dialog{padding:14px}.user-help-layout{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);gap:14px}.user-help-layout nav{flex-direction:row;flex-wrap:wrap;max-height:115px;gap:3px}.user-help-layout nav button{padding:6px 8px;font-size:12px}}

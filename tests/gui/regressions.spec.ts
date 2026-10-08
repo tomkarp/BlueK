@@ -2259,7 +2259,7 @@ test('GUI-80 project name field does not intercept clicks on project actions', a
   await page.getByRole('dialog', { name: 'Create New Kotlin File' }).getByRole('button', { name: 'Cancel' }).click();
 
   await page.getByRole('button', { name: 'Help', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'Keyboard Shortcuts' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'BlueK Help' })).toBeVisible();
   await expect(page.locator('.sidebar-utilities').getByRole('button', { name: /Offline Version/ })).toBeVisible();
 });
 
@@ -2307,4 +2307,73 @@ test('RT-33 Export Project JSON keeps its file name and content', async ({ page 
   const saved = JSON.parse(Buffer.concat(chunks).toString('utf8'));
   expect(saved).toMatchObject({ format: 'bluek-project', version: 1, projectName: 'Hunde: Teil 1/2',
     files: [{ fileName: 'Hund.kt', kind: 'class', source: 'class Hund' }] });
+});
+
+test('GUI-129 bundled user manual covers workflows and remains usable in small viewports', async ({ page }) => {
+  await project(page);
+  await page.getByRole('button', { name: 'Help', exact: true }).click();
+  const help = page.getByRole('dialog', { name: 'BlueK Help', exact: true });
+  const navigation = help.getByRole('navigation', { name: 'Help sections' });
+  await expect(help.getByRole('heading', { name: 'Quick start', exact: true })).toBeVisible();
+  await expect(help.locator('header p')).toHaveCount(0);
+  const initialHelpBox = await help.boundingBox();
+  expect(initialHelpBox!.height).toBe(page.viewportSize()!.height - 24);
+  const sections = ['Quick start', 'Objects & codepad', 'Projects & saving', 'Saved state', 'Testing', 'Kotlin compatibility', 'BluePlay', 'Keyboard shortcuts', 'Troubleshooting'];
+  for (const section of sections) {
+    await navigation.getByRole('button', { name: section, exact: true }).click();
+    await expect(help.getByRole('heading', { name: section, exact: true })).toBeVisible();
+    await expect(navigation.getByRole('button', { name: section, exact: true })).toHaveAttribute('aria-current', 'page');
+    expect(await help.boundingBox()).toEqual(initialHelpBox);
+    await expect(help.getByRole('article')).not.toContainText(/student|classroom|teaching/i);
+  }
+  await navigation.getByRole('button', { name: 'Saved state', exact: true }).click();
+  await expect(help.getByRole('article')).toContainText('StateTest');
+  await expect(help.getByRole('article')).toContainText('all class properties, all @BeforeTest methods and init blocks');
+  await navigation.getByRole('button', { name: 'Testing', exact: true }).click();
+  await expect(help.locator('pre')).toContainText('assertEquals(1, counter.value)');
+  await navigation.getByRole('button', { name: 'Kotlin compatibility', exact: true }).click();
+  const reference = help.getByRole('link', { name: 'Kotlin compatibility reference', exact: true });
+  await expect(reference).toHaveAttribute('href', 'https://github.com/tomkarp/BlueK/blob/main/docs/kotlin-support.md');
+  await expect(reference).toHaveAttribute('rel', 'noopener noreferrer');
+  await navigation.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).click();
+  await expect(help.locator('.shortcuts-help-list')).toContainText(/(?:Cmd|Ctrl)\+K/);
+  await expect(help.locator('.shortcuts-help-list li')).toHaveCount(10);
+  await page.setViewportSize({ width: 800, height: 600 });
+  await navigation.getByRole('button', { name: 'Quick start', exact: true }).click();
+  const close = help.getByRole('button', { name: 'Close', exact: true });
+  const box = await close.boundingBox();
+  expect(box!.y + box!.height).toBeLessThanOrEqual(600);
+  await expect(close).toBeVisible();
+  const article = help.getByRole('article');
+  expect(await article.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
+  await article.evaluate(el => el.scrollTop = el.scrollHeight);
+  await navigation.getByRole('button', { name: 'BluePlay', exact: true }).click();
+  expect(await article.evaluate(el => el.scrollTop)).toBe(0);
+  await page.screenshot({ path: 'test-results/user-manual-desktop.png' });
+  await page.setViewportSize({ width: 390, height: 600 });
+  const smallHelpBox = await help.boundingBox();
+  for (const section of sections) {
+    await navigation.getByRole('button', { name: section, exact: true }).click();
+    await expect(help.getByRole('heading', { name: section, exact: true })).toBeVisible();
+  }
+  expect(await help.boundingBox()).toEqual(smallHelpBox);
+  expect(await help.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+  const smallBox = await close.boundingBox();
+  expect(smallBox!.y + smallBox!.height).toBeLessThanOrEqual(600);
+  await page.screenshot({ path: 'test-results/user-manual-small.png' });
+  await close.click();
+  await expect(help).toHaveCount(0);
+  await page.getByRole('button', { name: 'Help', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Quick start', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(help).toHaveCount(0);
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Dark mode', exact: true }).check();
+  await page.getByRole('dialog', { name: 'Settings', exact: true }).getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'Help', exact: true }).click();
+  await expect(help).toBeFocused();
+  await navigation.getByRole('button', { name: 'Testing', exact: true }).click();
+  await expect(help.locator('pre')).toHaveCSS('background-color', 'rgb(30, 30, 30)');
+  await page.screenshot({ path: 'test-results/user-manual-dark.png' });
+  await close.click();
 });

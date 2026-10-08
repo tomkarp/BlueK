@@ -1,4 +1,5 @@
 <script lang="ts">
+  import UserHelpDialog from "./UserHelpDialog.svelte";
   import { containClicks } from "../uiActions";
 
   export let settingsNotice: boolean;
@@ -77,61 +78,46 @@
       </div>
     </div>
   </div>{/if}
-{#if shortcutsHelpOpen}<div class="modal topmost-modal" role="presentation">
-    <div
-      class="dialog shortcuts-help-dialog"
-      role="dialog"
-      aria-modal="true"
-      tabindex="-1"
-      aria-labelledby="shortcuts-help-title"
-      use:containClicks
-    >
-      <h3 id="shortcuts-help-title">Keyboard Shortcuts</h3>
-      <ul class="shortcuts-help-list">
-        <li>
-          <strong>{compileShortcutLabel}</strong><span>Compile the project</span
-          >
-        </li>
-        <li><strong>{runShortcutLabel}</strong><span>Run main</span></li>
-        <li><strong>{saveShortcutLabel}</strong><span>Save / Export</span></li>
-        <li>
-          <strong>{terminalShortcutLabel}</strong><span
-            >Cycle the terminal: closed / window / split</span
-          >
-        </li>
-        <li>
-          <strong>{formatShortcutLabel}</strong><span
-            >Format the current Kotlin file</span
-          >
-        </li>
-        <li>
-          <strong>{commentShortcutLabel}</strong><span
-            >Comment / uncomment selected lines</span
-          >
-        </li>
-        <li>
-          <strong>{vimShortcutLabel}</strong><span
-            >Switch Vim mode on / off</span
-          >
-        </li>
-        <li>
-          <strong>{editorNextShortcutLabel}</strong><span
-            >Next editor window</span
-          >
-        </li>
-        <li>
-          <strong>{editorPrevShortcutLabel}</strong><span
-            >Previous editor window</span
-          >
-        </li>
-        <li>
-          <strong>Escape</strong><span
-            >Close the topmost dialog or window (in Vim mode: Shift+Escape)</span
-          >
-        </li>
-      </ul>
-      <div class="dialog-actions">
-        <button on:click={() => (shortcutsHelpOpen = false)}>Close</button>
-      </div>
-    </div>
-  </div>{/if}
+{#if shortcutsHelpOpen}
+  <UserHelpDialog close={() => (shortcutsHelpOpen = false)}>
+    <ul slot="shortcuts" class="shortcuts-help-list">
+      <li>
+        <strong>{compileShortcutLabel}</strong><span>Compile the project</span>
+      </li>
+      <li><strong>{runShortcutLabel}</strong><span>Run main</span></li>
+      <li><strong>{saveShortcutLabel}</strong><span>Save / Export</span></li>
+      <li>
+        <strong>{terminalShortcutLabel}</strong><span
+          >Cycle the terminal: closed / window / split</span
+        >
+      </li>
+      <li>
+        <strong>{formatShortcutLabel}</strong><span
+          >Format the current Kotlin file</span
+        >
+      </li>
+      <li>
+        <strong>{commentShortcutLabel}</strong><span
+          >Comment / uncomment selected lines</span
+        >
+      </li>
+      <li>
+        <strong>{vimShortcutLabel}</strong><span>Switch Vim mode on / off</span>
+      </li>
+      <li>
+        <strong>{editorNextShortcutLabel}</strong><span>Next editor window</span
+        >
+      </li>
+      <li>
+        <strong>{editorPrevShortcutLabel}</strong><span
+          >Previous editor window</span
+        >
+      </li>
+      <li>
+        <strong>Escape</strong><span
+          >Close the topmost dialog or window (in Vim mode: Shift+Escape)</span
+        >
+      </li>
+    </ul>
+  </UserHelpDialog>
+{/if}
