@@ -61,6 +61,21 @@ Der Worker hält genau eine `KotliteSession` mit genau einem lebenden
 - `workspace/ProjectWorkspace.svelte.ts`: besitzt Projektdateien, Library,
   Ressourcen, README, Projektname, Kartengeometrie und Projekt-/Transferdialoge.
   Verantwortet Laden, Vorlagen, Autosave, Quelltextänderungen und Export.
+  `projectDraftStorage.ts` kapselt ausschließlich Speicher-I/O und die exklusive
+  Besitzzuordnung eines Entwurfs zur Lebensdauer eines Browserdokuments.
+  Session Storage hält nur die Entwurfs-ID; pro ID enthält Local Storage genau
+  einen Projektstand. Änderungen, Vorlagen- und Linkimport im selben Tab
+  ersetzen diesen Stand ohne Versionshistorie. Open / Import bietet
+  gespeicherte Entwürfe mit Zeitpunkt sowie einzelnes Löschen und Delete all.
+  Das Löschen entfernt nur Browserkopien nach Rückfrage; ein unverändert
+  offener Tab speichert sie beim Schließen nicht neu, spätere Bearbeitung schon.
+  Jeder Datensatz hat einen eigenen Speicherschlüssel, sodass gleichzeitige
+  Schreibvorgänge anderer Tabs keine gemeinsame Projektliste überschreiben.
+  Web Locks verhindern gemeinsame Schreibzugriffe kopierter Tab-Sessions; bei
+  fehlender API wird beim Wiederherstellen vorsichtshalber ein unabhängiger
+  Entwurf erstellt. Recent work wird beim Öffnen und bei Storage-Ereignissen
+  aus den gespeicherten Datensätzen abgeleitet; es ist kein zweiter Runtime-Store.
+  Der bisherige einzelne Autosave wird einmalig als Entwurf migriert.
   Linkoptionen für README und Standard-Testzustand gehören zum Projekttransfer;
   nach erfolgreichem Linkimport delegiert der Controller das Zustandsladen über
   `TestWorkspace.loadDefaultFixture`. Diese Aktion nutzt den bestehenden

@@ -506,6 +506,14 @@
     >
       {project.shareNotice}
     </div>{/if}
+  {#if project.savedProjectsNotice || project.autosaveWarning}
+    <div class="project-recovery-notice" role="status" aria-live="polite">
+      <span>{project.autosaveWarning || "You have saved projects. Open / Import lets you continue working on them."}</span>
+      {#if !project.autosaveWarning}
+        <button aria-label="Dismiss saved projects notice" title="Dismiss" onclick={() => (project.savedProjectsNotice = false)}>×</button>
+      {/if}
+    </div>
+  {/if}
   <TerminalWindow
     bind:terminalOpen={terminal.terminalOpen}
     bind:terminalSplit={terminal.terminalSplit}
@@ -674,6 +682,10 @@
     downloadUrl={OFFLINE_DOWNLOAD}
   />
   <ProjectTransferDialogs
+    recentProjects={project.recentProjects}
+    openRecentProject={project.openRecentProject}
+    deleteRecentProject={project.deleteRecentProject}
+    deleteAllRecentProjects={project.deleteAllRecentProjects}
     bind:toolbarDialog={project.toolbarDialog}
     bind:shareLinkDialog={project.shareLinkDialog}
     bind:shareCodeInput={project.shareCodeInput}

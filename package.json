@@ -32,12 +32,13 @@
     "test:codepad-flow": "node scripts/smoke-codepad-flow.mjs",
     "share:server": "node server/share-server.mjs",
     "test:share-server": "node scripts/smoke-share-server.mjs",
-    "test:regression": "npm run typecheck && npm run test:ui && npm run test:window-interaction && npm run test:workspace && npm run test:runtime-state && npm run test:references && npm run test:testing && npm run test:kotlin-surface && npm run test:performance && npm run test:inspector && npm run test:blueplay-api && npm run test:blueplay-stage && npm run test:project-format && npm run test:program-export && npm run test:player-worker && npm run test:codepad-flow && npm run test:offline && npm run test:gui",
+    "test:regression": "npm run typecheck && npm run test:ui && npm run test:window-interaction && npm run test:workspace && npm run test:runtime-state && npm run test:references && npm run test:testing && npm run test:kotlin-surface && npm run test:performance && npm run test:inspector && npm run test:blueplay-api && npm run test:blueplay-stage && npm run test:project-format && npm run test:project-drafts && npm run test:program-export && npm run test:player-worker && npm run test:codepad-flow && npm run test:offline && npm run test:gui",
     "test:blueplay-api": "node scripts/smoke-blueplay-api.mjs",
     "test:window-interaction": "node scripts/smoke-window-interaction.mjs",
     "test:workspace": "node scripts/smoke-workspace-controllers.mjs",
     "test:testing": "node scripts/smoke-testing.mjs",
-    "test:testing:portable": "node scripts/smoke-testing.mjs --jvm"
+    "test:testing:portable": "node scripts/smoke-testing.mjs --jvm",
+    "test:project-drafts": "node scripts/smoke-project-drafts.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",

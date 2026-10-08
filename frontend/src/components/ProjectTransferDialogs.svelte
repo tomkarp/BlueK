@@ -4,6 +4,11 @@
   import type { ProjectFile } from "../../../runtime-contract/src/index";
 
   import type { ShareLinkDialog } from "../uiTypes";
+  import type { ProjectDraftSummary } from "../projectDraftStorage";
+  export let recentProjects: ProjectDraftSummary[];
+  export let openRecentProject: (id: string) => Promise<void>;
+  export let deleteRecentProject: (id: string) => void;
+  export let deleteAllRecentProjects: () => void;
   export let toolbarDialog: "open" | "save" | null;
   export let shareLinkDialog: ShareLinkDialog | null;
   // A compile-time condition also removes server-only controls from offline JS.
@@ -33,7 +38,7 @@
     role="presentation"
   >
     <div
-      class="dialog toolbar-dialog"
+      class="dialog toolbar-dialog open-project-dialog"
       role="dialog"
       aria-modal="true"
       tabindex="-1"
@@ -41,45 +46,97 @@
       use:containClicks
     >
       <h3 id="open-import-title">Open / Import</h3>
-      <p>Drop a project file here, or click to choose one.</p>
-      <label
-        class="project-dropzone"
-        on:dragover|preventDefault
-        on:drop={openProjectDrop}
-      >
-        <strong>JSON</strong>
-        <span>Accepted: .json</span>
-        <input
-          type="file"
-          aria-label="Choose project file"
-          accept=".json,.bluek.json,application/json"
-          on:change={(event) => {
-            importProject(event);
-            toolbarDialog = null;
-          }}
-        />
-      </label>
-      {#if serverFeatures}<div class="shared-project-loader">
-          <strong>Load shared project</strong>
-          <label>
-            <span>Three words</span>
-            <input
-              aria-label="Three-word project code"
-              bind:value={shareCodeInput}
-              placeholder="green-lamp-river"
-              on:keydown={(event) =>
-                event.key === "Enter" && loadSharedProjectFromCode()}
-            />
-          </label>
-          <button
-            class="shared-project-load"
-            disabled={!shareCodeInput.trim()}
-            on:click={loadSharedProjectFromCode}>Load project</button
-          >
-          {#if shareCodeError}<div class="dialog-error" role="alert">
-              {shareCodeError}
-            </div>{/if}
-        </div>{/if}
+      <div class="open-project-content">
+        {#if recentProjects.length}
+          <section class="recent-projects" aria-labelledby="recent-work-title">
+            <div class="recent-projects-heading">
+              <h4 id="recent-work-title">Recent work</h4>
+              <button
+                class="delete-all-projects"
+                aria-label="Delete all saved projects"
+                on:click={deleteAllRecentProjects}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true"
+                  ><path
+                    d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"
+                  /></svg
+                >
+                <span>Delete all</span>
+              </button>
+            </div>
+            <p>Saved in this browser. Choose a project to continue.</p>
+            <div class="recent-project-list">
+              {#each recentProjects as project (project.id)}
+                <div class="recent-project-row">
+                  <button
+                    class="recent-project"
+                    on:click={() => void openRecentProject(project.id)}
+                  >
+                    <strong>{project.name}</strong>
+                    <span
+                      >{project.fileCount}
+                      {project.fileCount === 1 ? "file" : "files"} · Last saved {new Date(
+                        project.updatedAt,
+                      ).toLocaleString("en-GB")}</span
+                    >
+                  </button>
+                  <button
+                    class="delete-recent-project"
+                    aria-label={`Delete saved project ${project.name}`}
+                    title={`Delete saved project ${project.name}`}
+                    on:click={() => deleteRecentProject(project.id)}
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true"
+                      ><path
+                        d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"
+                      /></svg
+                    >
+                  </button>
+                </div>
+              {/each}
+            </div>
+          </section>
+        {/if}
+        <p>Drop a project file here, or click to choose one.</p>
+        <label
+          class="project-dropzone"
+          on:dragover|preventDefault
+          on:drop={openProjectDrop}
+        >
+          <strong>JSON</strong>
+          <span>Accepted: .json</span>
+          <input
+            type="file"
+            aria-label="Choose project file"
+            accept=".json,.bluek.json,application/json"
+            on:change={(event) => {
+              importProject(event);
+              toolbarDialog = null;
+            }}
+          />
+        </label>
+        {#if serverFeatures}<div class="shared-project-loader">
+            <strong>Load shared project</strong>
+            <label>
+              <span>Three words</span>
+              <input
+                aria-label="Three-word project code"
+                bind:value={shareCodeInput}
+                placeholder="green-lamp-river"
+                on:keydown={(event) =>
+                  event.key === "Enter" && loadSharedProjectFromCode()}
+              />
+            </label>
+            <button
+              class="shared-project-load"
+              disabled={!shareCodeInput.trim()}
+              on:click={loadSharedProjectFromCode}>Load project</button
+            >
+            {#if shareCodeError}<div class="dialog-error" role="alert">
+                {shareCodeError}
+              </div>{/if}
+          </div>{/if}
+      </div>
       <div class="dialog-actions">
         <button on:click={() => (toolbarDialog = null)}>Cancel</button>
       </div>
@@ -126,9 +183,7 @@
           role="group"
           aria-labelledby="link-options-label"
         >
-          <span id="link-options-label"
-            >When opening a link:</span
-          >
+          <span id="link-options-label">When opening a link:</span>
           <label
             class="share-link-option"
             class:disabled={!readme.trim()}

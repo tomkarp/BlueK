@@ -97,6 +97,7 @@ Runtime-State-Tests und GUI-Tests verwenden das gebaute Bundle unter
 | `npm run test:blueplay-demos` | Space-Invaders-Vorlage im Interpreter |
 | `npm run test:inspector`, `test:codepad-flow`, `test:project-format`, `test:program-export`, `test:blueplay-stage`, `test:player-worker`, `test:ui` | einzelne TypeScript-Module ohne Browser |
 | `npm run test:window-interaction` | gemeinsame Fenstergeometrie, Mindestgrößen, Pointer-Abbruch und Titelzeilen-Buttons; auch Teil von `test:regression` |
+| `npm run test:project-drafts` | Browserentwürfe: exklusive Tab-Zuordnung, Kopien, Migration, Schreibfehler und fehlender Speicher (Helper ohne Browser) |
 | `npm run test:workspace` | echte kompilierte Svelte-Controller: klonbare Aufrufargumente, unabhängige App-Instanzen und verworfene Aufrufergebnisse nach Generationswechsel; auch Teil von `test:regression` |
 | `npm run test:offline` | baut und prüft HTML/ZIP; echte Chromium-/WebKit-Tests über `file://` ohne Webserver und mit gesperrtem HTTP-Netzwerk |
 | `npm run test:share-server` | Share-Dienst mit temporärer Datenbank |

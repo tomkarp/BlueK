@@ -846,8 +846,7 @@ test("GUI-112 object bench state shortcuts create, reuse and change the default 
     .poll(() =>
       page.evaluate(
         () =>
-          JSON.parse(localStorage.getItem("bluek.current-project.v1") || "{}")
-            .defaultTestClass,
+          JSON.parse(localStorage.getItem("bluek.project-draft.v1." + sessionStorage.getItem("bluek.tab-draft.v1")) || "{}").project?.defaultTestClass,
       ),
     )
     .toBe("StateTest");
@@ -879,8 +878,7 @@ test("GUI-112 object bench state shortcuts create, reuse and change the default 
     .poll(() =>
       page.evaluate(
         () =>
-          JSON.parse(localStorage.getItem("bluek.current-project.v1") || "{}")
-            .defaultTestClass,
+          JSON.parse(localStorage.getItem("bluek.project-draft.v1." + sessionStorage.getItem("bluek.tab-draft.v1")) || "{}").project?.defaultTestClass,
       ),
     )
     .toBe("HundTest");

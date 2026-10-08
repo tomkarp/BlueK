@@ -76,7 +76,7 @@ bei Verweisen die Beschreibung mitnennen.
 | GUI-43 | Nach dem Laden eines gespeicherten Projekts wird `/load/<code>` aus der URL entfernt; weitere Vorlagen funktionieren normal | GUI-Test grün | Abgesichert |
 | GUI-44 | Open / Import kann einen dreiteiligen Wortcode eingeben und lädt das entsprechende gespeicherte Projekt | GUI-Test grün | Abgesichert |
 | GUI-50 | Nach dem Laden eines vollständigen `#bluek=...`-Projektlinks wird der Link aus der URL entfernt; das geladene Projekt bleibt sichtbar | Chromium-GUI-Test grün | Abgesichert |
-| GUI-45 | Nach einem Neustart ohne Projektlink wird der zuletzt bearbeitete Projektzustand aus dem Browser-Speicher wiederhergestellt | GUI-Test grün: Projekt laden, URL ohne Link öffnen, Klasse bleibt sichtbar | Abgesichert |
+| GUI-45 | Neuladen bzw. Navigation zur Startadresse im bisherigen Tab stellt dessen eigenen Arbeitsentwurf wieder her; frische Tabs wählen keinen fremden Entwurf automatisch | Vorhandener Chromium-Test prüft Laden und Navigation im selben Tab; getrennte Tabs und neuer Start siehe GUI-120/GUI-122 | Bestehender Test im gezielten Lauf grün; Gesamtprüfung siehe Prüfprotokoll |
 | GUI-46 | Method result trennt Methodenname, Rückgabewert und Aktionen sichtbar und ohne Überlappung | Produktionsbuild grün; visuelle Prüfung anhand des Fehlerbilds noch offen | GUI-Test offen |
 | GUI-47 | Parameterlose Funktionen/Methoden und Aktivitätsanzeige; der erforderliche Create-Namensdialog wird von GUI-02 gemeinsam verwendet | Vollständiger Chromium-Lauf 2026-09-18: alle 7 GUI-47-Tests grün; der Test beobachtet nur unerwartete Parameterdialoge | Abgesichert |
 | GUI-48 | Private Attribute werden im Objektinspektor durch eine klar graue Zeile und graue, weiterhin gut lesbare Schrift unterschieden; öffentlich lesbare Properties mit `private set` zeigen weiterhin ein moderat abgesetztes, deaktiviertes Stift-Symbol mit Tooltip | Chromium-Test prüft grauen Hintergrund und graue Schrift der privaten Zeile sowie Symbol, Sperrung, Tooltip, Klick und Doppelklick ohne Editierung; Metadaten-/Kotlite-Smoke und Typecheck | Nach aktuellem CSS-Check zu verifizieren |
@@ -278,7 +278,80 @@ bei Verweisen die Beschreibung mitnennen.
 | GUI-118 | Volle Projektlinks laden optional den Standard-Testzustand, kombinierbar mit README; ohne Flag bleibt das Projekt unkompiliert und der Objektbereich leer | Chromium prüft die gemeinsame Optionsspalte und identische Buttonbreiten bei 800×700, kopierten Link, automatisches Compile/Load, Objektwert und geschlossenes Testfenster/Editor | Gezielter Browserlauf bestanden; Nutzerabnahme offen |
 | GUI-119 | Kurzlinks tragen die State-Option allein oder zusammen mit README; fehlender Default deaktiviert die Option und fehlerhafte Ladeaktionen zeigen einen Fehlerdialog | Chromium mit gemocktem Share-HTTP prüft erzeugten und geöffneten Kurzlink, gespeicherten Default, beide Query-Varianten sowie fehlenden Default und Setup-Exception | Gezielter Browserlauf bestanden; Nutzerabnahme offen |
 
+| GUI-120 | Mehrere Tabs speichern unabhängig; kleine Code-, Namens- und README-Änderungen aktualisieren denselben Entwurf ohne neue Versionen | Chromium: zwei Tabs bearbeiten, gleichzeitig neu laden, IDs und gespeicherte Quellen prüfen; Zahl der Einträge bleibt zwei | Gezielter Erstlauf grün; erweiterter Gesamtlauf ausstehend |
+| GUI-121 | Kopierte Tab-Sessions erhalten unabhängige Schreibzuordnung; explizites erneutes Öffnen eines Aufgabenlinks lädt die Vorlage auch bei reiner Hash-Navigation | Chromium mit echter opener-Kopie und erneuter Linknavigation; gespeicherte Quellen bleiben unabhängig | Nach Ergänzung der Hash-Navigation gezielter Lauf grün |
+| GUI-122 | Nach Schließen der Tabs zeigt ein frischer Start einen schließbaren Hinweis; Open / Import enthält Recent work und lädt komplette Projektdaten | Chromium: zwei Tabs schließen, Start ohne Zuordnung, Name/Zeit/Dateien, kleiner Viewport, Ressourcen/README/Default/Kartengeometrie; Laden eines noch aktiven Entwurfs erzeugt unabhängige Kopie | Gezielter Lauf grün; visuelle Nutzerabnahme offen |
+| GUI-123 | Bisheriger Autosave wird erhalten und migriert; defekte Einträge verbergen gültige Entwürfe nicht; explizite Links zeigen keinen Starthinweis | Helper und Chromium mit altem Autosave und korruptem Datensatz | Gezielte Tests grün |
+| GUI-124 | Auch Projektwechsel und erneutes Laden eines Aufgabenlinks ersetzen denselben Tab-Eintrag; leere Vorlagen entfernen die Standard-Testklasse | Chromium prüft gleichbleibende ID, genau einen Eintrag und entfernten Default | Gezielter Lauf grün |
+| GUI-125 | Speicherfehler bleiben sichtbar und beeinträchtigen Editor/Export nicht; unveränderte Stände erhalten keinen neuen Zeitstempel | Chromium mit QuotaExceededError und Helper mit fehlerhaftem/gesperrtem Speicher | Gezielte Tests grün |
+| GUI-126 | Dauerhafte Entwürfe überstehen vollständiges Schließen und Neustarten des Browsers | Chromium-Prozess mit echtem persistentem Profil schließen, neu starten, beide Projektstände über Recent work laden | Gezielter Lauf grün; browserabhängige automatische Tab-Wiederherstellung nicht behauptet |
+
+| GUI-127 | Mülleimer neben jedem gespeicherten Projekt löscht nur diesen Eintrag nach Rückfrage; Cancel behält ihn und andere offene Listen aktualisieren sich | Chromium: zwei Tabs, Cancel/Löschen, gespeicherte Daten, Storage-Ereignis, unverändertes Schließen erzeugt keinen gelöschten Eintrag neu | Gezielter Lauf grün |
+| GUI-128 | Delete all mit Mülleimer oberhalb der Liste löscht alle Browserentwürfe nach Rückfrage und behält Einstellungen; der Starthinweis verschwindet | Chromium: Rückfrage abbrechen/bestätigen, Einstellungsdaten bleiben, offene Tabs unverändert schließen und neu starten | Gezielter Lauf grün |
+
 ## Prüfprotokoll
+
+### Getrennte Browserentwürfe und Wiederaufnahme (2026-10-07)
+
+- Vor Änderung Sicherungscommit `e325e20` auf `codex/kotlin-tests`, ohne Push.
+- Session Storage enthält nur die Entwurfs-ID. Local Storage hält einen
+  aktualisierten Projektstand pro ID; keine Kopie des Schülercodes in Session
+  Storage und keine Version pro Tastendruck. Runtime-Objekte/Codepad bleiben
+  weiterhin nur über Save State/Load State rekonstruierbar.
+- Erstlauf der neuen Chromium-Fälle: 5/6 grün; erneutes Öffnen desselben Links
+  scheiterte an der bisherigen fehlenden Hash-Navigation. Behoben. Danach
+  bestanden alle sieben neuen Fälle inklusive echtem Browserprozess-Neustart.
+- Begleitende Tests GUI-67 hatten noch explizite Reloads nach Hash-Navigation;
+  diese konkurrierten mit dem nun automatischen Import-Reload. Tests angepasst,
+  gezielter Lauf GUI-45/66/67 danach grün.
+- Helper-Erstlauf scheiterte an zu früher Prüfung einer asynchron freigegebenen
+  Test-Lock. Freigabe korrekt abgewartet; `test:project-drafts` danach grün.
+- Typecheck zunächst ein Fehler wegen gemischter Svelte-Eventsyntax, behoben;
+  danach 0 Fehler/0 Warnungen. `test:workspace` grün.
+- Erster Offline-Lauf: 3/4 grün; Vorlagenmodal schloss vor dem asynchronen
+  Projektwechsel, sodass der Test die alte Vorlage ausführte. Modal bleibt
+  nun bis zum abgeschlossenen Wechsel offen. Wiederholung: 4/4 grün in Chromium/WebKit unter file://.
+- Nutzerpräzisierung: pro Tab nur ein Stand, auch Projektwechsel und erneutes
+  Öffnen eines Aufgabenlinks ersetzen denselben Eintrag. Keine Versionshistorie.
+  Einzelnes Löschen und Delete all mit Mülleimer im bestehenden Open / Import.
+  Ein unverändert geöffnetes Projekt erzeugt einen gelöschten Datensatz nicht
+  neu; spätere Bearbeitung speichert wieder automatisch.
+- Gezielter Lauf nach allen Ergänzungen: 9/9 neue Chromium-Fälle grün. Ein
+  vorheriger Lauf hatte zwei unerwartete Reload-/Dialogausfälle; unverändert
+  wiederholt bestanden alle Fälle; auch im folgenden GUI-Gesamtlauf alle neun grün.
+- Der erste GUI-Gesamtlauf wurde nach 42 bestandenen Fällen bewusst unterbrochen,
+  um die nachgereichten Löschbuttons einzubauen; kein vollständiges Ergebnis.
+- Folgender vollständiger GUI-Lauf: 176/177 bestanden. Eine ältere Prüfung des
+  Download-Controls suchte noch einen Link, obwohl es inzwischen ein Button ist;
+  Testlocator korrigiert. Vollständige Wiederholung: **177/177 bestanden**.
+- Beim abschließenden Review wurde die Fingerprint-Rücksetzung nach Rückkehr
+  aus dem Back/Forward-Cache korrigiert: unveränderte Projekte dürfen weder einen
+  neuen Zeitstempel erhalten noch nach Löschung erneut gespeichert werden.
+  Helper prüft beide Fälle sowie die unabhängige Kopie, wenn ein anderer Tab
+  den früheren Entwurf inzwischen besitzt. Tatsächlich grün. Der echte
+  Back/Forward-Cache eines Browsers ist damit nicht separat geprüft.
+- Danach beim Review einen weiteren Zeitstempelfehler reproduziert:
+  `parseProject` und der Export ordnen JSON-Felder unterschiedlich an; der
+  bisherige Textvergleich erkannte Neuladen deshalb als Änderung. Helper-Test
+  zunächst rot, nach normalisiertem Vergleich grün. GUI-120 prüft zusätzlich
+  die unveränderten Zeitstempel nach gleichzeitigem Neuladen beider Tabs.
+  Betroffene Browser-/Offline-Prüfungen nach dieser letzten Korrektur nochmals
+  separat ausgeführt: **18/18 bestanden** (neun Entwurfsfälle, fünf bestehende
+  GUI-Prüfungen und vier Offline-Fälle in Chromium/WebKit). Der 177er-Gesamtlauf
+  lag unmittelbar davor.
+- Typecheck abschließend 0 Fehler/0 Warnungen, Speicher-/Projektformat-/
+  Workspace-Helper und beide Architektur-Smokes grün. `build:svelte` grün
+  (bekannte Bundlegrößen-/Formatter-Warnungen, keine Buildfehler).
+- Manueller built-in-browser: frischer Starthinweis sowie Open / Import mit
+  Recent work, Zeit/Dateien und beiden Mülleimeraktionen sichtbar geprüft.
+  Native Delete-all-Rückfrage wurde nicht bestätigt. Der Steuerkanal hing
+  danach beim Versuch, sie abzubrechen (CDP-Timeout); manuelle Abbruchprüfung
+  dadurch blockiert. Automatisierte Chromium-Abbruch-/Löschprüfungen grün;
+  visuelle Nutzerabnahme bleibt offen.
+- Keine neuen Hauptoberflächen-Buttons und kein Eintrag zum Original-Reset.
+  Wiederherstellung ausschließlich im vorhandenen Open / Import-Dialog;
+  vorhandene Entwürfe werden beim frischen Start dezent angezeigt.
+
 
 ### Keine Größenänderungsanzeige in der Codevorschau (2026-10-07)
 

@@ -1894,7 +1894,7 @@ test('GUI-66 the README note sits in the corner, formats Markdown while typing a
   const note = page.getByRole('button', { name: 'README.md' });
   // Like BlueJ, every project has the note — an empty description shows one too.
   await expect(note).toBeVisible();
-  const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('bluek.current-project.v1') || '{}'));
+  const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('bluek.project-draft.v1.' + sessionStorage.getItem('bluek.tab-draft.v1')) || '{}').project || {});
   await expect.poll(() => stored().then((saved) => 'files' in saved)).toBe(true);
   expect(await stored()).not.toHaveProperty('readme');
 
@@ -1965,8 +1965,7 @@ test('GUI-67 a link can open the README, and the export dialog attaches that to 
 
   // With it the description is the first thing the reader sees.
   await page.goto(link + '&readme=1');
-  // Only the hash changed, which is no new visit — a reload is one.
-  await page.reload();
+  // Opening a full project link again also works as a hash-only navigation.
   const dialog = page.getByRole('dialog', { name: 'README.md' });
   await expect(dialog.locator('.cm-md-h1')).toHaveText('Hunde');
   await dialog.getByRole('button', { name: 'Close' }).click();
@@ -1995,7 +1994,7 @@ test('GUI-67 a link can open the README, and the export dialog attaches that to 
 
   // An empty README has nothing to open, so the option goes with it.
   await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify({ ...payload, readme: '' })).toString('base64url'));
-  await page.reload();
+  await page.waitForURL(url => !url.hash);
   await expect(page.getByLabel('Codepad input')).toBeEnabled();
   await page.getByRole('button', { name: 'Save / Export' }).click();
   await expect(page.getByRole('dialog', { name: 'Save / Export' }).getByLabel(/Open README.md with the link/).first()).toBeDisabled();
@@ -2254,7 +2253,7 @@ test('GUI-80 project name field does not intercept clicks on project actions', a
 
   await page.getByRole('button', { name: 'Help', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Keyboard Shortcuts' })).toBeVisible();
-  await expect(page.locator('.toolbar-options').getByRole('link', { name: /Offline Version/ })).toBeVisible();
+  await expect(page.locator('.toolbar-options').getByRole('button', { name: /Offline Version/ })).toBeVisible();
 });
 
 test('GUI-78 selected Kotlin lines can be commented and uncommented by button and slash shortcut', async ({ page }) => {

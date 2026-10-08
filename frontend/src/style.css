@@ -843,3 +843,31 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 .dark .fixture-actions button:hover:not(:disabled),.dark .fixture-actions button:focus-visible{border-color:#555;background:#343434;color:#eee}
 .dark .fixture-class-dialog input,.dark .fixture-class-dialog select{background:#3c3c3c;color:#eee;border-color:#5a5a5a}
 .dark .test-panel{background:#2d3033;color:#eee}.dark .test-panel button,.dark .test-panel select{background:#393d42;color:#eee}
+
+/* Browser drafts: existing Open / Import dialog and a dismissible startup note. */
+.open-project-dialog{display:flex;flex-direction:column;max-height:calc(100dvh - 32px);width:min(620px,calc(100vw - 32px));min-width:0}
+.open-project-dialog>h3,.open-project-dialog>.dialog-actions{flex-shrink:0}
+.open-project-content{min-height:0;overflow-y:auto;padding-right:4px}
+.recent-projects{margin:6px 0 22px}
+.recent-projects h4{margin:0 0 8px;font-size:16px}
+.recent-projects p{margin:0 0 12px;color:#666;font-size:13px}
+.recent-project-list{display:flex;flex-direction:column;gap:6px;max-height:210px;overflow-y:auto}
+.recent-project-list .recent-project{display:flex;flex-direction:column;align-items:flex-start;gap:5px;flex-shrink:0;width:100%;margin:0;padding:10px 12px;text-align:left;box-shadow:none}
+.recent-project strong{overflow-wrap:anywhere}
+.recent-project span{color:#666;font-size:12px}
+.project-recovery-notice{position:fixed;z-index:100;top:72px;right:20px;display:flex;align-items:center;gap:12px;max-width:min(470px,calc(100vw - 40px));padding:12px 14px;border:1px solid #a6afb5;border-radius:6px;background:#f2f6f8;color:#43515a;box-shadow:0 2px 6px #0002;font-size:13px;line-height:1.5}
+.project-recovery-notice button{flex-shrink:0;padding:2px 6px;border:0;background:transparent;box-shadow:none;color:inherit;font-size:19px;cursor:pointer}
+.dark .project-recovery-notice{background:#29363e;color:#dee8ee;border-color:#667982}
+.dark .recent-project span,.dark .recent-projects p{color:#b9bdc3}
+.recent-project-row{display:flex;align-items:stretch;gap:6px}
+.recent-project-row .recent-project{flex:1;min-width:0;width:auto}
+.recent-project-row .delete-recent-project{display:flex;align-items:center;justify-content:center;flex:0 0 34px;margin:0;padding:6px;box-shadow:none;color:#777}
+.delete-recent-project svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.recent-project-row .delete-recent-project:hover{color:#a52929}
+.dark .delete-recent-project{color:#bdc4cb}
+.recent-projects-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
+.recent-projects-heading h4{margin:0}
+.recent-projects-heading .delete-all-projects{display:flex;align-items:center;gap:6px;margin:0;padding:4px 6px;border:0;background:transparent;box-shadow:none;color:#777;font-size:12px}
+.delete-all-projects svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.recent-projects-heading .delete-all-projects:hover{color:#a52929}
+.dark .recent-projects-heading .delete-all-projects{color:#bdc4cb}

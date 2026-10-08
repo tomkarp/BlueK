@@ -1,4 +1,9 @@
 import { projectTemplate } from "../projectTemplates";
+import {
+  ProjectDraftStorage,
+  DRAFT_PREFIX,
+  type ProjectDraftSummary,
+} from "../projectDraftStorage";
 import { untrack } from "svelte";
 import type { CardPosition, InheritanceEdge } from "../uiTypes";
 
@@ -78,7 +83,68 @@ interface ProjectWorkspaceHost {
 
 export class ProjectWorkspace {
   constructor(private readonly host: ProjectWorkspaceHost) {}
-  private AUTOSAVE_KEY = "bluek.current-project.v1";
+  private drafts = new ProjectDraftStorage({
+    local: () => window.localStorage,
+    session: () => window.sessionStorage,
+    locks: () => window.navigator.locks,
+    newId: () => crypto.randomUUID(),
+    now: () => Date.now(),
+  });
+  recentProjects: ProjectDraftSummary[] = $state.raw([]);
+  savedProjectsNotice = $state(false);
+  autosaveWarning = $state("");
+  refreshRecentProjects = () => {
+    this.recentProjects = this.drafts.list();
+    if (!this.recentProjects.length) this.savedProjectsNotice = false;
+  };
+  deleteRecentProject = (id: string) => {
+    const draft = this.recentProjects.find((project) => project.id === id);
+    if (
+      !draft ||
+      !window.confirm(
+        `Delete “${draft.name}” from this browser's saved projects?`,
+      )
+    )
+      return;
+    try {
+      this.drafts.delete(id);
+      this.refreshRecentProjects();
+      this.host.ui().status = "Saved project deleted";
+    } catch {
+      this.host.ui().error =
+        "Could not delete the saved project from this browser.";
+    }
+  };
+  deleteAllRecentProjects = () => {
+    if (!window.confirm("Delete all saved projects from this browser?")) return;
+    try {
+      this.drafts.deleteAll();
+      this.host.ui().status = "All saved projects deleted";
+    } catch {
+      this.host.ui().error =
+        "Could not delete all saved projects from this browser.";
+    } finally {
+      this.refreshRecentProjects();
+    }
+  };
+  openRecentProject = async (id: string) => {
+    this.saveAutosave();
+    const ready = this.autosaveReady;
+    this.autosaveReady = false;
+    try {
+      const payload = await this.drafts.open(id);
+      await this.loadProject(payload, "Saved project restored.");
+      this.toolbarDialog = null;
+      this.savedProjectsNotice = false;
+    } catch (reason) {
+      this.host.ui().error =
+        reason instanceof Error ? reason.message : String(reason);
+    } finally {
+      this.autosaveReady = ready;
+      this.saveAutosave();
+      this.refreshRecentProjects();
+    }
+  };
   private defaultCardPosition = (index: number): CardPosition => ({
     x: 80 + (index % 4) * 280,
     y: 40 + Math.floor(index / 4) * 160,
@@ -125,9 +191,12 @@ export class ProjectWorkspace {
   shareCodeError = $state("");
   shareWithReadme = $state(false);
   shareWithState = $state(false);
-  canShareState = $derived.by(() =>
-    Boolean(this.defaultTestClass) &&
-    this.files.some((file) => file.fileName === `${this.defaultTestClass}.kt`),
+  canShareState = $derived.by(
+    () =>
+      Boolean(this.defaultTestClass) &&
+      this.files.some(
+        (file) => file.fileName === `${this.defaultTestClass}.kt`,
+      ),
   );
   autosaveReady = $state(false);
   inheritanceEdges: InheritanceEdge[] = $state([]);
@@ -244,13 +313,19 @@ export class ProjectWorkspace {
   };
   saveAutosave = () => {
     if (!this.autosaveReady) return;
+    this.persistDraft(this.projectPayload());
+  };
+  private persistDraft = (
+    payload: ReturnType<ProjectWorkspace["projectPayload"]>,
+  ) => {
     try {
-      window.localStorage.setItem(
-        this.AUTOSAVE_KEY,
-        JSON.stringify(this.projectPayload()),
-      );
+      this.drafts.save(payload);
+      this.autosaveWarning = this.drafts.sessionAvailable
+        ? ""
+        : "Automatic project recovery is unavailable. Use Save / Export to keep your work.";
     } catch {
-      // Storage can be unavailable or full; the editor remains usable.
+      this.autosaveWarning =
+        "Your changes could not be saved in this browser. Use Save / Export to keep your work.";
     }
   };
   refreshInheritanceEdges = () => {
@@ -633,6 +708,8 @@ export class ProjectWorkspace {
       payload,
       (index) => `project-${Date.now()}-${index}`,
     );
+    this.saveAutosave();
+    this.savedProjectsNotice = false;
     const frameworkFiles = new Set([
       "World.kt",
       "Actor.kt",
@@ -777,20 +854,13 @@ export class ProjectWorkspace {
       )
     )
       return;
-    this.newProjectOpen = false;
     await this.host.session().stopForProjectReplacement();
     if (choice === "empty") {
-      this.files = [];
-      this.library = undefined;
-      this.resources = [];
-      this.cardPositions = {};
-      this.readme = "";
-      this.projectName = "";
-      this.closeReadme();
-      this.selected = 0;
-      this.host.editor().resetWindows();
-      this.host.session().markUncompiled();
-      this.host.ui().status = "New project";
+      await this.loadProject(
+        { format: "bluek-project", version: 1, files: [] },
+        "New project",
+      );
+      this.newProjectOpen = false;
       return;
     }
     try {
@@ -803,6 +873,8 @@ export class ProjectWorkspace {
     } catch {
       this.host.ui().status = "Project error";
       this.host.ui().error = "Could not load project template.";
+    } finally {
+      this.newProjectOpen = false;
     }
   };
   diagram = createDiagramInteraction({
@@ -887,32 +959,25 @@ export class ProjectWorkspace {
         this.host.ui().error = "Could not load the BluePlay example.";
       }
     };
-    const initializeProject = async () => {
-      const hasExplicitProject = Boolean(
-        window.location.pathname.match(/^\/load\//) ||
-        new URLSearchParams(window.location.hash.slice(1)).get("bluek") ||
-        new URLSearchParams(window.location.search).get("example") ===
-          "blueplay",
-      );
-      if (!hasExplicitProject) {
-        try {
-          const saved = window.localStorage.getItem(this.AUTOSAVE_KEY);
-          if (saved) {
-            await this.loadProject(
-              JSON.parse(saved),
-              "Local project restored.",
-            );
-            this.autosaveReady = true;
-            return;
-          }
-        } catch {
-          // Ignore an invalid or unavailable autosave and start normally.
-        }
+    this.drafts.migrateLegacy();
+    const hasExplicitProject = Boolean(
+      window.location.pathname.match(/^\/load\//) ||
+      new URLSearchParams(window.location.hash.slice(1)).get("bluek") ||
+      new URLSearchParams(window.location.search).get("example") === "blueplay",
+    );
+    if (!hasExplicitProject) {
+      const saved = await this.drafts.restore();
+      if (saved) await this.loadProject(saved, "Local project restored.");
+      else {
+        this.refreshRecentProjects();
+        this.savedProjectsNotice = this.recentProjects.length > 0;
       }
+    } else {
+      await this.drafts.resumeTab();
       await loadExample();
-      this.autosaveReady = true;
-    };
-    await initializeProject();
+    }
+    this.autosaveReady = true;
+    this.saveAutosave();
   };
   connect = () => {
     $effect(() => {
@@ -921,15 +986,10 @@ export class ProjectWorkspace {
     });
     $effect(() => {
       const payload = this.projectPayload();
-      const ready = this.autosaveReady;
-      if (ready) {
-        try {
-          window.localStorage.setItem(
-            this.AUTOSAVE_KEY,
-            JSON.stringify(payload),
-          );
-        } catch {}
-      }
+      if (this.autosaveReady) untrack(() => this.persistDraft(payload));
+    });
+    $effect(() => {
+      if (this.toolbarDialog === "open") untrack(this.refreshRecentProjects);
     });
     $effect(() => {
       void this.files;
@@ -939,7 +999,43 @@ export class ProjectWorkspace {
     });
     const timer = window.setInterval(this.refreshInheritanceEdges, 250);
     this.refreshInheritanceEdges();
-    return () => window.clearInterval(timer);
+    const pagehide = () => {
+      this.saveAutosave();
+      this.drafts.release();
+    };
+    const pageshow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        this.autosaveReady = false;
+        void this.drafts.reclaim().then(() => {
+          this.autosaveReady = true;
+          this.saveAutosave();
+        });
+      }
+    };
+    const storageChanged = (event: StorageEvent) => {
+      if (event.key === null || event.key.startsWith(DRAFT_PREFIX))
+        this.refreshRecentProjects();
+    };
+    const linkNavigation = () => {
+      // Opening the same origin's full project link can be a hash-only
+      // navigation. Reload explicitly so it runs the normal import path.
+      if (new URLSearchParams(window.location.hash.slice(1)).has("bluek")) {
+        this.saveAutosave();
+        window.location.reload();
+      }
+    };
+    window.addEventListener("pagehide", pagehide);
+    window.addEventListener("pageshow", pageshow);
+    window.addEventListener("storage", storageChanged);
+    window.addEventListener("hashchange", linkNavigation);
+    return () => {
+      pagehide();
+      window.clearInterval(timer);
+      window.removeEventListener("pagehide", pagehide);
+      window.removeEventListener("pageshow", pageshow);
+      window.removeEventListener("storage", storageChanged);
+      window.removeEventListener("hashchange", linkNavigation);
+    };
   };
   selectFile = (id: string) => {
     this.selected = this.files.findIndex((file) => file.id === id);

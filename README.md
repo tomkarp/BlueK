@@ -30,7 +30,14 @@ Build-Pipeline, Tests und Deployment stehen in [DEVELOPMENT.md](DEVELOPMENT.md).
 - **Projekte:** Jede Kotlin-Datei ist eine Karte – entweder genau eine Klasse
   oder Top-Level-Funktionen und -Properties. Vererbung wird als Pfeil
   gezeichnet. Dazu kommen Projektname und README-Notiz. Das Projekt wird im
-  Browser automatisch gesichert (localStorage), als `.bluek.json`
+  Browser automatisch als getrennte Arbeitsentwürfe gesichert. Jeder Tab merkt
+  sich nur seine Entwurfs-ID im Session Storage; der Projektinhalt liegt einmal
+  im dauerhaften Browserspeicher. Neuladen stellt den eigenen Entwurf wieder her,
+  **Open / Import → Recent work** öffnet gespeicherte Projekte nach dem Schließen.
+  Kleine Änderungen und Projektwechsel aktualisieren denselben Tab-Eintrag;
+  es entsteht keine Versionshistorie. Ein frischer Start weist auf vorhandene
+  Entwürfe hin. Im Open / Import-Dialog können diese einzeln oder gemeinsam
+  gelöscht werden. Projekte werden als `.bluek.json`
   exportiert/importiert, als BlueJ-Projekt (ZIP oder Ordner) importiert oder
   als Link geteilt: vollständig im Link (`#bluek=…`) oder optional als
   Drei-Wort-Kurzlink über den Share-Dienst.
