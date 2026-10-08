@@ -36,6 +36,20 @@
         the file may make earlier autosaves unavailable. Short project links
         require the online version.
       </p>
+      <div class="offline-download-caution">
+        <p>
+          The offline version has not yet been widely tested in practice. Test it
+          with your own projects and browser before relying on it.
+        </p>
+        <p>
+          <a
+            class="offline-download-report"
+            href="https://github.com/tomkarp/BlueK/issues/new"
+            target="_blank"
+            rel="noopener noreferrer">Report a bug on GitHub</a
+          > (internet connection required).
+        </p>
+      </div>
       <div class="dialog-actions">
         <button on:click={() => (open = false)}>Cancel</button>
         <a

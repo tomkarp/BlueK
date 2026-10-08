@@ -1,59 +1,53 @@
 # Deployment
 
-BlueK ist eine statische Anwendung. Optional kommt ein kleiner Node-Dienst mit
-SQLite für Projekt-Kurzlinks hinzu. Auf dem eigenen Server ist Caddy der
-einzige öffentliche Dienst: Er liefert die statischen Dateien aus und leitet
-`/api/*` intern an den Share-Dienst weiter.
+BlueK is a static application. An optional Node/SQLite service provides short
+project links. Caddy serves static files and proxies `/api/*` to that service.
 
 ## Workflows
 
-Alle Workflows bauen vollständig neu (Java 21, Node 22, `npm ci`,
-`npm run build`) und lassen sich auch manuell starten.
+All workflows run Java 21, Node 22, npm ci and a full npm run build;
+manual dispatch is also available.
 
-| Workflow | Auslöser | Ziel |
+| Workflow | Trigger | Deployment |
 | --- | --- | --- |
-| `.github/workflows/deploy-server.yml` | Push auf `main` | statische Dateien per rsync nach `BLUEK_DEPLOY_PATH` (bluek.de); Share-Dienst nach `/opt/bluek-share/`, dort `npm ci --omit=dev` und `systemctl restart bluek-share` |
-| `.github/workflows/deploy-pages.yml` | Push auf `main` | GitHub Pages unter dem Basispfad `/BlueK/`; ohne Share-Dienst |
-| `.github/workflows/deploy-beta.yml` | Push auf `beta` | nur statische Dateien nach `BLUEK_BETA_DEPLOY_PATH` (beta.bluek.de); nutzt den Share-Dienst der öffentlichen Version mit |
+| deploy-server.yml | Push to main | rsync static files to BLUEK_DEPLOY_PATH; service to /opt/bluek-share, production dependencies and service restart |
+| deploy-pages.yml | Push to main | GitHub Pages under /BlueK/, without share service |
+| deploy-beta.yml | Push to beta | Static files to BLUEK_BETA_DEPLOY_PATH, using the public share service |
 
-Benötigte Repository-Secrets (Settings → Secrets and variables → Actions):
-`BLUEK_DEPLOY_SSH_KEY`, `BLUEK_DEPLOY_KNOWN_HOSTS`, `BLUEK_DEPLOY_HOST`,
-`BLUEK_DEPLOY_USER`, `BLUEK_DEPLOY_PORT`, `BLUEK_DEPLOY_PATH` und
-`BLUEK_BETA_DEPLOY_PATH` (z. B. `/root/bluek-beta`). Der Deploy-Benutzer muss
-die Zielverzeichnisse anlegen und beschreiben sowie `bluek-share` neu starten
-dürfen.
+Repository secrets: `BLUEK_DEPLOY_SSH_KEY`, `BLUEK_DEPLOY_KNOWN_HOSTS`,
+`BLUEK_DEPLOY_HOST`, `BLUEK_DEPLOY_USER`, `BLUEK_DEPLOY_PORT`,
+`BLUEK_DEPLOY_PATH`, `BLUEK_BETA_DEPLOY_PATH`.
+The deployment user needs directory write and service-restart permissions.
 
-## Share-Dienst
+## Share service
 
-`server/share-server.mjs` speichert Projekt-JSON ohne Benutzerverwaltung für
-30 Tage. Jeder Code besteht aus drei englischen Wörtern aus
-`data/share-words-en.txt` (siehe [share-wordlist.md](share-wordlist.md)).
-Wer einen Code kennt, kann das Projekt lesen; sensible Daten gehören nicht in
-geteilte Projekte.
+`server/share-server.mjs` stores JSON for 30 days without user accounts.
+Codes contain three random English words from the
+[attributed word list](share-wordlist.md). Anyone with a code can read its
+project; avoid sensitive content in shared projects.
 
-| Endpunkt | Zweck |
+| Endpoint | Purpose |
 | --- | --- |
-| `GET /api/health` | Lebenszeichen |
-| `POST /api/projects` | Projekt speichern (höchstens 10 MB), liefert `code` und `expiresAt` |
-| `GET /api/projects/<code>` | Projekt laden |
+| GET /api/health | Health check |
+| POST /api/projects | Store up to 10 MB; returns code/expiry |
+| GET /api/projects/<code> | Retrieve project |
 
-Die Oberfläche öffnet Kurzlinks unter `/load/<code>`.
+The UI opens `/load/<code>`.
 
-| Umgebungsvariable | Standard |
+| Variable | Default |
 | --- | --- |
-| `BLUEK_SHARE_HOST` | `127.0.0.1` |
-| `BLUEK_SHARE_PORT` | `8787` |
-| `BLUEK_SHARE_DB` | `server/data/projects.sqlite` relativ zum Projektordner |
-| `BLUEK_SHARE_WORDS` | `data/share-words-en.txt` relativ zum Projektordner |
+| BLUEK_SHARE_HOST | 127.0.0.1 |
+| BLUEK_SHARE_PORT | 8787 |
+| BLUEK_SHARE_DB | server/data/projects.sqlite relative to repository |
+| BLUEK_SHARE_WORDS | data/share-words-en.txt relative to repository |
 
-SQLite legt neben der Datenbank `-wal`- und `-shm`-Dateien an; alle drei
-müssen im Datenverzeichnis bleiben. Lokal: `npm run share:server`, Test:
-`npm run test:share-server`.
+Keep SQLite database, -wal and -shm files together.
+Local command: `npm run share:server`; test: `npm run test:share-server`.
 
-### systemd
+### systemd example
 
-Die Unit auf dem Server ist nicht Teil des Repositorys. Eine Vorlage, die den
-Pfaden des Workflows folgt (`/etc/systemd/system/bluek-share.service`):
+The server unit is not checked in. Example matching workflow paths,
+`/etc/systemd/system/bluek-share.service`:
 
 ```ini
 [Unit]
@@ -76,7 +70,7 @@ RestartSec=2
 WantedBy=multi-user.target
 ```
 
-Einmalig einrichten:
+Initial setup:
 
 ```sh
 sudo useradd --system --home /opt/bluek-share bluek-share
@@ -87,34 +81,29 @@ sudo systemctl enable --now bluek-share
 
 ## Caddy
 
-API-Regel und SPA-Fallback müssen vor dem statischen File-Handler stehen; der
-Fallback ist auch für `/load/<code>` nötig.
+API routing precedes the static handler; the SPA fallback supports `/load/<code>`.
 
 ```caddyfile
 bluek.de {
     root * <BLUEK_DEPLOY_PATH>
-
     handle /api/* {
         reverse_proxy 127.0.0.1:8787
     }
-
     try_files {path} /index.html
     file_server
 }
 
 beta.bluek.de {
     root * <BLUEK_BETA_DEPLOY_PATH>
-
     handle /api/* {
         reverse_proxy 127.0.0.1:8787
     }
-
     try_files {path} /index.html
     file_server
 }
 ```
 
-Danach:
+Validate and reload:
 
 ```sh
 sudo caddy validate --config /etc/caddy/Caddyfile
@@ -122,6 +111,4 @@ sudo systemctl reload caddy
 curl -fsS https://bluek.de/api/health
 ```
 
-Für `beta.bluek.de` muss ein DNS-Eintrag (`A`/`AAAA` oder `CNAME` auf
-`bluek.de`) auf denselben Server zeigen; das TLS-Zertifikat holt Caddy
-automatisch.
+beta.bluek.de needs DNS to the same server; Caddy obtains TLS certificates.

@@ -21,7 +21,7 @@ dependency of the binary `kotlite-stdlib` 1.1.0 from Maven Central. No
 upstream interpreter ends up in the BlueK bundle. Because that stdlib was
 compiled against the upstream API, signatures it uses must stay compatible.
 Upstream tests are not vendored; coverage comes from the BlueK smoke tests
-named below. An overview in German is in `docs/kotlite.md`.
+named below. An implementation overview is in `docs/kotlite.md`.
 
 It is kept as a source dependency so BlueK can apply small, reviewable
 browser-session fixes without replacing Kotlite with a separate interpreter.

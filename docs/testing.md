@@ -1,39 +1,39 @@
-# Kotlin-Tests in BlueK
+# Tests and saved state
 
-BlueK bietet eine reduzierte Oberfläche von JetBrains’ **`kotlin.test`**.
-Testklassen und erzeugte Fixtures sind gewöhnlicher Kotlin-Quelltext und können
-mit `kotlin-test-junit5` unter JUnit Jupiter und in IntelliJ laufen. BlueK selbst
-führt sie im vorhandenen Kotlite-Interpreter aus; eine JVM läuft im Browser nicht.
+BlueK supports a reduced JetBrains **`kotlin.test`** API. Testing is currently
+in **alpha**. Test classes and generated setup code are ordinary Kotlin and
+can run outside BlueK with `kotlin-test-junit5` and JUnit Jupiter, including
+in IntelliJ. BlueK itself runs them in its browser interpreter, without a JVM.
 
-## Einfaches Beispiel
+## Example
 
-`Hund.kt`:
+`Dog.kt`:
 
 ```kotlin
-class Hund {
-    var alter = 0
-    fun geburtstag() { alter++ }
+class Dog {
+    var age = 0
+    fun birthday() { age++ }
 }
 ```
 
-`HundTest.kt`:
+`DogTest.kt`:
 
 ```kotlin
 import kotlin.test.*
 
-class HundTest {
-    val hund: Hund = Hund()
+class DogTest {
+    val dog: Dog = Dog()
 
     @Test
-    fun `Geburtstag erhöht das Alter`() {
-        hund.geburtstag()
-        assertEquals(1, hund.alter)
+    fun `birthday increases age`() {
+        dog.birthday()
+        assertEquals(1, dog.age)
     }
 }
 ```
 
-Außerhalb BlueKs liegt `Hund.kt` in `src/main/kotlin`, `HundTest.kt` in
-`src/test/kotlin`. Die geprüfte Gradle-Konfiguration (`build.gradle.kts`) ist:
+Outside BlueK, put production code in `src/main/kotlin`, tests in
+`src/test/kotlin`. The portability check uses this `build.gradle.kts`:
 
 ```kotlin
 plugins { kotlin("jvm") version "2.2.21" }
@@ -46,189 +46,124 @@ dependencies {
 tasks.test { useJUnitPlatform() }
 ```
 
-## Bedienung
+## Creating and running tests
 
-1. Klassenkarte rechts anklicken → **Create Test Class**. Der vorgeschlagene
-   Name ist `HundTest`. Die grüne Testkarte erscheint ohne UML-Stereotyp leicht
-   versetzt oben rechts hinter `Hund`. Sie ist fest an die Klasse gebunden,
-   lässt sich nicht einzeln verschieben und folgt beim Ziehen der Hund-Karte.
-   Ein Klick auf eine Klassenkarte bringt sie nach vorne. Bei einem Testkartenpaar
-   bleibt die Produktionsklasse vor ihrer Testkarte.
-2. Eine unabhängige Testklasse wird über **New File → Test Class** erstellt;
-   sie erhält keine Zuordnung zu einer Produktionsklasse.
-3. Im Editor `@Test`-Methoden schreiben oder **Record Test…** wählen.
-   Das Testfenster und seine Klassenauswahl enthalten auch Testklassen ohne
-   Testmethoden, einschließlich gerade über New File angelegter Klassen.
-   Jede Klasse bietet dort eine Aktion zum Starten ihrer ersten Aufzeichnung.
-4. **Run All Tests**, **Run Tests** an einer Testkarte oder einen einzelnen
-   Test im Kartenmenü starten. Jeder Lauf kompiliert das Projekt neu und ersetzt
-   die bisherigen Objekte. Das Testfenster zeigt Ergebnisse, Fehlerdetails,
-   Quelltextnavigation und einzelne Wiederholungen. **Stop** beendet auch einen
-   Test, der auf Eingabe wartet oder endlos läuft; offene Tests werden abgebrochen.
+Right-click a class → **Create Test Class**. Its green card sits 30 pixels above
+and to the right, behind the production class, and moves with it.
+**New File → Test Class** creates a free test class. Both kinds support the same
+testing/state features; attachment affects the diagram only.
 
-Die Zuordnung einer erzeugten Testkarte wird als optionales `testTarget` im
-Projekt gespeichert und bei einer Dateiumbenennung angepasst. Die Zuordnung
-beeinflusst die Kotlin-Semantik nicht. Importierte Testklassen werden durch ihre
-Annotationen erkannt; sie können ohne angehängte Produktionsklasse laufen.
+Write `@Test` methods in the editor or choose **Record Test…**.
+The Tests window includes classes without test methods, so their first test
+can be recorded there. **Run All Tests**, a test card's **Run Tests**, or an
+individual test starts a fresh compile and clears previous interactive objects.
+Results distinguish passed, failed and ignored tests, show details and source
+navigation, and allow individual reruns. **Stop** also ends input waits and
+endless loops; remaining tests are aborted.
 
-## Unterstützte API
+## Supported API
 
-| Annotation | Verhalten |
+| Annotation | Meaning |
 | --- | --- |
-| `@Test` | Öffentliche, parameterlose Instanzmethode mit Rückgabetyp `Unit` |
-| `@BeforeTest` | Vor jeder Testmethode auf der frischen Testinstanz |
-| `@AfterTest` | Nach jeder begonnenen Fixture, auch bei Fehlern im Setup oder Test; Fehler werden zusätzlich angezeigt |
-| `@Ignore` | Auf einer Testmethode oder der ganzen Testklasse: überspringen |
+| `@Test` | Public parameterless instance method returning Unit |
+| `@BeforeTest` | Runs before each test on its fresh test-class instance |
+| `@AfterTest` | Runs after setup has begun, including setup/test failure; additional errors are reported |
+| `@Ignore` | Skips a test method or whole class |
 
-Pro Klasse gibt es höchstens eine `@BeforeTest`- und eine `@AfterTest`-Methode.
-Ein fehlgeschlagener Konstruktor startet kein Teardown. Testklassen sind
-gewöhnliche Klassen auf oberster Ebene, ohne Vererbung oder Typparameter,
-mit parameterlosem Konstruktor. Methoden haben einen Blockrumpf oder deklarieren `Unit` ausdrücklich.
-Verschachtelte und parametrisierte Tests, Extensions, `@BeforeAll`/`@AfterAll`
-und weitere Framework-Annotationen werden nicht unterstützt. Die vier
-Annotationen funktionieren mit Einzel-/Wildcard-Import, Importalias und
-qualifiziertem Namen. Tests erhalten pro Methode eine neue Instanz;
-Top-Level-Zustand wird innerhalb eines Laufs geteilt, zwischen Läufen neu geladen.
-Methodennamen mit Leerzeichen in Backticks sind erlaubt; auf der JVM unzulässige
-Namenszeichen werden abgewiesen, gemäß der
-[Kotlin-Spezifikation](https://kotlinlang.org/spec/syntax-and-grammar.html#identifiers).
+At most one BeforeTest and AfterTest per class. A constructor failure does not
+start teardown. Test classes must be ordinary top-level classes without
+inheritance/type parameters and with a parameterless constructor. Methods
+have a block body or explicitly declare Unit. Nested/parameterized tests,
+extensions, BeforeAll/AfterAll and other framework annotations are unsupported.
+Annotations accept explicit/wildcard imports, aliases and qualified names.
+Top-level state is shared within a run and reloaded between runs.
+Backtick method names may contain spaces; JVM-invalid characters are rejected.
 
-Assertions: `assertEquals<T>(expected, actual, message: String? = null)`,
-`assertNotEquals<T>(illegal, actual, message)`, `assertTrue(Boolean, message)`, `assertFalse(Boolean, message)`,
-`assertNull(Any?, message)`, `assertNotNull<T>(T?, message): T`, `fail(message): Nothing`.
-Die Nachrichten sind optional. `Double`-Werte folgen der generischen Kotlin-
-Gleichheit: NaN ist NaN gleich, `0.0` und `-0.0` sind verschieden. `assertNotNull`,
-`assertTrue` und `assertFalse` unterstützen die vorhandenen Smartcast-Regeln.
-Lambda-/Toleranz-Overloads, `assertContentEquals`, `assertFailsWith` und eigene
-Asserter sind noch nicht enthalten. Assertion-Fehler und andere Exceptions
-werden getrennt angezeigt; weitere Tests laufen danach weiter. Interpreter-
-Zustandsfehler dürfen weiterhin nicht von Schülercode abgefangen werden.
+Assertions (all messages optional):
 
-## Objektleiste und gespeicherter Testzustand
+```kotlin
+assertEquals<T>(expected: T, actual: T, message: String? = null)
+assertNotEquals<T>(illegal: T, actual: T, message: String? = null)
+assertTrue(actual: Boolean, message: String? = null)
+assertFalse(actual: Boolean, message: String? = null)
+assertNull(actual: Any?, message: String? = null)
+assertNotNull<T>(actual: T?, message: String? = null): T
+fail(message: String? = null): Nothing
+```
 
-**Save State from Object Bench** erzeugt Felder und ein `@BeforeTest`-Setup aus
-Konstruktoren, Methodenaufrufen, expliziten Property-Lesezugriffen, Zuweisungen
-und einfachen Codepad-Anweisungen. Das Fenster zeigt den gesamten erzeugten
-Quelltext vor **Save & Compile** in einem eingebetteten Kotlin-Editor mit
-Syntax-Highlighting, Editor-Einstellungen sowie Kommentar- und Formatieraktionen.
-Vorhandene Testmethoden bleiben erhalten.
-Die Objektleiste wird beim Speichern und Neukompilieren geleert.
-Automatisch benannte Rückgabewerte (`result1` usw.) werden nur dann als lokale
-Variablen ausgegeben, wenn ein späterer aufgezeichneter Schritt sie verwendet;
-andernfalls bleibt der Aufruf ohne unnötige Zuweisung stehen.
-Automatische Getter-Auswertungen beim Anzeigen im Objektinspektor werden nicht
-aufgezeichnet. Ein ausdrücklich aufgerufener Property-Getter bleibt dagegen
-Teil des gespeicherten Zustands.
-Objekte, die nicht mehr auf der Objektleiste liegen, werden nicht als Attribute
-gespeichert. Benötigen spätere aufgezeichnete Schritte ein solches Objekt noch,
-bleibt seine lokale Variable im Setup; andernfalls entfällt die unbenutzte
-Deklaration; ihr Konstruktor wird weiterhin ausgeführt, damit dessen Effekte
-auf andere Objekte erhalten bleiben.
+Equality follows generic Kotlin semantics: NaN equals NaN; positive and negative
+zero differ. The supported assertion contracts participate in smart casts.
+Lambda/tolerance overloads, `assertContentEquals`, `assertFailsWith` and custom
+asserters are unavailable. Assertion failures and other exceptions are reported
+separately; subsequent tests continue.
 
-**Load State to Object Bench** lädt das Projekt frisch, erzeugt eine Testinstanz,
-führt deren Setup aus und bindet initialisierte gespeicherte Felder auf die
-Objektleiste. Objektidentität und gemeinsame Referenzen bleiben erhalten.
-Berechnete Properties werden dabei nicht zusätzlich ausgeführt. Auch ein
-von Hand bearbeiteter Testzustand lässt sich laden; beim Überschreiben erscheint die
-gleiche Warnung wie bei einem bereits gespeicherten Zustand.
-Das Laden über die Objektleisten-Aktion oder das Kontextmenü öffnet das
-Testfenster nicht. Es bleibt für Testläufe und Aufzeichnungen reserviert.
-Nach einem Seiten-Neuladen ist kein manueller Compile-Schritt nötig:
-Die Ladeaktion kompiliert das gespeicherte Projekt bei Bedarf selbst.
+## Saved state
 
-Gespeicherte Zustände aus der Objektleiste lassen sich erneut laden, interaktiv verändern
-und wieder speichern. Beim Speichern in eine vorhandene Testklasse warnt BlueK,
-dass alle Klassenattribute und alle `@BeforeTest`-Methoden ersetzt werden.
-Enthält die Klasse `init`-Blöcke, werden auch diese ersetzt; die Warnung
-nennt sie ausdrücklich.
-`@Test`-Methoden und andere Methoden bleiben erhalten. Damit ist die
-Objektleiste die maßgebliche Definition des gespeicherten Zustands.
+Three icon-only buttons at the right of the status line beneath the object
+bench provide **Save state**, **Load state** and **Choose default test class**.
+The first save asks for a class name, suggesting **StateTest**, then previews
+editable Kotlin before **Save & Compile**. The chosen class becomes the
+project's default and survives autosave, JSON import/export and project links.
+Any test class can be selected, even without Test methods.
 
-Drei textfreie Aktionen in der Statuszeile direkt unter der Objektleiste,
-rechts neben der Objekt-Auswahl, heißen **Save state**, **Load state** und
-**Choose default test class**. Sie speichern und laden den Zustand der
-Standard-Testklasse beziehungsweise ändern diese Standardklasse. Beim
-ersten Speichern fragt BlueK nach einem Klassennamen (Vorschlag
-`StateTest`), zeigt danach die Kotlin-Vorschau und speichert die erzeugte
-unabhängige Testklasse als Standard. Die Auswahl wird im Projekt gespeichert
-und mit Autosave sowie Projekt-Export/Import übernommen.
-Im Dialog **Save / Export** lässt sich für volle Projektlinks und Kurzlinks
-zusätzlich **Load state** auswählen. Ein solcher Link lädt nach dem Öffnen
-automatisch den Zustand der gespeicherten Standard-Testklasse in die Objektleiste
-und kompiliert das Projekt dafür selbst. Ohne Standardklasse ist die Option
-deaktiviert. **Open README** kann gleichzeitig gewählt werden; das Testfenster
-und der Quelltexteditor bleiben geschlossen. Die Optionen gehören zum Link:
-volle Links tragen `&state=1` im Fragment, Kurzlinks `?state=1` im Query-String
-(mit README `?readme=1&state=1`). Ein normaler Dateiimport oder Autosave-Restore
-lädt den Zustand weiterhin erst auf Wunsch. Fehler beim automatischen Laden
-werden im normalen Fehlerdialog angezeigt.
-Erzeugte Zustandsfelder sind `val`-Referenzen mit ihrem ursprünglichen
-Konstruktoraufruf; Objekte bleiben über ihre Methoden veränderbar. Dafür ist
-`lateinit` nicht nötig. Werden zwischen den Konstruktoren andere Aktionen
-aufgezeichnet oder entsteht ein Objekt aus einem Methodenresultat, werden
-die `val`-Felder im `init`-Block zugewiesen. So bleibt die ursprüngliche
-Reihenfolge erhalten; Konstruktorargumente sehen den Zustand zum richtigen
-Zeitpunkt. Einfachere Zustände behalten Feldinitialisierungen und `setUp()`.
+**Save State from Object Bench** turns constructors, method calls, explicit
+property reads, assignments and supported codepad statements into properties
+and setup code. Fields are `val`; no `lateinit` or marker comments are needed.
+Simple preparation uses field initializers plus BeforeTest. Interleaved
+construction/actions or returned objects use assignments in `init` to retain
+chronological order. Preview uses the normal embedded Kotlin editor, including
+highlighting, formatting, comments and editor settings.
 
-Der Zustand wird durch **Wiederholung der Vorbereitung** rekonstruiert. Es gibt
-keine allgemeine Serialisierung beliebiger Objektgraphen. Deterministische
-private Zustandsänderungen durch aufgezeichnete Methoden bleiben erhalten;
-Zufall, Zeit, externe Effekte und Eingaben können beim Wiederholen andere Werte
-liefern. BluePlay-Simulationen und `main()` sind nicht als gespeicherter
-Objektleisten-Zustand erfassbar.
-Nach einem fehlgeschlagenen Runtime-Aufruf kann Zustand verändert sein; BlueK
-verlangt dann Reset und erneute Vorbereitung. Wiederverwendete Bench-Namen,
-interne Handles und nicht rekonstruierbare Bindungen werden mit einem Hinweis
-abgewiesen.
-Zuweisungen an die Referenz einer Codepad-Variablen und lokale Variablen,
-die ein Zustandsattribut verdecken, lassen sich nicht unverändert als `val`-
-Zustand wiedergeben; BlueK meldet diese Grenze statt fehlerhaften Code anzubieten.
-Primitive Bench-Werte (Zahlen, Boolean und Char) als gespeicherte
-Zustandsfelder sind zunächst ausgeschlossen; String-Referenzen sind möglich.
-Die Codevorschau bleibt vor jedem Speichern editierbar; Compile-Diagnosen prüfen
-auch dort Typen und Sichtbarkeit.
+Saving to an existing class replaces **all class properties and all BeforeTest
+methods**, plus any `init` blocks. A warning explains what will be replaced;
+there is no warning if none exist. Other methods, including Test methods,
+remain. Saving recompiles and clears the bench without opening the editor or
+Tests window.
 
-## Aufzeichnung
+Automatic inspector getter evaluations are excluded. Explicit getter calls
+remain. Automatically named results are local variables only if later steps
+need them. Objects removed from the bench are not fields: retain a local binding
+only if later preparation needs it; otherwise keep just the constructor's
+execution, preserving its effects.
 
-**Record Test…** stellt zuerst die Fixture auf die Objektleiste. Danach werden
-Konstruktoren, Methoden, Zuweisungen und Codepad-Schritte aufgezeichnet.
-Bei einem Methodenresultat kann **Add Assertion** Gleichheit, null oder nicht
-null prüfen. Erwartete skalare Werte werden als Kotlin-Ausdruck vorgeschlagen
-und können geändert werden. Das Resultat wird nur einmal berechnet und im Test
-in einer lokalen Variable behalten. **Finish Recording…** ergänzt eine neue
-`@Test`-Methode nach Vorschau. **Cancel Recording** verwirft Assertion-Entwürfe;
-die bereits vorgenommenen Änderungen an Objekten bleiben bestehen.
+**Load State to Object Bench** recompiles, creates the chosen test instance,
+runs setup and binds initialized stored fields to the bench. Identity and shared
+references survive. Computed properties do not run merely to transfer state.
+Loading works after page reload without a manual Compile, and opens neither
+the Tests window nor editor. You can then modify the objects and save again.
+Manually edited setup code can also be loaded.
 
-Die Bedienidee stammt aus dem offiziellen
-[BlueJ Testing Tutorial](https://www.bluej.org/tutorial/testing-tutorial.pdf):
-angehängte Testklassen, Fixture-Transfer und Aufzeichnung mit Assertions im
-Ergebnisdialog. BlueK verwendet dafür die Kotlin-API und einen zusätzlichen
-Quelltext-Vorschauschritt.
+Project links may select **Load state**, optionally together with **Open README**.
+They load the default class after importing. A regular JSON import or autosave
+restore waits for your Load state action. Errors use the ordinary error dialog.
 
-## Architektur und Nachweise
+### Limits of saved state
 
-- Parser/AST im vendorten Interpreter besitzen Annotationen und Quellpositionen.
-- `BlueKTesting` gehört genau einer `KotliteSession`: Discovery, Ergebnisse,
-  Replay-Journal und Aufzeichnung liegen im Worker. Anweisungsgrenzen stammen
-  aus Parser-Metadaten; mehrzeilige String-Inhalte werden beim Einrücken erhalten. Die Oberfläche besitzt
-  ausschließlich Dialogentwürfe und leitet ihre Ansichten aus `RuntimeSnapshot` ab.
-- Der Runner erzeugt interne Aufrufe im normalen suspendierbaren Interpreterpfad.
-  Konstruktoren, Setup, Tests und Teardown durchlaufen `enterCall`/`leaveCall`;
-  Eingabe, Depth-Limit und Generationen gelten unverändert.
-- `TestWorkspace` nutzt den einzigen bestehenden `LocalRuntimeClient`.
-  Quelltextänderungen/Compile ersetzen seine Generation und beenden eine
-  Aufzeichnung. Eine gespeicherte Vorschau darf keine inzwischen geänderte Datei
-  überschreiben (Revisionprüfung).
-- `npm run test:testing`: echter Client/Host/Bundle; Lifecycle, Fehler, Ignorieren,
-  Annotationen, Fixture-Roundtrip, Aufzeichnung, Abbruch und Cancel.
-- `npm run test:testing:portable`: zusätzlich genau den generierten Fixture- und
-  Testquelltext mit Kotlin 2.2.21, `kotlin-test-junit5` und JUnit Jupiter 6.0.0
-  außerhalb BlueKs kompilieren und ausführen (einschließlich mehrzeiliger
-  Fixture-Argumente, chronologisch geordneter `init`-Vorbereitung, gemeinsamer
-  Objektreferenzen und benannter Assertion-Parameter). Nutzt einen sauberen
-  Gradle-Build, Java und Maven Central;
-  Projekt und Ergebnisse liegen in `.cache/kotlin-test-portability/`.
-- `tests/gui/testing.spec.ts`: tatsächliche Chromium-Bedienung für Karten,
-  Fixture-Transfer, Recording, Ergebnisdetails, Wiederholung und Cancel.
-- Der Stand der manuellen Prüfung im eingebauten Browser steht getrennt in
-  [regression-checklist.md](regression-checklist.md).
+This is **replay of preparation**, not arbitrary graph serialization. Private
+changes made through recorded methods are retained when replay is deterministic.
+Randomness, time, input and external effects may differ. BluePlay simulation
+steps and `main` execution cannot be saved this way.
+
+After a failed runtime call, partial effects can remain; BlueK requires reset
+and fresh preparation. Reused names, internal handles and non-reconstructible
+bindings are rejected with an explanation. Codepad reference reassignment and
+locals shadowing state fields cannot be reproduced as unchanged val fields.
+Primitive bench fields (numbers, Boolean, Char) are excluded; String references
+are supported. The editable preview is checked by the ordinary compiler path.
+
+## Recording a test
+
+**Record Test…** first loads the class's state onto the bench, then records
+constructors, method calls, assignments and codepad steps. A method result's
+**Add Assertion** can check equality, null or non-null. Suggested scalar
+expectations are editable Kotlin expressions; each result is evaluated once
+and retained locally when needed.
+
+**Finish Recording…** previews and adds a Test method.
+**Cancel Recording** discards assertion drafts but leaves object changes made
+while recording. Editing source or recompiling ends the recording.
+
+Interaction is inspired by the [BlueJ testing tutorial](https://www.bluej.org/tutorial/testing-tutorial.pdf),
+with Kotlin annotations and an additional source preview.
+Implementation contracts and verification commands:
+[testing internals](testing-internals.md).

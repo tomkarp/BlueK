@@ -1,91 +1,72 @@
-# Kotlite-Genericschnittstelle
+# Generics and inline calls
 
-## Generische Klassen und Collections
+Developer reference; [user-facing limits](kotlin-support.md#calls-inference-and-smart-casts).
 
-Generische Klassen funktionieren über mehrere `session.load()`-Aufrufe und
-anschließende Codepad-Ausdrücke, einschließlich `Box<String>` und `Box<Int>`.
-Generische Member, vererbte Methoden, Rückgabewerte und Objektidentität bleiben
-erhalten. `List`, `Collection` und `Iterable` sind kovariant; `MutableList` und
-`MutableCollection` bleiben invariant.
+## Classes and variance
 
-## Reifizierte Funktionen und Closures
+Generic classes/member values and identity survive repeated `session.load`
+and codepad evaluation. List/Collection/Iterable are covariant;
+MutableList/MutableCollection are invariant.
 
-`inline fun <reified T> ...` macht den konkreten Aufruf-Typ in `is T`, `!is T`
-und `as T` verfügbar. Verschachtelte und zurückgegebene Lambdas behalten die
-konkreten Typen ihres jeweiligen Aufrufs sowie ihre lexikalischen Variablen.
-Auch wiederholte Factory-Aufrufe mit unterschiedlichen Typargumenten teilen
-keine Typauflösung.
+## Reified types and closures
 
-Die Analyse weist nicht-reifizierte `is T`-Prüfungen, direkte und inferierte
-Weitergabe eines nicht-reifizierten Typparameters an einen reifizierten
-Parameter, `reified` an Klassen sowie reifiziertes `Nothing` ab.
-Namensgleiche Typparameter innerer Funktionen und Klassen verdecken äußere.
+`inline fun <reified T>` exposes the concrete call type to `is T`, `!is T`
+and `as T`. Nested/returned lambdas capture resolved types together with their
+lexical variables; repeated factories must not share type substitutions.
+Inner type parameters shadow outer names.
 
-Die Laufzeitprüfung prüft den Klassifikator und Nullbarkeit. Generische
-Elementtypen werden nicht durch Betrachtung der Listenelemente geprüft:
-`matches<List<String>>(listOf(1))` kann deshalb bei einer reifizierten
-`matches`-Funktion wahr sein. Eine direkte Prüfung `any is List<String>` wird
-bei unbekannten Elementtypen abgewiesen; `any is List<*>` ist zulässig.
-Siehe [Kotlin: Type erasure](https://kotlinlang.org/docs/generics.html#type-erasure).
+Reject non-reified runtime type checks, forwarding non-reified types to reified
+parameters (including inferred forwarding), reified class parameters and
+reified Nothing. Runtime checks inspect classifier/nullability rather than
+collection elements: reified `List<String>` checks can accept a list of numbers
+under erasure. Direct `any is List<String>` is rejected when element types
+cannot be checked; `List<*>` is allowed.
 
-## Inline-Lambdas und Rücksprünge
+## Inline control flow
 
-Der Interpreter bildet das Verhalten ohne JVM-/JS-Quelltextexpansion ab:
+The interpreter models semantics without textual code expansion:
 
-- Gewöhnliche Lambda-Parameter einer `inline`-Funktion erlauben nichtlokale
-  `return`-Anweisungen zur lexikalisch umgebenden Funktion, auch durch mehrere
-  Inline-Aufrufe. Direkte Weitergabe an andere Inline-Parameter ist zulässig.
-- `noinline` erlaubt Speicherung, Rückgabe und Weitergabe eines Funktionswerts,
-  aber keinen nichtlokalen Rücksprung aus dessen Lambda.
-- `crossinline` erlaubt den Aufruf in einer zurückgegebenen Wrapper-Lambda,
-  aber keinen nichtlokalen Rücksprung. Der Parameter selbst darf nicht als
-  gewöhnlicher Funktionswert entkommen.
-- Lokale `return@funktionsname` und explizite Lambda-Labels funktionieren.
-  Nichtlokale Rücksprünge umgehen `catch`, führen aber `finally` aus.
-- Rücksprungziele gehören zu einer konkreten Funktionsausführung. Rekursion,
-  zurückgegebene Closures und Suspendierung verwechseln keine Aufrufe.
+- Ordinary inline lambda parameters allow non-local return to the lexical
+  enclosing function, including through nested inline calls/forwarding.
+- `noinline` permits storage, return and forwarding as a value, but no non-local
+  return from its lambda.
+- `crossinline` permits invocation inside a returned wrapper lambda, but no
+  non-local return or escaping as an ordinary function value.
+- Local `return@function` and explicit labels work. Non-local return bypasses
+  catch but executes finally.
+- Return targets belong to individual activations. Recursion, closures and
+  suspension must not mix them up.
 
-Die Analyse verhindert illegale Parameterweitergabe und Rücksprünge sowie
-unzulässige Kombinationen von `noinline`/`crossinline`. Für die ältere,
-binär eingebundene Kotlite-Standardbibliothek ergänzt `StdlibInlineMetadata`
-gezielt Inline-Metadaten für Scope-Funktionen und aufgezählte synchrone
-Collection-/Text-/Byte-Operationen. Neue Host-Funktionen deklarieren ihre
-Modifier direkt. Referenz: [Kotlin: Inline functions](https://kotlinlang.org/docs/inline-functions.html).
+The analyzer validates forwarding, returns and modifier combinations.
+`StdlibInlineMetadata` supplies missing metadata for explicitly listed older
+binary-stdlib functions. New host definitions declare modifiers directly.
+There is no optimization by inlining, inline-property/reflection support or
+cross-module PublishedApi validation. Non-local break/continue across lambdas
+remain unsupported.
 
-Dies ist keine vollständige Kotlin-Compilerimplementierung: Es gibt keine
-Optimierung durch Code-Inlining, keine Erweiterung um Inline-Properties,
-Reflection oder modulübergreifende `@PublishedApi`-Prüfungen. Nichtlokale
-`break`/`continue` über Lambda-Grenzen sind weiterhin nicht unterstützt.
-Die dokumentierte Unterstützung betrifft Funktionsparameter und Returns.
+## Host function contract
 
-## Host-Funktionen und `filterIsInstance`
+`FunctionCallNode.typeArguments` propagates explicit/inferred types to
+`CallableNode.execute(..., typeArguments)`. Host
+`CustomFunctionDefinition.typeParameters` resolve to DataTypes in the final
+callback argument. `TypeParameter.isReified` and `FunctionModifier.inline`
+represent reified host functions; `extraTypeParameters` describes receiver-only
+parameters.
 
-BlueK reicht explizite und inferierte Typargumente über
-`FunctionCallNode.typeArguments` bis zu `CallableNode.execute(..., typeArguments)`
-weiter. Host-Funktionen deklarieren `CustomFunctionDefinition.typeParameters`
-und erhalten die aufgelösten `DataType`-Werte im letzten Callback-Argument.
-`TypeParameter.isReified` und `FunctionModifier.inline` beschreiben reifizierte
-Host-Funktionen. `extraTypeParameters` enthält unabhängig davon Typparameter,
-die nur aus dem Receiver aufgelöst werden.
-
-`filterIsInstance` liegt im allgemeinen `GenericCollectionsModule`, unabhängig
-von Session und BluePlay. Seine interne Signatur lautet:
+`GenericCollectionsModule` implements:
 
 ```kotlin
 inline fun <reified T> Iterable<S>.filterIsInstance(): List<T>
 ```
 
-`S` wird aus dem Receiver ermittelt, nur `T` wird am Aufruf angegeben. Die native
-Implementierung nutzt wie `is`, Casts und Rückgabewertprüfungen die gemeinsame Laufzeitprüfung
-`DataType.acceptsRuntimeType`, berücksichtigt Unterklassen und nullable
-Zieltypen und erhält Reihenfolge und Objektidentität.
+S is resolved from the receiver; only T is specified at the call. The native
+implementation shares `DataType.acceptsRuntimeType` with type checks/casts and
+preserves subclasses, nullable targets, order and identity.
 
-## Prüfung
+## Verification
 
-`npm run test:generics` führt `scripts/smoke-generics.mjs` und
-`scripts/smoke-generics-boundaries.mjs` gegen das gebaute Browser-Bundle aus.
-Die Tests prüfen positive Ergebnisse und die Analysephase ungültiger Programme,
-lexikalische Captures, Rekursion, Labels, Modifier und Suspendierung.
-`tests/gui/generics.spec.ts` prüft zusätzlich Projektkompilierung, generische
-Instanzen, Returns und Closure-Aufrufe über die echte Browser-/Worker-Strecke.
-Tatsächliche Testläufe werden in der Regression-Checkliste festgehalten.
+`npm run test:generics` runs `smoke-generics.mjs` and
+`smoke-generics-boundaries.mjs` against the built bundle. Tests cover valid
+results, rejection phases, captures, recursion, labels, modifiers and suspension.
+`tests/gui/generics.spec.ts` covers the real browser/worker path.
+Actual results belong in [regression-checklist.md](regression-checklist.md).

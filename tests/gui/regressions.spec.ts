@@ -1733,16 +1733,22 @@ test('GUI-14 output is visible before a long loop finishes', async ({ page }) =>
   await expect(page.getByLabel('Codepad input')).toBeEnabled();
 });
 
-test('GUI-63 the toolbar explains the offline version before downloading it', async ({ page }) => {
+test('GUI-63 the sidebar explains the offline version before downloading it', async ({ page }) => {
   await project(page);
   let downloads = 0;
   page.on('download', () => { downloads++; });
-  const downloadButton = page.locator('.toolbar-options').getByRole('button', { name: /Offline Version/ });
+  const downloadButton = page.locator('.sidebar-utilities').getByRole('button', { name: /Offline Version/ });
   await downloadButton.click();
   const dialog = page.getByRole('dialog', { name: 'BlueK Offline' });
   await expect(dialog).toContainText('without downloading anything');
   await expect(dialog).toContainText('BlueK.html');
   await expect(dialog).toContainText('Autosave');
+  await expect(dialog).toContainText('not yet been widely tested in practice');
+  await expect(dialog).toContainText('with your own projects and browser before relying on it');
+  const reportBug = dialog.getByRole('link', { name: 'Report a bug on GitHub', exact: true });
+  await expect(reportBug).toHaveAttribute('href', 'https://github.com/tomkarp/BlueK/issues/new');
+  await expect(reportBug).toHaveAttribute('target', '_blank');
+  await expect(reportBug).toHaveAttribute('rel', 'noopener noreferrer');
   expect(downloads).toBe(0);
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(dialog).toHaveCount(0);
@@ -1760,6 +1766,7 @@ test('GUI-63 the toolbar explains the offline version before downloading it', as
   expect(zip.status()).toBe(200);
   expect((await zip.body()).byteLength).toBeGreaterThan(100_000);
   await page.setViewportSize({ width: 800, height: 600 });
+  await link.scrollIntoViewIfNeeded();
   const cancelBounds = await dialog.getByRole('button', { name: 'Cancel', exact: true }).boundingBox();
   expect(cancelBounds!.y + cancelBounds!.height).toBeLessThanOrEqual(600);
   await page.screenshot({ path: 'test-results/offline-download-notice.png' });
@@ -2253,7 +2260,7 @@ test('GUI-80 project name field does not intercept clicks on project actions', a
 
   await page.getByRole('button', { name: 'Help', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Keyboard Shortcuts' })).toBeVisible();
-  await expect(page.locator('.toolbar-options').getByRole('button', { name: /Offline Version/ })).toBeVisible();
+  await expect(page.locator('.sidebar-utilities').getByRole('button', { name: /Offline Version/ })).toBeVisible();
 });
 
 test('GUI-78 selected Kotlin lines can be commented and uncommented by button and slash shortcut', async ({ page }) => {

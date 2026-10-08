@@ -678,7 +678,7 @@ test("GUI-117 init-state replacement warns and failed loading reports its error 
   await expect(page.locator(".test-panel")).toHaveCount(0);
 });
 
-test("GUI-110 testing actions collapse by default and utility icons move to toolbar", async ({
+test("GUI-110 testing actions collapse by default and utility icons stay below the testing area", async ({
   page,
 }) => {
   await load(page, payload());
@@ -688,7 +688,7 @@ test("GUI-110 testing actions collapse by default and utility icons move to tool
   await expect(
     page.getByRole("button", { name: "Run All Tests", exact: true }),
   ).toHaveCount(0);
-  await expect(disclosure.getByText(/Alpha-Stadium/)).toBeHidden();
+  await expect(disclosure.locator(".sidebar-testing-notice")).toBeHidden();
   await toggle.click();
   await expect(disclosure).toHaveAttribute("open", "");
   await expect(
@@ -716,12 +716,12 @@ test("GUI-110 testing actions collapse by default and utility icons move to tool
   await expect(
     page.getByRole("button", { name: "Run All Tests", exact: true }),
   ).toHaveCount(0);
-  await expect(disclosure.getByText(/Alpha-Stadium/)).toBeHidden();
+  await expect(disclosure.locator(".sidebar-testing-notice")).toBeHidden();
 
-  const toolbar = page.locator(".toolbar-options");
-  const download = toolbar.getByRole("button", { name: "Offline Version" });
-  const help = toolbar.getByRole("button", { name: "Help", exact: true });
-  const settings = toolbar.getByRole("button", {
+  const utilities = page.locator(".sidebar-utilities");
+  const download = utilities.getByRole("button", { name: "Offline Version" });
+  const help = utilities.getByRole("button", { name: "Help", exact: true });
+  const settings = utilities.getByRole("button", {
     name: "Settings",
     exact: true,
   });
@@ -734,6 +734,37 @@ test("GUI-110 testing actions collapse by default and utility icons move to tool
   expect(downloadBox?.height).toBe(settingsBox?.height);
   expect(helpBox?.width).toBe(settingsBox?.width);
   expect(helpBox?.height).toBe(settingsBox?.height);
+  await expect(settings).toHaveText("");
+  await expect(page.locator(".toolbar-options button")).toHaveCount(3);
+  const utilityBox = await utilities.boundingBox();
+  const toggleBox = await toggle.boundingBox();
+  expect(utilityBox!.y).toBeGreaterThan(toggleBox!.y + toggleBox!.height);
+  const mainBox = await page.getByRole("button", { name: "Start main", exact: true }).boundingBox();
+  expect(toggleBox!.y - (mainBox!.y + mainBox!.height)).toBe(14);
+  await expect(toggle.locator("svg")).toHaveCSS("transform", "matrix(0, 1, -1, 0, 0, 0)");
+  expect(downloadBox!.y - utilityBox!.y).toBe(6);
+  await expect(utilities).toHaveCSS("border-top-width", "0px");
+  await toggle.click();
+  const testBox = await disclosure.getByRole("button", { name: "Run All Tests", exact: true }).boundingBox();
+  expect(testBox!.y).toBeGreaterThan(toggleBox!.y + toggleBox!.height);
+  await expect(toggle.locator("svg")).toHaveCSS("transform", "matrix(0, -1, 1, 0, 0, 0)");
+  await expect(download).toBeVisible();
+  await expect(help).toBeVisible();
+  await expect(settings).toBeVisible();
+  await help.click();
+  await expect(page.getByRole("dialog", { name: "Keyboard Shortcuts" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await settings.click();
+  await expect(page.getByRole("dialog", { name: "Settings", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.setViewportSize({ width: 800, height: 600 });
+  for (const button of [download, help, settings]) {
+    const box = await button.boundingBox();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.y + box!.height).toBeLessThanOrEqual(600);
+  }
+  await page.screenshot({ path: "test-results/sidebar-utilities.png" });
+
 });
 
 test("GUI-111 toolbar button toggles all test classes", async ({ page }) => {

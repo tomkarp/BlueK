@@ -390,10 +390,6 @@
     showInheritance={project.showInheritance}
     showTestClasses={project.showTestClasses}
     hasTestClasses={testFileIds.length > 0}
-    bind:settingsNotice={ui.settingsNotice}
-    {offlineBuild}
-    bind:offlineDownloadOpen={ui.offlineDownloadOpen}
-    bind:shortcutsHelpOpen={ui.shortcutsHelpOpen}
     toggleInheritance={project.toggleInheritance}
     toggleTestClasses={project.toggleTestClasses}
     commitProjectName={project.commitProjectName}
@@ -420,6 +416,10 @@
       openTests={() => (tests.open = true)}
       runTests={() => tests.run()}
       runMain={session.runMain}
+      bind:settingsNotice={ui.settingsNotice}
+      {offlineBuild}
+      bind:offlineDownloadOpen={ui.offlineDownloadOpen}
+      bind:shortcutsHelpOpen={ui.shortcutsHelpOpen}
     />
     <section
       class="workspace"
