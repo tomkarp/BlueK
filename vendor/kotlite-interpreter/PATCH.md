@@ -21,7 +21,7 @@ dependency of the binary `kotlite-stdlib` 1.1.0 from Maven Central. No
 upstream interpreter ends up in the BlueK bundle. Because that stdlib was
 compiled against the upstream API, signatures it uses must stay compatible.
 Upstream tests are not vendored; coverage comes from the BlueK smoke tests
-named below. An overview in German is in `docs/kotlite.md`.
+named below. An implementation overview is in `docs/kotlite.md`.
 
 It is kept as a source dependency so BlueK can apply small, reviewable
 browser-session fixes without replacing Kotlite with a separate interpreter.
@@ -968,3 +968,47 @@ Type arguments from the enclosing call and from a lambda's expected result (RT-1
   every chained receiver twice broke `reified T` in `filter { … }.map { it as T }`; both were
   caught by `smoke-curriculum-kotlin` and `smoke-generics-boundaries` and are restricted as above.
 Coverage: `node scripts/smoke-kotlin-surface.mjs` (RT-100), `npm run test:conformance`.
+
+## 2026-10-06: portable kotlin.test-Annotationen und Testnamen
+
+- Lexer liest echte Kotlin-Bezeichner in Backticks ohne die Backticks als Teil
+  des Namens (insbesondere Testnamen mit Leerzeichen).
+- Parser löst `kotlin.test.Test`, `BeforeTest`, `AfterTest`, `Ignore` über
+  Einzel-/Wildcard-Imports, Alias oder qualifizierten Namen auf. Andere
+  Annotationen, doppelte Annotationen und Annotationen auf Properties/Objekten
+  werden abgewiesen. Function-/Class-AST behält Annotationen und Endpositionen
+  für Discovery und Quelltexterzeugung im Host. Der Interpreter ignoriert die
+  Host-Metadaten bei gewöhnlichen Aufrufen; keine zweite Test-Ausführungsschiene.
+- Analyzer ergänzt die bestehenden Smartcast-Regeln für `assertNotNull`,
+  `assertTrue`, `assertFalse`. Assertions selbst leben nativ im Browser-Modul.
+- Nachweise: `smoke-testing.mjs`, `smoke-kotlin-surface.mjs` und
+  `tests/gui/testing.spec.ts`; konkrete Laufresultate in der Regression-Checkliste.
+
+- Die Double-Konformitätsprobe der neuen Assertions fand einen bestehenden
+  Fehler im Unary-Operator: `-0.0` wurde als `0 - 0.0` positiv. Double-Unary-Minus
+  verwendet jetzt echte Negation; Unary-Plus erhält das Vorzeichen. Nachweis:
+  `assertNotEquals(0.0, -0.0)` und generische NaN-Gleichheit in der Stdlib-Probe.
+
+- Der Konformitätslauf fing danach `whenSubjectVariable/ieee754Equality.kt` ab:
+  Vergleichsoperatoren verwendeten für Double `compareTo` und ordneten negative
+  Null unter positive Null ein. Numerische `<`, `<=`, `>` und `>=` verwenden jetzt
+  IEEE-Vergleiche; explizites `Double.compareTo` behält seine totale Ordnung.
+  Zusätzliche Proben für beide Nullwerte, NaN und gemischte Int-/Double-Operanden
+  in `smoke-kotlin-surface.mjs`, dieselben Null-/NaN-Assertions auch auf der JVM.
+
+- `ScriptNode.sourceRanges` speichert die ursprünglichen Anweisungsgrenzen vor
+  dem Auflösen verschachtelter Deklarationen. Fixture-Replay verwendet diese
+  Parser-Spannen statt Zeilen und rückt nur die erste Zeile einer Anweisung ein,
+  damit mehrzeilige String-Argumente unverändert bleiben. Zwei Fixture-Roundtrips
+  und derselbe erzeugte Test auf der JVM sind in `smoke-testing.mjs` abgesichert.
+
+## 2026-10-07: genaue Quellspannen für Zustands-Roundtrips
+
+- Property-AST speichert Deklarationsbeginn/-ende sowie den Initialisierer
+  getrennt von Accessoren; Function-AST beginnt vor Modifikatoren und
+  Annotationen (auch Alias/qualifizierte Annotationen). Init-Blöcke behalten
+  ihre Endposition. Der Host kann gespeicherte Zustände dadurch ohne
+  Heuristik für `=` oder Annotationstext ersetzen und erneut erfassen.
+- Die Zusatzmetadaten verändern die Ausführung nicht. Nachweis:
+  `smoke-testing.mjs` für private Attribute, Getter, Alias-/qualifizierte
+  Setup-Annotationen und wiederholten Transfer eines Init-Zustands.

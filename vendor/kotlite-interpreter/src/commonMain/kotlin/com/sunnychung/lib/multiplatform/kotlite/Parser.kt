@@ -95,6 +95,7 @@ data class NestedClassInfo(val isPrivate: Boolean, val isInner: Boolean)
  */
 open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<String, NestedClassInfo>? = null) {
     /** The classes whose body is being parsed, innermost last, by qualified name. */
+    private val annotationImports = mutableMapOf<String, String>()
     private val enclosingClasses = mutableListOf<String>()
     private val foundNestedClasses = linkedMapOf<String, NestedClassInfo>()
     /** The type parameters of the classes parsed so far, for the outer object of an inner class. */
@@ -1888,6 +1889,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
      *
      */
     fun propertyDeclaration(modifiers: Set<String>, isProcessBody: Boolean = true): PropertyDeclarationNode {
+        if (modifiers.any { it.startsWith("@") }) throw SemanticException(currentToken.position, "Test annotations cannot annotate properties")
         val modifiers = modifiers.toPropertyModifiers()
         val t = currentToken
         val isMutable = eat(TokenType.Identifier).let {
@@ -1913,11 +1915,13 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
             type()
         } else null
 
+        var initialValueSourceRange: IntRange? = null
         val initialValue = if (currentToken.type == TokenType.Symbol && currentToken.value == "=") {
             eat(TokenType.Symbol, "=")
             // `val symbol =` with the value on the next line, as formatters write long values (RT-70)
             repeatedNL()
-            expression()
+            val start = currentToken.position.index
+            expression().also { initialValueSourceRange = start until currentToken.position.index }
         } else {
             null
         }
@@ -1985,7 +1989,10 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
             }
             else -> null
         }
-        return PropertyDeclarationNode(position = t.position, name = name, declaredModifiers = modifiers, typeParameters = typeParameters, receiver = receiver, declaredType = type, isMutable = isMutable, initialValue = initialValue, accessors = accessors)
+        return PropertyDeclarationNode(position = t.position, name = name, declaredModifiers = modifiers, typeParameters = typeParameters, receiver = receiver, declaredType = type, isMutable = isMutable, initialValue = initialValue, accessors = accessors).also {
+            it.sourceEnd = currentToken.position.index
+            it.initialValueSourceRange = initialValueSourceRange
+        }
     }
 
     /**
@@ -2225,7 +2232,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
         return receiverType to name
     }
 
-    fun Set<String>.toFunctionModifiers() = this.filter { it !in DEFAULT_VISIBILITY }.map {
+    fun Set<String>.toFunctionModifiers() = this.filter { it !in DEFAULT_VISIBILITY && !it.startsWith("@") }.map {
         when (it) {
             "operator" -> FunctionModifier.operator
             "open" -> FunctionModifier.open
@@ -2257,6 +2264,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
      *
      */
     fun functionDeclaration(modifiers: Set<String>, isProcessBody: Boolean = true, isBodyOptional: Boolean = false): FunctionDeclarationNode {
+        val annotations = modifiers.filter { it.startsWith("@") }.map { it.removePrefix("@") }.toSet()
         val modifiers = modifiers.toFunctionModifiers()
         val t = eat(TokenType.Identifier, "fun")
         repeatedNL()
@@ -2290,7 +2298,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
             body = body,
             typeParameters = typeParameters,
             declaredModifiers = modifiers,
-        )
+        ).also { it.annotations = annotations; it.sourceEnd = currentToken.position.index }
     }
 
     fun dummyBlockNode() = BlockNode(emptyList(), SourcePosition("", 1, 1), ScopeType.Function, FunctionBodyFormat.Block)
@@ -2433,7 +2441,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
                 val t = eat(TokenType.Identifier, "init")
                 repeatedNL()
                 val block = block(ScopeType.Initializer)
-                ClassInstanceInitializerNode(position = t.position, block = block)
+                ClassInstanceInitializerNode(position = t.position, block = block).also { it.sourceEnd = currentToken.position.index }
             } else {
                 declaration(isInterface = isInterface, isMember = true)
             }
@@ -2519,10 +2527,31 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
      */
     fun modifiers(): Set<String> {
         val modifiers = mutableSetOf<String>()
-        while (currentToken.type == TokenType.Identifier && (currentToken.value in ACCEPTED_MODIFIERS || isDataClassModifier() || isInnerClassModifier())) {
-            modifiers += currentToken.value as String
-            eat(TokenType.Identifier)
-            repeatedNL()
+        while (true) {
+            if (isCurrentToken(TokenType.Symbol, "@")) {
+                val position = eat(TokenType.Symbol, "@").position
+                val parts = mutableListOf(userDefinedIdentifier())
+                while (isCurrentToken(TokenType.Operator, ".")) {
+                    eat(TokenType.Operator, ".")
+                    parts += userDefinedIdentifier()
+                }
+                val name = parts.joinToString(".")
+                val qualified = if (parts.size == 1) annotationImports[name] ?: name else name
+                val simple = qualified.substringAfterLast('.')
+                if (simple !in setOf("Test", "BeforeTest", "AfterTest", "Ignore") || qualified != "kotlin.test.$simple") {
+                    throw SemanticException(position, "Unsupported annotation @$name. Import kotlin.test.Test, BeforeTest, AfterTest or Ignore (or use their qualified names).")
+                }
+                if (!modifiers.add("@$simple")) throw SemanticException(position, "Duplicate annotation @$simple")
+                if (isCurrentToken(TokenType.Operator, "(")) {
+                    eat(TokenType.Operator, "(")
+                    eat(TokenType.Operator, ")")
+                }
+                repeatedNL()
+            } else if (currentToken.type == TokenType.Identifier && (currentToken.value in ACCEPTED_MODIFIERS || isDataClassModifier() || isInnerClassModifier())) {
+                modifiers += currentToken.value as String
+                eat(TokenType.Identifier)
+                repeatedNL()
+            } else break
         }
         return modifiers
     }
@@ -2535,7 +2564,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
     private fun isInnerClassModifier(): Boolean =
         currentToken.value == "inner" && peekNextToken().let { it.type == TokenType.Identifier && (it.value == "class" || it.value in ACCEPTED_MODIFIERS) }
 
-    fun Set<String>.toClassModifiers() = this.filter { it !in DEFAULT_VISIBILITY }.map {
+    fun Set<String>.toClassModifiers() = this.filter { it !in DEFAULT_VISIBILITY && !it.startsWith("@") }.map {
         when (it) {
             "open" -> ClassModifier.open
             "enum" -> ClassModifier.enum
@@ -2625,6 +2654,8 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
      */
     /** [isMember]: declared in a class body, so it is a nested class of that class (RT-91). */
     fun classDeclaration(modifiers: Set<String>, isMember: Boolean = false): ClassDeclarationNode {
+        val annotations = modifiers.filter { it.startsWith("@") }.map { it.removePrefix("@") }.toSet()
+        if (annotations.any { it != "Ignore" }) throw SemanticException(currentToken.position, "Only @Ignore can annotate a test class")
         // A nested class may be private to its outer class; visibility of other classes is not supported.
         val isPrivate = isMember && "private" in modifiers
         val isInner = "inner" in modifiers
@@ -2642,7 +2673,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
         val outerClassName = if (isMember) enclosingClasses.last() else null
         val name = outerClassName?.let { "$it.$simpleName" } ?: simpleName
         if (outerClassName != null) foundNestedClasses[name] = NestedClassInfo(isPrivate = isPrivate, isInner = isInner)
-        return inClass(name) { classDeclarationAfterName(t, isInterface, modifiers, name, simpleName, outerClassName, isInner) }
+        return inClass(name) { classDeclarationAfterName(t, isInterface, modifiers, name, simpleName, outerClassName, isInner) }.also { it.annotations = annotations; it.sourceEnd = currentToken.position.index }
     }
 
     private inline fun <T> inClass(name: String, block: () -> T): T {
@@ -2771,6 +2802,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
      * A companion object is named `<Class>.Companion` by [classMembersOf].
      */
     fun objectDeclaration(modifiers: Set<String>, companionPosition: SourcePosition? = null, isMember: Boolean = false): ClassDeclarationNode {
+        if (modifiers.any { it.startsWith("@") }) throw SemanticException(currentToken.position, "Test annotations require an ordinary class, not an object")
         val isCompanion = companionPosition != null
         repeatedNL()
         val t = eat(TokenType.Identifier, "object")
@@ -2919,22 +2951,23 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
      *     | typeAlias
      */
     fun declaration(isInterface: Boolean, isMember: Boolean = false): ASTNode {
-        if (currentToken.type != TokenType.Identifier) {
+        val sourceStart = currentToken.position.index
+        if (currentToken.type != TokenType.Identifier && !isCurrentToken(TokenType.Symbol, "@")) {
 //            throw ParseException("Expected an identifier but missing")
             throw UnexpectedTokenException(currentToken)
         }
         var modifiers: Set<String>? = null
         while (true) {
             when (currentToken.value as String) {
-                "val", "var" -> return propertyDeclaration(modifiers ?: emptySet())
+                "val", "var" -> return propertyDeclaration(modifiers ?: emptySet()).also { it.sourceStart = sourceStart }
                 // An interface function may have a default body (RT-79).
-                "fun" -> return functionDeclaration(modifiers ?: emptySet(), isBodyOptional = isInterface)
+                "fun" -> return functionDeclaration(modifiers ?: emptySet(), isBodyOptional = isInterface).also { it.sourceStart = sourceStart }
                 "class", "interface" -> return classDeclaration(modifiers ?: emptySet(), isMember = isMember)
                 "object" -> return objectDeclaration(modifiers ?: emptySet(), isMember = isMember)
                 "constructor" -> throw UnsupportedOperationException(
                     "Secondary constructors are not supported by this Kotlite build."
                 )
-                in ACCEPTED_MODIFIERS, "data", "inner" -> {
+                in ACCEPTED_MODIFIERS, "data", "inner", "@" -> {
                     if (modifiers == null && (currentToken.value != "data" || isDataClassModifier()) && (currentToken.value != "inner" || isInnerClassModifier())) {
                         modifiers = modifiers()
                     } else {
@@ -3156,6 +3189,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
      *     {label | annotation} (declaration | assignment | loopStatement | expression)
      */
     fun statement(): ASTNode { // TODO complete
+        if (isCurrentToken(TokenType.Symbol, "@")) return declaration(isInterface = false)
         // `outer@ for (...)`: a labeled loop (RT-85)
         if (currentToken.type == TokenType.Identifier && peekNextToken().`is`(TokenType.Symbol, "@")
             && areTokensConsecutive(currentToken, peekNextToken())
@@ -3246,13 +3280,20 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
             semis()
         }
         val imports = mutableListOf<ImportDirective>()
+        val sourceRanges = mutableListOf<IntRange>()
         while (currentToken.type != TokenType.EOF) {
             // Project files are combined into one script, so imports may occur
             // before any top-level declaration.
             if (isCurrentToken(TokenType.Identifier, "import") && peekNextToken().type == TokenType.Identifier) {
-                imports += importDirective()
+                val directive = importDirective()
+                imports += directive
+                if (directive.path == "kotlin.test.*") {
+                    for (name in listOf("Test", "BeforeTest", "AfterTest", "Ignore")) annotationImports[name] = "kotlin.test.$name"
+                } else annotationImports[directive.alias ?: directive.path.substringAfterLast('.')] = directive.path
             } else {
+                val start = currentToken.position.index
                 nodes += statement().flattened()
+                sourceRanges += start until currentToken.position.index
             }
             if (currentToken.type in setOf(TokenType.Semicolon, TokenType.NewLine)) {
                 semi()
@@ -3263,7 +3304,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
         if (nestedClasses == null && foundNestedClasses.isNotEmpty()) {
             return Parser(Lexer(lexer.filename, lexer.code, lexer.isParseComment), foundNestedClasses.toMap()).script()
         }
-        return ScriptNode(position = t.position, nodes = nodes, imports = imports)
+        return ScriptNode(position = t.position, nodes = nodes, imports = imports).also { it.sourceRanges = sourceRanges }
     }
 
     private fun importDirective(): ImportDirective {

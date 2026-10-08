@@ -1,5 +1,5 @@
 export type FileKind='class'|'functions';
-export interface ProjectFile{id:string;path?:string;fileName:string;kind:FileKind;source:string;revision:number}
+export interface ProjectFile{id:string;path?:string;fileName:string;kind:FileKind;source:string;revision:number;testTarget?:string;isTestClass?:boolean}
 export interface ProjectLibrary { id: 'blueplay'; version: 1 }
 export interface ProjectResource {
   path: string;
@@ -58,6 +58,8 @@ export interface BluePlayActorFrame {
 export interface BluePlayTextFrame { x: number; y: number; text: string }
 export interface BluePlayStage {
   frameVersion: number;
+  /** Number of `World.show()` calls; a new value reopens a closed world window. */
+  showCount: number;
   width: number;
   height: number;
   cellSize: number;
@@ -114,6 +116,9 @@ export interface RuntimeSnapshot {
 export type RuntimeCommand = { generationId?: string } & (
   | { op: 'eval'; code: string; filename?: string }
   | { op: 'main'; fileName: string }
+  | { op: 'tests'; className?: string; method?: string }
+  | { op: 'fixture'; className: string }
+  | { op: 'testing'; action: 'begin'|'cancel'|'assert'|'recordSource'|'fixtureSource'; className?: string; value?: string; kind?: 'equals'|'null'|'notNull' }
   | { op: 'create'; className: string; name: string; args: string[]; typeArguments?: string[] }
   | { op: 'invoke'; objectId: string; name: string; args: string[]; typeArguments?: string[] }
   | { op: 'get'; objectId: string; property: string }
@@ -158,3 +163,11 @@ interface RuntimeEventBase {
 export type RuntimeEvent =
   | (RuntimeEventBase & { kind: 'started' | 'output' | 'snapshot' | 'inputRequested'; inputRequestId?: number; snapshot: RuntimeSnapshot })
   | (RuntimeEventBase & { kind: 'frame'; frame: SimulationFrame; effects?: RuntimeEffect[] });
+
+export interface TestMetadata { fileName: string; methods: { name: string; line: number; ignored: boolean }[] }
+export interface ClassMeta { testing?: TestMetadata }
+export interface ManifestClass { testing?: TestMetadata }
+export interface TestCaseResult { className: string; name: string; fileName: string; line: number; status: 'pending'|'running'|'passed'|'failed'|'error'|'ignored'|'aborted'; errors: string[] }
+export interface TestState { status: 'idle'|'running'|'completed'|'aborted'; cases: TestCaseResult[]; recording: string|null; canCapture: boolean; captureError: string|null; lastResult: string|null; lastType: string|null; suggestedExpected?: string|null }
+export interface RuntimeSnapshot { testing?: TestState }
+export interface RuntimeValue { generatedSource?: string; fileName?: string; replacesFixture?: boolean; replacesInitializers?: boolean }

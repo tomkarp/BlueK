@@ -1,153 +1,130 @@
-# BlueK entwickeln
+# Developing BlueK
 
-Architektur und Zuständigkeiten stehen verbindlich in
-[docs/architecture.md](docs/architecture.md), Regeln für KI-Agenten in
-[AGENTS.md](AGENTS.md).
+Read [AGENTS.md](AGENTS.md) and the binding [architecture](docs/architecture.md)
+before changing the application. User documentation starts in [README.md](README.md).
 
-## Voraussetzungen
+## Setup
 
-- Node.js 22 (wie in CI)
-- Java 21, nur für `npm run build:kotlite` bzw. `npm run build`
-- Einmalig für GUI-/Offline-Tests: `npx playwright install chromium webkit`
+- Node.js 22, as used in CI.
+- Java 21 for `build:kotlite` and the complete `build`.
+- Browser tests: `npx playwright install chromium webkit` after installing packages.
 
-## Verzeichnisse
+```sh
+npm ci
+npm run dev     # http://localhost:5173
+```
 
-| Pfad | Inhalt |
+The interpreter bundle is checked in, so development does not normally need
+Gradle. Vite forwards `/api` to the optional share server at `127.0.0.1:8787`;
+start that with `npm run share:server` when testing short links.
+
+## Build pipeline
+
+Student Kotlin is interpreted, not compiled. `npm run build` builds these tools:
+
+1. **build:kotlite**: Gradle compiles `kotlite-browser` and the vendored
+   interpreter with Kotlin 2.2.21/JS IR, links `kotlite-stdlib` 1.1.0 and runs
+   webpack. The output `frontend/public/kotlite/bluek-kotlite-browser.js` and
+   generated `frontend/src/bluePlayApi.generated.json` must be updated together.
+2. **build:player**: builds the embedded player worker/runtime and UI into
+   `frontend/public/player/bluek-player.html` (generated, not committed).
+3. **build:offline**: embeds the same Svelte IDE, Blob worker, interpreter,
+   standard images, templates, formatter WASM and player template into
+   `dist-offline/BlueK-offline/BlueK.html`. Packages it with instructions and
+   copies the ZIP into `frontend/public/downloads/`.
+4. **vite build**: builds the hosted IDE into `frontend/dist/`.
+
+`npm run build:svelte` builds the frontend without rebuilding Kotlin.
+`npm run build:standard-images` regenerates the committed image/alpha-mask
+module after changing `assets/standard-images/`.
+
+`predev` builds the player template if missing or older than the interpreter,
+and the offline ZIP only if missing. An existing offline ZIP may therefore
+be stale during development; explicitly rebuild it when needed.
+Preview a production build with a static server, for example:
+
+```sh
+python3 -m http.server 4173 --directory frontend/dist
+```
+
+## Source ownership
+
+| Path | Responsibility |
 | --- | --- |
-| `frontend/src/` | Svelte-Oberfläche, Runtime-Client, Worker, Runtime-Host, Projektformat, HTML-Export, Player |
-| `frontend/src/components/` | Darstellung von Fenstern, Dialogen, Diagramm und Hauptbedienelementen; typisierte Props und Rückruffunktionen |
-| `frontend/src/workspace/` | reaktive Svelte-Controller mit eigenem UI-Zustand für Projekt, Editor, Ausführung, Objekte, BluePlay und Terminal; Verdrahtung in `SvelteApp.svelte` |
-| `frontend/public/` | statische Assets: Interpreter-Bundle (`kotlite/`, eingecheckt), Vorlagen (`examples/`), generierte Player-Vorlage (`player/`) und Offline-ZIP (`downloads/`) |
-| `frontend/build/` | Build-Helfer für einzelne HTML-Dateien und das gzip+base64-Interpreter-Bundle |
-| `runtime-contract/src/index.ts` | gemeinsame Typen von Oberfläche, Worker und Runtime-Host |
-| `kotlite-browser/` | Kotlin/JS-Projekt: `KotliteSession`, BlueK-Stdlib, BluePlay-Bibliothek und -Engine, Fehlermeldungshilfen |
-| `vendor/kotlite-interpreter/` | Quellstand des Kotlite-Interpreters mit allen BlueK-Änderungen (siehe `PATCH.md`) |
-| `jvm/` | nur noch der Gradle-Wrapper (Gradle 8.14.1); der Name ist historisch |
-| `assets/standard-images/` | BluePlay-Standardgrafiken (Quelle für `standardImages.generated.ts`) |
-| `scripts/` | Build-Skripte, Node-Smoke-Tests, Benchmark, Dateien des Offline-Pakets (`offline/`) |
-| `tests/gui/` | Playwright-Tests im echten Chromium |
-| `server/` | optionaler Share-Dienst für Kurz-Links |
-| `data/` | Wortliste des Share-Diensts |
-| `examples/` | Kotlin-Quelltexte als Testeingaben (u. a. historische BluePlay-Frameworkdateien für `smoke-blueplay-browser`) |
+| `frontend/src/components/` | Svelte presentation and local UI interaction |
+| `frontend/src/workspace/` | Typed controllers owning project, editor, execution, object, test, BluePlay and terminal UI state |
+| `frontend/src/` | Runtime client/worker/host, project I/O, formatters, rendering and player |
+| `runtime-contract/src/index.ts` | Shared typed commands, snapshots and metadata |
+| `kotlite-browser/` | Kotlin/JS session, native stdlib additions, BluePlay library/engine, testing |
+| `vendor/kotlite-interpreter/` | Parser, analyzer and interpreter; changes recorded in `PATCH.md` |
+| `jvm/` | Gradle 8.14.1 wrapper; directory name is historical |
+| `frontend/public/` | Checked-in interpreter and templates; generated player/download assets |
+| `scripts/`, `tests/gui/` | Build scripts, runtime/helper tests, Playwright tests |
+| `server/`, `data/` | Optional SQLite share service and attributed word list |
 
-## Build-Pipeline
-
-Kotlin-Schülercode wird nie kompiliert. Gebaut werden nur die Werkzeuge, die
-ihn im Browser interpretieren, und die Oberfläche. Eine grafische Übersicht mit
-allen Schritten steht in [docs/architecture.md](docs/architecture.md#build).
-
-`npm run build` führt nacheinander aus:
-
-1. **`build:kotlite`** – `./jvm/gradlew -p kotlite-browser jsBrowserProductionWebpack`.
-   Der Kotlin-Multiplatform-Compiler (Plugin 2.2.21, Ziel JS IR) übersetzt
-   `kotlite-browser` und über einen Gradle-Composite-Build
-   (`includeBuild("../vendor/kotlite-interpreter")`) den vendorten Interpreter
-   nach JavaScript. Die Maven-Koordinate
-   `io.github.sunny-chung:kotlite-interpreter` wird dabei durch den
-   vendorten Quellstand ersetzt – auch als transitive Abhängigkeit der
-   binär von Maven Central geladenen `kotlite-stdlib` 1.1.0. Webpack bündelt
-   alles zu `bluek-kotlite-browser.js` (~950 KB) und kopiert es nach
-   `frontend/public/kotlite/`. Das Bundle ist eingecheckt; `npm run dev` und
-   alle Node-Smokes verwenden es direkt ohne Gradle.
-2. **`build:player`** – `scripts/build-player.mjs` baut mit Vite zwei
-   IIFE-Skripte (Player-Worker mit eingebettetem gzip+base64-Interpreter und
-   Player-Oberfläche) und schreibt sie inline in
-   `frontend/public/player/bluek-player.html` (generiert, nicht eingecheckt).
-3. **`build:offline`** – `scripts/build-offline.mjs` baut die Svelte-IDE als
-   IIFE mit `VITE_BLUEK_OFFLINE=1`. Es bettet CSS, den Blob-Worker mit
-   gzip+base64-Interpreter, die Player-Vorlage und das zur Build-Zeit aus
-   Brotli entpackte und neu gzip-komprimierte Formatter-WASM ein.
-   Projektvorlagen sind eingebettete JSON-Daten. Ergebnis:
-   `dist-offline/BlueK-offline/BlueK.html`, direkt per Doppelklick ausführbar.
-   Ein ZIP aus HTML und Anleitung wird nach `frontend/public/downloads/`
-   kopiert; Server und Startskripte entfallen.
-4. **`vite build`** – kompiliert Svelte 5 und TypeScript nach
-   `frontend/dist/`: Hauptbundle, Runtime-Worker als Modul-Worker, ktfmt-WASM
-   und alle Dateien aus `frontend/public/`.
-
-Getrennt und nur bei Bedarf: `npm run build:standard-images` erzeugt aus
-`assets/standard-images/*.png` das eingecheckte Modul
-`frontend/src/standardImages.generated.ts` (Data-URLs samt Alpha-Masken).
-Nach dem Hinzufügen oder Entfernen einer Grafik erneut ausführen.
-
-`npm run dev` startet Vite auf Port 5173 und leitet `/api` an
-`127.0.0.1:8787` weiter. Vorher erzeugt `predev` die Player-Vorlage, falls
-sie fehlt oder älter als das Interpreter-Bundle ist, und das Offline-ZIP,
-falls es fehlt.
-Einen Produktionsbuild prüft man mit einem beliebigen statischen Server, etwa
-`python3 -m http.server 4173 --directory frontend/dist`.
+Session changes belong in `KotliteSession.kt`; language semantics in the
+vendored interpreter. Stdlib additions belong in `BlueKStdlibModule.kt`, while
+changes to existing binary stdlib functions can use
+`ExecutionEnvironment.patchFunction` in `KotliteSession.resetInterpreter`.
+BluePlay public API lives in `BluePlayLibrary.kt`; native engine/drawing logic
+in `BluePlayEngine.kt`/`BluePlayDrawing.kt`.
 
 ## Tests
 
-Nach Kotlin-Änderungen zuerst `npm run build:kotlite`: Node-Smokes,
-Runtime-State-Tests und GUI-Tests verwenden das gebaute Bundle unter
-`frontend/public/kotlite/`.
+After Kotlin changes, rebuild the interpreter **before** tests: they use the
+checked-in browser bundle. Select checks appropriate to the changed behavior;
+a helper passing does not prove a visible browser interaction.
 
-| Befehl | Prüft |
+| Command | Scope |
 | --- | --- |
-| `npm run test:regression` | Sammellauf: Typecheck, UI-Helfer, Runtime-State, Referenzen, Kotlin-Oberfläche, Inspektor, BluePlay-Stage, Projekt- und Exportformat, Player-Worker, Codepad-Ablauf, Offline-Paket und alle GUI-Tests |
-| `npm run typecheck` | `tsc` und `svelte-check` (nur Fehler brechen ab) |
-| `npm run browser-smoke` | Architekturregeln (statisch), Kotlite-Bundle, BluePlay-Runtime, Curriculum-Kotlin und Runtime-State |
-| `npm run test:runtime-state` | echter Client und Host mit dem gebauten Bundle und Worker-Ersatz: Identität, passive Inspektion, Phasen, Eingabe, konkurrierende Befehle, veraltete Antworten |
-| `npm run test:references` | Referenz- und Erreichbarkeitsmodell direkt an der Session |
-| `npm run test:generics` | Generics, `reified`, Inline-Lambdas, Analysegrenzen |
-| `npm run test:kotlin-surface` | zugesagte Stdlib-Oberfläche und bekannte Lücken (siehe `docs/kotlin-surface.md`) |
-| `npm run test:blueplay-demos` | Space-Invaders-Vorlage im Interpreter |
-| `npm run test:inspector`, `test:codepad-flow`, `test:project-format`, `test:program-export`, `test:blueplay-stage`, `test:player-worker`, `test:ui` | einzelne TypeScript-Module ohne Browser |
-| `npm run test:window-interaction` | gemeinsame Fenstergeometrie, Mindestgrößen, Pointer-Abbruch und Titelzeilen-Buttons; auch Teil von `test:regression` |
-| `npm run test:workspace` | echte kompilierte Svelte-Controller: klonbare Aufrufargumente, unabhängige App-Instanzen und verworfene Aufrufergebnisse nach Generationswechsel; auch Teil von `test:regression` |
-| `npm run test:offline` | baut und prüft HTML/ZIP; echte Chromium-/WebKit-Tests über `file://` ohne Webserver und mit gesperrtem HTTP-Netzwerk |
-| `npm run test:share-server` | Share-Dienst mit temporärer Datenbank |
-| `npm run test:gui` | Playwright/Chromium gegen einen eigenen Vite-Server auf Port 5194 |
-| `node scripts/check-interactive-core.mjs` | Suspension bei `readln` direkt am Bundle |
-| `node scripts/smoke-kotlite-browser.mjs` | Teil von `browser-smoke`; enthält u. a. die RT-37-Fälle (Eingabe in Stdlib-Lambdas, gepuffert und auf Anforderung) |
-| `npm run test:conformance` | Offizielle Kotlin-Compilertests (`compiler/testData/codegen/box`, 39 Bereiche wie `controlStructures`, `classes`, `strings`, `arrays`) gegen das Bundle; jeder Test muss `"OK"` liefern. Holt beim ersten Lauf einen festen Stand nach `.cache/kotlin-box` (Netz nötig) und scheitert, wenn ein Test aus `scripts/conformance-baseline.txt` nicht mehr besteht. `-- --report` zeigt Bereiche, falsche Ergebnisse und häufigste Fehler, `-- --update` schreibt die Baseline neu. Etwa 5 Minuten; nicht Teil von `test:regression` (RT-97) |
-| `npm run test:performance` | Laufzeit des Interpreters (Rekursion, Schleifen, Objekte, Lambdas, Zeichenketten, Compile) gegen Grenzwerte (PERF-06); auch Teil von `test:regression`. Mit `BLUEK_BUNDLE=… node scripts/benchmark-interpreter.mjs --report` lässt sich ein anderes Bundle vergleichen |
-| `node scripts/benchmark-blueplay.mjs` | Tick- und Frame-Kosten des Space-Invaders-Beispiels und ihr Wachstum mit vielen Schüssen (0–400) |
+| `npm run typecheck` | TypeScript and Svelte diagnostics |
+| `npm run test:regression` | Combined checks, runtime/helpers, offline package and GUI suite |
+| `npm run browser-smoke` | Architecture rules, bundle, BluePlay API/runtime, curriculum Kotlin and runtime state |
+| `npm run test:runtime-state` | Real client/host/bundle with worker substitute: identity, snapshots, input, concurrency and stale replies |
+| `npm run test:references` | Session namespace and reachability |
+| `npm run test:testing` | Test lifecycle, saved state, recording, failure and cancellation |
+| `npm run test:testing:portable` | Generated Kotlin unchanged under kotlin.test/JUnit Jupiter; requires Java, Gradle and Maven Central |
+| `npm run test:generics` | Generics, reified types, inline control flow and analysis boundaries |
+| `npm run test:kotlin-surface` | Promised stdlib operations and explicit known gaps |
+| `npm run test:blueplay-api` | Independent pinned BlueJ API, help manifest and original student examples |
+| `npm run test:blueplay-demos` | Space Invaders template in the interpreter |
+| `npm run test:inspector`, `test:codepad-flow`, `test:project-format`, `test:program-export`, `test:blueplay-stage`, `test:player-worker`, `test:ui` | Focused TypeScript/helper behavior |
+| `npm run test:window-interaction` | Window geometry, minimum sizes, pointer cancellation and title buttons |
+| `npm run test:workspace` | Compiled Svelte controllers, cloneable arguments, isolated app instances and stale results |
+| `npm run test:project-drafts` | Draft ownership, migration, locks, storage failure and unchanged saves |
+| `npm run test:offline` | Build/ZIP checks and real Chromium/WebKit file:// execution without HTTP |
+| `npm run test:gui` | Chromium against a dedicated Vite server on port 5194 |
+| `npm run test:share-server` | Share service with a temporary SQLite database |
+| `npm run test:performance` | Interpreter benchmarks with thresholds; avoid competing heavy loads |
+| `npm run test:conformance` | Pinned official Kotlin box tests; separate from regression suite, downloads corpus initially |
+| `node scripts/benchmark-blueplay.mjs` | Tick/frame and collision costs with 0–400 shots |
+| `node scripts/check-interactive-core.mjs` | Direct bundle input/suspension check |
 
-GUI-Bericht: `playwright-report/`; Fehlerbilder und Traces: `test-results/`.
+GUI reports: `playwright-report/`; screenshots/traces: `test-results/`.
+Coverage IDs, actual results and remaining acceptance gaps:
+[regression checklist](docs/regression-checklist.md).
 
-**Profilieren.** Das eingecheckte Bundle ist minifiziert. Für lesbare
-Funktionsnamen im CPU-Profil `./jvm/gradlew -p kotlite-browser
-jsBrowserDevelopmentWebpack` bauen (bleibt unter `kotlite-browser/build/`)
-und den Benchmark damit profilieren:
-`BLUEK_BUNDLE=kotlite-browser/build/kotlin-webpack/js/developmentExecutable/bluek-kotlite-browser.js node --cpu-prof scripts/benchmark-blueplay.mjs`.
-Die Datei `*.cpuprofile` lässt sich in den Chrome DevTools (Performance)
-öffnen.
-Welche Tests zu welcher Regression gehören und was zuletzt tatsächlich lief,
-steht in [docs/regression-checklist.md](docs/regression-checklist.md).
+Conformance takes roughly five minutes. `-- --report` lists failures;
+`-- --update` replaces the baseline in `scripts/conformance-baseline.txt`.
+Do not silently update it to hide a regression.
 
-## Wo wird was geändert?
+For readable CPU profiles, build
+`./jvm/gradlew -p kotlite-browser jsBrowserDevelopmentWebpack`, then run:
 
-| Änderung | Ort |
-| --- | --- |
-| fehlende Stdlib-Funktion | `kotlite-browser/.../BlueKStdlibModule.kt` (nativ), dazu `docs/kotlin-surface.md` und `scripts/smoke-kotlin-surface.mjs` |
-| Stdlib-Funktion verhält sich anders als Kotlin oder muss suspendieren können | `environment.patchFunction` in `KotliteSession.resetInterpreter` (Beispiele: `count`, `removeAll`, `substring`) |
-| Sprachsemantik, Parser, Analyse, Interpreter | `vendor/kotlite-interpreter/`, Eintrag in `PATCH.md` |
-| Session: Laden, Codepad, Objektbank, Inspektion, Eingabe | `kotlite-browser/.../KotliteSession.kt` |
-| Befehle und Snapshot zwischen UI und Worker | `runtime-contract/src/index.ts`, `frontend/src/runtimeHost.ts`, `frontend/src/localRuntimeClient.ts` |
-| BluePlay-API | `BluePlayLibrary.kt` (Kotlin-Quelltext der Bibliothek) und native `bluek*`-Funktionen in `BluePlayEngine.kt` (Bildgeometrie: `BluePlayDrawing.kt`); Darstellung in `frontend/src/bluePlayStage.ts`, Takt in `frontend/src/simulationTimer.ts` |
-| Oberfläche | `frontend/src/SvelteApp.svelte` und die dort genutzten Module |
+```sh
+BLUEK_BUNDLE=kotlite-browser/build/kotlin-webpack/js/developmentExecutable/bluek-kotlite-browser.js node --cpu-prof scripts/benchmark-blueplay.mjs
+```
 
-Bei jeder Änderung an GUI- oder Laufzeitverhalten wird
-`docs/regression-checklist.md` mitgepflegt (siehe AGENTS.md).
+Open the resulting `.cpuprofile` in Chrome DevTools.
 
-## Branches und Deployment
+## Interface translations
 
-- `main` → <https://bluek.de> und GitHub Pages
-- `beta` → <https://beta.bluek.de>
+See [localization](docs/localization.md) for message catalogs, language ownership
+and translation checks.
 
-Jeder Push löst den passenden Workflow unter `.github/workflows/` aus; der
-Build läuft dort vollständig neu (Java 21, Node 22, `npm ci`,
-`npm run build`). Einrichtung von Server, Caddy und Share-Dienst:
-[docs/deployment.md](docs/deployment.md).
+## Deployment
 
-### BluePlay-API-Abgleich
-
-`npm run test:blueplay-api` vergleicht öffentliche Signaturen und das erzeugte
-Hilfemanifest mit dem festgehaltenen BlueJ-Projekt in
-`tests/fixtures/blueplay-reference/`. Es prüft gültige und ungültige Aufrufe,
-benannte Argumente, originale Schülerdateien, Objektlebensdauer und Bildkopien.
-Der Test gehört zu `browser-smoke` und `test:regression`.
-`npm run build:kotlite` erzeugt nach dem Bundle auch
-`frontend/src/bluePlayApi.generated.json`; beide Dateien gemeinsam aktualisieren.
+`main` deploys to bluek.de and GitHub Pages; `beta` to beta.bluek.de.
+Pushes trigger full builds through `.github/workflows/`.
+See [deployment instructions](docs/deployment.md) for Caddy, secrets and the
+optional share service. Commit and push only when explicitly requested.

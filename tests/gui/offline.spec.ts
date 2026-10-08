@@ -129,3 +129,31 @@ test('GUI-62 WebKit also starts the single-file IDE and BluePlay worker', async 
     verify();
   } finally { await browser.close(); }
 });
+
+test('GUI-129 user manual is bundled and readable without network', async ({ page }) => {
+  const verify = await open(page);
+  await page.getByRole('button', { name: 'Help', exact: true }).click();
+  const help = page.getByRole('dialog', { name: 'BlueK Help', exact: true });
+  for (const section of ['Quick start', 'Saved state', 'Testing', 'Kotlin compatibility', 'BluePlay', 'Keyboard shortcuts']) {
+    await help.getByRole('navigation', { name: 'Help sections' }).getByRole('button', { name: section, exact: true }).click();
+    await expect(help.getByRole('heading', { name: section, exact: true })).toBeVisible();
+  }
+  await help.getByRole('button', { name: 'Close', exact: true }).click();
+  verify();
+});
+
+test('GUI-130 offline language choice and German manual work without network', async ({page}) => {
+  const verify = await open(page, 'fun main() {}');
+  await page.getByRole('button', {name: 'Settings', exact: true}).click();
+  await page.getByLabel('Language', {exact: true}).selectOption('de');
+  await expect(page.getByRole('dialog', {name: 'Einstellungen', exact: true})).toBeVisible();
+  await page.getByRole('button', {name: 'Schließen', exact: true}).click();
+  await page.getByRole('button', {name: 'Hilfe', exact: true}).click();
+  await expect(page.getByRole('heading', {name: 'Schnelleinstieg', exact: true})).toBeVisible();
+  await page.getByRole('button', {name: 'Schließen', exact: true}).click();
+  await page.reload();
+  await expect(page.getByRole('button', {name: 'Kompilieren', exact: true})).toBeVisible();
+  await page.getByRole('button', {name: 'Speichern / Exportieren', exact: true}).click();
+  await expect(page.getByRole('button', {name: /Kurzlink kopieren/})).toHaveCount(0);
+  verify();
+});

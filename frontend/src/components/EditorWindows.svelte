@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { useLanguage } from "../i18n/Language.svelte";
+  const language = useLanguage();
+  $: t = $language.t;
   import type { Action } from "svelte/action";
   import type {
     Diagnostic,
@@ -62,7 +65,7 @@
             !editorGroup.maximized}
           class="dialog editor-dialog editor-tabbed-dialog"
           role="dialog"
-          aria-label={`Editor: ${editorFile.fileName}`}
+          aria-label={t("ui.editor.editor0", [editorFile.fileName])}
           tabindex="-1"
           style={`${editorGroup.maximized ? "" : `width:${editorGroup.size.width}px;height:${editorGroup.size.height}px;`} ${editorGroup.position && !editorGroup.maximized ? `left:${editorGroup.position.left}px;top:${editorGroup.position.top}px;` : ""}`}
           on:pointerdown={() => {
@@ -81,7 +84,7 @@
             <div
               class="editor-tabs"
               role="tablist"
-              aria-label="Open editor files"
+              aria-label={t("ui.editor.openEditorFiles")}
             >
               {#each editorWindows as tabWindow (tabWindow.id)}
                 {@const tabFile = files.find(
@@ -96,7 +99,7 @@
                       class="editor-tab-close"
                       role="button"
                       tabindex="0"
-                      aria-label={`Close ${tabFile.fileName}`}
+                      aria-label={t("ui.editor.close0", [tabFile.fileName])}
                       on:click|stopPropagation={() => closeEditor(tabWindow.id)}
                       on:keydown|stopPropagation={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
@@ -112,11 +115,11 @@
               <button
                 on:click={() => toggleEditorMaximized(activeEditorId)}
                 aria-label={editorGroup.maximized
-                  ? "Restore editor window"
-                  : "Maximize editor window"}
+                  ? t("ui.editor.restoreEditorWindow")
+                  : t("ui.editor.maximizeEditorWindow")}
                 title={editorGroup.maximized
-                  ? "Restore editor window"
-                  : "Maximize editor window"}
+                  ? t("ui.editor.restoreEditorWindow")
+                  : t("ui.editor.maximizeEditorWindow")}
                 ><svg
                   class="window-control-icon"
                   viewBox="0 0 24 24"
@@ -140,8 +143,8 @@
               >
               <button
                 on:click={ungroupEditors}
-                aria-label="Ungroup editor tabs"
-                title="Ungroup editor tabs"
+                aria-label={t("ui.editor.ungroupEditorTabs")}
+                title={t("ui.editor.ungroupEditorTabs")}
                 ><svg class="window-icon" viewBox="0 0 24 24" aria-hidden="true"
                   ><path
                     d="M10 10L3 3M3 9V3h6M14 10l7-7M15 3h6v6M10 14l-7 7M3 15v6h6M14 14l7 7M21 15v6h-6"
@@ -150,19 +153,20 @@
               >
               <button
                 on:click={closeAllEditors}
-                aria-label="Close all editors"
-                title="Close all editors">×</button
+                aria-label={t("ui.editor.closeAllEditors")}
+                title={t("ui.editor.closeAllEditors")}>×</button
               >
             </div>
           </div>
           <div
             class="svelte-editor-host"
             role="group"
-            aria-label="Code editor content"
+            aria-label={t("ui.editor.codeEditorContent")}
             on:pointerdown={() => {
               activeWindow = "editor";
             }}
             use:codeMirror={{
+              phrases: $language.editorPhrases,
               id: activeEditorId,
               value: editorFile.source,
               fontSize: editorFontSize,
@@ -176,19 +180,21 @@
             <div
               class="editor-actions"
               role="toolbar"
-              aria-label="Editor actions"
+              aria-label={t("ui.common.editorActions")}
             >
               <button
                 class="editor-action editor-comment"
                 on:click={() => toggleEditorComments(activeEditorId)}
-                aria-label="Toggle line comments"
-                title={`Comment / uncomment lines (${commentShortcutLabel})`}
-                >//</button
+                aria-label={t("ui.common.toggleLineComments")}
+                title={t("ui.common.commentUncommentLines0", [
+                  commentShortcutLabel,
+                ])}>//</button
               ><button
                 class="editor-action editor-format"
                 on:click={() => formatEditor(activeEditorId)}
-                aria-label="Format Kotlin file"
-                title={`Format Kotlin file (${formatShortcutLabel})`}>≡</button
+                aria-label={t("ui.common.formatKotlinFile")}
+                title={t("ui.common.formatKotlinFile0", [formatShortcutLabel])}
+                >≡</button
               >
             </div>
           </div>
@@ -199,16 +205,19 @@
               )}
               role="alert"
               aria-label={onlyWarnings(diagnosticsByFile[editorFile.fileName])
-                ? "Compiler warnings"
-                : "Compiler errors"}
+                ? t("ui.editor.compilerWarnings")
+                : t("ui.common.compilerErrors")}
             >
               <span
                 >{#each diagnosticsByFile[editorFile.fileName] as diagnostic}<span
                     class="editor-diagnostic"
                     ><strong
-                      >Line {diagnostic.line}{isCompileError(diagnostic)
-                        ? ""
-                        : " (warning)"}:</strong
+                      >{t("ui.editor.line01", [
+                        diagnostic.line,
+                        isCompileError(diagnostic)
+                          ? ""
+                          : t("ui.editor.warning"),
+                      ])}</strong
                     >
                     {diagnostic.message}</span
                   >{/each}</span
@@ -216,11 +225,11 @@
                 type="button"
                 class="dialog-error-close"
                 aria-label={onlyWarnings(diagnosticsByFile[editorFile.fileName])
-                  ? "Close compiler warnings"
-                  : "Close compiler errors"}
+                  ? t("ui.editor.closeCompilerWarnings")
+                  : t("ui.editor.closeCompilerErrors")}
                 title={onlyWarnings(diagnosticsByFile[editorFile.fileName])
-                  ? "Close compiler warnings"
-                  : "Close compiler errors"}
+                  ? t("ui.editor.closeCompilerWarnings")
+                  : t("ui.editor.closeCompilerErrors")}
                 on:click={() => markDiagnostics([])}>×</button
               >
             </div>{/if}
@@ -231,14 +240,14 @@
               <span>{dialogError}</span><button
                 type="button"
                 class="dialog-error-close"
-                aria-label="Close format error"
-                title="Close format error"
+                aria-label={t("ui.common.closeFormatError")}
+                title={t("ui.common.closeFormatError")}
                 on:click={closeFormatError}>×</button
               >
             </div>{/if}
           {#each ["n", "ne", "e", "se", "s", "sw", "w", "nw"] as direction}<div
               role="separator"
-              aria-label={`Resize editor ${direction}`}
+              aria-label={t("ui.editor.resizeEditor0", [direction])}
               class={`editor-resize-handle editor-resize-${direction}`}
               on:pointerdown={(event) => {
                 activeWindow = "editor";
@@ -257,7 +266,7 @@
             class:editor-window-active={activeEditorId === editorWindow.id}
             class="dialog editor-dialog"
             role="dialog"
-            aria-label={`Editor: ${editorFile.fileName}`}
+            aria-label={t("ui.editor.editor0", [editorFile.fileName])}
             tabindex="-1"
             style={`${editorWindow.maximized ? "" : `width:${editorWindow.size.width}px;height:${editorWindow.size.height}px;`} ${editorWindow.position && !editorWindow.maximized ? `left:${editorWindow.position.left}px;top:${editorWindow.position.top}px;` : ""} z-index:${activeEditorId === editorWindow.id ? 2 : 1};`}
             on:pointerdown={() => {
@@ -280,11 +289,11 @@
                 <button
                   on:click={() => toggleEditorMaximized(editorWindow.id)}
                   aria-label={editorWindow.maximized
-                    ? "Restore editor window"
-                    : "Maximize editor window"}
+                    ? t("ui.editor.restoreEditorWindow")
+                    : t("ui.editor.maximizeEditorWindow")}
                   title={editorWindow.maximized
-                    ? "Restore editor window"
-                    : "Maximize editor window"}
+                    ? t("ui.editor.restoreEditorWindow")
+                    : t("ui.editor.maximizeEditorWindow")}
                   ><svg
                     class="window-control-icon"
                     viewBox="0 0 24 24"
@@ -309,8 +318,8 @@
                 <button
                   disabled={editorWindows.length < 2}
                   on:click={collectEditors}
-                  aria-label="Collect editor windows into tabs"
-                  title="Collect editor windows into tabs"
+                  aria-label={t("ui.editor.collectEditorWindowsIntoTabs")}
+                  title={t("ui.editor.collectEditorWindowsIntoTabs")}
                   ><svg
                     class="window-icon"
                     viewBox="0 0 24 24"
@@ -322,20 +331,21 @@
                 >
                 <button
                   on:click={() => closeEditor(editorWindow.id)}
-                  aria-label="Close editor"
-                  title="Close editor">×</button
+                  aria-label={t("ui.editor.closeEditor")}
+                  title={t("ui.editor.closeEditor")}>×</button
                 >
               </div>
             </div>
             <div
               class="svelte-editor-host"
               role="group"
-              aria-label="Code editor content"
+              aria-label={t("ui.editor.codeEditorContent")}
               on:pointerdown={() => {
                 activeWindow = "editor";
                 activeEditorId = editorWindow.id;
               }}
               use:codeMirror={{
+                phrases: $language.editorPhrases,
                 id: editorWindow.id,
                 value: editorFile.source,
                 fontSize: editorFontSize,
@@ -349,20 +359,22 @@
               <div
                 class="editor-actions"
                 role="toolbar"
-                aria-label="Editor actions"
+                aria-label={t("ui.common.editorActions")}
               >
                 <button
                   class="editor-action editor-comment"
                   on:click={() => toggleEditorComments(editorWindow.id)}
-                  aria-label="Toggle line comments"
-                  title={`Comment / uncomment lines (${commentShortcutLabel})`}
-                  >//</button
+                  aria-label={t("ui.common.toggleLineComments")}
+                  title={t("ui.common.commentUncommentLines0", [
+                    commentShortcutLabel,
+                  ])}>//</button
                 ><button
                   class="editor-action editor-format"
                   on:click={() => formatEditor(editorWindow.id)}
-                  aria-label="Format Kotlin file"
-                  title={`Format Kotlin file (${formatShortcutLabel})`}
-                  >≡</button
+                  aria-label={t("ui.common.formatKotlinFile")}
+                  title={t("ui.common.formatKotlinFile0", [
+                    formatShortcutLabel,
+                  ])}>≡</button
                 >
               </div>
             </div>
@@ -373,16 +385,19 @@
                 )}
                 role="alert"
                 aria-label={onlyWarnings(diagnosticsByFile[editorFile.fileName])
-                  ? "Compiler warnings"
-                  : "Compiler errors"}
+                  ? t("ui.editor.compilerWarnings")
+                  : t("ui.common.compilerErrors")}
               >
                 <span
                   >{#each diagnosticsByFile[editorFile.fileName] as diagnostic}<span
                       class="editor-diagnostic"
                       ><strong
-                        >Line {diagnostic.line}{isCompileError(diagnostic)
-                          ? ""
-                          : " (warning)"}:</strong
+                        >{t("ui.editor.line01", [
+                          diagnostic.line,
+                          isCompileError(diagnostic)
+                            ? ""
+                            : t("ui.editor.warning"),
+                        ])}</strong
                       >
                       {diagnostic.message}</span
                     >{/each}</span
@@ -392,11 +407,11 @@
                   aria-label={onlyWarnings(
                     diagnosticsByFile[editorFile.fileName],
                   )
-                    ? "Close compiler warnings"
-                    : "Close compiler errors"}
+                    ? t("ui.editor.closeCompilerWarnings")
+                    : t("ui.editor.closeCompilerErrors")}
                   title={onlyWarnings(diagnosticsByFile[editorFile.fileName])
-                    ? "Close compiler warnings"
-                    : "Close compiler errors"}
+                    ? t("ui.editor.closeCompilerWarnings")
+                    : t("ui.editor.closeCompilerErrors")}
                   on:click={() => markDiagnostics([])}>×</button
                 >
               </div>{/if}
@@ -407,14 +422,14 @@
                 <span>{dialogError}</span><button
                   type="button"
                   class="dialog-error-close"
-                  aria-label="Close format error"
-                  title="Close format error"
+                  aria-label={t("ui.common.closeFormatError")}
+                  title={t("ui.common.closeFormatError")}
                   on:click={closeFormatError}>×</button
                 >
               </div>{/if}
             {#each ["n", "ne", "e", "se", "s", "sw", "w", "nw"] as direction}<div
                 role="separator"
-                aria-label={`Resize editor ${direction}`}
+                aria-label={t("ui.editor.resizeEditor0", [direction])}
                 class={`editor-resize-handle editor-resize-${direction}`}
                 on:pointerdown={(event) => {
                   activeWindow = "editor";

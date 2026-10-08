@@ -1090,8 +1090,37 @@ object BlueKStdlibModule : LibraryModule("bluek-stdlib") {
     /** A part of a larger object, as `super` evaluates to it; not a value of its own. */
     private fun RuntimeValue.isInheritancePart() = this is ClassInstance && wholeInstance() !== this
 
+    /** Portable scalar assertions from kotlin.test (Kotlin 2.2). */
+    private val testFunctions: List<CustomFunctionDefinition> = buildList {
+        fun message() = CustomFunctionParameter("message", "String?", "null")
+        fun failure(args: List<RuntimeValue>, fallback: String): Nothing {
+            val prefix = (args.lastOrNull() as? StringValue)?.value
+            throw AssertionError(if (prefix == null) fallback else "$prefix. $fallback")
+        }
+        for (name in listOf("assertEquals", "assertNotEquals")) add(function(null, name, "Unit",
+            listOf(parameter(if (name == "assertEquals") "expected" else "illegal", "T"), parameter("actual", "T"), message()), listOf(TypeParameter("T", "Any?"))) { _, _, args, _ ->
+            val equal = if (args[0] is DoubleValue && args[1] is DoubleValue) (args[0] as DoubleValue).value.toBits() == (args[1] as DoubleValue).value.toBits() else args[0] == args[1]
+            if (equal != (name == "assertEquals")) failure(args, "Expected <${args[0]}> ${if (name == "assertNotEquals") "to differ from" else "but was"} <${args[1]}>")
+            UnitValue
+        })
+        for (name in listOf("assertTrue", "assertFalse")) add(function(null, name, "Unit",
+            listOf(parameter("actual", "Boolean"), message())) { _, _, args, _ ->
+            if ((args[0] as BooleanValue).value != (name == "assertTrue")) failure(args, "Expected value to be ${name == "assertTrue"}.")
+            UnitValue
+        })
+        add(function(null, "assertNull", "Unit", listOf(parameter("actual", "Any?"), message())) { _, _, args, _ ->
+            if (args[0] !== NullValue) failure(args, "Expected <null>, but was <${args[0]}>.")
+            UnitValue
+        })
+        add(function(null, "assertNotNull", "T", listOf(parameter("actual", "T?"), message()), listOf(TypeParameter("T", "Any"))) { _, _, args, _ ->
+            if (args[0] === NullValue) failure(args, "Expected value to be not null.")
+            args[0]
+        })
+        add(function(null, "fail", "Nothing", listOf(message())) { _, _, args, _ -> throw AssertionError((args[0] as? StringValue)?.value ?: "Test failed.") })
+    }
+
     override val classes: List<ProvidedClassDefinition> = listOf(tripleClass, stringBuilderClass, randomClass, indexedValueClass, comparatorClass) + BlueKArrays.classes
     override val properties: List<ExtensionProperty> = numberProperties + listProperties + stringProperties + mapProperties + tripleProperties + stringBuilderProperties + indexedValueProperties
     override val globalProperties: List<GlobalProperty> = emptyList()
-    override val functions: List<CustomFunctionDefinition> = numberFunctions + listFunctions + stringFunctions + textSequenceFunctions + collectionFunctions + mapFunctions + builderFunctions + randomFunctions + componentFunctions + nullableFunctions + BlueKArrays.functions
+    override val functions: List<CustomFunctionDefinition> = numberFunctions + listFunctions + stringFunctions + textSequenceFunctions + collectionFunctions + mapFunctions + builderFunctions + randomFunctions + componentFunctions + nullableFunctions + BlueKArrays.functions + testFunctions
 }

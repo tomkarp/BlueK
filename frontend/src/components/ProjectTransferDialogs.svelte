@@ -1,9 +1,17 @@
 <script lang="ts">
+  import { useLanguage } from "../i18n/Language.svelte";
+  const language = useLanguage();
+  $: t = $language.t;
   import { containClicks } from "../uiActions";
 
   import type { ProjectFile } from "../../../runtime-contract/src/index";
 
   import type { ShareLinkDialog } from "../uiTypes";
+  import type { ProjectDraftSummary } from "../projectDraftStorage";
+  export let recentProjects: ProjectDraftSummary[];
+  export let openRecentProject: (id: string) => Promise<void>;
+  export let deleteRecentProject: (id: string) => void;
+  export let deleteAllRecentProjects: () => void;
   export let toolbarDialog: "open" | "save" | null;
   export let shareLinkDialog: ShareLinkDialog | null;
   // A compile-time condition also removes server-only controls from offline JS.
@@ -11,6 +19,9 @@
   export let shareCodeInput: string;
   export let shareCodeError: string;
   export let shareWithReadme: boolean;
+  export let shareWithState: boolean;
+  export let canShareState: boolean;
+  export let defaultTestClass: string;
   export let readme: string;
   export let files: ProjectFile[];
   export let htmlExportBlocked: boolean;
@@ -30,55 +41,120 @@
     role="presentation"
   >
     <div
-      class="dialog toolbar-dialog"
+      class="dialog toolbar-dialog open-project-dialog"
       role="dialog"
       aria-modal="true"
       tabindex="-1"
       aria-labelledby="open-import-title"
       use:containClicks
     >
-      <h3 id="open-import-title">Open / Import</h3>
-      <p>Drop a project file here, or click to choose one.</p>
-      <label
-        class="project-dropzone"
-        on:dragover|preventDefault
-        on:drop={openProjectDrop}
-      >
-        <strong>JSON</strong>
-        <span>Accepted: .json</span>
-        <input
-          type="file"
-          aria-label="Choose project file"
-          accept=".json,.bluek.json,application/json"
-          on:change={(event) => {
-            importProject(event);
-            toolbarDialog = null;
-          }}
-        />
-      </label>
-      {#if serverFeatures}<div class="shared-project-loader">
-          <strong>Load shared project</strong>
-          <label>
-            <span>Three words</span>
-            <input
-              aria-label="Three-word project code"
-              bind:value={shareCodeInput}
-              placeholder="green-lamp-river"
-              on:keydown={(event) =>
-                event.key === "Enter" && loadSharedProjectFromCode()}
-            />
-          </label>
-          <button
-            class="shared-project-load"
-            disabled={!shareCodeInput.trim()}
-            on:click={loadSharedProjectFromCode}>Load project</button
-          >
-          {#if shareCodeError}<div class="dialog-error" role="alert">
-              {shareCodeError}
-            </div>{/if}
-        </div>{/if}
+      <h3 id="open-import-title">{t("ui.common.openImport")}</h3>
+      <div class="open-project-content">
+        {#if recentProjects.length}
+          <section class="recent-projects" aria-labelledby="recent-work-title">
+            <div class="recent-projects-heading">
+              <h4 id="recent-work-title">{t("ui.transfer.recentWork")}</h4>
+              <button
+                class="delete-all-projects"
+                aria-label={t("ui.transfer.deleteAllSavedProjects")}
+                on:click={deleteAllRecentProjects}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true"
+                  ><path
+                    d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"
+                  /></svg
+                >
+                <span>{t("ui.transfer.deleteAll")}</span>
+              </button>
+            </div>
+            <p>{t("ui.transfer.savedInThisBrowserChooseAProjectTo")}</p>
+            <div class="recent-project-list">
+              {#each recentProjects as project (project.id)}
+                <div class="recent-project-row">
+                  <button
+                    class="recent-project"
+                    on:click={() => void openRecentProject(project.id)}
+                  >
+                    <strong
+                      >{project.name === "Untitled project"
+                        ? t("ui.common.untitledProject")
+                        : project.name}</strong
+                    >
+                    <span
+                      >{project.fileCount}
+                      {project.fileCount === 1
+                        ? t("ui.transfer.file")
+                        : t("ui.transfer.files")}
+                      {t("ui.transfer.lastSaved")}
+                      {new Date(project.updatedAt).toLocaleString(
+                        $language.locale,
+                      )}</span
+                    >
+                  </button>
+                  <button
+                    class="delete-recent-project"
+                    aria-label={t("ui.transfer.deleteSavedProject0", [
+                      project.name,
+                    ])}
+                    title={t("ui.transfer.deleteSavedProject0", [project.name])}
+                    on:click={() => deleteRecentProject(project.id)}
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true"
+                      ><path
+                        d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"
+                      /></svg
+                    >
+                  </button>
+                </div>
+              {/each}
+            </div>
+          </section>
+        {/if}
+        <p>{t("ui.transfer.dropAProjectFileHereOrClickTo")}</p>
+        <label
+          class="project-dropzone"
+          on:dragover|preventDefault
+          on:drop={openProjectDrop}
+        >
+          <strong>JSON</strong>
+          <span>{t("ui.transfer.acceptedJson")}</span>
+          <input
+            type="file"
+            aria-label={t("ui.transfer.chooseProjectFile")}
+            accept=".json,.bluek.json,application/json"
+            on:change={(event) => {
+              importProject(event);
+              toolbarDialog = null;
+            }}
+          />
+        </label>
+        {#if serverFeatures}<div class="shared-project-loader">
+            <strong>{t("ui.transfer.loadSharedProject")}</strong>
+            <label>
+              <span>{t("ui.transfer.threeWords")}</span>
+              <input
+                aria-label={t("ui.transfer.threeWordProjectCode")}
+                bind:value={shareCodeInput}
+                placeholder="green-lamp-river"
+                on:keydown={(event) =>
+                  event.key === "Enter" && loadSharedProjectFromCode()}
+              />
+            </label>
+            <button
+              class="shared-project-load"
+              disabled={!shareCodeInput.trim()}
+              on:click={loadSharedProjectFromCode}
+              >{t("ui.transfer.loadProject")}</button
+            >
+            {#if shareCodeError}<div class="dialog-error" role="alert">
+                {shareCodeError}
+              </div>{/if}
+          </div>{/if}
+      </div>
       <div class="dialog-actions">
-        <button on:click={() => (toolbarDialog = null)}>Cancel</button>
+        <button on:click={() => (toolbarDialog = null)}
+          >{t("ui.common.cancel")}</button
+        >
       </div>
     </div>
   </div>{/if}
@@ -94,92 +170,101 @@
       aria-labelledby="save-export-title"
       use:containClicks
     >
-      <h3 id="save-export-title">Save / Export</h3>
-      <p>Choose how to save or share this project:</p>
+      <h3 id="save-export-title">{t("ui.common.saveExport")}</h3>
+      <p>{t("ui.transfer.chooseHowToSaveOrShareThisProject")}</p>
       <div class="project-choice-list toolbar-project-choice-list">
-        <!-- Only a link carries it: a file is opened, a link is followed, and
-               what it opens with is what the sender ticked here — in the box of
-               the link it belongs to. -->
-        <div class="project-choice-row">
-          <button
+        <button
+          on:click={() => {
+            shareProject();
+            toolbarDialog = null;
+          }}
+          disabled={!files.length}
+          ><strong>{t("ui.common.copyFullProjectLink")}</strong><span
+            >{t("ui.transfer.shareTheCompleteProjectEncodedInTheURL")}</span
+          ></button
+        >
+        {#if serverFeatures}<button
             on:click={() => {
-              shareProject();
+              void saveShortProject();
               toolbarDialog = null;
             }}
             disabled={!files.length}
-            ><strong>Copy Full Project Link</strong><span
-              >Share the complete project encoded in the URL.</span
+            ><strong>{t("ui.common.copyShortLink")}</strong><span
+              >{t("ui.transfer.saveTheProjectFor30DaysAndCopy")}</span
             ></button
+          >{/if}
+        <div
+          class="share-link-options"
+          class:single-link={!serverFeatures}
+          role="group"
+          aria-labelledby="link-options-label"
+        >
+          <span id="link-options-label"
+            >{t("ui.transfer.whenOpeningALink")}</span
           >
           <label
-            class="share-readme-option"
+            class="share-link-option"
             class:disabled={!readme.trim()}
             title={readme.trim()
-              ? "Show README.md right away when this link is opened"
-              : "The README is still empty — there is nothing to show"}
+              ? t("ui.transfer.showREADMEMdRightAwayWhenThisLink")
+              : t("ui.transfer.theREADMEIsStillEmptyThereIsNothing")}
             ><input
               type="checkbox"
-              aria-label="Open README.md with the link"
+              aria-label={t("ui.transfer.openREADMEMdWithTheLink")}
               bind:checked={shareWithReadme}
               disabled={!readme.trim()}
-            /><span>Open README</span></label
+            /><span>{t("ui.transfer.openREADME")}</span></label
+          >
+          <label
+            class="share-link-option"
+            class:disabled={!canShareState}
+            title={canShareState
+              ? t("ui.transfer.loadStateFrom0IntoTheObjectBench", [
+                  defaultTestClass,
+                ])
+              : t("ui.common.chooseADefaultTestClassFirst")}
+            ><input
+              type="checkbox"
+              aria-label={t("ui.transfer.loadDefaultTestClassStateWithTheLink")}
+              bind:checked={shareWithState}
+              disabled={!canShareState}
+            /><span>{t("ui.common.loadState")}</span></label
           >
         </div>
-        {#if serverFeatures}<div class="project-choice-row">
-            <button
-              on:click={() => {
-                void saveShortProject();
-                toolbarDialog = null;
-              }}
-              disabled={!files.length}
-              ><strong>Copy Short Link</strong><span
-                >Save the project for 30 days and copy a short link.</span
-              ></button
-            >
-            <label
-              class="share-readme-option"
-              class:disabled={!readme.trim()}
-              title={readme.trim()
-                ? "Show README.md right away when this link is opened"
-                : "The README is still empty — there is nothing to show"}
-              ><input
-                type="checkbox"
-                aria-label="Open README.md with the link"
-                bind:checked={shareWithReadme}
-                disabled={!readme.trim()}
-              /><span>Open README</span></label
-            >
-          </div>{/if}
         <button
+          class="file-export-choice"
           on:click={() => {
             exportProject();
             toolbarDialog = null;
           }}
           disabled={!files.length}
-          ><strong>Export Project JSON</strong><span
-            >Export the complete BlueK project as JSON.</span
+          ><strong>{t("ui.common.exportProjectJSON")}</strong><span
+            >{t("ui.transfer.exportTheCompleteBlueKProjectAsJSON")}</span
           ></button
         >
         <button
+          class="file-export-choice"
           on:click={() => {
             toolbarDialog = null;
             void exportHtml();
           }}
           disabled={!files.length || htmlExportBlocked || htmlExporting}
-          ><strong>Export as HTML (Beta)</strong><span
+          ><strong>{t("ui.common.exportAsHTMLBeta")}</strong><span
             >{htmlExportBlocked
-              ? "Needs a file with a parameterless main()."
-              : "A single web page that runs the program, without BlueK."}</span
+              ? t("ui.transfer.needsAFileWithAParameterlessMain")
+              : t("ui.transfer.aSingleWebPageThatRunsTheProgram")}</span
           ></button
         >
-        <button disabled
-          ><strong>Export BlueJ Project (.zip)</strong><span
-            >Export for BlueJ (not implemented yet).</span
+        <button class="file-export-choice" disabled
+          ><strong>{t("ui.transfer.exportBlueJProjectZip")}</strong><span
+            >{t("ui.transfer.exportForBlueJNotImplementedYet")}</span
           ></button
         >
       </div>
       <div class="dialog-actions">
-        <button on:click={() => (toolbarDialog = null)}>Cancel</button>
+        <button on:click={() => (toolbarDialog = null)}
+          >{t("ui.common.cancel")}</button
+        >
       </div>
     </div>
   </div>{/if}
@@ -192,34 +277,36 @@
       aria-labelledby="share-link-title"
       use:containClicks
     >
-      <h3 id="share-link-title">Short project link</h3>
+      <h3 id="share-link-title">{t("ui.transfer.shortProjectLink")}</h3>
       <p>
         {shareLinkDialog.copied
-          ? "The link was copied to the clipboard. Write down these three words:"
-          : "Write down these three words:"}
+          ? t("ui.transfer.theLinkWasCopiedToTheClipboardWrite")
+          : t("ui.transfer.writeDownTheseThreeWords")}
       </p>
       <button
         class="share-link-code"
-        aria-label="Three-word project code"
-        title="Copy project link"
+        aria-label={t("ui.transfer.threeWordProjectCode")}
+        title={t("ui.transfer.copyProjectLink")}
         on:click={() => {
           void copySharedLink();
         }}>{shareLinkDialog.code}</button
       >
-      <p class="share-link-full-label">Complete link:</p>
+      <p class="share-link-full-label">{t("ui.transfer.completeLink")}</p>
       <button
         class="share-link-value"
-        aria-label="Complete project link"
-        title="Copy project link"
+        aria-label={t("ui.transfer.completeProjectLink")}
+        title={t("ui.transfer.copyProjectLink")}
         on:click={() => {
           void copySharedLink();
         }}>{shareLinkDialog.url}</button
       >
       <p class="share-link-expiry">
-        This project will be deleted after 30 days.
+        {t("ui.transfer.thisProjectWillBeDeletedAfter30Days")}
       </p>
       <div class="dialog-actions">
-        <button on:click={() => (shareLinkDialog = null)}>Close</button>
+        <button on:click={() => (shareLinkDialog = null)}
+          >{t("ui.common.close")}</button
+        >
       </div>
     </div>
   </div>{/if}

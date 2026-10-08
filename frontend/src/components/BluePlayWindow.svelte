@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { useLanguage } from "../i18n/Language.svelte";
+  const language = useLanguage();
+  $: t = $language.t;
   import type { RuntimeSnapshot } from "../../../runtime-contract/src/index";
   import type { StageFrame } from "../bluePlayStage";
 
@@ -29,7 +32,7 @@
     class:stage-compact={(stage.width || 1) * (stage.cellSize || 1) < 560}
     class="stage-window"
     role="dialog"
-    aria-label="BluePlay – World"
+    aria-label={t("ui.blueplay.bluePlayWorld")}
     data-library={libraryId}
     data-phase={phase}
     data-simulation={simulation}
@@ -41,13 +44,14 @@
       tabindex="0"
       on:pointerdown={beginStageDrag}
     >
-      <span>BluePlay – World</span>
+      <span>{t("ui.blueplay.bluePlayWorld")}</span>
       <div>
         <button
           on:click|stopPropagation={() => (stageMaximized = !stageMaximized)}
           aria-label={stageMaximized
-            ? "Restore BluePlay world"
-            : "Maximize BluePlay world"}>{stageMaximized ? "❐" : "□"}</button
+            ? t("ui.blueplay.restoreBluePlayWorld")
+            : t("ui.blueplay.maximizeBluePlayWorld")}
+          >{stageMaximized ? "❐" : "□"}</button
         >
         <button
           on:click|stopPropagation={() => {
@@ -55,7 +59,7 @@
             stageWindowDismissed = true;
             stageMaximized = false;
           }}
-          aria-label="Close BluePlay world">×</button
+          aria-label={t("ui.blueplay.closeBluePlayWorld")}>×</button
         >
       </div>
     </div>
@@ -65,36 +69,40 @@
         class="game-stage"
         class:game-canvas={true}
         role="button"
-        aria-label="BluePlay world"
+        aria-label={t("ui.blueplay.bluePlayWorld2")}
         tabindex="0"
         style={stageStyle(stage)}
         on:click={stageClick}
       ></canvas>
     </div>
-    <div class="game-controls" aria-label="BluePlay controls">
+    <div class="game-controls" aria-label={t("ui.blueplay.bluePlayControls")}>
       {#if mainEntries.length}<button
           on:click={resetGame}
           disabled={!canExecute}
-          aria-label="Reset BluePlay world">Reset</button
+          aria-label={t("ui.blueplay.resetBluePlayWorld")}
+          >{t("ui.common.reset")}</button
         >{/if}
       <button
         on:click={() => bluePlayAction("step")}
         disabled={!canExecute || stageRunning}
-        aria-label="Act once">Act</button
+        aria-label={t("ui.blueplay.actOnce")}>{t("ui.blueplay.act")}</button
       >
       <button
         on:click={() => bluePlayAction("start")}
         disabled={!canExecute || stageRunning}
-        aria-label="Run BluePlay world">Run</button
+        aria-label={t("ui.blueplay.runBluePlayWorld")}
+        >{t("ui.blueplay.run")}</button
       >
       <button
         on:click={() => bluePlayAction("stop")}
         disabled={!stageRunning}
-        aria-label="Pause BluePlay world">Pause</button
+        aria-label={t("ui.blueplay.pauseBluePlayWorld")}
+        >{t("ui.blueplay.pause")}</button
       >
       <label
-        >Speed <input
-          aria-label="Speed"
+        >{t("ui.blueplay.speed")}
+        <input
+          aria-label={t("ui.blueplay.speed")}
           type="range"
           min="1"
           max="100"

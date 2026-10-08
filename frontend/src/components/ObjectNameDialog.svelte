@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { useLanguage } from "../i18n/Language.svelte";
+  const language = useLanguage();
+  $: t = $language.t;
   import { focusOnMount, containClicks } from "../uiActions";
 
   import type { RuntimeValue } from "../../../runtime-contract/src/index";
@@ -17,10 +20,10 @@
       tabindex="-1"
       use:containClicks
     >
-      <h3>New Object Name</h3>
-      <p>Enter the name for the new object on the object bench.</p>
+      <h3>{t("ui.objects.newObjectName")}</h3>
+      <p>{t("ui.objects.enterTheNameForTheNewObjectOn")}</p>
       <label
-        >Name of instance<input
+        >{t("ui.common.nameOfInstance")}<input
           bind:value={objectName}
           use:focusOnMount
           on:keydown={(event) => {
@@ -31,10 +34,12 @@
       >
       {#if objectNameError}<p role="alert">{objectNameError}</p>{/if}
       <div class="dialog-actions">
-        <button on:click={() => (objectNamePrompt = null)}>Cancel</button
+        <button on:click={() => (objectNamePrompt = null)}
+          >{t("ui.common.cancel")}</button
         ><button
           on:click={confirmObjectOnBench}
-          disabled={!/^[A-Za-z_]\w*$/.test(objectName.trim())}>OK</button
+          disabled={!/^[A-Za-z_]\w*$/.test(objectName.trim())}
+          >{t("ui.common.oK")}</button
         >
       </div>
     </div>

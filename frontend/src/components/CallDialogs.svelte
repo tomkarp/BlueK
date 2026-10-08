@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { useLanguage } from "../i18n/Language.svelte";
+  const language = useLanguage();
+  $: t = $language.t;
   import { focusOnMount, containClicks } from "../uiActions";
 
   import type { RuntimeValue } from "../../../runtime-contract/src/index";
@@ -11,6 +14,22 @@
   } from "../uiTypes";
   import { missingRequired, missingTypeArgument } from "../uiParity";
   import CallArguments from "./CallArguments.svelte";
+  export let recording = false;
+  export let assertionAvailable = false;
+  export let suggestedExpected: string | null = null;
+  export let assertionError = "";
+  export let addAssertion: (
+    expected: string,
+    kind: "equals" | "null" | "notNull",
+  ) => Promise<void> = async () => {};
+  let expected = "";
+  let assertionKind: "equals" | "null" | "notNull" = "equals";
+  let previousResult: ResultDialog | null = null;
+  $: if (resultDialog !== previousResult) {
+    previousResult = resultDialog;
+    expected = suggestedExpected || "";
+  }
+
   export let createDialog: CreateDialog | null;
   export let invokeDialog: InvokeDialog | null;
   export let resultDialog: ResultDialog | null;
@@ -41,12 +60,13 @@
       use:containClicks
     >
       <h3 id="create-object-title">
-        Create {createDialog.className}{createDialog.typeParameters.length
+        {t("ui.common.create")}
+        {createDialog.className}{createDialog.typeParameters.length
           ? `<${createTypeArgs.map((value) => value || "…").join(", ")}>`
           : ""}
       </h3>
       <label
-        >Name of instance<input
+        >{t("ui.common.nameOfInstance")}<input
           bind:value={createName}
           use:focusOnMount={!createDialog.parameters.length &&
             !createDialog.typeParameters.length}
@@ -56,7 +76,7 @@
           }}
         /></label
       >{#if createDialog.constructors.length > 1}<label
-          >Constructor<select
+          >{t("ui.objects.constructor")}<select
             bind:value={createDialog.constructorIndex}
             on:change={(event) =>
               chooseConstructor(
@@ -73,7 +93,8 @@
               >{/each}</select
           ></label
         >{/if}{#each createDialog.typeParameters as typeParameter, index}<label
-          >Type argument {typeParameter}<input
+          >{t("ui.objects.typeArgument")}
+          {typeParameter}<input
             bind:value={createTypeArgs[index]}
             use:focusOnMount={index === 0}
             on:keydown={(event) => event.key === "Enter" && confirmCreate()}
@@ -88,14 +109,17 @@
         focusFirst={!createDialog.typeParameters.length}
         submit={confirmCreate}
       />{#if dialogError}<div class="dialog-error" role="alert">
-          {dialogError}
+          {$language.message(dialogError)}
         </div>{/if}
       <div class="dialog-actions">
-        <button on:click={() => (createDialog = null)}>Cancel</button><button
+        <button on:click={() => (createDialog = null)}
+          >{t("ui.common.cancel")}</button
+        ><button
           on:click={confirmCreate}
           disabled={!canExecute ||
             missingTypeArgument(createTypeArgs) ||
-            missingRequired(createDialog.parameters, createArgs)}>Create</button
+            missingRequired(createDialog.parameters, createArgs)}
+          >{t("ui.common.create")}</button
         >
       </div>
     </div>
@@ -115,7 +139,8 @@
           : invokeDialog.receiver || ""}{invokeDialog.method.name}()
       </h3>
       {#each invokeDialog.method.typeParameters || [] as typeParameter, index}<label
-          >Type argument {typeParameter}<input
+          >{t("ui.objects.typeArgument")}
+          {typeParameter}<input
             bind:value={invokeTypeArgs[index]}
             use:focusOnMount={index === 0}
             on:keydown={(event) => event.key === "Enter" && confirmInvoke()}
@@ -133,15 +158,17 @@
         focusFirst={!invokeDialog.method.typeParameters?.length}
         submit={confirmInvoke}
       />{#if dialogError}<div class="dialog-error" role="alert">
-          {dialogError}
+          {$language.message(dialogError)}
         </div>{/if}
       <div class="dialog-actions">
-        <button on:click={() => (invokeDialog = null)}>Cancel</button><button
+        <button on:click={() => (invokeDialog = null)}
+          >{t("ui.common.cancel")}</button
+        ><button
           on:click={confirmInvoke}
           disabled={!canExecute ||
             missingTypeArgument(invokeTypeArgs) ||
             missingRequired(invokeDialog.method.parameters || [], invokeArgs)}
-          >Invoke</button
+          >{t("ui.objects.invoke")}</button
         >
       </div>
     </div>
@@ -153,9 +180,36 @@
       aria-modal="true"
       tabindex="-1"
     >
-      <h3>Method result</h3>
+      <h3>{t("ui.objects.methodResult")}</h3>
       <div class="result-method">{resultDialog.method}</div>
       <output class="result-value">{resultDialog.value}</output>
+      {#if recording && assertionAvailable}<div class="test-assertion">
+          <label
+            >{t("ui.objects.testAssertion")}<select bind:value={assertionKind}
+              ><option value="equals"
+                >{t("ui.objects.equalsExpectedValue")}</option
+              ><option value="null">{t("ui.objects.isNull")}</option><option
+                value="notNull">{t("ui.objects.isNotNull")}</option
+              ></select
+            ></label
+          >
+          {#if assertionKind === "equals"}<label
+              >{t("ui.objects.expectedKotlinExpression")}<input
+                bind:value={expected}
+                spellcheck="false"
+              /></label
+            >{/if}
+          {#if assertionError}<p class="dialog-error" role="alert">
+              {$language.message(assertionError)}
+            </p>{/if}
+          <button
+            disabled={!canExecute ||
+              (assertionKind === "equals" && !expected.trim())}
+            on:click={async () => {
+              await addAssertion(expected, assertionKind);
+            }}>{t("ui.objects.addAssertion")}</button
+          >
+        </div>{:else if recording}<p>{t("ui.objects.resultRecorded")}</p>{/if}
       <div class="result-actions">
         {#if resultDialog.objectId}<button
             on:click={() => {
@@ -166,7 +220,7 @@
               };
               inspectObject(object);
               resultDialog = null;
-            }}>Inspect</button
+            }}>{t("ui.common.inspect")}</button
           ><button
             on:click={() => {
               requestObjectOnBench({
@@ -176,8 +230,10 @@
                 kind: "object",
               });
               resultDialog = null;
-            }}>Get</button
-          >{/if}<button on:click={() => (resultDialog = null)}>Close</button>
+            }}>{t("ui.objects.get")}</button
+          >{/if}<button on:click={() => (resultDialog = null)}
+          >{t("ui.common.close")}</button
+        >
       </div>
     </div>
   </div>{/if}

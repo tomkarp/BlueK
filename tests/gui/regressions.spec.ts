@@ -1183,6 +1183,35 @@ test('GUI-07 every value can be placed on the bench', async ({ page }) => {
   }
 });
 
+test('GUI-115 object bench scrolls to objects beyond its visible area', async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 600 });
+  await project(page, 'class Hund {}');
+  for (let index = 1; index <= 12; index++) {
+    const entry = await evaluate(page, 'Hund()');
+    await entry.getByRole('button').click();
+    await page.getByLabel('Name of instance').fill(`hund${index}`);
+    await page.getByRole('button', { name: 'OK', exact: true }).click();
+  }
+
+  const bench = page.locator('.bench');
+  const objects = bench.locator('.object');
+  await expect(objects).toHaveCount(12);
+  await expect.poll(() => bench.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+  const benchBox = (await bench.boundingBox())!;
+  const last = objects.last();
+  const lastBox = (await last.boundingBox())!;
+  expect(lastBox.y + lastBox.height).toBeGreaterThan(benchBox.y + benchBox.height);
+
+  await page.mouse.move(benchBox.x + benchBox.width / 2, benchBox.y + benchBox.height / 2);
+  await page.mouse.wheel(0, 2000);
+  await expect.poll(() => bench.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+  await expect.poll(() => last.evaluate(element => {
+    const item = element.getBoundingClientRect();
+    const viewport = element.closest('.bench')!.getBoundingClientRect();
+    return item.top >= viewport.top && item.bottom <= viewport.bottom;
+  })).toBe(true);
+});
+
 test('GUI-18 primitive inspectors stay compact, show their type and the active inspector is on top', async ({ page }) => {
   await project(page);
   for (const [code, name] of [['5', 'zahl'], ['"Hallo"', 'text']]) {
@@ -1704,9 +1733,30 @@ test('GUI-14 output is visible before a long loop finishes', async ({ page }) =>
   await expect(page.getByLabel('Codepad input')).toBeEnabled();
 });
 
-test('GUI-63 the sidebar links the offline bundle, which the build always provides', async ({ page }) => {
+test('GUI-63 the sidebar explains the offline version before downloading it', async ({ page }) => {
   await project(page);
-  const link = page.getByRole('link', { name: /Offline Version/ });
+  let downloads = 0;
+  page.on('download', () => { downloads++; });
+  const downloadButton = page.locator('.sidebar-utilities').getByRole('button', { name: /Offline Version/ });
+  await downloadButton.click();
+  const dialog = page.getByRole('dialog', { name: 'BlueK Offline' });
+  await expect(dialog).toContainText('without downloading anything');
+  await expect(dialog).toContainText('BlueK.html');
+  await expect(dialog).toContainText('Autosave');
+  await expect(dialog).toContainText('not yet been widely tested in practice');
+  await expect(dialog).toContainText('with your own projects and browser before relying on it');
+  const reportBug = dialog.getByRole('link', { name: 'Report a bug on GitHub', exact: true });
+  await expect(reportBug).toHaveAttribute('href', 'https://github.com/tomkarp/BlueK/issues/new');
+  await expect(reportBug).toHaveAttribute('target', '_blank');
+  await expect(reportBug).toHaveAttribute('rel', 'noopener noreferrer');
+  expect(downloads).toBe(0);
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await downloadButton.click();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await downloadButton.click();
+  const link = dialog.getByRole('link', { name: 'Download ZIP', exact: true });
   await expect(link).toBeVisible();
   await expect(link).toHaveAttribute('download', 'BlueK-offline.zip');
 
@@ -1715,6 +1765,16 @@ test('GUI-63 the sidebar links the offline bundle, which the build always provid
   const zip = await page.request.get(new URL(href, page.url()).toString());
   expect(zip.status()).toBe(200);
   expect((await zip.body()).byteLength).toBeGreaterThan(100_000);
+  await page.setViewportSize({ width: 800, height: 600 });
+  await link.scrollIntoViewIfNeeded();
+  const cancelBounds = await dialog.getByRole('button', { name: 'Cancel', exact: true }).boundingBox();
+  expect(cancelBounds!.y + cancelBounds!.height).toBeLessThanOrEqual(600);
+  await page.screenshot({ path: 'test-results/offline-download-notice.png' });
+  const download = page.waitForEvent('download');
+  await link.click();
+  expect((await download).suggestedFilename()).toBe('BlueK-offline.zip');
+  expect(downloads).toBe(1);
+  await expect(dialog).toHaveCount(0);
 });
 
 test('GUI-64 a compiler error is marked in the source and reported below the editor', async ({ page }) => {
@@ -1841,7 +1901,7 @@ test('GUI-66 the README note sits in the corner, formats Markdown while typing a
   const note = page.getByRole('button', { name: 'README.md' });
   // Like BlueJ, every project has the note — an empty description shows one too.
   await expect(note).toBeVisible();
-  const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('bluek.current-project.v1') || '{}'));
+  const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('bluek.project-draft.v1.' + sessionStorage.getItem('bluek.tab-draft.v1')) || '{}').project || {});
   await expect.poll(() => stored().then((saved) => 'files' in saved)).toBe(true);
   expect(await stored()).not.toHaveProperty('readme');
 
@@ -1912,8 +1972,7 @@ test('GUI-67 a link can open the README, and the export dialog attaches that to 
 
   // With it the description is the first thing the reader sees.
   await page.goto(link + '&readme=1');
-  // Only the hash changed, which is no new visit — a reload is one.
-  await page.reload();
+  // Opening a full project link again also works as a hash-only navigation.
   const dialog = page.getByRole('dialog', { name: 'README.md' });
   await expect(dialog.locator('.cm-md-h1')).toHaveText('Hunde');
   await dialog.getByRole('button', { name: 'Close' }).click();
@@ -1925,10 +1984,9 @@ test('GUI-67 a link can open the README, and the export dialog attaches that to 
   await expect(save.locator('.project-choice-list button strong')).toHaveText([
     'Copy Full Project Link', 'Copy Short Link', 'Export Project JSON', 'Export as HTML (Beta)', 'Export BlueJ Project (.zip)',
   ]);
-  // Each link box carries the option at its right edge; both mean the same.
-  await expect(save.getByLabel(/Open README.md with the link/)).toHaveCount(2);
-  await save.getByLabel(/Open README.md with the link/).first().check();
-  await expect(save.getByLabel(/Open README.md with the link/).last()).toBeChecked();
+  // One shared option row applies to both kinds of project links.
+  await expect(save.getByLabel(/Open README.md with the link/)).toHaveCount(1);
+  await save.getByLabel(/Open README.md with the link/).check();
   // Headless Chromium may refuse the clipboard; then the app offers the link in
   // a prompt instead. Either way it is the link that has to carry the flag.
   let prompted = '';
@@ -1943,7 +2001,7 @@ test('GUI-67 a link can open the README, and the export dialog attaches that to 
 
   // An empty README has nothing to open, so the option goes with it.
   await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify({ ...payload, readme: '' })).toString('base64url'));
-  await page.reload();
+  await page.waitForURL(url => !url.hash);
   await expect(page.getByLabel('Codepad input')).toBeEnabled();
   await page.getByRole('button', { name: 'Save / Export' }).click();
   await expect(page.getByRole('dialog', { name: 'Save / Export' }).getByLabel(/Open README.md with the link/).first()).toBeDisabled();
@@ -2031,7 +2089,7 @@ test('GUI-71 Dark mode can be switched on and off in Settings', async ({ page })
   await expect(editor).not.toHaveCSS('background-color', 'rgb(30, 30, 30)');
 });
 
-test('GUI-74 Settings are grouped into General and Editor with English as the available language', async ({ page }) => {
+test('GUI-74 Settings are grouped into General and Editor with English and German language choices', async ({ page }) => {
   await project(page);
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   const settings = page.getByRole('dialog', { name: 'Settings' });
@@ -2041,7 +2099,7 @@ test('GUI-74 Settings are grouped into General and Editor with English as the av
   await expect(sections.nth(1).getByRole('heading', { name: 'Editor', exact: true })).toBeVisible();
   const language = settings.getByLabel('Language', { exact: true });
   await expect(language).toHaveValue('en');
-  await expect(language.locator('option')).toHaveText(['English (only for now)']);
+  await expect(language.locator('option')).toHaveText(['English', 'Deutsch']);
   await expect(sections.nth(0).getByLabel('Dark mode', { exact: true })).toBeVisible();
   await expect(sections.nth(1).getByLabel('Font size', { exact: true })).toBeVisible();
   await expect(sections.nth(1).getByLabel('Vim mode', { exact: true })).toBeVisible();
@@ -2123,6 +2181,47 @@ test('GUI-75 class cards snap to a shared invisible grid while dragging', async 
   expect(alignedPosition.y - firstPosition.y).toBe(160);
 });
 
+test('GUI-102 class cards can be dragged beyond the visible diagram, which then scrolls', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, files: [
+    { fileName: 'Hund.kt', kind: 'class', source: 'class Hund {}' },
+  ] };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  await expect(page.getByLabel('Codepad input')).toBeEnabled();
+  const card = page.locator('.classcard').first();
+  const canvas = page.locator('.canvas');
+  const canvasBox = (await canvas.boundingBox())!;
+  const box = (await card.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(canvasBox.x + canvasBox.width - 10, box.y + box.height / 2, { steps: 4 });
+  // Scrolling is time-based: it must not depend on the number of mouse events.
+  await page.waitForTimeout(500);
+  const scrolled = await canvas.evaluate((element) => element.scrollLeft);
+  expect(scrolled).toBeGreaterThan(0);
+  expect(scrolled).toBeLessThan(500);
+  // Moving back must not shrink the scroll area under the drag: the card
+  // stays under the pointer instead of racing away.
+  const backX = canvasBox.x + canvasBox.width / 2;
+  for (let x = canvasBox.x + canvasBox.width - 10; x > backX; x -= 20) {
+    await page.mouse.move(x, box.y + box.height / 2);
+    await page.waitForTimeout(16);
+  }
+  await page.waitForTimeout(300);
+  const underPointer = (await card.boundingBox())!;
+  expect(Math.abs(underPointer.x + underPointer.width / 2 - backX)).toBeLessThanOrEqual(30);
+  // ... and the view does not jump back to the start when the card leaves the far end.
+  expect(await canvas.evaluate((element) => element.scrollLeft)).toBeGreaterThanOrEqual(scrolled);
+  await page.mouse.move(canvasBox.x + canvasBox.width - 10, box.y + box.height / 2, { steps: 4 });
+  await page.waitForTimeout(200);
+  await page.mouse.up();
+  const left = await card.evaluate((element) => Number.parseFloat((element as HTMLElement).style.left));
+  expect(left % 20).toBe(0);
+  expect(left).toBeGreaterThan(canvasBox.width - 250);
+  const scrollable = await canvas.evaluate((element) => ({ scroll: element.scrollWidth, client: element.clientWidth, left: element.scrollLeft }));
+  expect(scrollable.scroll).toBeGreaterThan(scrollable.client);
+  expect(scrollable.left).toBeGreaterThan(0);
+});
+
 test('GUI-77 the left action names the main entry point instead of Run', async ({ page }) => {
   await project(page, 'fun main() {}');
   const startMain = page.getByRole('button', { name: 'Start main', exact: true });
@@ -2160,8 +2259,8 @@ test('GUI-80 project name field does not intercept clicks on project actions', a
   await page.getByRole('dialog', { name: 'Create New Kotlin File' }).getByRole('button', { name: 'Cancel' }).click();
 
   await page.getByRole('button', { name: 'Help', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'Keyboard Shortcuts' })).toBeVisible();
-  await expect(page.getByRole('link', { name: /Offline Version/ })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'BlueK Help' })).toBeVisible();
+  await expect(page.locator('.sidebar-utilities').getByRole('button', { name: /Offline Version/ })).toBeVisible();
 });
 
 test('GUI-78 selected Kotlin lines can be commented and uncommented by button and slash shortcut', async ({ page }) => {
@@ -2208,4 +2307,73 @@ test('RT-33 Export Project JSON keeps its file name and content', async ({ page 
   const saved = JSON.parse(Buffer.concat(chunks).toString('utf8'));
   expect(saved).toMatchObject({ format: 'bluek-project', version: 1, projectName: 'Hunde: Teil 1/2',
     files: [{ fileName: 'Hund.kt', kind: 'class', source: 'class Hund' }] });
+});
+
+test('GUI-129 bundled user manual covers workflows and remains usable in small viewports', async ({ page }) => {
+  await project(page);
+  await page.getByRole('button', { name: 'Help', exact: true }).click();
+  const help = page.getByRole('dialog', { name: 'BlueK Help', exact: true });
+  const navigation = help.getByRole('navigation', { name: 'Help sections' });
+  await expect(help.getByRole('heading', { name: 'Quick start', exact: true })).toBeVisible();
+  await expect(help.locator('header p')).toHaveCount(0);
+  const initialHelpBox = await help.boundingBox();
+  expect(initialHelpBox!.height).toBe(page.viewportSize()!.height - 24);
+  const sections = ['Quick start', 'Objects & codepad', 'Projects & saving', 'Saved state', 'Testing', 'Kotlin compatibility', 'BluePlay', 'Keyboard shortcuts', 'Troubleshooting'];
+  for (const section of sections) {
+    await navigation.getByRole('button', { name: section, exact: true }).click();
+    await expect(help.getByRole('heading', { name: section, exact: true })).toBeVisible();
+    await expect(navigation.getByRole('button', { name: section, exact: true })).toHaveAttribute('aria-current', 'page');
+    expect(await help.boundingBox()).toEqual(initialHelpBox);
+    await expect(help.getByRole('article')).not.toContainText(/student|classroom|teaching/i);
+  }
+  await navigation.getByRole('button', { name: 'Saved state', exact: true }).click();
+  await expect(help.getByRole('article')).toContainText('StateTest');
+  await expect(help.getByRole('article')).toContainText('all class properties, all @BeforeTest methods and init blocks');
+  await navigation.getByRole('button', { name: 'Testing', exact: true }).click();
+  await expect(help.locator('pre')).toContainText('assertEquals(1, counter.value)');
+  await navigation.getByRole('button', { name: 'Kotlin compatibility', exact: true }).click();
+  const reference = help.getByRole('link', { name: 'Kotlin compatibility reference', exact: true });
+  await expect(reference).toHaveAttribute('href', 'https://github.com/tomkarp/BlueK/blob/main/docs/kotlin-support.md');
+  await expect(reference).toHaveAttribute('rel', 'noopener noreferrer');
+  await navigation.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).click();
+  await expect(help.locator('.shortcuts-help-list')).toContainText(/(?:Cmd|Ctrl)\+K/);
+  await expect(help.locator('.shortcuts-help-list li')).toHaveCount(10);
+  await page.setViewportSize({ width: 800, height: 600 });
+  await navigation.getByRole('button', { name: 'Quick start', exact: true }).click();
+  const close = help.getByRole('button', { name: 'Close', exact: true });
+  const box = await close.boundingBox();
+  expect(box!.y + box!.height).toBeLessThanOrEqual(600);
+  await expect(close).toBeVisible();
+  const article = help.getByRole('article');
+  expect(await article.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
+  await article.evaluate(el => el.scrollTop = el.scrollHeight);
+  await navigation.getByRole('button', { name: 'BluePlay', exact: true }).click();
+  expect(await article.evaluate(el => el.scrollTop)).toBe(0);
+  await page.screenshot({ path: 'test-results/user-manual-desktop.png' });
+  await page.setViewportSize({ width: 390, height: 600 });
+  const smallHelpBox = await help.boundingBox();
+  for (const section of sections) {
+    await navigation.getByRole('button', { name: section, exact: true }).click();
+    await expect(help.getByRole('heading', { name: section, exact: true })).toBeVisible();
+  }
+  expect(await help.boundingBox()).toEqual(smallHelpBox);
+  expect(await help.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+  const smallBox = await close.boundingBox();
+  expect(smallBox!.y + smallBox!.height).toBeLessThanOrEqual(600);
+  await page.screenshot({ path: 'test-results/user-manual-small.png' });
+  await close.click();
+  await expect(help).toHaveCount(0);
+  await page.getByRole('button', { name: 'Help', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Quick start', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(help).toHaveCount(0);
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Dark mode', exact: true }).check();
+  await page.getByRole('dialog', { name: 'Settings', exact: true }).getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'Help', exact: true }).click();
+  await expect(help).toBeFocused();
+  await navigation.getByRole('button', { name: 'Testing', exact: true }).click();
+  await expect(help.locator('pre')).toHaveCSS('background-color', 'rgb(30, 30, 30)');
+  await page.screenshot({ path: 'test-results/user-manual-dark.png' });
+  await close.click();
 });

@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { useLanguage } from "../i18n/Language.svelte";
+  const language = useLanguage();
+  $: t = $language.t;
   import { focusOnMount } from "../uiActions";
 
   import type { Diagnostic } from "../../../runtime-contract/src/index";
@@ -18,26 +21,32 @@
       tabindex="-1"
       aria-labelledby="compiler-error-title"
     >
-      {#if exception}<h3 id="compiler-error-title">Exception</h3>
-        <p>The call ended with an exception.</p>{:else}<h3
-          id="compiler-error-title">
-          Compiler errors
+      {#if exception}<h3 id="compiler-error-title">
+          {t("ui.compiler.exception")}
         </h3>
-        <p>The project could not be compiled.</p>{/if}
+        <p>{t("ui.compiler.theCallEndedWithAnException")}</p>{:else}<h3
+          id="compiler-error-title"
+        >
+          {t("ui.common.compilerErrors")}
+        </h3>
+        <p>{t("ui.compiler.theProjectCouldNotBeCompiled")}</p>{/if}
       <!-- Errors inside a project file are marked in its editor; only errors
              without a source location, such as a failed call, land here. -->
       {#each compilerDiagnostics as diagnostic}<div
           class="compiler-error-location"
         >
-          <strong>{diagnostic.fileName || "Kotlin source"}</strong> · line {diagnostic.line},
-          column {diagnostic.column}
+          <strong>{diagnostic.fileName || t("ui.compiler.kotlinSource")}</strong
+          >
+          {t("ui.compiler.line")}
+          {diagnostic.line}{t("ui.compiler.column")}
+          {diagnostic.column}
         </div>
         <pre
           class="compiler-error-message">{diagnostic.message}</pre>{/each}{#if !compilerDiagnostics.length}<pre
           class="compiler-error-text">{error}</pre>{/if}
       <div class="dialog-actions">
         <button use:focusOnMount on:click={() => (compilerDialog = false)}
-          >Close</button
+          >{t("ui.common.close")}</button
         >
       </div>
     </div>

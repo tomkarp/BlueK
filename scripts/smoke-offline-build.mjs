@@ -18,7 +18,7 @@ try {
   const html = await readFile(path.join(bundle, 'BlueK.html'), 'utf8');
   assert.equal(html.slice(0, html.indexOf("<script>")).match(/(?:src|href)="(?:https?:|\.\/assets\/)/g), null);
   assert.equal(html.includes('<script type="module"'), false);
-  assert.equal(html.includes('Copy Short Link'), false);
+  // Catalogs include all messages; offline link availability is checked in the live DOM.
   const zip = spawnSync('unzip', ['-Z1', path.join(target, 'BlueK-offline.zip')], { encoding: 'utf8' });
   assert.equal(zip.status, 0);
   assert.deepEqual(zip.stdout.trim().split('\n').sort(), [

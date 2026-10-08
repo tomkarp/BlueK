@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { useLanguage } from "../i18n/Language.svelte";
+  const language = useLanguage();
+  $: t = $language.t;
   export let newProjectOpen: boolean;
   export let projectInfo: "template" | "example" | null;
   export let chooseTemplate: (choice: string) => Promise<void>;
@@ -12,56 +15,57 @@
       tabindex="-1"
       aria-labelledby="new-project-title"
     >
-      <h3 id="new-project-title">Create New Project</h3>
-      <p>Choose a starting point:</p>
+      <h3 id="new-project-title">{t("ui.projects.createNewProject")}</h3>
+      <p>{t("ui.projects.chooseAStartingPoint")}</p>
       <div class="project-choice-list">
         <div class="project-choice-row">
           <button on:click={() => chooseTemplate("empty")}
-            ><strong>Empty Project</strong><span
-              >Start with a blank BlueK project.</span
+            ><strong>{t("ui.projects.emptyProject")}</strong><span
+              >{t("ui.projects.startWithABlankBlueKProject")}</span
             ></button
           >
         </div>
         <div class="project-choice-with-info">
           <button on:click={() => chooseTemplate("empty-blueplay")}
-            ><strong>BluePlay Template</strong><span
-              >Start with the built-in World, Actor and Image library.</span
+            ><strong>{t("ui.projects.bluePlayTemplate")}</strong><span
+              >{t("ui.projects.startWithTheBuiltInWorldActorAnd")}</span
             ></button
           ><button
             class="project-info-button"
             on:click|stopPropagation={() => (projectInfo = "template")}
-            aria-label="What is BluePlay?">?</button
+            aria-label={t("ui.projects.whatIsBluePlay")}>?</button
           >
         </div>
         <div class="project-choice-with-info">
           <button on:click={() => chooseTemplate("blueplay")}
-            ><strong>BluePlay Example</strong><span
-              >Open a small runnable World and Actor project.</span
+            ><strong>{t("ui.projects.bluePlayExample")}</strong><span
+              >{t("ui.projects.openASmallRunnableWorldAndActorProject")}</span
             ></button
           ><button
             class="project-info-button"
             on:click|stopPropagation={() => (projectInfo = "example")}
-            aria-label="What is BluePlay?">?</button
+            aria-label={t("ui.projects.whatIsBluePlay")}>?</button
           >
         </div>
         <div class="project-choice-secondary">
           <p class="project-choice-note">
-            The following examples currently exist to test and demonstrate
-            BlueK. They will be removed in the long run.
+            {t("ui.projects.theFollowingExamplesCurrentlyExistToTestAnd")}
           </p>
           <div class="project-choice-row">
             <button on:click={() => chooseTemplate("bluek-demo")}
-              ><strong>BlueK Demo Project</strong><span
-                >Explore classes, inheritance and object interaction with Person
-                and Student.</span
+              ><strong>{t("ui.projects.blueKDemoProject")}</strong><span
+                >{t(
+                  "ui.projects.exploreClassesInheritanceAndObjectInteractionWithPerson",
+                )}</span
               ></button
             >
           </div>
           <div class="project-choice-row">
             <button on:click={() => chooseTemplate("space-invaders")}
-              ><strong>Space Invaders Demo</strong><span
-                >Play a simplified BluePlay game with a movable defender and
-                invaders.</span
+              ><strong>{t("ui.projects.spaceInvadersDemo")}</strong><span
+                >{t(
+                  "ui.projects.playASimplifiedBluePlayGameWithAMovable",
+                )}</span
               ></button
             >
           </div>
@@ -72,7 +76,7 @@
           on:click={() => {
             newProjectOpen = false;
             projectInfo = null;
-          }}>Cancel</button
+          }}>{t("ui.common.cancel")}</button
         >
       </div>
       {#if projectInfo}<div
@@ -84,22 +88,21 @@
           <button
             class="project-info-close"
             on:click={() => (projectInfo = null)}
-            aria-label="Close BluePlay information">×</button
+            aria-label={t("ui.projects.closeBluePlayInformation")}>×</button
           >
-          <h4>What is BluePlay?</h4>
+          <h4>{t("ui.projects.whatIsBluePlay")}</h4>
           <p>
-            BluePlay is a lightweight Kotlin framework for creating graphical
-            games and simulations with worlds, actors and images.
+            {t("ui.projects.bluePlayIsALightweightKotlinFrameworkForCreating")}
           </p>
           <p>
             {projectInfo === "template"
-              ? "The template provides an empty starting point."
-              : "The example demonstrates a small World and Actor project."}
+              ? t("ui.projects.theTemplateProvidesAnEmptyStartingPoint")
+              : t("ui.projects.theExampleDemonstratesASmallWorldAndActor")}
           </p>
           <a
             href="https://github.com/tomkarp/BluePlay"
             target="_blank"
-            rel="noreferrer">View BluePlay on GitHub</a
+            rel="noreferrer">{t("ui.projects.viewBluePlayOnGitHub")}</a
           >
         </div>{/if}
     </div>

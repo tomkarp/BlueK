@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { useLanguage } from "../i18n/Language.svelte";
+  const language = useLanguage();
+  $: t = $language.t;
   import type { ProjectFile } from "../../../runtime-contract/src/index";
 
   import type { ActiveWindow } from "../uiTypes";
@@ -13,8 +16,10 @@
   export let terminalSplit: boolean;
   export let activeWindow: ActiveWindow;
   export let showInheritance: boolean;
-  export let settingsNotice: boolean;
+  export let showTestClasses: boolean;
+  export let hasTestClasses: boolean;
   export let toggleInheritance: () => void;
+  export let toggleTestClasses: () => void;
   export let commitProjectName: (event: KeyboardEvent) => void;
 </script>
 
@@ -22,44 +27,44 @@
   <button
     class="toolbar-main-action"
     on:click={() => (newProjectOpen = true)}
-    aria-label="New Project"
-    title="New Project"
+    aria-label={t("ui.toolbar.newProject")}
+    title={t("ui.toolbar.newProject")}
   >
     <span class="toolbar-action-icon" aria-hidden="true"
       ><svg viewBox="0 0 24 24"
         ><path d="M5 2.5h10l4 4V21.5H5z" /><path d="M15 2.5v4h4" /></svg
       ></span
-    ><span>New Project</span>
+    ><span>{t("ui.toolbar.newProject")}</span>
   </button>
   <button
     class="toolbar-main-action"
     on:click={() => (toolbarDialog = "open")}
-    aria-label="Open / Import"
-    title="Open / Import"
+    aria-label={t("ui.common.openImport")}
+    title={t("ui.common.openImport")}
   >
     <span class="toolbar-action-icon" aria-hidden="true"
       ><svg viewBox="0 0 24 24"><path d="M6 19h12M12 16V5M9 8l3-3 3 3" /></svg
       ></span
-    ><span>Open / Import</span>
+    ><span>{t("ui.common.openImport")}</span>
   </button>
   <button
     class="toolbar-main-action"
     on:click={() => (toolbarDialog = "save")}
     disabled={!files.length}
-    aria-label="Save / Export"
-    title="Save / Export"
+    aria-label={t("ui.common.saveExport")}
+    title={t("ui.common.saveExport")}
   >
     <span class="toolbar-action-icon" aria-hidden="true"
       ><svg viewBox="0 0 24 24"><path d="M6 5h12M12 8v11M9 16l3 3 3-3" /></svg
       ></span
-    ><span>Save / Export</span>
+    ><span>{t("ui.common.saveExport")}</span>
   </button>
   {#if libraryId === "blueplay"}
     <button
       class="toolbar-icon-button media-tool-button"
       on:click={() => (imageLibraryOpen = true)}
-      aria-label="Images"
-      title="Images"
+      aria-label={t("ui.common.images")}
+      title={t("ui.common.images")}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true"
         ><rect x="3" y="3" width="18" height="18" rx="2" /><circle
@@ -72,8 +77,8 @@
     <button
       class="toolbar-icon-button media-tool-button"
       on:click={() => (mediaNotice = "Audio support is not implemented yet.")}
-      aria-label="Audio"
-      title="Audio"
+      aria-label={t("ui.toolbar.audio")}
+      title={t("ui.toolbar.audio")}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true"
         ><path d="M3 10v4h4l5 4V6l-5 4H3Z" /><path
@@ -84,8 +89,8 @@
   {/if}
   <input
     class="project-title"
-    aria-label="Project name"
-    placeholder="Untitled project"
+    aria-label={t("ui.toolbar.projectName")}
+    placeholder={t("ui.common.untitledProject")}
     bind:value={projectName}
     on:keydown={commitProjectName}
   />
@@ -98,8 +103,12 @@
         if (terminalOpen) activeWindow = "terminal";
         if (!terminalOpen) terminalSplit = false;
       }}
-      aria-label={terminalOpen ? "Hide terminal" : "Show terminal"}
-      title={terminalOpen ? "Hide terminal" : "Show terminal"}
+      aria-label={terminalOpen
+        ? t("ui.toolbar.hideTerminal")
+        : t("ui.toolbar.showTerminal")}
+      title={terminalOpen
+        ? t("ui.toolbar.hideTerminal")
+        : t("ui.toolbar.showTerminal")}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true"
         ><rect x="2.5" y="3" width="19" height="18" rx="2" /><path
@@ -112,11 +121,11 @@
       class="toolbar-icon-button"
       on:click={toggleInheritance}
       aria-label={showInheritance
-        ? "Hide inheritance arrows"
-        : "Show inheritance arrows"}
+        ? t("ui.toolbar.hideInheritanceArrows")
+        : t("ui.toolbar.showInheritanceArrows")}
       title={showInheritance
-        ? "Hide inheritance arrows"
-        : "Show inheritance arrows"}
+        ? t("ui.toolbar.hideInheritanceArrows")
+        : t("ui.toolbar.showInheritanceArrows")}
     >
       <svg viewBox="0 0 32 24" aria-hidden="true"
         ><rect x="2" y="2" width="11" height="6" rx="1" /><rect
@@ -132,16 +141,23 @@
       >
     </button>
     <button
-      class="toolbar-icon-button settings-button"
-      on:click={() => (settingsNotice = true)}
-      aria-label="Settings"
-      title="Settings"
+      class:active={showTestClasses}
+      class="toolbar-icon-button test-classes-button"
+      on:click={toggleTestClasses}
+      disabled={!hasTestClasses}
+      aria-label={showTestClasses
+        ? t("ui.toolbar.hideTestClasses")
+        : t("ui.toolbar.showTestClasses")}
+      title={showTestClasses
+        ? t("ui.toolbar.hideTestClasses")
+        : t("ui.toolbar.showTestClasses")}
     >
-      <svg viewBox="0 0 24 24" aria-hidden="true"
-        ><path
-          d="M9.7 3.8l.6-1.3h3.4l.6 1.3 1.3.6 1.4-.3 2.4 2.4-.3 1.4.6 1.3 1.3.6v3.4l-1.3.6-.6 1.3.3 1.4-2.4 2.4-1.4-.3-1.3.6-.6 1.3h-3.4l-.6-1.3-1.3-.6-1.4.3-2.4-2.4.3-1.4-.6-1.3-1.3-.6V9.8l1.3-.6.6-1.3-.3-1.4 2.4-2.4 1.4.3zM12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z"
-        /></svg
-      >
+      <svg class="test-classes-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 3h11l4 4v14H3z" />
+        <path d="M14 3v4h4" />
+        <path class="test-check-row-one" d="m6 11 1.5 1.5L10 10" />
+        <path class="test-check-row-two" d="m6 16 1.5 1.5L10 15" />
+      </svg>
     </button>
   </div>
 </div>

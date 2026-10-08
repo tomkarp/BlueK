@@ -14,6 +14,7 @@ export class WorkspaceUi {
   vimMode = $state(false);
   darkMode = $state(false);
   shortcutsHelpOpen = $state(false);
+  offlineDownloadOpen = $state(false);
   formatShortcutLabel = $state("Ctrl+I");
   commentShortcutLabel = $state("Ctrl+/");
   vimShortcutLabel = $state("Ctrl+Shift+V");

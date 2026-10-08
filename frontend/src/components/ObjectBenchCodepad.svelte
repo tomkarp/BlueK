@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { useLanguage } from "../i18n/Language.svelte";
+  const language = useLanguage();
+  $: t = $language.t;
   import type {
     ProjectFile,
     RuntimeSnapshot,
@@ -42,7 +45,9 @@
           tabindex="0"
           class:selected={selectedObjectId === object.objectId}
           class="object"
-          title={fieldInput ? `Insert ${object.name}` : undefined}
+          title={fieldInput
+            ? t("ui.codepad.insert0", [object.name])
+            : undefined}
           on:mousedown={(event) => fieldInput && event.preventDefault()}
           on:click={(event) => {
             // Like BlueJ's call dialogs: while a field is edited, a
@@ -65,12 +70,14 @@
   <div
     class="bench-codepad-splitter"
     role="separator"
-    aria-label="Resize object bench and codepad"
+    aria-label={t("ui.codepad.resizeObjectBenchAndCodepad")}
     on:pointerdown={beginBenchResize}
   ></div>
   <button
     class="codepad-toggle"
-    aria-label={codepadOpen ? "Collapse Codepad" : "Expand Codepad"}
+    aria-label={codepadOpen
+      ? t("ui.codepad.collapseCodepad")
+      : t("ui.codepad.expandCodepad")}
     on:click={() => (codepadOpen = !codepadOpen)}
     >{codepadOpen ? "›" : "‹"}</button
   >
@@ -79,7 +86,7 @@
       <div
         class="codepad-history"
         role="log"
-        aria-label="Codepad history"
+        aria-label={t("ui.codepad.codepadHistory")}
         on:contextmenu|preventDefault|stopPropagation={(event) =>
           (codepadMenu = { x: event.clientX, y: event.clientY })}
       >
@@ -107,7 +114,9 @@
                     objectId: entry.objectId,
                     className: entry.className || "Object",
                   })}
-                aria-label={`Get ${entry.className || "object"} on object bench`}
+                aria-label={t("ui.codepad.get0OnObjectBench", [
+                  entry.className || "object",
+                ])}
               >
                 <span class="codepad-object-icon" aria-hidden="true"
                 ></span><span class="codepad-object-label"
@@ -118,7 +127,7 @@
                     ><span class="codepad-result-type"
                       >{codepadResultType(entry.result)}</span
                     >{:else}<span class="codepad-object-placeholder"
-                      >&lt;object&gt;</span
+                      >{t("ui.codepad.object")}</span
                     ><span> : {entry.className}</span>{/if}</span
                 >
               </button>
@@ -137,7 +146,7 @@
         {/each}
       </div>
       <textarea
-        aria-label="Codepad input"
+        aria-label={t("ui.codepad.codepadInput")}
         rows="1"
         bind:value={codepad}
         on:keydown={submitCodepad}

@@ -46,12 +46,15 @@ export async function droppedDirectoryEntries(
   return nested.flat();
 }
 
-export async function copyLink(url: string): Promise<boolean> {
+export async function copyLink(
+  url: string,
+  promptLabel = "Copy this project link:",
+): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(url);
     return true;
   } catch {
-    window.prompt("Copy this project link:", url);
+    window.prompt(promptLabel, url);
     return false;
   }
 }
@@ -59,23 +62,30 @@ export async function copyLink(url: string): Promise<boolean> {
 export async function copyFullProjectLink(
   payload: ProjectSource,
   readme: boolean,
+  state: boolean,
+  promptLabel = "Copy this project link:",
 ): Promise<boolean> {
-  const url = new URL(window.location.protocol === "file:" ? "https://bluek.de/" : window.location.href);
+  const url = new URL(
+    window.location.protocol === "file:"
+      ? "https://bluek.de/"
+      : window.location.href,
+  );
   url.search = "";
-  url.hash = `bluek=${await encodeBlueKLink(payload)}${readme ? "&readme=1" : ""}`;
-  return copyLink(url.href);
+  url.hash = `bluek=${await encodeBlueKLink(payload)}${readme ? "&readme=1" : ""}${state ? "&state=1" : ""}`;
+  return copyLink(url.href, promptLabel);
 }
 
 export async function saveShortProjectLink(
   payload: ProjectSource,
   readme: boolean,
+  state: boolean,
+  promptLabel = "Copy this project link:",
 ): Promise<ShareLinkDialog> {
   const { code } = await saveProjectToServer(payload);
-  const url = new URL(
-    `/load/${code}${readme ? "?readme=1" : ""}`,
-    window.location.origin,
-  ).href;
-  return { url, code, copied: await copyLink(url) };
+  const url = new URL(`/load/${code}`, window.location.origin);
+  if (readme) url.searchParams.set("readme", "1");
+  if (state) url.searchParams.set("state", "1");
+  return { url: url.href, code, copied: await copyLink(url.href, promptLabel) };
 }
 
 export async function readSharedProject(code: string): Promise<unknown> {

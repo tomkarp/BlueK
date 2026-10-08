@@ -427,8 +427,9 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         val call = node as? FunctionCallNode ?: return emptyList()
         val argument = call.arguments.firstOrNull()?.value ?: return emptyList()
         return when ((call.function as? VariableReferenceNode)?.variableName) {
-            "requireNotNull", "checkNotNull" -> listOfNotNull(nonNullFact(smartCastSubject(argument)))
-            "require", "check" -> smartCastsWhenTrue(argument)
+            "requireNotNull", "checkNotNull", "assertNotNull" -> listOfNotNull(nonNullFact(smartCastSubject(argument)))
+            "require", "check", "assertTrue" -> smartCastsWhenTrue(argument)
+            "assertFalse" -> smartCastsWhenFalse(argument)
             else -> emptyList()
         }
     }

@@ -45,6 +45,8 @@ export class BluePlayWorkspace {
   speed = $state(50);
   stageWindowOpen = $state(false);
   stageWindowDismissed = $state(false);
+  /** `showCount` of the last frame; a higher count means World.show() ran. */
+  private shownCount = 0;
   stageMaximized = $state(false);
   stagePosition: { left: number; top: number } | null = $state(null);
   stageDrawPending = $state(false);
@@ -207,7 +209,12 @@ export class BluePlayWorkspace {
       this.host.project().runtimeResources,
       this.resourceSizes,
     );
-    // Repeated snapshots must not reopen a window dismissed by the user.
+    // Repeated snapshots must not reopen a window dismissed by the user,
+    // an explicit World.show() (object menu, codepad, main) does.
+    if (value.showCount !== this.shownCount) {
+      this.shownCount = value.showCount;
+      this.stageWindowDismissed = false;
+    }
     if (!this.stageWindowDismissed) this.stageWindowOpen = true;
     this.speed = Number(value.speed) || this.speed;
     this.stageAudio.playFrameSounds(
@@ -247,6 +254,7 @@ export class BluePlayWorkspace {
   };
   clearWorld = () => {
     this.stage = null;
+    this.shownCount = 0;
     this.stageWindowOpen = false;
     this.stageWindowDismissed = false;
   };

@@ -73,6 +73,12 @@ test('GUI-58 BluePlay library cards are normal movable cards with per-file API d
   );
   expect(worldZ).toBeGreaterThan(Math.max(...initialEdgeZ));
   expect(edgeZ).toContain(worldZ);
+  await world.click();
+  const clickedWorldZ = await world.evaluate((element) => Number(getComputedStyle(element).zIndex));
+  expect(clickedWorldZ).toBeGreaterThan(worldZ);
+  expect(await page.locator('.inheritance-edge').evaluateAll((elements) =>
+    elements.map((element) => Number(getComputedStyle(element).zIndex)),
+  )).toContain(clickedWorldZ);
   const topCard = await page.evaluate(({ x, y }) =>
     document.elementFromPoint(x, y)?.closest('.classcard')?.getAttribute('aria-label'), {
       x: targetCenter.x,
@@ -551,4 +557,26 @@ test('GUI-91 BluePlay help contains the exact reference API and stays compact', 
   await help.locator('.blueplay-api-content').evaluate(element => { element.scrollTop = element.scrollHeight; });
   await expect(help.getByRole('button', { name: 'Close', exact: true })).toBeInViewport();
   await page.screenshot({ path: '/tmp/blueplay-api-mobile.png' });
+});
+
+test('GUI-103 World.show() from the codepad reopens a closed world window every time', async ({ page }) => {
+  const stage = await loadBluePlay(page);
+  const input = page.getByLabel('Codepad input');
+  await input.fill('val codepadWorld = World(100, 100, 1); codepadWorld.show()');
+  await input.press('Enter');
+  await expect(input).toBeEnabled();
+  for (let round = 0; round < 3; round += 1) {
+    await expect(stage).toBeVisible();
+    await stage.getByRole('button', { name: 'Close BluePlay world' }).click();
+    await expect(stage).toBeHidden();
+    // Other codepad calls keep a closed window closed.
+    await input.fill('codepadWorld.width');
+    await input.press('Enter');
+    await expect(input).toBeEnabled();
+    await expect(stage).toBeHidden();
+    await input.fill('codepadWorld.show()');
+    await input.press('Enter');
+    await expect(input).toBeEnabled();
+  }
+  await expect(stage).toBeVisible();
 });

@@ -148,11 +148,85 @@ class KotliteSession {
         !(function.functionName == "associateBy" &&
             function.parameterTypes.singleOrNull()?.name == "valueSelector")
 
+    private val testing = BlueKTesting()
+    private var fixtureSerial = 0
+    fun testState(): String = testing.state()
+    fun setTestCallback(callback: (() -> Unit)?) { testing.changed = callback }
+    fun noteInteraction(op: String, objectId: String, name: String, source: String, result: String) {
+        // Inspector refreshes are presentation-only. Their getter evaluations
+        // must never become part of a replayable object-bench fixture.
+        if (op == "inspectGet") return
+        if (op == "bind" && references[name]?.interactive == false && testing.hasDeclaration(name)) testing.aliases[objectId] = name
+        if (op == "bind" && objectId !in testing.aliases) {
+            val value = handles[objectId]
+            references.entries.firstOrNull { it.key != name && referenceValue(it.value) === value }?.let { testing.aliases[objectId] = it.key }
+        }
+        testing.note(op, objectId, name, source, result)
+    }
+    fun testingAction(action: String, className: String, value: String, kind: String): String = try {
+        var source: String? = null
+        var replacesFixture = false
+        var replacesInitializers = false
+        when (action) {
+            "begin" -> testing.begin(className)
+            "cancel" -> testing.cancel()
+            "assert" -> testing.assertion(value, kind)
+            "recordSource" -> source = testing.recordedSource(value)
+            "fixtureSource" -> {
+                replacesFixture = testing.replacesFixture(className)
+                replacesInitializers = testing.replacesInitializers(className)
+                source = testing.fixtureSource(className, references.filter { it.value.onBench }.map { (name, ref) ->
+                    name to (referenceValue(ref)?.type()?.toTypeNode()?.descriptiveName() ?: error("Missing object $name"))
+                })
+            }
+            else -> error("Unknown test action.")
+        }
+        "{\"kind\":\"unit\",\"display\":\"Unit\"" + (source?.let { ",\"generatedSource\":${JSON.stringify(it)},\"fileName\":${JSON.stringify(testing.suites[className.ifEmpty { JSON.parse<dynamic>(testing.state()).recording as String }]?.file)},\"replacesFixture\":$replacesFixture,\"replacesInitializers\":$replacesInitializers" } ?: "") + "}"
+    } catch (e: Throwable) { errorMessage(e.message ?: "Test action failed.", "request") }
+
+    fun startTests(className: String, method: String, onInput: (Int) -> Unit, onComplete: (String) -> Unit): String = try {
+        val driver = testing.driver(className, method)
+        startEvaluateInternal("<BlueK tests>", driver, onInput, { result -> testing.complete(result.startsWith("{\"kind\":\"error\"")); onComplete(result) }, emptySet())
+    } catch (e: Throwable) { errorMessage(e.message ?: "Test run failed.", "request") }
+
+    fun startFixture(className: String, onInput: (Int) -> Unit, onComplete: (String) -> Unit): String = try {
+        val suite = testing.suites[className] ?: error("Unknown test class.")
+        val name = "__bluek_fixture${++fixtureSerial}"
+        val code = "val $name = $className()\n" + suite.before.joinToString("\n") { "$name.`${it.name}`()" }
+        startEvaluateInternal("<BlueK fixture>", code, onInput, { result ->
+            if (result.startsWith("{\"kind\":\"error\"")) onComplete(result)
+            else {
+                try {
+                    val fixture = interpreter.symbolTable().findPropertyByDeclaredName(name) as ClassInstance
+                    val bindings = mutableMapOf<String, String>()
+                    for (property in suite.node.declarations.filterIsInstance<PropertyDeclarationNode>()) {
+                        val value = fixture.readBackingPropertyByDeclaredName(property.name) ?: continue
+                        if (value === NullValue || value === UnitValue) continue
+                        val id = registerExpressionValue(value)
+                        val bound = bind(id, property.name)
+                        check(!bound.startsWith("{\"kind\":\"error\"")) { "Cannot put ${property.name} on the bench: $bound" }
+                        bindings[property.name] = id
+                    }
+                    runCatching { testing.seedFixture(className, bindings) }.onFailure { testing.taint(it.message ?: "This fixture cannot be captured.") }
+                    onComplete(result)
+                } catch (e: Throwable) { onComplete(errorMessage(e.message ?: "Fixture could not be restored.", "request")) }
+            }
+        }, emptySet())
+    } catch (e: Throwable) { errorMessage(e.message ?: "Fixture failed.", "request") }
+
     private fun resetInterpreter() {
         environment = ExecutionEnvironment(functionRegistrationFilter = ::isUsableStdlibFunction, sleepHandler = { millis ->
             checkCanPause(interpreter, "Thread.sleep()")
             awaitRuntimeSleep(millis)
         })
+        for (name in listOf("bluekTestStart", "bluekTestFailure", "bluekTestFinish")) environment.registerFunction(CustomFunctionDefinition(
+            position = SourcePosition.BUILTIN, receiverType = null, functionName = name, returnType = "Unit",
+            parameterTypes = when (name) { "bluekTestStart" -> listOf(CustomFunctionParameter("index", "Int")); "bluekTestFailure" -> listOf(CustomFunctionParameter("error", "Throwable")); else -> emptyList() },
+            executable = { _, _, args, _ ->
+                when (name) { "bluekTestStart" -> testing.start((args[0] as IntValue).value); "bluekTestFailure" -> testing.failure(args[0] as ClassInstance); else -> testing.finish() }
+                UnitValue
+            }
+        ))
         environment.registerClass(BlueKClass.definition())
         environment.registerFunction(BlueKClass.beepFunction { pendingEffects += "beep" })
         val modules = AllStdLibModules { text -> appendOutput(text) }.modules +
@@ -423,6 +497,11 @@ class KotliteSession {
 
     fun load(filename: String, source: String): String = evaluate(filename, source)
 
+    /** Project files explicitly marked as test classes can also store object-bench states before they contain tests. */
+    fun setTestClassFiles(filenames: Array<String>) {
+        testing.setTestClassFiles(filenames.toSet())
+    }
+
     /** Project files contain declarations, unlike executable Codepad snippets.
      * Parse every file before evaluating even the first property initializer.
      */
@@ -448,6 +527,9 @@ class KotliteSession {
                 return projectError(filename, location?.groupValues?.get(1)?.toIntOrNull() ?: 1,
                     location?.groupValues?.get(2)?.toIntOrNull() ?: 1, error.message ?: "Invalid Kotlin source.")
             }
+            try {
+                testing.load(filename, sources[index], script)?.let { return projectError(filename, 1, 1, it) }
+            } catch (e: Throwable) { return projectError(filename, 1, 1, e.message ?: "Invalid test declaration.") }
             // The browser runtime provides the Kotlin language and standard
             // library, but no JVM libraries such as java.time or javax.swing.
             script.imports.firstOrNull { !it.path.startsWith("kotlin.") }?.let { import ->
@@ -626,7 +708,7 @@ class KotliteSession {
                 .filterNot { it.modifiers.any { modifier -> modifier.name == "private" } }
                 .mapIndexed { index, function -> jsonFunction("${declaration.name}.Companion", function, index) }
             val typeParameters = declaration.typeParameters.joinToString(",", "[", "]") { parameter -> "\"${escape(parameter.name)}\"" }
-            "{\"id\":\"${escape(declaration.name)}\",\"name\":\"${escape(declaration.name)}\",\"kind\":\"$kind\",\"modifiers\":${declaration.modifiers.joinToString(",", "[", "]") { modifier -> "\"${modifier.name}\"" }},\"typeParameters\":$typeParameters,\"supertypes\":$supers,\"constructors\":$constructors,\"properties\":$properties,\"methods\":$methods${if (companionMethods.isEmpty()) "" else ",\"companionMethods\":${companionMethods.joinToString(",", "[", "]")}"}${if (bluePlayEnabled && declaration.name in setOf("World", "Actor", "Image")) ",\"builtin\":true" else ""}}"
+            "{\"id\":\"${escape(declaration.name)}\",\"name\":\"${escape(declaration.name)}\",\"kind\":\"$kind\",\"modifiers\":${declaration.modifiers.joinToString(",", "[", "]") { modifier -> "\"${modifier.name}\"" }},\"typeParameters\":$typeParameters,\"supertypes\":$supers,\"constructors\":$constructors,\"properties\":$properties,\"methods\":$methods${if (companionMethods.isEmpty()) "" else ",\"companionMethods\":${companionMethods.joinToString(",", "[", "]")}"}${testing.metadata(declaration.name)}${if (bluePlayEnabled && declaration.name in setOf("World", "Actor", "Image")) ",\"builtin\":true" else ""}}"
         }
         val functionJson = functions.mapIndexed { index, function ->
             val sourceFile = projectFunctionRanges.firstOrNull { function.position.lineNum in it.second..it.third }?.first

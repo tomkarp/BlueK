@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { useLanguage } from "../i18n/Language.svelte";
+  const language = useLanguage();
+  $: t = $language.t;
   import { focusOnMount, containClicks } from "../uiActions";
 
   import type {
@@ -51,7 +54,7 @@
     <div
       class="inspect-window"
       role="dialog"
-      aria-label="Object inspector"
+      aria-label={t("ui.inspector.objectInspector")}
       tabindex="-1"
       style={`position:fixed;left:${inspector.position.left}px;top:${inspector.position.top}px;margin:0;z-index:${inspector.id === activeInspectorId ? 100 : 10 + index}`}
       on:pointerdown={(event) => {
@@ -105,9 +108,9 @@
                 <input
                   use:focusOnMount
                   bind:this={fieldInput}
-                  aria-label={`Value of ${field.name}`}
+                  aria-label={t("ui.inspector.valueOf0", [field.name])}
                   aria-invalid={Boolean(fieldError)}
-                  placeholder="expression"
+                  placeholder={t("ui.inspector.expression")}
                   bind:value={fieldDraft}
                   on:keydown={(event) => {
                     if (event.key === "Escape") {
@@ -120,15 +123,17 @@
               {:else}
                 {#if field.reference}<button
                     class="inspect-reference"
-                    aria-label={`Open referenced object ${field.name}`}
-                    title={`Open ${field.name}`}
+                    aria-label={t("ui.inspector.openReferencedObject0", [
+                      field.name,
+                    ])}
+                    title={t("ui.inspector.open0", [field.name])}
                     on:click={() => inspectFieldReference(inspector.id, field)}
                     ><svg viewBox="0 0 48 24" aria-hidden="true"
                       ><path d="M3 12h32" /><path d="m29 5 8 7-8 7" /></svg
                     ></button
                   >{:else if field.error}<button
                     class="inspect-error-value"
-                    aria-label={`Show error for ${field.name}`}
+                    aria-label={t("ui.inspector.showErrorFor0", [field.name])}
                     title={field.error}
                     on:click={() => {
                       inspectorError = {
@@ -143,9 +148,9 @@
                     class="inspect-edit"
                     class:inspect-edit-disabled={!editable}
                     disabled={!editable}
-                    aria-label={`Edit ${field.name}`}
+                    aria-label={t("ui.inspector.edit0", [field.name])}
                     title={field.setterPrivate
-                      ? "The setter is private"
+                      ? t("ui.inspector.theSetterIsPrivate")
                       : "Edit"}
                     on:click={() => beginFieldEdit(field, inspector.data)}
                     >✎</button
@@ -156,10 +161,12 @@
                 >{fieldError}</small
               >{/if}
           </div>
-        {:else}No fields{/each}
+        {:else}{t("ui.inspector.noFields")}{/each}
       </div>
       <div class="dialog-actions">
-        <button on:click={() => closeInspector(inspector.id)}>Close</button>
+        <button on:click={() => closeInspector(inspector.id)}
+          >{t("ui.common.close")}</button
+        >
       </div>
     </div>
   </div>
@@ -174,12 +181,13 @@
       use:containClicks
     >
       <h3 id="inspector-error-title">
-        Property error: {inspectorError.property}
+        {t("ui.inspector.propertyError")}
+        {inspectorError.property}
       </h3>
       <p>{inspectorError.message}</p>
       <div class="dialog-actions">
         <button use:focusOnMount on:click={() => (inspectorError = null)}
-          >Close</button
+          >{t("ui.common.close")}</button
         >
       </div>
     </div>

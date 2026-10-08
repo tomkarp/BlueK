@@ -15,6 +15,7 @@ const bundle = await rolldown({
       if (id === entry) return `
         export { ObjectWorkspace } from '${new URL('../frontend/src/workspace/ObjectWorkspace.svelte.ts', import.meta.url).pathname}';
         export { WorkspaceUi } from '${new URL('../frontend/src/workspace/WorkspaceUi.svelte.ts', import.meta.url).pathname}';
+        export { ProjectWorkspace } from '${new URL('../frontend/src/workspace/ProjectWorkspace.svelte.ts', import.meta.url).pathname}';
       `;
     },
     transform: {
@@ -32,7 +33,7 @@ const bundle = await rolldown({
 });
 const { output } = await bundle.generate({ format: 'esm' });
 await bundle.close();
-const { ObjectWorkspace, WorkspaceUi } = await import('data:text/javascript;base64,' + Buffer.from(output[0].code).toString('base64'));
+const { ObjectWorkspace, WorkspaceUi, ProjectWorkspace } = await import('data:text/javascript;base64,' + Buffer.from(output[0].code).toString('base64'));
 
 const snapshot = { generationId: 'one', phase: 'ready', references: [], liveObjectIds: [], inspections: {} };
 let generation = 'one';
@@ -109,4 +110,27 @@ const transportFailure = first.objects.executeInspectorCommand({ op: 'inspect', 
 await Promise.resolve();
 pending.reject(new Error('Transport failed'));
 await assert.rejects(transportFailure, /Transport failed/, 'A real failure in the current generation is preserved');
-console.log('Workspace controllers passed: real Svelte reactivity, cloneable arguments, independent instances, stale invocation results and cancelled inspections.');
+const project = new ProjectWorkspace({
+  tests: () => ({ async loadDefaultFixture() {} }),
+  objects: () => ({ dismissMenu() {} }),
+  session: () => ({ markUncompiled() {}, sourceEdited() {} }),
+  ui: () => first.ui,
+  editor: () => ({ openEditor() {}, removeFile() {} }),
+});
+project.files = [{ id: 'hund', fileName: 'Hund.kt', source: 'class Hund', kind: 'class', revision: 1 }];
+const attached = project.addTestClass(project.files[0], 'HundTest');
+assert.throws(() => project.addTestClass(project.files[0], 'AnotherHundTest'), /already/);
+project.setDefaultTestClass('HundTest');
+assert.equal(project.canShareState, true, 'A stored default class enables state loading in project links');
+project.applyGeneratedSource(attached.id, 'import kotlin.test.*\nclass RenamedTest {}');
+assert.equal(project.files.find(file => file.id === attached.id).fileName, 'RenamedTest.kt');
+assert.equal(project.defaultTestClass, 'RenamedTest');
+project.duplicateFile(project.files.find(file => file.id === attached.id));
+assert.equal(project.files.at(-1).testTarget, undefined, 'A duplicate test card is independent');
+assert.equal(project.files.at(-1).isTestClass, true);
+project.deleteFile(project.files[0]);
+assert.equal(project.files.find(file => file.id === attached.id).testTarget, undefined, 'Deleting the parent frees its attached test card');
+project.deleteFile(project.files.find(file => file.id === attached.id));
+assert.equal(project.defaultTestClass, '', 'Deleting the default test clears the setting');
+assert.equal(project.canShareState, false, 'A deleted default class disables the link option');
+console.log('Workspace controllers passed: real Svelte reactivity, cloneable arguments, independent instances, stale replies, cancelled inspections and test-card rename/duplicate/delete.');

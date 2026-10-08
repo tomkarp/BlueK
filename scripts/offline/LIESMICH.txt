@@ -1,35 +1,35 @@
-BlueK – Offline-Version
-=======================
+BlueK offline
+=============
 
-Start
------
-1. ZIP auf die Festplatte entpacken (nicht im ZIP-Fenster öffnen).
-2. BlueK.html doppelklicken oder im Browser öffnen.
+Getting started
+---------------
+1. Extract the ZIP onto your computer (do not open inside the ZIP viewer).
+2. Open BlueK.html in a recent desktop browser.
 
-Die HTML-Datei enthält die gesamte Anwendung. Kein Server, keine Installation,
-kein Node.js oder Python erforderlich. Die LIESMICH.txt wird zum Start nicht
-benötigt; BlueK.html kann auch einzeln weitergegeben werden.
+The HTML file contains the whole app. No installation, server, Node.js or
+Python is needed. It can also be distributed on its own.
 
-Funktionen
-----------
-Projekte anlegen, Vorlagen öffnen, bearbeiten, formatieren, kompilieren,
-ausführen, BluePlay nutzen, JSON/BlueJ-Projekte importieren und exportieren
-sowie einzelne Programme als HTML exportieren funktioniert ohne Internet.
+Features
+--------
+Create projects, open templates, edit/format/check/run Kotlin, use BluePlay,
+import JSON or BlueJ projects, export JSON and export standalone HTML programs.
+BlueJ ZIP export is not implemented.
 
-Kurzlinks und Drei-Wort-Codes benötigen den Share-Server und sind ausgeblendet.
-„Copy Full Project Link“ enthält das komplette Projekt und verweist für den
-Empfänger auf https://bluek.de/; zum Öffnen dieses Links ist Internet nötig.
+Short links need the online share service and are hidden offline. Copy Full
+Project Link encodes the project and targets https://bluek.de/; opening that
+link requires internet.
 
-Projekte sichern
-----------------
-BlueK speichert das aktuelle Projekt im Browser. Diese Speicherung hängt vom
-Browser und bei lokalen HTML-Dateien auch vom Dateipfad ab. Wird die Datei
-verschoben, kann das bisherige Projekt fehlen. Für die Abgabe oder als Sicherung
-„Save / Export“ > „Export Project JSON“ wählen und die .bluek.json-Datei speichern.
-Über „Open / Import“ lässt sich diese Datei wieder öffnen.
+Save your projects
+------------------
+Browser autosave depends on the browser and the location of BlueK.html.
+Moving the file, clearing browser data or private browsing can remove access
+to drafts. Use Save / Export > Export Project JSON for backups or submissions.
+Reopen the .bluek.json file through Open / Import.
 
-Browser
--------
-Einen aktuellen Desktop-Browser verwenden. Getestet über lokale Dateien in
-Chromium und WebKit (Safari-Engine). Bei einem privaten Browserfenster oder
-nach dem Löschen der Browserdaten kann die automatische Sicherung fehlen.
+Before relying on offline use
+-----------------------------
+The offline version has not yet been widely tested in practice. Test it with
+your own projects and browser before relying on it. Automated local-file
+checks cover Chromium and WebKit; they are not a guarantee for every browser.
+
+Report bugs when online: https://github.com/tomkarp/BlueK/issues/new

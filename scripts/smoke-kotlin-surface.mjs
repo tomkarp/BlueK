@@ -22,6 +22,14 @@ const evaluate = source => JSON.parse(session.evaluate('<surface>', source));
 
 // Expression -> expected `display`. Grouped as in docs/kotlin-surface.md.
 const supported = [
+  // Portable kotlin.test scalar assertions, including boxed Double equality.
+  ['assertEquals(2, 2); assertNotEquals(2, 3); assertTrue(true); assertFalse(false); assertNull(null); assertNotNull("x")', 'x'],
+  ['assertEquals(Double.NaN, Double.NaN); assertNotEquals(0.0, -0.0)', 'Unit'],
+  ['listOf(-0.0 < 0.0, -0.0 > 0.0, -0.0 <= 0.0, -0.0 >= 0.0).joinToString()', 'false, false, true, true'],
+  ['listOf(Double.NaN < 0.0, Double.NaN > 0.0, Double.NaN <= 0.0, Double.NaN >= 0.0).joinToString()', 'false, false, false, false'],
+  ['listOf(1 < 1.5, 1.5 > 1, (-0.0).compareTo(0.0) < 0).joinToString()', 'true, true, true'],
+  ['fun nullableAssertionValue(): String? = "okay"; fun assertionContract(): Int { val assertedValue = nullableAssertionValue(); assertNotNull(assertedValue); return assertedValue.length }; assertionContract()', '4'],
+
   // Numbers: minOf/maxOf/coerce* and the Int/Char conversions (BlueKStdlibModule, group B).
   ['val ok1: String? = "ab"; ok1?.length', '2'],
   ['val ok2: String? = "ab"; ok2!!.length', '2'],
