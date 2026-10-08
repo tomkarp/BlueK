@@ -11,6 +11,13 @@ contents are available offline; links to GitHub require internet. Shortcuts
 show Cmd on macOS and Ctrl elsewhere. Long sections scroll within the dialog,
 leaving Close available.
 
+## Interface language
+
+Choose **English** or **Deutsch** in **Settings → Language**. BlueK uses the
+browser language when supported, otherwise English, and remembers an explicit
+choice in this browser. Kotlin code,
+program output and compiler/runtime errors keep their original text.
+
 ## Projects and editing
 
 **New Project** offers an empty project, BluePlay templates and demo projects.

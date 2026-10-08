@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { useLanguage } from "../i18n/Language.svelte";
+  const language = useLanguage();
+  $: t = $language.t;
   import type { ProjectFile } from "../../../runtime-contract/src/index";
 
   import { bluePlayApiDocs } from "../bluePlayApi";
@@ -16,17 +19,20 @@
     >
       <div class="blueplay-api-header">
         <h3 id="blueplay-api-title">{api.title}</h3>
-        <p>{api.summary}</p>
+        <p>{$language.message(api.summary)}</p>
       </div>
       <div class="blueplay-api-content">
         {#each api.sections as section}
-          <section class="blueplay-api-section" aria-label={section.title}>
-            <h4>{section.title}</h4>
+          <section
+            class="blueplay-api-section"
+            aria-label={$language.message(section.title)}
+          >
+            <h4>{$language.message(section.title)}</h4>
             <dl class="blueplay-api-members">
               {#each section.members as member}
                 <div class="blueplay-api-member">
                   <dt><code>{member.signature}</code></dt>
-                  <dd>{member.description}</dd>
+                  <dd>{$language.message(member.description)}</dd>
                 </div>
               {/each}
             </dl>
@@ -34,7 +40,9 @@
         {/each}
       </div>
       <div class="dialog-actions">
-        <button on:click={() => (bluePlayApiFile = null)}>Close</button>
+        <button on:click={() => (bluePlayApiFile = null)}
+          >{t("ui.common.close")}</button
+        >
       </div>
     </div>
   </div>{/if}

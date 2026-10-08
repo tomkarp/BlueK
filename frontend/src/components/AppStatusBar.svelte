@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { useLanguage } from "../i18n/Language.svelte";
+  const language = useLanguage();
+  $: t = $language.t;
   import type { RuntimeSnapshot } from "../../../runtime-contract/src/index";
 
   import type { BenchObject, ActiveWindow } from "../uiTypes";
@@ -26,15 +29,15 @@
     >{selectedObjectId &&
     bench.find((object) => object.objectId === selectedObjectId)
       ? `${bench.find((object) => object.objectId === selectedObjectId)?.name} : ${bench.find((object) => object.objectId === selectedObjectId)?.className}`
-      : "No object selected"}</span
+      : t("ui.status.noObjectSelected")}</span
   >
-  <div class="fixture-actions" aria-label="Test state actions">
+  <div class="fixture-actions" aria-label={t("ui.status.testStateActions")}>
     <button
-      aria-label="Save state"
+      aria-label={t("ui.common.saveState")}
       title={captureError ||
         (defaultTestClass
-          ? `Save state to ${defaultTestClass}`
-          : "Save object bench as a test state")}
+          ? t("ui.status.saveStateTo0", [defaultTestClass])
+          : t("ui.status.saveObjectBenchAsATestState"))}
       disabled={!canSaveFixture}
       on:click={saveFixture}
       ><svg viewBox="0 0 24 24" aria-hidden="true">
@@ -43,10 +46,10 @@
         <path d="M12 12v7m-3-3 3 3 3-3" />
       </svg></button
     ><button
-      aria-label="Load state"
+      aria-label={t("ui.common.loadState")}
       title={defaultTestClass
-        ? `Load state from ${defaultTestClass}`
-        : "Choose a default test class first"}
+        ? t("ui.status.loadStateFrom0", [defaultTestClass])
+        : t("ui.common.chooseADefaultTestClassFirst")}
       disabled={!canLoadFixture}
       on:click={loadFixture}
       ><svg viewBox="0 0 24 24" aria-hidden="true">
@@ -55,10 +58,10 @@
         <path d="M12 19v-7m-3 3 3-3 3 3" />
       </svg></button
     ><button
-      aria-label="Choose default test class"
+      aria-label={t("ui.common.chooseDefaultTestClass")}
       title={defaultTestClass
-        ? `Default test class: ${defaultTestClass}`
-        : "Choose default test class"}
+        ? t("ui.status.defaultTestClass0", [defaultTestClass])
+        : t("ui.common.chooseDefaultTestClass")}
       disabled={!canChooseTestClass}
       on:click={chooseTestClass}
       ><svg viewBox="0 0 24 24" aria-hidden="true">
@@ -73,26 +76,26 @@
       on:click={() => {
         terminalOpen = true;
         activeWindow = "terminal";
-      }}>Terminal</button
+      }}>{t("ui.status.terminal")}</button
     >{/if}
   <span
     class:active={programActive}
     class="activity-bar"
     role="progressbar"
     aria-busy={programActive}
-    title={programActive ? "BlueK is running" : "Ready"}
+    title={programActive ? t("ui.status.blueKIsRunning") : t("ui.status.ready")}
     aria-label={phase === "compiling"
-      ? "Compiling"
+      ? t("ui.status.compiling")
       : phase === "running" || inputReady
-        ? "Program active"
-        : "Ready"}
+        ? t("ui.status.programActive")
+        : t("ui.status.ready")}
     >{#if programActive}<span class="activity-indicator" aria-hidden="true"
       ></span>{/if}</span
   >
   <button
     class="reset-runtime"
-    aria-label="Reset runtime"
-    title="Reset"
+    aria-label={t("ui.common.resetRuntime")}
+    title={t("ui.common.reset")}
     on:click={resetRuntime}
     disabled={phase === "compiling"}>↶</button
   >

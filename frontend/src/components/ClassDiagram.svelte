@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { useLanguage } from "../i18n/Language.svelte";
+  const language = useLanguage();
+  $: t = $language.t;
   import type { ProjectFile } from "../../../runtime-contract/src/index";
 
   import type { BenchObject } from "../uiTypes";
@@ -43,8 +46,8 @@
       aria-live="polite"
     >
       {inheritanceSelection
-        ? "Now select its superclass."
-        : "Select a subclass, then its superclass."}
+        ? t("ui.diagram.nowSelectItsSuperclass")
+        : t("ui.diagram.selectASubclassThenItsSuperclass")}
     </div>{/if}
   {#if showInheritance}
     {#each inheritanceEdges.filter((edge) => showTestClasses || (!testFileIds.includes(edge.id) && !testFileIds.includes(edge.parentId))) as edge, index}
@@ -82,7 +85,7 @@
         class:written={Boolean(readme.trim())}
         class="readme-card"
         aria-label="README.md"
-        title="README.md — describe this project"
+        title={t("ui.diagram.rEADMEMdDescribeThisProject")}
         on:click={openReadme}
         on:keydown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
@@ -109,7 +112,8 @@
         aria-hidden={!showTestClasses && testFileIds.includes(file.id)}
         tabindex={!showTestClasses && testFileIds.includes(file.id) ? -1 : 0}
         class:test-card={testFileIds.includes(file.id)}
-        class:hidden-test-card={!showTestClasses && testFileIds.includes(file.id)}
+        class:hidden-test-card={!showTestClasses &&
+          testFileIds.includes(file.id)}
         class:attached-test={Boolean(file.testTarget)}
         class:uncompiled
         class:inheritance-selected={inheritanceSelection === file.id}
@@ -134,7 +138,7 @@
             selectCard(file, index);
           }
         }}
-        >
+      >
         <div class="card-header">
           {#if file.kind === "functions"}<small>«functions»</small>{/if}<strong
             >{file.fileName.replace(".kt", "")}</strong

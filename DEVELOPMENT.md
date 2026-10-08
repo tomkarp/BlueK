@@ -117,6 +117,11 @@ BLUEK_BUNDLE=kotlite-browser/build/kotlin-webpack/js/developmentExecutable/bluek
 
 Open the resulting `.cpuprofile` in Chrome DevTools.
 
+## Interface translations
+
+See [localization](docs/localization.md) for message catalogs, language ownership
+and translation checks.
+
 ## Deployment
 
 `main` deploys to bluek.de and GitHub Pages; `beta` to beta.bluek.de.

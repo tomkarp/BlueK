@@ -1,4 +1,8 @@
 <script lang="ts">
+  import TranslatedText from "./TranslatedText.svelte";
+  import { useLanguage } from "../i18n/Language.svelte";
+  const language = useLanguage();
+  $: t = $language.t;
   import { containClicks } from "../uiActions";
   export let open: boolean;
   export let downloadUrl: string;
@@ -14,49 +18,39 @@
       tabindex="-1"
       use:containClicks
     >
-      <h3 id="offline-download-title">BlueK Offline</h3>
+      <h3 id="offline-download-title">{t("ui.offline.blueKOffline")}</h3>
       <p>
-        You can use BlueK online without downloading anything. This version is
-        for working without an internet connection.
+        {t("ui.offline.youCanUseBlueKOnlineWithoutDownloadingAnything")}
       </p>
       <ol>
-        <li>Download and extract the ZIP file.</li>
-        <li>
-          Open <strong>BlueK.html</strong> in a recent browser. No installation is
-          needed.
-        </li>
-        <li>
-          Save your projects with <strong
-            >Save / Export → Export Project JSON</strong
-          >, and import them to continue elsewhere.
-        </li>
+        <li>{t("ui.offline.downloadAndExtractTheZIPFile")}</li>
+        <li><TranslatedText message="ui.offline.openHtml" /></li>
+        <li><TranslatedText message="ui.offline.saveProjects" /></li>
       </ol>
       <p class="offline-download-note">
-        Autosave depends on your browser and the location of BlueK.html. Moving
-        the file may make earlier autosaves unavailable. Short project links
-        require the online version.
+        {t("ui.offline.autosaveDependsOnYourBrowserAndTheLocation")}
       </p>
       <div class="offline-download-caution">
         <p>
-          The offline version has not yet been widely tested in practice. Test it
-          with your own projects and browser before relying on it.
+          {t("ui.offline.theOfflineVersionHasNotYetBeenWidely")}
         </p>
         <p>
           <a
             class="offline-download-report"
             href="https://github.com/tomkarp/BlueK/issues/new"
             target="_blank"
-            rel="noopener noreferrer">Report a bug on GitHub</a
-          > (internet connection required).
+            rel="noopener noreferrer">{t("ui.offline.reportABugOnGitHub")}</a
+          >
+          {t("ui.offline.internetConnectionRequired")}
         </p>
       </div>
       <div class="dialog-actions">
-        <button on:click={() => (open = false)}>Cancel</button>
+        <button on:click={() => (open = false)}>{t("ui.common.cancel")}</button>
         <a
           class="offline-download-action"
           href={downloadUrl}
           download="BlueK-offline.zip"
-          on:click={() => (open = false)}>Download ZIP</a
+          on:click={() => (open = false)}>{t("ui.offline.downloadZIP")}</a
         >
       </div>
     </div>

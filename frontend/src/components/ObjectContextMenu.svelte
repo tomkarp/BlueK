@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { useLanguage } from "../i18n/Language.svelte";
+  const language = useLanguage();
+  $: t = $language.t;
   import { containClicks, fitPopup, fitPopupSubmenu } from "../uiActions";
 
   import type {
@@ -67,18 +70,18 @@
     </div>
     {#if menu.file && isBluePlayFrameworkFile(menu.file)}
       <button on:click={() => openBluePlayApi(menu!.file!)}
-        >Show API documentation</button
+        >{t("ui.objects.showAPIDocumentation")}</button
       >
     {:else if menu.file}
       {#if isTestFile(menu.file)}
         <button
-            disabled={testActionBusy}
-            on:click={() => {
-              const name = testClassName(menu!.file!);
-              menu = null;
-              runTests(name);
-            }}>Run Tests</button
-          >
+          disabled={testActionBusy}
+          on:click={() => {
+            const name = testClassName(menu!.file!);
+            menu = null;
+            runTests(name);
+          }}>{t("ui.common.runTests")}</button
+        >
         {#each classes.find((item) => item.testing?.fileName === menu!.file!.fileName)?.testing?.methods || [] as method}<button
             disabled={testActionBusy}
             on:click={() => {
@@ -94,7 +97,7 @@
             const name = testClassName(menu!.file!);
             menu = null;
             loadFixture(name);
-          }}>Load State to Object Bench</button
+          }}>{t("ui.objects.loadStateToObjectBench")}</button
         >
         <button
           disabled={!canExecute || !canCapture || recording}
@@ -102,7 +105,7 @@
             const name = testClassName(menu!.file!);
             menu = null;
             saveFixture(name);
-          }}>Save State from Object Bench</button
+          }}>{t("ui.objects.saveStateFromObjectBench")}</button
         >
         <button
           disabled={testActionBusy}
@@ -110,7 +113,7 @@
             const name = testClassName(menu!.file!);
             menu = null;
             recordTest(name);
-          }}>Record Test…</button
+          }}>{t("ui.common.recordTest")}</button
         >
       {:else}
         {#each classes.find((item) => item.name === menu!.file!.fileName.replace(".kt", ""))?.constructors || [] as constructor, index}
@@ -138,20 +141,25 @@
         >
       {/each}
       <hr />
-      <button on:click={() => openEditor(menu?.file)}>Open Editor</button>
+      <button on:click={() => openEditor(menu?.file)}
+        >{t("ui.objects.openEditor")}</button
+      >
       <button
         disabled={!canExecute && phase !== "uncompiled"}
         on:click={() => {
           menu = null;
           compile();
-        }}>Compile</button
+        }}>{t("ui.common.compile")}</button
       >
-      <button on:click={() => deleteFile(menu!.file!)}>Delete</button>
-      <button on:click={() => duplicateFile(menu!.file!)}>Duplicate…</button>
+      <button on:click={() => deleteFile(menu!.file!)}
+        >{t("ui.objects.delete")}</button
+      >
+      <button on:click={() => duplicateFile(menu!.file!)}
+        >{t("ui.objects.duplicate")}</button
+      >
       {#if menu.file.kind === "class" && !isTestFile(menu.file)}<hr />
-        <button
-          on:click={() => createTestClass(menu!.file!)}
-          >Create Test Class</button
+        <button on:click={() => createTestClass(menu!.file!)}
+          >{t("ui.common.createTestClass")}</button
         >{/if}
     {:else if menu.object}
       {#each inheritedPopupGroups(menu.object, classes) as group}
@@ -164,7 +172,7 @@
             fitPopupSubmenu(event.currentTarget as HTMLElement)}
         >
           <button class="popup-submenu-trigger" use:containClicks
-            >inherited from {group[0]}<span>›</span></button
+            >{t("ui.objects.inheritedFrom")} {group[0]}<span>›</span></button
           >
           <div class="popup-submenu-panel">
             {#each group[1] as method}<button
@@ -187,15 +195,19 @@
           on:click={() => invokeObject(menu!.object!, method)}
           >{popupObjectMethodLabel(method)}</button
         >
-      {:else}<div class="popup-no-methods">(No accessible methods)</div>{/each}
+      {:else}<div class="popup-no-methods">
+          {t("ui.objects.noAccessibleMethods")}
+        </div>{/each}
       <hr />
       <button
         disabled={!canExecute}
-        on:click={() => inspectObject(menu!.object!)}>Inspect</button
+        on:click={() => inspectObject(menu!.object!)}
+        >{t("ui.common.inspect")}</button
       >
       <button
         disabled={!canExecute}
-        on:click={() => removeObject(menu!.object!)}>Remove</button
+        on:click={() => removeObject(menu!.object!)}
+        >{t("ui.objects.remove")}</button
       >
     {/if}
   </div>

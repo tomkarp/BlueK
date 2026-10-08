@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { useLanguage } from "../i18n/Language.svelte";
+  const language = useLanguage();
+  $: t = $language.t;
   import type {
     ProjectFile,
     RuntimeSnapshot,
@@ -37,10 +40,10 @@
       newClassOpen = true;
       newClassName = "";
       newClassType = "class";
-    }}>New File</button
+    }}>{t("ui.sidebar.newFile")}</button
   >
   <button class="sidebar-legacy-save" on:click={exportProject}
-    >Save Project</button
+    >{t("ui.sidebar.saveProject")}</button
   >
   <button
     class:active-tool={inheritanceMode}
@@ -51,7 +54,9 @@
       status = inheritanceMode ? "Select subclass, then superclass" : "Ready";
     }}
   >
-    Inheritance<span class="inheritance-icon" aria-hidden="true"
+    {t("ui.sidebar.inheritance")}<span
+      class="inheritance-icon"
+      aria-hidden="true"
       ><svg viewBox="0 0 72 32"
         ><line x1="2" y1="16" x2="40" y2="16" /><path
           d="M40 2 L70 16 L40 30 Z"
@@ -61,60 +66,66 @@
   </button>
   <button
     on:click={compile}
-    title={`Compile (${compileShortcutLabel})`}
+    title={t("ui.sidebar.compile0", [compileShortcutLabel])}
     disabled={!files.length ||
       phase === "compiling" ||
       phase === "running" ||
-      inputReady}>Compile</button
+      inputReady}>{t("ui.common.compile")}</button
   >
   <button
     on:click={() => void runMain()}
-    title={`Start main (${runShortcutLabel})`}
-    aria-label="Start main"
-    disabled={!canExecute || !mainEntries.length}>Start main</button
+    title={t("ui.sidebar.startMain0", [runShortcutLabel])}
+    aria-label={t("ui.sidebar.startMain")}
+    disabled={!canExecute || !mainEntries.length}
+    >{t("ui.sidebar.startMain")}</button
   >
   <details class="sidebar-testing">
     <summary
       class="sidebar-testing-toggle"
-      aria-label="Show or hide testing actions"
-      title="Show or hide testing actions"
+      aria-label={t("ui.sidebar.showOrHideTestingActions")}
+      title={t("ui.sidebar.showOrHideTestingActions")}
     >
-      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2 13 8 3 14Z" /></svg>
+      <svg viewBox="0 0 16 16" aria-hidden="true"
+        ><path d="M3 2 13 8 3 14Z" /></svg
+      >
     </summary>
     <div class="sidebar-testing-actions" id="sidebar-testing-actions">
-        <p class="sidebar-testing-notice">Testing is still in
-the alpha stage.</p>
-        <button on:click={openTests}
-          >{recording ? "● Recording…" : "Tests…"}</button
-        >
-        <button
-          on:click={runTests}
-          disabled={recording ||
-            phase === "running" ||
-            phase === "compiling" ||
-            inputReady}>Run All Tests</button
-        >
+      <p class="sidebar-testing-notice">
+        {t("ui.sidebar.testingIsStillInTheAlphaStage")}
+      </p>
+      <button on:click={openTests}
+        >{recording ? t("ui.sidebar.recording") : t("ui.sidebar.tests")}</button
+      >
+      <button
+        on:click={runTests}
+        disabled={recording ||
+          phase === "running" ||
+          phase === "compiling" ||
+          inputReady}>{t("ui.sidebar.runAllTests")}</button
+      >
     </div>
   </details>
   <div class="side-spacer"></div>
-  <div class="sidebar-utilities" role="group" aria-label="Application actions">
+  <div
+    class="sidebar-utilities"
+    role="group"
+    aria-label={t("ui.sidebar.applicationActions")}
+  >
     {#if !offlineBuild}<button
         class="utility-icon-button toolbar-download-button"
         on:click={() => (offlineDownloadOpen = true)}
-        aria-label="Offline Version"
-        title="Download BlueK for offline use"
+        aria-label={t("ui.sidebar.offlineVersion")}
+        title={t("ui.sidebar.downloadBlueKForOfflineUse")}
       >
         <svg viewBox="0 0 24 24" aria-hidden="true"
-          ><path d="M12 3v11m-4-4 4 4 4-4" /><path
-            d="M4 17v4h16v-4"
-          /></svg
+          ><path d="M12 3v11m-4-4 4 4 4-4" /><path d="M4 17v4h16v-4" /></svg
         >
       </button>{/if}
     <button
       class="utility-icon-button toolbar-help-button"
       on:click={() => (shortcutsHelpOpen = true)}
-      aria-label="Help"
-      title="Help"
+      aria-label={t("ui.sidebar.help")}
+      title={t("ui.sidebar.help")}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true"
         ><circle cx="12" cy="12" r="9" /><path
@@ -125,8 +136,8 @@ the alpha stage.</p>
     <button
       class="utility-icon-button settings-button"
       on:click={() => (settingsNotice = true)}
-      aria-label="Settings"
-      title="Settings"
+      aria-label={t("ui.common.settings")}
+      title={t("ui.common.settings")}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true"
         ><path

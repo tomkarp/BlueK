@@ -64,7 +64,7 @@ const app = await iife('frontend/src/offlineMain.ts', 'BlueKOffline', [offline, 
 const css = await readFile(path.join(repository, 'frontend/src/style.css'), 'utf8');
 if (/<\/style/i.test(css)) throw new Error('CSS cannot be inlined safely.');
 const html = `<!doctype html>
-<html lang="de">
+<html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>BlueK</title>
 <style>${css}</style></head>
 <body><div id="root"></div><script>${inlineScript(app)}</script></body>

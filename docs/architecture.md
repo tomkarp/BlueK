@@ -81,6 +81,13 @@ Supporting modules:
 - `terminalText.ts`: interprets raw output control sequences for IDE and player;
   text style/layout is presentation, never a replacement runtime output store.
 
+### Interface language
+
+`SvelteApp` owns an app-local `Language` context for English/German presentation.
+Language choice persists separately in Local Storage. Without a saved choice,
+the browser language is used when supported, otherwise English. Runtime
+diagnostics, source and program output are never translated. See [localization](localization.md) for catalog contracts.
+
 ### Browser drafts
 
 `projectDraftStorage.ts` owns storage I/O and exclusive document-lifetime draft

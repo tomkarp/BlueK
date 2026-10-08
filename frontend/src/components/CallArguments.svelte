@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { useLanguage } from "../i18n/Language.svelte";
+  const language = useLanguage();
+  $: t = $language.t;
   import { focusOnMount } from "../uiActions";
 
   /**
@@ -16,7 +19,7 @@
     `${parameter.name}: ${parameter.type?.displayName || "Any?"}${parameter.hasDefault ? " = …" : ""}`;
 </script>
 
-<div class="call-arguments" role="group" aria-label="Call">
+<div class="call-arguments" role="group" aria-label={t("ui.objects.call")}>
   <span class="call-prefix">{prefix}(</span>
   <div class="call-argument-list">
     {#each parameters as parameter, index}<div class="call-argument">

@@ -48,6 +48,9 @@ Shared instructions for coding agents. Do not add tool-specific files such as
   `frontend/public/kotlite/` is used by all runtime tests.
 - BluePlay is a built-in versioned library, not editable project source.
   Keep its **New Project** templates available.
+- Follow [localization](docs/localization.md) for interface text. Keep complete
+  sentences/paragraphs together. Translate terms only when natural; otherwise
+  retain the exact English term. Compiler/runtime diagnostics stay English.
 - For regression fixes, add or extend a meaningful behavior test where practical.
   Run affected tests and record actual results, failures and blockers. Never
   describe an unwritten or unrun test as passed.
@@ -59,6 +62,7 @@ Shared instructions for coding agents. Do not add tool-specific files such as
 - [Generics and inline calls](docs/kotlite-generics.md)
 - [BluePlay engine](docs/blueplay-internals.md) and [reference audit](docs/blueplay-api-audit.md)
 - [Test/state implementation](docs/testing-internals.md)
+- [Interface languages](docs/localization.md)
 - [Regression evidence](docs/regression-checklist.md)
 - [Deployment](docs/deployment.md)
 - [Vendored interpreter changes](vendor/kotlite-interpreter/PATCH.md)

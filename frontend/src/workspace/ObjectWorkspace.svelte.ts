@@ -149,7 +149,7 @@ export class ObjectWorkspace {
   confirmCreate = async () => {
     if (!this.host.session().canExecute) return;
     if (!this.createDialog || !/^[A-Za-z_]\w*$/.test(this.createName.trim())) {
-      this.host.ui().dialogError = "Bitte einen gültigen Instanznamen angeben.";
+      this.host.ui().dialogError = "Please enter a valid instance name.";
       return;
     }
     if (
@@ -159,7 +159,7 @@ export class ObjectWorkspace {
           (reference) => reference.name === this.createName.trim(),
         )
     ) {
-      this.host.ui().dialogError = "Dieser Instanzname ist bereits vergeben.";
+      this.host.ui().dialogError = "This instance name is already in use.";
       return;
     }
     if (
@@ -167,7 +167,7 @@ export class ObjectWorkspace {
       missingRequired(this.createDialog.parameters, this.createArgs)
     ) {
       this.host.ui().dialogError =
-        "Bitte alle erforderlichen Kotlin-Argumente und Typargumente ausfüllen.";
+        "Fill in all required Kotlin arguments and type arguments.";
       return;
     }
     const dialog = this.createDialog;
@@ -196,7 +196,7 @@ export class ObjectWorkspace {
         return;
       if (result.kind === "error")
         this.showCallError(
-          result.display || "Objekt konnte nicht erstellt werden.",
+          result.display || "Object could not be created.",
           result.phase === "runtime",
         );
     } catch (reason) {
@@ -289,7 +289,7 @@ export class ObjectWorkspace {
       missingRequired(parameters, this.invokeArgs)
     ) {
       this.host.ui().dialogError =
-        "Bitte alle erforderlichen Kotlin-Argumente und Typargumente ausfüllen.";
+        "Fill in all required Kotlin arguments and type arguments.";
       return;
     }
     const args = kotlinCallArguments(parameters, [...this.invokeArgs]);
@@ -339,7 +339,7 @@ export class ObjectWorkspace {
         return;
       if (result.kind === "error")
         this.showCallError(
-          result.display || "Aufruf fehlgeschlagen.",
+          result.display || "Call failed.",
           result.phase === "runtime",
         );
       else {

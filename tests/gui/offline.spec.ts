@@ -141,3 +141,19 @@ test('GUI-129 user manual is bundled and readable without network', async ({ pag
   await help.getByRole('button', { name: 'Close', exact: true }).click();
   verify();
 });
+
+test('GUI-130 offline language choice and German manual work without network', async ({page}) => {
+  const verify = await open(page, 'fun main() {}');
+  await page.getByRole('button', {name: 'Settings', exact: true}).click();
+  await page.getByLabel('Language', {exact: true}).selectOption('de');
+  await expect(page.getByRole('dialog', {name: 'Einstellungen', exact: true})).toBeVisible();
+  await page.getByRole('button', {name: 'Schließen', exact: true}).click();
+  await page.getByRole('button', {name: 'Hilfe', exact: true}).click();
+  await expect(page.getByRole('heading', {name: 'Schnelleinstieg', exact: true})).toBeVisible();
+  await page.getByRole('button', {name: 'Schließen', exact: true}).click();
+  await page.reload();
+  await expect(page.getByRole('button', {name: 'Kompilieren', exact: true})).toBeVisible();
+  await page.getByRole('button', {name: 'Speichern / Exportieren', exact: true}).click();
+  await expect(page.getByRole('button', {name: /Kurzlink kopieren/})).toHaveCount(0);
+  verify();
+});

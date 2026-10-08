@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { useLanguage } from "../i18n/Language.svelte";
+  const language = useLanguage();
+  $: t = $language.t;
   import { focusOnMount, containClicks } from "../uiActions";
 
   import type { MainDialog } from "../uiTypes";
@@ -16,23 +19,28 @@
       tabindex="-1"
       use:containClicks
     >
-      <h2 id="main-selection-title">Choose main</h2>
+      <h2 id="main-selection-title">{t("ui.execution.chooseMain")}</h2>
       <p>
         {mainDialog.action === "export"
-          ? "Which main() should the exported HTML file start?"
-          : `Which main() should ${mainDialog.action === "reset" ? "Reset" : "Start main"} run?`}
+          ? t("ui.execution.whichMainShouldTheExportedHTMLFileStart")
+          : t("ui.execution.whichMainShould0Run", [
+              mainDialog.action === "reset" ? "Reset" : "Start main",
+            ])}
       </p>
       <div class="toolbar-dialog-options main-selection-options">
         {#each mainEntries as fileName, index}
           <button
             class="toolbar-dialog-option"
             on:click={() => void chooseMain(fileName)}
-            use:focusOnMount={index === 0}>{fileName} — main()</button
+            use:focusOnMount={index === 0}
+            >{fileName} {t("ui.execution.main")}</button
           >
         {/each}
       </div>
       <div class="dialog-actions">
-        <button on:click={() => (mainDialog = null)}>Cancel</button>
+        <button on:click={() => (mainDialog = null)}
+          >{t("ui.common.cancel")}</button
+        >
       </div>
     </div>
   </div>{/if}

@@ -274,7 +274,47 @@ Unless explicitly stated, visual user acceptance remains pending.
 | GUI-128 | Confirm/cancel Delete all, settings retained, no unchanged resurrection | 9/9 draft cases passed; included in final affected 18/18 run (2026-10-07); manual acceptance pending |
 | GUI-129 | Bundled user manual, section navigation, adaptive shortcuts, small viewports, dark mode and offline use | Hosted selection 3/3 and offline manual 1/1 passed (2026-10-08); screenshots inspected; user acceptance pending |
 
+| GUI-130 | Supported browser-language default with English fallback, persisted German/English choice, unchanged source/live state/diagnostics, translated dialogs/manual/editor search and offline use | 188/188 full GUI cases and final affected 11/11 selection passed (2026-10-08); nine localization cases passed; offline language case passed; agent screenshots inspected, user acceptance pending |
+
 ## Recorded verification
+
+### Interface languages — 2026-10-08
+
+Checkpoint commit `1d902e8` preceded the language conversion; no push.
+English and German catalogs contain 599 messages, grouped into interface,
+manual and BluePlay API files. Complete paragraphs keep formatting inline rather
+than splitting translations into fragments. Language selection is stored
+separately from projects, uses the supported browser language unless explicitly
+selected, falls back to English and
+updates the app without replacing source or runtime state. The diagram label
+`«functions»` remains English; the German Run All Tests button says `Alles testen`.
+Kotlin class-type labels retain the exact English terms Open Class, Abstract
+Class and Data Class. Translate terminology only when its translation is natural.
+
+Verification:
+
+- Typecheck: **0 errors, 0 warnings**; catalog keys/nonempty values/placeholders
+  passed. Static and Svelte architecture checks passed.
+- UI, workspace, window-interaction, project-format and project-draft helper
+  suites passed.
+- Initial conversion run: **185/186 passed**. EXP-10 exposed a newline between
+  the translated line label and number; this was fixed with one interpolated
+  message. After catalog reorganization and the browser-language default change,
+  the complete GUI suite passed **188/188**. The final affected selection passed
+  **11/11**, including a subsequently added German BluePlay-reference case.
+- Nine GUI-130 cases cover regional browser locales, unsupported-language
+  fallback, saved-choice precedence, invalid/unavailable storage, persistence,
+  a second page, native confirmation, switching back, editor Undo/search,
+  unchanged live objects/source/signatures, Kotlin class-type terminology,
+  complete formatted paragraphs, German state actions, small help layout and
+  verbatim English compiler/runtime errors.
+- Offline build/ZIP and **6/6 file:// browser cases passed**, including the new
+  German language/help/persistence case. Existing offline execution includes
+  Chromium and WebKit; the new language case uses Chromium.
+- Agent inspected German help/state screenshots. No user visual acceptance,
+  actual Windows browser run or exhaustive inspection of every German tooltip
+  is claimed. Early migration/test-fixture failures were corrected before the
+  final affected run.
 
 ### Bundled user manual — 2026-10-08
 

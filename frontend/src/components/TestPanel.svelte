@@ -1,4 +1,8 @@
 <script lang="ts">
+  import TranslatedText from "./TranslatedText.svelte";
+  import { useLanguage } from "../i18n/Language.svelte";
+  const language = useLanguage();
+  const { t } = language;
   import type { Action } from "svelte/action";
   import type { EditorOptions } from "../editorActions";
   import type { TestWorkspace } from "../workspace/TestWorkspace.svelte";
@@ -40,59 +44,67 @@
 </script>
 
 {#if tests.open}
-  <aside class="test-panel" aria-label="Tests" use:containClicks>
+  <aside
+    class="test-panel"
+    aria-label={t("ui.testing.tests")}
+    use:containClicks
+  >
     <header>
-      <strong>Tests · kotlin.test</strong><button
-        aria-label="Close Tests"
+      <strong>{t("ui.testing.testsKotlinTest")}</strong><button
+        aria-label={t("ui.testing.closeTests")}
         onclick={() => (tests.open = false)}>×</button
       >
     </header>
     <div class="test-controls">
       <select
-        aria-label="Test class"
+        aria-label={t("ui.testing.testClass")}
         value={tests.selectedClass}
         onchange={(event) => (tests.selected = event.currentTarget.value)}
         disabled={!tests.canRun}
       >
-        <option value="">All test classes</option>
+        <option value="">{t("ui.testing.allTestClasses")}</option>
         {#each tests.stateClasses as suite}<option value={suite.name}
             >{suite.name}</option
           >{/each}
       </select>
       <button
         onclick={() => tests.run(tests.selectedClass)}
-        disabled={!tests.canRun}>Run Tests</button
+        disabled={!tests.canRun}>{t("ui.common.runTests")}</button
       >
       <button
         onclick={() => void stop()}
-        disabled={!tests.busy && !tests.state?.recording}>Stop</button
+        disabled={!tests.busy && !tests.state?.recording}
+        >{t("ui.testing.stop")}</button
       >
     </div>
     {#if tests.selectedClass && !tests.state?.recording}
       <div class="test-controls">
         <button
           onclick={() => tests.fixture(tests.selectedClass)}
-          disabled={!tests.canRun}>Load State</button
+          disabled={!tests.canRun}>{t("ui.testing.loadState")}</button
         >
         <button
           onclick={() => tests.capture(tests.selectedClass)}
-          disabled={!tests.ready || !tests.state?.canCapture}>Save State</button
+          disabled={!tests.ready || !tests.state?.canCapture}
+          >{t("ui.testing.saveState")}</button
         >
         <button
           onclick={() => tests.record(tests.selectedClass)}
-          disabled={!tests.canRun}>Record Test…</button
+          disabled={!tests.canRun}>{t("ui.common.recordTest")}</button
         >
       </div>
     {/if}
     {#if tests.state?.recording}
-      <section class="test-recording" aria-label="Test recording">
-        <strong>● Recording {tests.state.recording}</strong>
+      <section
+        class="test-recording"
+        aria-label={t("ui.testing.testRecording")}
+      >
+        <strong>{t("ui.testing.recording")} {tests.state.recording}</strong>
         <p>
-          Create objects and call methods. In each result dialog you can add an
-          assertion.
+          {t("ui.testing.createObjectsAndCallMethodsInEachResult")}
         </p>
         <label
-          >Test method name<input
+          >{t("ui.testing.testMethodName")}<input
             bind:value={tests.methodName}
             placeholder="testBirthday"
           /></label
@@ -100,26 +112,34 @@
         <button
           disabled={!tests.ready}
           onclick={() => tests.capture(tests.state!.recording!, true)}
-          >Finish Recording…</button
+          >{t("ui.testing.finishRecording")}</button
         >
         <button disabled={!tests.ready} onclick={tests.cancel}
-          >Cancel Recording</button
+          >{t("ui.testing.cancelRecording")}</button
         >
       </section>
     {/if}
-    {#if tests.error}<p class="dialog-error" role="alert">{tests.error}</p>{/if}
+    {#if tests.error}<p class="dialog-error" role="alert">
+        {$language.message(tests.error)}
+      </p>{/if}
     {#if tests.state?.captureError}<p class="test-notice">
         {tests.state.captureError}
       </p>{/if}
     {#if tests.state?.status === "completed" && !tests.state.cases.length}
       <div class="test-summary" role="status">
-        No @Test methods found. Use Record Test to add one.
+        {t("ui.testing.noTestMethodsFoundUseRecordTestTo")}
       </div>
     {/if}
     {#if tests.state?.cases.length}
       <div class="test-summary" role="status">
-        {tests.state.status} · {counts.passed || 0} passed · {(counts.failed ||
-          0) + (counts.error || 0)} failed · {counts.ignored || 0} ignored
+        {$language.message(tests.state.status)} · {t(
+          "ui.testing.resultCounts",
+          [
+            counts.passed || 0,
+            (counts.failed || 0) + (counts.error || 0),
+            counts.ignored || 0,
+          ],
+        )}
       </div>
       <div class="test-results">
         {#each tests.state.cases as result}
@@ -130,20 +150,22 @@
                   expanded === result.className + result.name
                     ? ""
                     : result.className + result.name)}
-              >{result.status} · {result.className}.{result.name}</button
+              >{$language.message(result.status)} · {result.className}.{result.name}</button
             >
             <button
-              aria-label={`Run ${result.name}`}
-              title="Run this test"
+              aria-label={t("ui.testing.run0", [result.name])}
+              title={t("ui.testing.runThisTest")}
               disabled={!tests.canRun}
               onclick={() => tests.run(result.className, result.name)}>▶</button
             >
             {#if expanded === result.className + result.name}<div
                 class="test-details"
               >
-                <button onclick={() => tests.reveal(result)}>Open source</button
+                <button onclick={() => tests.reveal(result)}
+                  >{t("ui.testing.openSource")}</button
                 >
-                <pre>{result.errors.join("\n\n") || result.status}</pre>
+                <pre>{result.errors.join("\n\n") ||
+                    $language.message(result.status)}</pre>
               </div>{/if}
           </div>
         {/each}
@@ -152,17 +174,20 @@
     {#if !tests.state?.recording}
       {#if !tests.state?.cases.length}
         <p class="test-notice">
-          Right-click a class to create its test class. Add @Test methods, or
-          use Record Test.
+          {t("ui.testing.rightClickAClassToCreateItsTest")}
         </p>
       {/if}
       {#each tests.stateClasses.filter((suite) => !tests.selectedClass || suite.name === tests.selectedClass) as suite}
-        <section class="test-suite" aria-label={`Test class ${suite.name}`}>
+        <section
+          class="test-suite"
+          aria-label={t("ui.testing.testClass0", [suite.name])}
+        >
           <div class="test-suite-header">
             <strong>{suite.name}</strong><button
-              aria-label={`Record test in ${suite.name}`}
+              aria-label={t("ui.testing.recordTestIn0", [suite.name])}
               disabled={!tests.canRun}
-              onclick={() => tests.record(suite.name)}>Record Test…</button
+              onclick={() => tests.record(suite.name)}
+              >{t("ui.common.recordTest")}</button
             >
           </div>
           {#each (!tests.state?.cases.length ? tests.suites.find((item) => item.name === suite.name)?.testing?.methods : []) || [] as method}<button
@@ -170,7 +195,7 @@
               disabled={!tests.canRun}
               onclick={() => tests.run(suite.name, method.name)}
               >▶ {suite.name}.{method.name}{method.ignored
-                ? " (ignored)"
+                ? t("ui.testing.ignored2")
                 : ""}</button
             >{/each}
         </section>
@@ -183,28 +208,25 @@
       class="dialog"
       role="dialog"
       aria-modal="true"
-      aria-label="Create Test Class"
+      aria-label={t("ui.common.createTestClass")}
       use:containClicks
     >
-      <h3>Create Test Class</h3>
+      <h3>{t("ui.common.createTestClass")}</h3>
       <label
-        >Class name<input
+        >{t("ui.testing.className")}<input
           bind:value={tests.className}
           use:focusOnMount
           onkeydown={(e) => e.key === "Enter" && tests.create()}
         /></label
       >
-      <p>
-        Attached to {tests.newClass.fileName}. Uses ordinary Kotlin and
-        kotlin.test.
-      </p>
+      <p>{t("ui.testing.attachedClass", [tests.newClass.fileName])}</p>
       {#if tests.error}<p role="alert" class="dialog-error">
-          {tests.error}
+          {$language.message(tests.error)}
         </p>{/if}
       <div class="dialog-actions">
-        <button onclick={() => (tests.newClass = null)}>Cancel</button><button
-          onclick={tests.create}>Create</button
-        >
+        <button onclick={() => (tests.newClass = null)}
+          >{t("ui.common.cancel")}</button
+        ><button onclick={tests.create}>{t("ui.common.create")}</button>
       </div>
     </div>
   </div>{/if}
@@ -213,28 +235,29 @@
       class="dialog fixture-class-dialog"
       role="dialog"
       aria-modal="true"
-      aria-label="Create test class for state"
+      aria-label={t("ui.testing.createTestClassForState")}
       use:containClicks
     >
-      <h3>Save object bench as test state</h3>
+      <h3>{t("ui.testing.saveObjectBenchAsTestState")}</h3>
       <p>
-        Create a test class for this object bench. The generated state will be
-        previewed before saving.
+        {t("ui.testing.createATestClassForThisObjectBench")}
       </p>
       <label
-        >Test class name<input
+        >{t("ui.testing.testClassName")}<input
           bind:value={tests.fixtureClassName}
           use:focusOnMount
           onkeydown={(e) => e.key === "Enter" && tests.createFixtureFromBench()}
         /></label
       >
       {#if tests.error}<p role="alert" class="dialog-error">
-          {tests.error}
+          {$language.message(tests.error)}
         </p>{/if}
       <div class="dialog-actions">
         <button onclick={() => (tests.createFixtureClass = false)}
-          >Cancel</button
-        ><button onclick={tests.createFixtureFromBench}>Continue</button>
+          >{t("ui.common.cancel")}</button
+        ><button onclick={tests.createFixtureFromBench}
+          >{t("ui.testing.continue")}</button
+        >
       </div>
     </div>
   </div>{/if}
@@ -243,13 +266,13 @@
       class="dialog fixture-class-dialog"
       role="dialog"
       aria-modal="true"
-      aria-label="Choose default test class"
+      aria-label={t("ui.common.chooseDefaultTestClass")}
       use:containClicks
     >
-      <h3>Default test class</h3>
+      <h3>{t("ui.testing.defaultTestClass")}</h3>
       <label
-        >Use this class for saving and loading test states<select
-          aria-label="Default test class selection"
+        >{t("ui.testing.useThisClassForSavingAndLoadingTest")}<select
+          aria-label={t("ui.testing.defaultTestClassSelection")}
           bind:value={tests.chosenDefaultClass}
         >
           {#each tests.stateClasses as suite}<option value={suite.name}
@@ -258,11 +281,14 @@
         </select></label
       >
       {#if tests.error}<p role="alert" class="dialog-error">
-          {tests.error}
+          {$language.message(tests.error)}
         </p>{/if}
       <div class="dialog-actions">
-        <button onclick={() => (tests.chooseDefaultOpen = false)}>Cancel</button
-        ><button onclick={tests.confirmDefaultClass}>Use Test Class</button>
+        <button onclick={() => (tests.chooseDefaultOpen = false)}
+          >{t("ui.common.cancel")}</button
+        ><button onclick={tests.confirmDefaultClass}
+          >{t("ui.testing.useTestClass")}</button
+        >
       </div>
     </div>
   </div>{/if}
@@ -272,34 +298,37 @@
       role="dialog"
       aria-modal="true"
       aria-label={tests.preview.recording
-        ? "Save recorded test"
-        : "Save test state"}
+        ? t("ui.testing.saveRecordedTest")
+        : t("ui.testing.saveTestState")}
       use:containClicks
     >
       <div class="test-source-content">
         <h3>
           {tests.preview.recording
-            ? "Save recorded test"
-            : "Save object bench as test state"}
+            ? t("ui.testing.saveRecordedTest")
+            : t("ui.testing.saveObjectBenchAsTestState")}
         </h3>
         <p>
-          {tests.preview.fileName} · replay uses constructors, calls and assignments.
-          External effects and random values can differ when replayed.
+          {tests.preview.fileName}
+          {t(
+            "ui.testing.replayUsesConstructorsCallsAndAssignmentsExternalEffects",
+          )}
         </p>
         {#if tests.preview.replacesFixture}
           <p class="dialog-warning" role="alert">
-            Replacing the test state will overwrite all class properties and all
-            <code>@BeforeTest</code> methods{tests.preview.replacesInitializers
-              ? ", and all init blocks"
-              : ""}. Other methods, including
-            <code>@Test</code> methods, will be kept.
+            <TranslatedText
+              message={tests.preview.replacesInitializers
+                ? "ui.testing.replaceWithInitWarning"
+                : "ui.testing.replaceWarning"}
+            />
           </p>
         {/if}
         <div
           class="svelte-editor-host test-source-editor"
           role="group"
-          aria-label="Generated Kotlin source"
+          aria-label={t("ui.testing.generatedKotlinSource")}
           use:codeMirror={{
+            phrases: $language.editorPhrases,
             id: "test-source-preview",
             value: tests.preview.source,
             fontSize: editorFontSize,
@@ -316,19 +345,21 @@
           <div
             class="editor-actions"
             role="toolbar"
-            aria-label="Editor actions"
+            aria-label={t("ui.common.editorActions")}
           >
             <button
               class="editor-action editor-comment"
               onclick={() => toggleEditorComments("test-source-preview")}
-              aria-label="Toggle line comments"
-              title={`Comment / uncomment lines (${commentShortcutLabel})`}
-              >//</button
+              aria-label={t("ui.common.toggleLineComments")}
+              title={t("ui.common.commentUncommentLines0", [
+                commentShortcutLabel,
+              ])}>//</button
             ><button
               class="editor-action editor-format"
               onclick={() => formatEditor("test-source-preview")}
-              aria-label="Format Kotlin file"
-              title={`Format Kotlin file (${formatShortcutLabel})`}>≡</button
+              aria-label={t("ui.common.formatKotlinFile")}
+              title={t("ui.common.formatKotlinFile0", [formatShortcutLabel])}
+              >≡</button
             >
           </div>
         </div>
@@ -339,22 +370,22 @@
             <span>{dialogError}</span><button
               type="button"
               class="dialog-error-close"
-              aria-label="Close format error"
-              title="Close format error"
+              aria-label={t("ui.common.closeFormatError")}
+              title={t("ui.common.closeFormatError")}
               onclick={closeFormatError}>×</button
             >
           </div>{/if}
         {#if tests.error}<p class="dialog-error" role="alert">
-            {tests.error}
+            {$language.message(tests.error)}
           </p>{/if}
       </div>
       <div class="dialog-actions">
         <button disabled={tests.busy} onclick={() => (tests.preview = null)}
-          >Cancel</button
+          >{t("ui.common.cancel")}</button
         ><button disabled={tests.busy} onclick={tests.save}
           >{tests.preview.replacesFixture
-            ? "Replace State & Compile"
-            : "Save & Compile"}</button
+            ? t("ui.testing.replaceStateCompile")
+            : t("ui.testing.saveCompile")}</button
         >
       </div>
     </div>

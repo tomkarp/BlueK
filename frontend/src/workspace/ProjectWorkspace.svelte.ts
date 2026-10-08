@@ -1,3 +1,4 @@
+import { englishText } from "../i18n/catalog";
 import { projectTemplate } from "../projectTemplates";
 import {
   ProjectDraftStorage,
@@ -60,6 +61,7 @@ import type { EditorWorkspace } from "./EditorWorkspace.svelte";
 import type { TestWorkspace } from "./TestWorkspace.svelte";
 
 interface ProjectWorkspaceHost {
+  language?: () => Pick<import("../i18n/Language.svelte").Language, "t">;
   tests: () => Pick<TestWorkspace, "loadDefaultFixture">;
   objects: () => Pick<ObjectWorkspace, "dismissMenu">;
   session: () => Readonly<
@@ -83,6 +85,10 @@ interface ProjectWorkspaceHost {
 
 export class ProjectWorkspace {
   constructor(private readonly host: ProjectWorkspaceHost) {}
+  private text = (
+    key: import("../i18n/Language.svelte").MessageKey,
+    values: (string | number)[] = [],
+  ) => this.host.language?.().t(key, values) ?? englishText(key, values);
   private drafts = new ProjectDraftStorage({
     local: () => window.localStorage,
     session: () => window.sessionStorage,
@@ -102,7 +108,9 @@ export class ProjectWorkspace {
     if (
       !draft ||
       !window.confirm(
-        `Delete “${draft.name}” from this browser's saved projects?`,
+        this.text("ui.transfer.delete0FromThisBrowserSSavedProjects", [
+          draft.name,
+        ]),
       )
     )
       return;
@@ -116,7 +124,12 @@ export class ProjectWorkspace {
     }
   };
   deleteAllRecentProjects = () => {
-    if (!window.confirm("Delete all saved projects from this browser?")) return;
+    if (
+      !window.confirm(
+        this.text("ui.transfer.deleteAllSavedProjectsFromThisBrowser"),
+      )
+    )
+      return;
     try {
       this.drafts.deleteAll();
       this.host.ui().status = "All saved projects deleted";
@@ -416,8 +429,7 @@ export class ProjectWorkspace {
       !/^[A-Za-z_]\w*$/.test(name) ||
       this.files.some((file) => file.fileName === `${name}.kt`)
     ) {
-      this.host.ui().error =
-        "Bitte einen eindeutigen gültigen Kotlin-Namen angeben.";
+      this.host.ui().error = "Choose a unique valid Kotlin name.";
       return;
     }
     if (this.newClassType === "functions") {
@@ -575,7 +587,10 @@ export class ProjectWorkspace {
   };
   ensureProjectName = () => {
     if (this.projectName.trim()) return true;
-    const entered = window.prompt("What should your project be called?", "");
+    const entered = window.prompt(
+      this.text("ui.transfer.whatShouldYourProjectBeCalled"),
+      "",
+    );
     if (entered === null) return false;
     this.projectName = entered.trim();
     return true;
@@ -656,6 +671,7 @@ export class ProjectWorkspace {
       this.projectPayload(),
       this.shareWithReadme,
       this.shareWithState && this.canShareState,
+      this.text("ui.transfer.copyThisProjectLink"),
     );
     if (copied) this.host.ui().status = "Project link copied";
     this.shareNotice = copied
@@ -669,6 +685,7 @@ export class ProjectWorkspace {
         this.projectPayload(),
         this.shareWithReadme,
         this.shareWithState && this.canShareState,
+        this.text("ui.transfer.copyThisProjectLink"),
       );
       if (this.shareLinkDialog.copied)
         this.host.ui().status = "Short project link copied";
@@ -699,7 +716,10 @@ export class ProjectWorkspace {
   };
   copySharedLink = async () => {
     if (!this.shareLinkDialog) return;
-    const copied = await copyLink(this.shareLinkDialog.url);
+    const copied = await copyLink(
+      this.shareLinkDialog.url,
+      this.text("ui.transfer.copyThisProjectLink"),
+    );
     if (copied)
       this.shareLinkDialog = { ...this.shareLinkDialog, copied: true };
   };
@@ -850,7 +870,7 @@ export class ProjectWorkspace {
     if (
       (this.files.length || this.resources.length) &&
       !window.confirm(
-        "Das aktuelle Projekt enthält Daten. Möchtest du es wirklich ersetzen?",
+        this.text("ui.transfer.theCurrentProjectContainsDataReplaceIt"),
       )
     )
       return;

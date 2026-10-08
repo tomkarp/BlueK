@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { useLanguage } from "../i18n/Language.svelte";
+  const language = useLanguage();
+  $: t = $language.t;
   import { focusOnMount, containClicks } from "../uiActions";
 
   import type { NewClassType } from "../uiTypes";
@@ -18,17 +21,17 @@
       aria-labelledby="new-class-title"
       use:containClicks
     >
-      <h3 id="new-class-title">Create New Kotlin File</h3>
+      <h3 id="new-class-title">{t("ui.files.createNewKotlinFile")}</h3>
       <label
-        >Name<input
+        >{t("ui.files.name")}<input
           bind:value={newClassName}
           use:focusOnMount
-          placeholder="e.g. Animal"
+          placeholder={t("ui.files.eGAnimal")}
           on:keydown={(event) => event.key === "Enter" && confirmNewClass()}
         /></label
       >
       <fieldset>
-        <legend>Type</legend
+        <legend>{t("ui.files.type")}</legend
         >{#each [["class", "Class"], ["interface", "Interface"], ["open", "Open Class"], ["abstract", "Abstract Class"], ["data", "Data Class"], ["test", "Test Class"], ["functions", "Kotlin Functions"]] as option}<label
             class="new-class-option"
             ><input
@@ -36,16 +39,16 @@
               name="svelte-new-class-type"
               value={option[0]}
               bind:group={newClassType}
-            /><span>{option[1]}</span></label
+            /><span>{$language.message(option[1])}</span></label
           >{/each}
       </fieldset>
       {#if error}<div class="dialog-error" role="alert">
-          {error}
+          {$language.message(error)}
         </div>{/if}
       <div class="dialog-actions">
-        <button on:click={() => (newClassOpen = false)}>Cancel</button><button
-          on:click={confirmNewClass}>Create</button
-        >
+        <button on:click={() => (newClassOpen = false)}
+          >{t("ui.common.cancel")}</button
+        ><button on:click={confirmNewClass}>{t("ui.common.create")}</button>
       </div>
     </div>
   </div>{/if}

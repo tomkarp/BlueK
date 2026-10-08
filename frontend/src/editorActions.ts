@@ -111,6 +111,7 @@ const darkEditorTheme = EditorView.theme(
   { dark: true },
 );
 export type EditorOptions = {
+  phrases?: Record<string, string>;
   id: string;
   value: string;
   fontSize: number;
@@ -182,6 +183,7 @@ export function createEditorActions(host: EditorActionHost) {
     const editorTheme = new Compartment();
     const editorHighlight = new Compartment();
     const editorEditable = new Compartment();
+    const editorLanguage = new Compartment();
     view = new EditorView({
       state: EditorState.create({
         doc: current.value,
@@ -195,6 +197,7 @@ export function createEditorActions(host: EditorActionHost) {
               { fallback: true },
             ),
           ),
+          editorLanguage.of(EditorState.phrases.of(current.phrases ?? {})),
           minimalSetup,
           lineNumbers(),
           indentUnit.of("    "),
@@ -267,6 +270,12 @@ export function createEditorActions(host: EditorActionHost) {
     return {
       update(next: EditorOptions) {
         const previousId = current.id;
+        if (next.phrases !== current.phrases)
+          view.dispatch({
+            effects: editorLanguage.reconfigure(
+              EditorState.phrases.of(next.phrases ?? {}),
+            ),
+          });
         const vimChanged = next.vim !== current.vim;
         const darkChanged = next.dark !== current.dark;
         const editableChanged = next.editable !== current.editable;
@@ -361,9 +370,14 @@ export function createEditorActions(host: EditorActionHost) {
 
 export function markdownEditor(
   node: HTMLElement,
-  options: { value: string; onChange: (value: string) => void },
+  options: {
+    value: string;
+    onChange: (value: string) => void;
+    placeholder?: string;
+  },
 ) {
   let current = options;
+  const hint = new Compartment();
   const view = new EditorView({
     parent: node,
     state: EditorState.create({
@@ -373,8 +387,11 @@ export function markdownEditor(
         keymap.of([...defaultKeymap, ...historyKeymap]),
         drawSelection(),
         EditorView.lineWrapping,
-        editorPlaceholder(
-          "Describe the project here. Markdown works: # Heading, **bold**, - list",
+        hint.of(
+          editorPlaceholder(
+            options.placeholder ??
+              "Describe the project here. Markdown works: # Heading, **bold**, - list",
+          ),
         ),
         markdownPreview(),
         EditorView.updateListener.of((update) => {
@@ -387,6 +404,15 @@ export function markdownEditor(
   // cursor in the first line would show that line's markers straight away.
   return {
     update(next: typeof options) {
+      if (next.placeholder !== current.placeholder)
+        view.dispatch({
+          effects: hint.reconfigure(
+            editorPlaceholder(
+              next.placeholder ??
+                "Describe the project here. Markdown works: # Heading, **bold**, - list",
+            ),
+          ),
+        });
       current = next;
       if (next.value !== view.state.doc.toString())
         view.dispatch({

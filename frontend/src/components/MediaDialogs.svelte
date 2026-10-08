@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { useLanguage } from "../i18n/Language.svelte";
+  const language = useLanguage();
+  $: t = $language.t;
   import { containClicks } from "../uiActions";
 
   import { standardImages } from "../standardImages";
@@ -19,14 +22,15 @@
       aria-labelledby="images-title"
       use:containClicks
     >
-      <h3 id="images-title">Images</h3>
+      <h3 id="images-title">{t("ui.common.images")}</h3>
       <div class="standard-image-grid">
         <button
           class="standard-image-tile standard-image-add"
           on:click={() =>
             (mediaNotice = "Adding images is not implemented yet.")}
-          aria-label="Add image"
-          title="Add image"><span aria-hidden="true">+</span></button
+          aria-label={t("ui.media.addImage")}
+          title={t("ui.media.addImage")}
+          ><span aria-hidden="true">+</span></button
         >
         {#each standardImages as resource (resource.path)}
           <div
@@ -41,7 +45,9 @@
         {/each}
       </div>
       <div class="dialog-actions">
-        <button on:click={() => (imageLibraryOpen = false)}>Close</button>
+        <button on:click={() => (imageLibraryOpen = false)}
+          >{t("ui.common.close")}</button
+        >
       </div>
     </div>
   </div>{/if}
@@ -54,10 +60,10 @@
       aria-labelledby="media-notice-title"
       use:containClicks
     >
-      <h3 id="media-notice-title">Not implemented</h3>
-      <p>{mediaNotice}</p>
+      <h3 id="media-notice-title">{t("ui.media.notImplemented")}</h3>
+      <p>{$language.message(mediaNotice)}</p>
       <div class="dialog-actions">
-        <button on:click={() => (mediaNotice = "")}>OK</button>
+        <button on:click={() => (mediaNotice = "")}>{t("ui.common.oK")}</button>
       </div>
     </div>
   </div>{/if}

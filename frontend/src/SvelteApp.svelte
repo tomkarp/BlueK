@@ -1,4 +1,8 @@
 <script lang="ts">
+  import { Language, provideLanguage } from "./i18n/Language.svelte";
+  const language = new Language();
+  provideLanguage(language);
+  const { t } = language;
   import OfflineDownloadDialog from "./components/OfflineDownloadDialog.svelte";
   import TestPanel from "./components/TestPanel.svelte";
   import { TestWorkspace } from "./workspace/TestWorkspace.svelte";
@@ -34,6 +38,7 @@
   import { onMount, untrack } from "svelte";
   const ui: WorkspaceUi = new WorkspaceUi();
   const project: ProjectWorkspace = new ProjectWorkspace({
+    language: () => language,
     tests: () => tests,
     objects: () => objects,
     session: () => session,
@@ -104,6 +109,7 @@
     }),
   );
   onMount(() => {
+    language.restore();
     ui.initializeShortcuts();
     void project.initialize();
     const vimShortcut = (event: KeyboardEvent) => {
@@ -354,6 +360,7 @@
 <div
   class:terminal-split={terminal.terminalOpen && terminal.terminalSplit}
   class:bluek-stage-closed={!play.stageWindowOpen}
+  lang={language.locale}
   class:dark={ui.darkMode}
   class="bluek svelte-preview"
   style={`--editor-font-size:${ui.editorFontSize}px;--terminal-split-width:${terminal.terminalSplitWidth}px;--bluek-stage-height:${play.stageHeight}px;--bluek-stage-window-width:${play.stageWindowWidth}px;${play.stagePosition ? `--bluek-stage-left:${play.stagePosition.left}px;--bluek-stage-top:${play.stagePosition.top}px;` : ""}`}
@@ -457,7 +464,7 @@
       <div
         class="pane-splitter"
         role="separator"
-        aria-label="Resize upper and lower panes"
+        aria-label={t("ui.workspace.resizeUpperAndLowerPanes")}
         onpointerdown={ui.beginPaneResize}
       ></div>
       <ObjectBenchCodepad
@@ -490,7 +497,10 @@
         resetRuntime={session.resetRuntime}
         defaultTestClass={tests.defaultClass}
         captureError={tests.state?.captureError || ""}
-        canSaveFixture={tests.ready && objects.bench.length > 0 && Boolean(tests.state?.canCapture) && !tests.state?.recording}
+        canSaveFixture={tests.ready &&
+          objects.bench.length > 0 &&
+          Boolean(tests.state?.canCapture) &&
+          !tests.state?.recording}
         canLoadFixture={Boolean(tests.defaultClass) && tests.canRun}
         canChooseTestClass={tests.stateClasses.length > 0}
         saveFixture={tests.saveBench}
@@ -504,13 +514,21 @@
       role="status"
       aria-live="polite"
     >
-      {project.shareNotice}
+      {language.message(project.shareNotice)}
     </div>{/if}
   {#if project.savedProjectsNotice || project.autosaveWarning}
     <div class="project-recovery-notice" role="status" aria-live="polite">
-      <span>{project.autosaveWarning || "You have saved projects. Open / Import lets you continue working on them."}</span>
+      <span
+        >{project.autosaveWarning
+          ? language.message(project.autosaveWarning)
+          : t("ui.workspace.savedProjectsNotice")}</span
+      >
       {#if !project.autosaveWarning}
-        <button aria-label="Dismiss saved projects notice" title="Dismiss" onclick={() => (project.savedProjectsNotice = false)}>×</button>
+        <button
+          aria-label={t("ui.workspace.dismissSavedProjectsNotice")}
+          title={t("ui.workspace.dismiss")}
+          onclick={() => (project.savedProjectsNotice = false)}>×</button
+        >
       {/if}
     </div>
   {/if}

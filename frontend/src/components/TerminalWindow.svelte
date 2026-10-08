@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { useLanguage } from "../i18n/Language.svelte";
+  const language = useLanguage();
+  $: t = $language.t;
   import type { RuntimeSnapshot } from "../../../runtime-contract/src/index";
 
   import type { ActiveWindow } from "../uiTypes";
@@ -52,13 +55,13 @@
           beginTerminalDrag(event);
         }}
       >
-        <span>BlueK Terminal</span>
+        <span>{t("ui.common.blueKTerminal")}</span>
         <div>
           <button
             on:click|stopPropagation={toggleTerminalMaximized}
             aria-label={terminalMaximized
-              ? "Restore terminal window"
-              : "Maximize terminal window"}
+              ? t("ui.common.restoreTerminalWindow")
+              : t("ui.common.maximizeTerminalWindow")}
             ><svg
               class="window-control-icon"
               viewBox="0 0 24 24"
@@ -83,8 +86,8 @@
             class="terminal-split-toggle"
             on:click|stopPropagation={toggleTerminalSplit}
             aria-label={terminalSplit
-              ? "Restore terminal window"
-              : "Split terminal to the right"}
+              ? t("ui.common.restoreTerminalWindow")
+              : t("ui.common.splitTerminalToTheRight")}
             ><svg
               class="window-control-icon terminal-split-icon"
               viewBox="0 0 24 24"
@@ -106,7 +109,8 @@
       <div class="terminal-output">
         {#key terminal}<pre>{#each terminalParts(terminal) as part}{#if part.box}<span
                   class="terminal-sized"
-                  style={part.box}><span
+                  style={part.box}
+                  ><span
                     class:terminal-input-echo={part.input}
                     style={part.style}>{part.text}</span
                   ></span
@@ -117,16 +121,18 @@
         <button
           class="terminal-clear"
           on:click|stopPropagation={clearTerminal}
-          aria-label="Clear terminal">⌫</button
+          aria-label={t("ui.common.clearTerminal")}>⌫</button
         >
       </div>
       {#if phase === "faulted"}<div class="terminal-notice" role="alert">
-          Execution stopped. Reset the runtime before running more code.<button
-            on:click={resetRuntime}>Reset runtime</button
+          {t(
+            "ui.common.executionStoppedResetTheRuntimeBeforeRunningMore",
+          )}<button on:click={resetRuntime}
+            >{t("ui.common.resetRuntime")}</button
           >
         </div>{/if}<input
         bind:this={inputElement}
-        placeholder={inputReady ? "Enter a line; press Return" : ""}
+        placeholder={inputReady ? t("ui.common.enterALinePressReturn") : ""}
         disabled={!inputReady}
         on:keydown={sendInput}
       />{#each ["n", "ne", "e", "se", "s", "sw", "w", "nw"] as direction}<div
@@ -140,7 +146,7 @@
     {#if terminalSplit}<div
         class="terminal-split-divider"
         role="separator"
-        aria-label="Resize BlueK and terminal"
+        aria-label={t("ui.common.resizeBlueKAndTerminal")}
         on:pointerdown|stopPropagation={beginTerminalSplitResize}
       ></div>{/if}
   </div>{/if}

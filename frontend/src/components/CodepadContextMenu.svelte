@@ -1,8 +1,8 @@
 <script lang="ts">
+  import { useLanguage } from "../i18n/Language.svelte";
+  const language = useLanguage();
+  $: t = $language.t;
   import { containClicks } from "../uiActions";
-
-
-
 
   import type { HistoryEntry, CodepadMenu } from "../uiTypes";
   export let codepadMenu: CodepadMenu | null;
@@ -34,11 +34,13 @@
       on:click={() =>
         copyCodepadText(
           codepadMenu?.text || history.map((entry) => entry.code).join("\n"),
-        )}>Copy</button
+        )}>{t("ui.codepad.copy")}</button
     ><button
       on:click={() => {
         history = [];
         codepadMenu = null;
-      }}>Clear history</button
-    ><button on:click={selectAllCodepadHistory}>Select all history</button>
+      }}>{t("ui.codepad.clearHistory")}</button
+    ><button on:click={selectAllCodepadHistory}
+      >{t("ui.codepad.selectAllHistory")}</button
+    >
   </div>{/if}
