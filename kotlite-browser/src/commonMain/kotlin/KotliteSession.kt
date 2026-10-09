@@ -387,6 +387,9 @@ class KotliteSession {
         return result("unit", UnitValue)
     }
 
+    /** The speed the scheduler waits for, also when student code called `setSpeed()`. */
+    fun bluePlaySpeed(): Int = bluePlay.speed
+
     /** Run one native-scheduled step without creating a Codepad history item. */
     fun startBluePlayStep(onInput: (Int) -> Unit, onComplete: (String) -> Unit): String {
         if (!bluePlay.hasShownWorld) return errorMessage("No BluePlay world has been shown yet.")

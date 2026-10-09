@@ -45,6 +45,7 @@ export interface KotliteSessionBridge {
   configureBluePlay(enabled: boolean, generationId: string): void;
   setBluePlayResources(manifest: string): void;
   setBluePlaySpeed(speed: number): string;
+  bluePlaySpeed(): number;
   startBluePlayStep(onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
   startBluePlayMain(fileName: string | null, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
   takeBluePlayIntent(): string;
@@ -73,7 +74,7 @@ export class RuntimeHost {
   private lastFrameAt = -Infinity;
   /** `cancelStep` cancels the scheduled next step. */
   /** `stepStartedAt`: when the step began that the pending interval is counted from. */
-  private simulation: { state: SimulationState; speed: number; emit: Emit | null; cancelStep: (() => void) | null; stepStartedAt: number } = { state: 'inactive', speed: 50, emit: null, cancelStep: null, stepStartedAt: 0 };
+  private simulation: { state: SimulationState; emit: Emit | null; cancelStep: (() => void) | null; stepStartedAt: number } = { state: 'inactive', emit: null, cancelStep: null, stepStartedAt: 0 };
 
   constructor(private readonly createSession: () => KotliteSessionBridge) {}
 
@@ -190,7 +191,7 @@ export class RuntimeHost {
     try {
       if (command.op === 'compile') {
         this.cancelScheduledStep();
-        this.simulation = { state: 'inactive', speed: 50, emit: null, cancelStep: null, stepStartedAt: 0 };
+        this.simulation = { state: 'inactive', emit: null, cancelStep: null, stepStartedAt: 0 };
         this.lastStage = undefined; this.active = null; this.sequence = 0; this.lastOutputPublishAt = -Infinity;
         this.snapshot = { ...initialSnapshot(), generationId: command.generationId, phase: 'compiling' };
         this.session = this.createSession();
@@ -319,14 +320,14 @@ export class RuntimeHost {
   private dispatchSimulation(id: number, command: Extract<WorkerCommand, { op: 'simulation' }>, emit: Emit) {
     if (!this.session) throw new RequestError('BluePlay is not compiled.');
     if (command.action === 'setSpeed') {
-      this.simulation.speed = Math.max(1, Math.min(100, Math.trunc(command.speed || 50)));
+      const result = JSON.parse(this.session.setBluePlaySpeed(Math.max(1, Math.min(100, Math.trunc(command.speed || 50)))));
       // A pending wait continues up to the new interval, measured from the same
       // step, so moving the slider away from a slow speed takes effect at once.
       if (this.simulation.cancelStep !== null) {
         this.cancelScheduledStep();
         this.scheduleSimulationStep(performance.now() - this.simulation.stepStartedAt);
       }
-      emit(this.publish(id, JSON.parse(this.session.setBluePlaySpeed(this.simulation.speed)), false)); return;
+      emit(this.publish(id, result, false)); return;
     }
     if (command.action === 'stop') {
       this.cancelScheduledStep();
@@ -393,12 +394,15 @@ export class RuntimeHost {
   }
 
   /** Without `elapsed` (ms since the previous step began) Run starts, whose first step runs at once, as in Greenfoot. */
-  private scheduleSimulationStep(elapsed = stepInterval(this.simulation.speed)) {
+  /** The engine owns the speed, so that the slider and `setSpeed()` in student code act alike. */
+  private speed(): number { return this.session?.bluePlaySpeed() ?? 50; }
+
+  private scheduleSimulationStep(elapsed = stepInterval(this.speed())) {
     if (this.simulation.cancelStep !== null || this.simulation.state !== 'running' || this.active || !this.simulation.emit) return;
     // Speed defines the interval between ticks, not an extra sleep after work.
     // Never catch up with a burst of queued ticks when a step exceeds its budget.
     this.simulation.stepStartedAt = performance.now() - elapsed;
-    this.simulation.cancelStep = scheduleAfter(Math.max(0, stepInterval(this.simulation.speed) - elapsed), () => { this.simulation.cancelStep = null; if (this.simulation.state === 'running') this.runSimulationStep(0, this.simulation.emit!, true); });
+    this.simulation.cancelStep = scheduleAfter(Math.max(0, stepInterval(this.speed()) - elapsed), () => { this.simulation.cancelStep = null; if (this.simulation.state === 'running') this.runSimulationStep(0, this.simulation.emit!, true); });
   }
 
   private cancelScheduledStep() {

@@ -39,7 +39,9 @@ including computation/publication cost. `stepInterval` is exponential like
 Greenfoot's slider (ln of the interval is a parabola through 1 s at speed 1,
 30 ms at 50 and 1 ms at 100), but keeps a real delay at the fastest end; the
 BlueJ BluePlay reference uses `100 - speed` ms. A speed change during a wait
-continues counting from the same step start. Do not accumulate catch-up steps. simulationTimer
+continues counting from the same step start. The scheduler reads the speed from
+BluePlayEngine (`bluePlaySpeed()`), so `setSpeed()` in student code and the
+slider act alike; RuntimeHost keeps no copy. Do not accumulate catch-up steps. simulationTimer
 waits mainly with a timer and uses event-loop tasks for the last 4 ms, avoiding
 nested-browser-timer clamping while admitting input/Pause events.
 

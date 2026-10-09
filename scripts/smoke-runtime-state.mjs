@@ -386,6 +386,27 @@ projectClient.invalidate();
   await runner.simulation('stop');
   stopStages();
   runner.invalidate();
+
+  // setSpeed() in student code changes the pace like the slider does.
+  const coded = new LocalRuntimeClient(() => new TestWorker());
+  const codedFiles = [
+    { id: 'Slow', fileName: 'Slow.kt', kind: 'class', revision: 1, source: 'class Slow : Actor() { override fun act() { x += 1; setSpeed(1) } }' },
+    { id: 'Main', fileName: 'Main.kt', kind: 'functions', revision: 1, source: 'fun main() { val w = World(100, 10, 1); w.addObject(Slow(), 1, 1); w.show() }' },
+  ];
+  assert.deepEqual((await coded.compile(codedFiles, 1, { id: 'blueplay', version: 1 })).diagnostics, []);
+  assert.notEqual((await coded.execute({ op: 'main', fileName: 'Main.kt' })).kind, 'error');
+  const codedStages = [];
+  const stopCoded = coded.stageStream(value => codedStages.push(value));
+  await coded.simulation('setSpeed', 100);
+  await coded.simulation('start');
+  const codedStart = Date.now();
+  while (!(codedStages.at(-1)?.objects[0]?.x >= 2) && Date.now() - codedStart < 2000) await new Promise(resolve => setTimeout(resolve, 5));
+  await new Promise(resolve => setTimeout(resolve, 300));
+  assert.equal(codedStages.at(-1).objects[0].x, 2, 'setSpeed(1) from act() slows the next step down');
+  assert.equal(codedStages.at(-1).speed, 1, 'the slider shows the speed set by the code');
+  await coded.simulation('stop');
+  stopCoded();
+  coded.invalidate();
 }
 // RT-82: an exception in act() stops Run and goes to the terminal like in Kotlin;
 // the world and the runtime stay usable.
