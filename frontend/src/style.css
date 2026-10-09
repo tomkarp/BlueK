@@ -403,8 +403,10 @@ footer{flex:0 0 108px}
 .toolbar .toolbar-icon-button.active{background:linear-gradient(#dff7fc,#a8dce8);color:#075b70}
 .toolbar .media-tool-button{width:46px;flex:0 0 46px;padding:0}
 .toolbar .media-tool-button svg{width:27px;height:27px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
-.image-library-dialog{width:min(700px,88vw);max-height:82vh;overflow:auto}
-.image-library-dialog .dialog-actions{justify-content:center}
+.image-library-dialog{width:min(700px,88vw);min-width:0;max-height:82vh;display:flex;flex-direction:column;overflow:hidden}
+.image-library-dialog h3{flex:none}
+.image-library-content{min-height:0;overflow:auto}
+.image-library-dialog .dialog-actions{flex:none;justify-content:center}
 .standard-image-grid{display:grid;grid-template-columns:repeat(auto-fill,120px);gap:12px;margin:18px 0}
 .standard-image-tile{box-sizing:border-box;width:120px;height:120px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;overflow:hidden;border:1px solid #aaa;border-radius:6px;background:#f5f5f5;color:#222;font-size:12px;text-align:center}
 button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
@@ -417,7 +419,15 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 .media-library-hint,.media-empty{color:#555;font-size:13px}
 .media-group-title{margin:16px 0 6px;font-size:13px}
 .image-library-dialog .standard-image-grid{margin:6px 0 10px}
-.project-image-tile{height:146px!important}
+.project-image-tile{position:relative}
+.project-image-tile>span{max-width:60px}
+.project-image-tile .media-actions{position:absolute;bottom:3px;left:3px;right:3px;justify-content:space-between;pointer-events:none}
+.dialog .project-image-tile .media-actions button{width:24px;height:24px;border:0;border-radius:4px;background:transparent;color:#777;box-shadow:none;cursor:pointer;pointer-events:auto}
+.dialog .project-image-tile .media-actions button:hover{background:#e4e4e4;color:#222}
+.dialog .project-image-tile .media-actions button:focus-visible{background:#e4e4e4;color:#222;outline:2px solid #168fbd;outline-offset:-2px}
+.project-image-tile .media-rename svg{width:13px;height:13px}
+.dark .dialog .project-image-tile .media-actions button{color:#aaa}
+.dark .dialog .project-image-tile .media-actions button:hover,.dark .dialog .project-image-tile .media-actions button:focus-visible{background:#46464c;color:#fff}
 .media-actions{display:flex;gap:6px}
 .dialog .media-actions button{width:26px;height:24px}
 .sound-list{list-style:none;margin:0 0 8px;max-height:240px;overflow:auto;padding:0;border:1px solid #ccc;border-radius:6px}

@@ -88,77 +88,79 @@
       use:containClicks
     >
       <h3 id="images-title">{t("ui.common.images")}</h3>
-      <p class="media-library-hint">
-        {t("ui.media.imageHint", [megabytes("image"), String(MEDIA.image.maxSide)])}
-      </p>
-      <h4 class="media-group-title">{t("ui.media.projectImages")}</h4>
-      <div class="standard-image-grid project-image-grid">
-        <button
-          class="standard-image-tile standard-image-add"
-          on:click={() => imageInput.click()}
-          aria-label={t("ui.media.addImage")}
-          title={t("ui.media.addImage")}
-          ><span aria-hidden="true">+</span></button
-        >
-        {#each images as resource (resource.path)}
-          <div
-            class="standard-image-tile project-image-tile"
-            role="group"
-            aria-label={fileName(resource.path)}
+      <div class="image-library-content">
+        <p class="media-library-hint">
+          {t("ui.media.imageHint", [megabytes("image"), String(MEDIA.image.maxSide)])}
+        </p>
+        <h4 class="media-group-title">{t("ui.media.projectImages")}</h4>
+        <div class="standard-image-grid project-image-grid">
+          <button
+            class="standard-image-tile standard-image-add"
+            on:click={() => imageInput.click()}
+            aria-label={t("ui.media.addImage")}
+            title={t("ui.media.addImage")}
+            ><span aria-hidden="true">+</span></button
           >
-            <div class="standard-image-preview">
-              <img src={resource.data} alt={fileName(resource.path)} />
-            </div>
-            <span
-              title={`${fileName(resource.path)}, ${sizeText(resourceBytes(resource))}`}
-              >{fileName(resource.path)}</span
+          {#each images as resource (resource.path)}
+            <div
+              class="standard-image-tile project-image-tile"
+              role="group"
+              aria-label={fileName(resource.path)}
             >
-            <div class="media-actions">
-              <button
-                class="media-rename"
-                on:click={() => renameMedia("image", resource.path)}
-                aria-label={t("ui.media.renameImage", [fileName(resource.path)])}
-                title={t("ui.media.renameImage", [fileName(resource.path)])}
-                ><svg viewBox="0 0 24 24" aria-hidden="true"
-                  ><path d="M4 20h4L19 9l-4-4L4 16z" /><path
-                    d="m13.5 6.5 4 4"
-                  /></svg
-                ></button
-              ><button
-                class="media-remove"
-                on:click={() => removeMedia("image", resource.path)}
-                aria-label={t("ui.media.removeImage", [fileName(resource.path)])}
-                title={t("ui.media.removeImage", [fileName(resource.path)])}
-                >×</button
+              <div class="standard-image-preview">
+                <img src={resource.data} alt={fileName(resource.path)} />
+              </div>
+              <span
+                title={`${fileName(resource.path)}, ${sizeText(resourceBytes(resource))}`}
+                >{fileName(resource.path)}</span
               >
+              <div class="media-actions">
+                <button
+                  class="media-rename"
+                  on:click={() => renameMedia("image", resource.path)}
+                  aria-label={t("ui.media.renameImage", [fileName(resource.path)])}
+                  title={t("ui.media.renameImage", [fileName(resource.path)])}
+                  ><svg viewBox="0 0 24 24" aria-hidden="true"
+                    ><path d="M4 20h4L19 9l-4-4L4 16z" /><path
+                      d="m13.5 6.5 4 4"
+                    /></svg
+                  ></button
+                ><button
+                  class="media-remove"
+                  on:click={() => removeMedia("image", resource.path)}
+                  aria-label={t("ui.media.removeImage", [fileName(resource.path)])}
+                  title={t("ui.media.removeImage", [fileName(resource.path)])}
+                  >×</button
+                >
+              </div>
             </div>
-          </div>
-        {/each}
-      </div>
-      {#if !images.length}<p class="media-empty">{t("ui.media.noImages")}</p>{/if}
-      {#if mediaErrors.image}<p class="media-error" role="alert">
-          {mediaErrors.image}
-        </p>{/if}
-      <input
-        bind:this={imageInput}
-        class="media-file-input"
-        type="file"
-        accept=".png,.jpg,.jpeg,image/png,image/jpeg"
-        multiple
-        hidden
-        aria-label={t("ui.media.addImage")}
-        on:change={() => choose("image", imageInput)}
-      />
-      <h4 class="media-group-title">{t("ui.media.standardImages")}</h4>
-      <div class="standard-image-grid standard-image-list">
-        {#each visibleStandardImages as resource (resource.path)}
-          <div class="standard-image-tile" aria-label={fileName(resource.path)}>
-            <div class="standard-image-preview">
-              <img src={resource.data} alt={fileName(resource.path)} />
+          {/each}
+        </div>
+        {#if !images.length}<p class="media-empty">{t("ui.media.noImages")}</p>{/if}
+        {#if mediaErrors.image}<p class="media-error" role="alert">
+            {mediaErrors.image}
+          </p>{/if}
+        <input
+          bind:this={imageInput}
+          class="media-file-input"
+          type="file"
+          accept=".png,.jpg,.jpeg,image/png,image/jpeg"
+          multiple
+          hidden
+          aria-label={t("ui.media.addImage")}
+          on:change={() => choose("image", imageInput)}
+        />
+        <h4 class="media-group-title">{t("ui.media.standardImages")}</h4>
+        <div class="standard-image-grid standard-image-list">
+          {#each visibleStandardImages as resource (resource.path)}
+            <div class="standard-image-tile" aria-label={fileName(resource.path)}>
+              <div class="standard-image-preview">
+                <img src={resource.data} alt={fileName(resource.path)} />
+              </div>
+              <span>{fileName(resource.path)}</span>
             </div>
-            <span>{fileName(resource.path)}</span>
-          </div>
-        {/each}
+          {/each}
+        </div>
       </div>
       <div class="dialog-actions">
         <button on:click={closeImages}>{t("ui.common.close")}</button>
