@@ -8,7 +8,6 @@
   import { stageStyle } from "../bluePlayStage";
   export let stage: StageFrame | null;
   export let stageWindowOpen: boolean;
-  export let stageWindowDismissed: boolean;
   export let stageMaximized: boolean;
   export let stageCanvas: HTMLCanvasElement | null;
   export let speed: number;
@@ -21,6 +20,7 @@
   export let beginStageDrag: (event: PointerEvent) => void;
   export let stageClick: (event: MouseEvent) => void;
   export let resetGame: () => Promise<void>;
+  export let closeWorld: () => void;
   export let bluePlayAction: (
     action: "step" | "start" | "stop" | "setSpeed",
   ) => void;
@@ -54,12 +54,12 @@
           >{stageMaximized ? "❐" : "□"}</button
         >
         <button
-          on:click|stopPropagation={() => {
-            stageWindowOpen = false;
-            stageWindowDismissed = true;
-            stageMaximized = false;
-          }}
-          aria-label={t("ui.blueplay.closeBluePlayWorld")}>×</button
+          on:click|stopPropagation={closeWorld}
+          disabled={stageRunning}
+          aria-label={t("ui.blueplay.closeBluePlayWorld")}
+          title={stageRunning
+            ? t("ui.blueplay.pauseToCloseWorld")
+            : t("ui.blueplay.closeBluePlayWorld")}>×</button
         >
       </div>
     </div>

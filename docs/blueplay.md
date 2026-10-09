@@ -21,6 +21,10 @@ fun main() {
 The world window has, from left to right, **Act**, **Run** and **Reset**, then
 **Speed**. While the world runs, Run turns into **Pause**; the three buttons keep
 the same size in every state. Exported players use the same controls.
+While the world runs, its window cannot be closed (the close button is
+disabled and Escape keeps it open); pause it first. If Run starts while the
+window is closed, for example through `start()` in the codepad, the window
+opens again.
 Speed works exponentially like Greenfoot's slider: about 1 s per step at 1,
 30 ms at the default 50 and 1 ms at 100; the left half therefore slows down
 considerably. Run performs its first step at once, and raising the speed

@@ -272,11 +272,7 @@
         terminal.terminalSplit = false;
       };
     if (editor.editorWindows.length) return editor.closeEditor;
-    if (play.stageWindowOpen)
-      return () => {
-        play.stageWindowOpen = false;
-        play.stageMaximized = false;
-      };
+    if (play.stageWindowOpen && !play.stageRunning) return play.closeWorld;
     if (tests.preview)
       return () => {
         tests.preview = null;
@@ -393,8 +389,7 @@
 >
   <BluePlayWindow
     stage={play.stage}
-    bind:stageWindowOpen={play.stageWindowOpen}
-    bind:stageWindowDismissed={play.stageWindowDismissed}
+    stageWindowOpen={play.stageWindowOpen}
     bind:stageMaximized={play.stageMaximized}
     bind:stageCanvas={play.stageCanvas}
     bind:speed={play.speed}
@@ -407,6 +402,7 @@
     beginStageDrag={play.beginStageDrag}
     stageClick={play.stageClick}
     resetGame={play.resetGame}
+    closeWorld={play.closeWorld}
     bluePlayAction={play.bluePlayAction}
   />
   <AppToolbar

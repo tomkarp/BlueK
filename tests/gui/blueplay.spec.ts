@@ -852,3 +852,34 @@ test('GUI-133 own PNG/JPEG images are added, renamed and removed; PNG transparen
   await images.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(await evaluate('Image("ring.png")', 1)).toContainText('Image file not found: ring.png');
 });
+
+test('GUI-135 the world window can only be closed while paused and reopens when Run starts', async ({ page }) => {
+  const stage = await loadBluePlay(page);
+  const close = stage.getByRole('button', { name: 'Close BluePlay world' });
+  await expect(close).toBeEnabled();
+  await stage.getByRole('button', { name: 'Run BluePlay world' }).click();
+  await expect(stage).toHaveAttribute('data-simulation', 'running');
+  await expect(close).toBeDisabled();
+  await expect(close).toHaveAttribute('title', 'Pause the world to close it.');
+  // Escape does not hide a running world either.
+  await page.keyboard.press('Escape');
+  await expect(stage).toBeVisible();
+
+  await stage.getByRole('button', { name: 'Pause BluePlay world' }).click();
+  await expect(stage).toHaveAttribute('data-simulation', 'paused');
+  await expect(close).toBeEnabled();
+  await close.click();
+  await expect(stage).toHaveCount(0);
+
+  // Run started from the codepad brings the closed world back, so it can be paused.
+  const input = page.getByLabel('Codepad input');
+  await input.fill('start()');
+  await input.press('Enter');
+  await expect(stage).toBeVisible();
+  await expect(stage).toHaveAttribute('data-simulation', 'running');
+  await expect(close).toBeDisabled();
+  await stage.getByRole('button', { name: 'Pause BluePlay world' }).click();
+  await expect(close).toBeEnabled();
+  await page.keyboard.press('Escape');
+  await expect(stage).toHaveCount(0);
+});

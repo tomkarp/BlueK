@@ -97,7 +97,8 @@
     "run": "Run",
     "pauseBluePlayWorld": "Pause BluePlay world",
     "pause": "Pause",
-    "speed": "Speed"
+    "speed": "Speed",
+    "pauseToCloseWorld": "Pausiere die Welt, um sie zu schließen."
   },
   "objects": {
     "call": "Aufruf",

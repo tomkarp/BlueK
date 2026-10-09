@@ -222,6 +222,16 @@ export class BluePlayWorkspace {
     this.speed = Number(value.speed) || this.speed;
   };
   connect = () => {
+    // A running world stays visible, so that it can always be paused, also when
+    // start() runs it from the codepad after the window was closed.
+    $effect(() => {
+      if (!this.stageRunning) return;
+      untrack(() => {
+        if (!this.stage) return;
+        this.stageWindowDismissed = false;
+        this.stageWindowOpen = true;
+      });
+    });
     $effect(() => {
       const resources = this.host.project().runtimeResources;
       if (resources.length)
@@ -250,6 +260,13 @@ export class BluePlayWorkspace {
       void this.host.project().runtimeResources;
       untrack(this.scheduleStageDraw);
     });
+  };
+  /** Closes the world window; while it runs, it must stay open to be paused. */
+  closeWorld = () => {
+    if (this.stageRunning) return;
+    this.stageWindowOpen = false;
+    this.stageWindowDismissed = true;
+    this.stageMaximized = false;
   };
   clearWorld = () => {
     this.stageAudio.stopAll();
