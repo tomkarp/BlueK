@@ -9,8 +9,9 @@ object PairClass {
     val clazz = ProvidedClassDefinition(
         fullQualifiedName = "Pair",
         typeParameters = listOf(
-            TypeParameter(name = "A", typeUpperBound = null),
-            TypeParameter(name = "B", typeUpperBound = null)
+            // `Pair<out A, out B>` as in Kotlin
+            TypeParameter(name = "A", typeUpperBound = null).also { it.variance = Variance.Covariant },
+            TypeParameter(name = "B", typeUpperBound = null).also { it.variance = Variance.Covariant }
         ),
         isInstanceCreationAllowed = true,
         primaryConstructorParameters = listOf(

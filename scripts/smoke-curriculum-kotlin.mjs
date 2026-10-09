@@ -1539,4 +1539,35 @@ fails((await project({ 'Anzeige.kt': 'class Anzeige {\n    fun zeige(text: Strin
   for (const source of rejected) fails(p.evaluate(source), `RT-99 ${source}`, /nullable receiver of type/);
 }
 
+// RT-106: arguments of different types have a common supertype as in Kotlin:
+// `listOf(40, 40, false)` is a List<Comparable<*>>, covariant arguments such as
+// `List<out T>` and `Pair<out A, out B>` take the common supertype of theirs.
+// Expected values come from kotlinc 2.x for the same code.
+{
+  const p = await project({ 'Main.kt': 'fun main() {}' });
+  ok(p.result, 'RT-106 project');
+  const cases = [
+    ['listOf(40, 40, false)', '[40, 40, false]'],
+    ['listOf(1, "zwei")', '[1, zwei]'],
+    ['listOf(1, 2.5)', '[1, 2.5]'],
+    ['setOf(1, "a")', '[1, a]'],
+    ['mapOf(1 to "a", "b" to 2)', '{1=a, b=2}'],
+    ['listOf(listOf(1), listOf("a"))', '[[1], [a]]'],
+    ['listOf(1, "a", true, 2.5, null)', '[1, a, true, 2.5, null]'],
+    ['arrayOf(1, "a").size', '2'],
+    ['val c106: Comparable<*> = listOf(1, true)[0]; c106', '1'],
+    ['val p106: Pair<Any, Any> = 1 to "a"; p106', '(1, a)'],
+    ['val l106: List<Any> = listOf(1, "a"); l106', '[1, a]'],
+    ['listOf(1, true).map { it.toString() }', '[1, true]'],
+    ['listOf(1, "a").filterIsInstance<String>()', '[a]'],
+    ['val m106 = mutableListOf(1, "a"); m106.remove("a"); m106', '[1]'],
+    ['if (true) 1 else 2.5', '1'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-106 ${source}`).display, expected, `RT-106 ${source}`);
+  // The common supertype keeps type safety: Comparable<*> has no `+`.
+  fails(p.evaluate('val x106 = listOf(1, "a"); x106[0] + 1'), 'RT-106 plus', /cannot be applied with operator `\+`/);
+  fails(p.evaluate('val s106: List<String> = listOf(1, "a")'), 'RT-106 List<String>', /actual type is `List<Comparable<\*>>`/);
+  fails(p.evaluate('val q106: Pair<String, Int> = 1 to 2'), 'RT-106 Pair', /actual type is `Pair<Int, Int>`/);
+}
+
 console.log('Curriculum Kotlin smoke test passed.');

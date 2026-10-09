@@ -836,10 +836,8 @@ object BlueKStdlibModule : LibraryModule("bluek-stdlib") {
      * overloads that differ only in the lambda's parameter count collide.
      */
     private val mapFunctions = listOf(
-        // RT-59; `key in map` already worked.
-        function("Map<K, V>", "containsKey", "Boolean", listOf(parameter("key", "K")), listOf(TypeParameter("K", null), TypeParameter("V", null))) { interpreter, receiver, args, _ ->
-            BooleanValue(map(receiver).containsKey(args[0]), interpreter.symbolTable())
-        },
+        // containsKey (RT-59) comes from the Kotlite stdlib's `Map<K, *>.containsKey`,
+        // which matches since star projections accept every argument (RT-106).
         function(
             "Map<K, V>", "getOrDefault", "V",
             listOf(parameter("key", "K"), parameter("defaultValue", "V")),

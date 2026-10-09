@@ -80,6 +80,15 @@ supported.
 - Type arguments can be inferred from declarations, returns, Elvis expressions,
   expected lambda results and enclosing call arguments, but not from branches
   of an `if` expression. Specify `emptyList<Int>()` in that case.
+- Values of different types get a common supertype as in Kotlin:
+  `listOf(40, 40, false)` and `listOf(1, "two")` are `List<Comparable<*>>`,
+  `mapOf(1 to "a", "b" to 2)` and nested lists work. Kotlin's intersection types
+  are reduced to one type, and there is no `Number`, so `listOf(1, 2.5)` offers
+  only Comparable members (no `toDouble()`). `mutableListOf(1, "a").add(true)`
+  is accepted, while Kotlin rejects it. An expected type does not widen an
+  invariant collection: write `mutableListOf<Any>(1, 2)` instead of
+  `val m: MutableList<Any> = mutableListOf(1, 2)`, and `setOf<Any>(…)` for a
+  `Set<Any>`.
 - Smart casts support simple names and one-level `name.property` paths for
   eligible `val` properties. They do not support `this.property`, longer paths,
   `this is Type` in extensions, `is T` for type parameters, safe-call conditions,

@@ -1012,3 +1012,29 @@ Coverage: `node scripts/smoke-kotlin-surface.mjs` (RT-100), `npm run test:confor
 - Die Zusatzmetadaten verändern die Ausführung nicht. Nachweis:
   `smoke-testing.mjs` für private Attribute, Getter, Alias-/qualifizierte
   Setup-Annotationen und wiederholten Transfer eines Init-Zustands.
+
+## 2026-10-09: gemeinsamer Obertyp wie in Kotlin (RT-106)
+
+- `superTypeOf` bildet für gleiche Klassen mit verschiedenen Typargumenten die
+  kleinste obere Schranke wie Kotlin: gleiche Argumente bleiben, kovariante
+  (`List<out T>`) erhalten ihren gemeinsamen Obertyp, alle anderen werden zur
+  Star-Projektion. `listOf(40, 40, false)`, `listOf(1, "zwei")`, gemischte
+  `setOf`/`mapOf`/`arrayOf`, verschachtelte Listen und `if`/`else` mit
+  verschiedenen Typen ergeben `…<Comparable<*>>` statt eines Fehlers mit
+  `Comparable<Any>`. `RepeatedType.equals` hält alle Platzhalter für gleich;
+  der Vergleich nutzt deshalb zusätzlich den beschreibenden Namen.
+- `ObjectType.isConvertibleFrom` akzeptiert für ein Star-Argument jedes
+  Argument (wie `isAssignableFrom`). `StarType` und `TypeNode` schreiben `*`
+  ohne `?`, damit erzeugter Quelltext (Codepad-Bindungen) gültiges Kotlin bleibt.
+- `Pair` deklariert `out A, out B` wie Kotlin, damit `mapOf` mit gemischten
+  Schlüssel-/Werttypen passt.
+- Ein invariantes Typargument des Empfängers legt seinen Typparameter fest:
+  `mutableListOf(1).add("x")` bleibt ein Fehler, statt die Liste über den neuen
+  gemeinsamen Obertyp zu verbreitern.
+- BlueKs eigenes `Map.containsKey` (RT-59) entfällt: das `Map<K, *>.containsKey`
+  der Kotlite-Stdlib passt jetzt und war sonst mehrdeutig.
+- Nicht nachgebaut: Kotlins Schnittmengentypen (Kotlite wählt einen Obertyp),
+  `Number`, die `out`-Projektion von `mutableListOf(1, "a")` (Kotlin verbietet
+  dort `add`) und die Verbreiterung durch einen erwarteten invarianten Typ.
+- Nachweis: RT-106 in `smoke-curriculum-kotlin.mjs` (Erwartungswerte mit
+  kotlinc geprüft), RT-63 weiterhin abgelehnt, `smoke-kotlin-surface.mjs`.

@@ -102,7 +102,8 @@ open class TypeNode(override val position: SourcePosition, val name: String, val
 
     val nameWithNullable: String get() = "$name${if (isNullable) "?" else ""}"
 
-    open fun descriptiveName(): String = "$name${arguments?.let { "<${it.joinToString(", ") { it.descriptiveName() }}>" } ?: ""}${if (isNullable) "?" else ""}"
+    // A star projection is written without `?`, so the name stays valid Kotlin source.
+    open fun descriptiveName(): String = "$name${arguments?.let { "<${it.joinToString(", ") { it.descriptiveName() }}>" } ?: ""}${if (isNullable && name != "*") "?" else ""}"
 
     override fun toMermaid(): String {
         val self = "${generateId()}[\"Type $name${if (isNullable) " ?" else ""}\"]"

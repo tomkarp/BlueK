@@ -128,6 +128,8 @@ class AnyType(isNullable: Boolean = false) : ObjectType(AnyClass.clazz, emptyLis
 data object StarType : DataType {
     override val name: String = "*"
     override val isNullable: Boolean = true
+    // `*` already admits null; `*?` is no Kotlin type.
+    override val descriptiveName: String = "*"
 
     override fun copyOf(isNullable: Boolean): DataType = this
 
@@ -279,6 +281,8 @@ open class ObjectType(val clazz: ClassDefinition, val arguments: List<DataType>,
         }
         return otherType == null || arguments.withIndex().all {
             val otherTypeArg = otherType.arguments[it.index]
+            // A star projection such as `Comparable<*>` accepts every argument.
+            if (it.value == StarType) return@all true
             when (clazz.typeParameters.getOrNull(it.index)?.variance ?: Variance.Invariant) {
                 Variance.Covariant -> it.value.isConvertibleFrom(otherTypeArg)
                 Variance.Contravariant -> otherTypeArg.isConvertibleFrom(it.value)

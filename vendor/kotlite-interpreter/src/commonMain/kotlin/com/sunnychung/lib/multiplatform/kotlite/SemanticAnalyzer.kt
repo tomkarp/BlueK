@@ -12,6 +12,7 @@ import com.sunnychung.lib.multiplatform.kotlite.extension.resolveGenericParamete
 import com.sunnychung.lib.multiplatform.kotlite.extension.unboxRepeatedType
 import com.sunnychung.lib.multiplatform.kotlite.extension.unboxTypeParameterType
 import com.sunnychung.lib.multiplatform.kotlite.model.DestructuringDeclarationNode
+import com.sunnychung.lib.multiplatform.kotlite.model.Variance
 import com.sunnychung.lib.multiplatform.kotlite.model.ASTNode
 import com.sunnychung.lib.multiplatform.kotlite.model.AnyType
 import com.sunnychung.lib.multiplatform.kotlite.model.CallableNode
@@ -2658,6 +2659,16 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
                     if (type != null) {
                         inferTypeArgumentFromOtherArgument(parameterType = parameterType, argumentType = type.toTypeNode())
+                        // An invariant receiver argument fixes its type parameter, so that
+                        // arguments cannot widen it: `mutableListOf(1).add("x")` stays an
+                        // error instead of becoming a MutableList<Comparable<*>> (RT-106).
+                        parameterType.arguments?.forEachIndexed { index, argument ->
+                            if (argument.name !in tpUpperBounds || !argument.arguments.isNullOrEmpty()) return@forEachIndexed
+                            if (type.clazz.typeParameters.getOrNull(index)?.variance != Variance.Invariant) return@forEachIndexed
+                            val exact = type.arguments.getOrNull(index) ?: return@forEachIndexed
+                            if (exact is RepeatedType && exact.actualType == null) return@forEachIndexed
+                            tpResolutions[argument.name] = exact.toTypeNode()
+                        }
                     }
                 }
                 // check at this point would miss generic lambda resolution
@@ -4776,11 +4787,22 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                                 if (superType1.arguments.size != superType2.arguments.size) {
                                     return@run
                                 }
+                                // Like Kotlin's least upper bound: equal arguments stay,
+                                // covariant ones (`List<out T>`) take their common supertype
+                                // and others become a star projection, so `listOf(1, true)`
+                                // is a `List<Comparable<*>>` instead of a mismatch.
                                 return TypeNode(
                                     position = SourcePosition.NONE,
                                     name = superType1.name,
                                     arguments = superType1.arguments.mapIndexed { index, it ->
-                                        superTypeOf(it.toTypeNode(), superType2.arguments[index].toTypeNode(), visitCache)
+                                        val other = superType2.arguments[index]
+                                        when {
+                                            // RepeatedType's equals ignores which type it stands for
+                                            it == other && it.descriptiveName == other.descriptiveName -> it.toTypeNode()
+                                            superType1.clazz.typeParameters.getOrNull(index)?.variance == Variance.Covariant ->
+                                                superTypeOf(it.toTypeNode(), other.toTypeNode(), visitCache)
+                                            else -> TypeNode(SourcePosition.NONE, "*", null, false)
+                                        }
                                     }.emptyToNull(),
                                     isNullable = isNullable,
                                 )
