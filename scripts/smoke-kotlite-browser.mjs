@@ -151,12 +151,22 @@ if (!privateTimerInspection.fields.some(field => field.name === 'min' && field.s
 }
 
 const bluekApiSession = api.bluekCreateKotliteSession();
-if (JSON.parse(bluekApiSession.evaluate('<BlueK API>', 'BlueK.beep()')).display !== 'Unit') {
-    throw new Error('BlueK.beep() did not return Unit.');
+if (JSON.parse(bluekApiSession.evaluate('<terminal bell>', 'print("\\u0007")')).display !== 'Unit') {
+    throw new Error('Printing terminal BEL did not return Unit.');
 }
 const beepEffects = JSON.parse(bluekApiSession.takeEffects());
-if (beepEffects.length !== 1 || beepEffects[0].type !== 'sound' || beepEffects[0].name !== 'beep') {
-    throw new Error('BlueK.beep() did not produce the expected sound effect.');
+if (beepEffects.length !== 1 || beepEffects[0].type !== 'sound' || beepEffects[0].name !== 'terminalBell') {
+    throw new Error('Printing terminal BEL did not produce the expected sound effect.');
+}
+if (bluekApiSession.takeOutput() !== '\u0007') {
+    throw new Error('Printing terminal BEL did not preserve the terminal control character.');
+}
+expectOk(JSON.parse(bluekApiSession.evaluate('<kitty text bell>', 'print("\\u001B]66;s=2;Text\\u0007")')), 'kitty text terminator');
+if (JSON.parse(bluekApiSession.takeEffects()).length !== 0) {
+    throw new Error('The BEL terminating an OSC text sequence incorrectly triggered a terminal beep.');
+}
+if (JSON.parse(bluekApiSession.evaluate('<removed BlueK API>', 'BlueK.beep()')).kind !== 'error') {
+    throw new Error('The BlueK.beep() API is still available.');
 }
 
 const classInputSession = api.bluekCreateKotliteSession();

@@ -128,7 +128,7 @@ export class RuntimeHost {
   /** A step that ends Run (stop(), a fault) publishes the complete state like a command reply. */
   private emitSimulationSnapshot(executionId: number, emit: Emit, response: RuntimeValue) {
     const reply = this.publish(0, response);
-    if (reply.response.output) emit({ type: 'event', generationId: reply.generationId, executionId, sequence: ++this.sequence, kind: 'output', output: reply.response.output, snapshot: reply.snapshot });
+    if (reply.response.output) emit({ type: 'event', generationId: reply.generationId, executionId, sequence: ++this.sequence, kind: 'output', output: reply.response.output, effects: reply.response.effects, snapshot: reply.snapshot });
     emit({ type: 'event', generationId: reply.generationId, executionId, sequence: ++this.sequence, kind: 'snapshot', snapshot: reply.snapshot });
   }
 
@@ -182,9 +182,11 @@ export class RuntimeHost {
     this.clearOutputTimer();
     const output = this.session?.takeOutput() || '';
     if (!output) return;
+    const effectsJson = this.session?.takeEffects();
+    const effects = effectsJson && effectsJson !== '[]' ? JSON.parse(effectsJson) : undefined;
     this.lastOutputPublishAt = now;
     this.refreshSnapshot();
-    emit({ type: 'event', generationId: this.snapshot.generationId, executionId, sequence: ++this.sequence, kind: 'output', output, snapshot: this.snapshot });
+    emit({ type: 'event', generationId: this.snapshot.generationId, executionId, sequence: ++this.sequence, kind: 'output', output, effects, snapshot: this.snapshot });
   }
 
   dispatch(id: number, command: WorkerCommand, emit: Emit): void {

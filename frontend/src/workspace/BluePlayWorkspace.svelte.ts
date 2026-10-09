@@ -283,7 +283,7 @@ export class BluePlayWorkspace {
     this.stageWindowOpen = true;
   };
   playEffect = (effect: RuntimeEffect) => {
-    if (effect.name === "beep") this.stageAudio.beep();
+    if (effect.name === "terminalBell") this.stageAudio.beep();
     else
       this.stageAudio.playResource(
         effect.path,

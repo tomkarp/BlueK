@@ -98,6 +98,9 @@ class KotliteSession {
     private var executionCompleted: ((String) -> Unit)? = null
     private var faulted = false
     private var bluePlayEnabled = false
+    private var outputEscapePending = false
+    private var outputInOsc = false
+    private var outputOscEscapePending = false
     private val bluePlay = BluePlayEngine { path ->
         pendingEffects += "{\"type\":\"sound\",\"name\":\"resource\",\"path\":\"${escape(path)}\"}"
     }
@@ -230,8 +233,6 @@ class KotliteSession {
                 UnitValue
             }
         ))
-        environment.registerClass(BlueKClass.definition())
-        environment.registerFunction(BlueKClass.beepFunction { pendingEffects += "{\"type\":\"sound\",\"name\":\"beep\"}" })
         val modules = AllStdLibModules { text -> appendOutput(text) }.modules +
             listOf(GenericCollectionsModule, BlueKStdlibModule)
         modules.forEach(environment::install)
@@ -466,6 +467,9 @@ class KotliteSession {
 
     /** Preserve BlueJ's form-feed terminal clear semantics for the UI. */
     private fun appendOutput(text: String) {
+        repeat(countTerminalBells(text)) {
+            pendingEffects += "{\"type\":\"sound\",\"name\":\"terminalBell\"}"
+        }
         val clearIndex = text.lastIndexOf('\u000C')
         if (clearIndex >= 0) {
             output.clear()
@@ -476,6 +480,33 @@ class KotliteSession {
         }
         if (text.isNotEmpty()) outputAtLineStart = text.last() == '\n' || text.last() == '\u000C'
         outputUpdated?.invoke()
+    }
+
+    /** Count BEL characters outside OSC sequences, where BEL closes OSC (including kitty text). */
+    private fun countTerminalBells(text: String): Int {
+        var bells = 0
+        for (char in text) {
+            if (outputInOsc) {
+                if (outputOscEscapePending && char == '\\') {
+                    outputInOsc = false
+                    outputOscEscapePending = false
+                } else if (char == '\u0007') {
+                    outputInOsc = false
+                    outputOscEscapePending = false
+                } else {
+                    outputOscEscapePending = char == '\u001B'
+                }
+            } else if (outputEscapePending) {
+                outputInOsc = char == ']'
+                outputEscapePending = char == '\u001B'
+                if (outputInOsc) outputOscEscapePending = false
+            } else if (char == '\u001B') {
+                outputEscapePending = true
+            } else if (char == '\u0007') {
+                bells++
+            }
+        }
+        return bells
     }
 
     /**
@@ -1171,6 +1202,9 @@ class KotliteSession {
         resetInterpreter()
         output.clear()
         outputAtLineStart = true
+        outputEscapePending = false
+        outputInOsc = false
+        outputOscEscapePending = false
         return result("reset", UnitValue)
     }
 

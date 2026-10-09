@@ -215,7 +215,7 @@
         outputFrame ||= requestAnimationFrame(flushOutput);
       }
       value.effects?.forEach((effect) => {
-        if (effect.name === "beep") audio.beep();
+        if (effect.name === "terminalBell") audio.beep();
         else audio.playResource(effect.path, resources);
       });
     }),

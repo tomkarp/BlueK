@@ -60,7 +60,7 @@ export class LocalRuntimeClient {
         if (runtimeEvent.kind === 'frame') { this.acceptFrame(runtimeEvent); return; }
         this.update(runtimeEvent.snapshot);
         if (runtimeEvent.kind === 'inputRequested') this.inputRequestId = runtimeEvent.inputRequestId;
-        if (runtimeEvent.output) this.responseListeners.forEach(listener => listener({ kind: 'unit', output: runtimeEvent.output, display: 'Unit' }));
+        if (runtimeEvent.output || runtimeEvent.effects) this.responseListeners.forEach(listener => listener({ kind: 'unit', output: runtimeEvent.output, effects: runtimeEvent.effects, display: 'Unit' }));
         if (runtimeEvent.snapshot.stage) this.stageListeners.forEach(listener => listener(runtimeEvent.snapshot.stage!));
         return;
       }

@@ -87,6 +87,11 @@ The screen is all retained output since clearing, with no fixed height; row 1
 is its first row. 2J clears and moves to top left. Writing/erasing a sized-text
 anchor removes the whole block; writing in rows below can cover it.
 
-Blink, window titles, old DEC double-height sequences, bell and other unsupported
-control sequences are ignored. Output is bounded: styles enabled only in a
+Blink, window titles, old DEC double-height sequences and other unsupported
+control sequences are ignored. The terminal bell (`\u0007`) plays a beep and is
+not shown. Output is bounded: styles enabled only in a
 discarded prefix may be lost when very large amounts of text are printed.
+
+```kotlin
+print("\u0007")
+```

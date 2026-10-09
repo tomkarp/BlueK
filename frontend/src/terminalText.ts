@@ -2,7 +2,7 @@
  * Program output as a terminal shows it (GUI-97): ANSI escape sequences for colours and text
  * styles (SGR, `ESC[…m`), erasing (`ESC[2J`, `ESC[K`) and cursor movement (`ESC[H`, `ESC[A` …),
  * and the control characters `\r` (back to the line start, the next text overwrites), `\b`
- * (one column back) and `\t` (next tab stop, every 8 columns). Unsupported sequences are
+ * (one column back), `\t` (next tab stop, every 8 columns), and BEL (`\u0007`, terminal bell). Unsupported sequences are
  * swallowed instead of shown. The screen is the output since the last clear; `ESC[2J` clears it
  * and moves the cursor home. BlueK's own markers `\u0001`…`\u0002` enclose echoed input.
  * Larger and smaller text uses kitty's text sizing protocol `ESC]66;s=2;Text BEL` (GUI-98): the
@@ -321,7 +321,7 @@ export function terminalParts(value: string): TerminalPart[] {
       col = 0;
     } else if (char === "\t") col = (Math.floor(col / 8) + 1) * 8; // next tab stop, like terminals
     else if (char >= " ") put(char);
-    // other control characters (e.g. the bell) are not shown
+    // other control characters are not shown
   }
 
   const parts: TerminalPart[] = [];

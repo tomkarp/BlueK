@@ -325,7 +325,7 @@ projectClient.invalidate();
   }
   const runner = new LocalRuntimeClient(() => new CloningTestWorker());
   const files = [
-    { id: 'Beeper', fileName: 'Beeper.kt', kind: 'class', revision: 1, source: 'class Beeper : Actor() { var n = 0; override fun act() { n += 1; x += 1; if (n == 2) BlueK.beep() } }' },
+    { id: 'Beeper', fileName: 'Beeper.kt', kind: 'class', revision: 1, source: 'class Beeper : Actor() { var n = 0; override fun act() { n += 1; x += 1; if (n == 2) print("\\u0007") } }' },
     { id: 'Main', fileName: 'Main.kt', kind: 'functions', revision: 1, source: 'fun main() { val pond = World(100, 10, 1); pond.addObject(Beeper(), 1, 1); pond.show() }' },
   ];
   assert.deepEqual((await runner.compile(files, 1, { id: 'blueplay', version: 1 })).diagnostics, []);
@@ -345,7 +345,7 @@ projectClient.invalidate();
   await runner.simulation('stop');
   stopEffects(); stopStages();
   assert.ok(stages.at(-1).objects[0].x >= 6, 'Run must publish frames of its steps');
-  assert.ok(effects.some(effect => effect.name === 'beep'), 'effects of steps during Run must reach the client');
+  assert.ok(effects.some(effect => effect.name === 'terminalBell'), 'terminal bell effects of steps during Run must reach the client');
   assert.equal(replacedClasses, false, 'frames of a Run must not replace the class metadata');
   runner.invalidate();
 }

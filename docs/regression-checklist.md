@@ -75,7 +75,7 @@ Unless explicitly stated, visual user acceptance remains pending.
 | RT-03 | One class or top-level declarations per file | Recorded runtime pass; `test:runtime-state` |
 | RT-04 | Suspendable Thread.sleep, cancellation and invalid arguments | Recorded runtime/browser pass |
 | RT-05 | Custom setter visibility, including private set | Recorded runtime pass |
-| RT-06 | BlueK.beep emits optional sound effect | Host-effect test recorded; audible output depends on device, not verified here |
+| RT-06 | Printing terminal BEL (`\u0007`) emits the terminal beep; `BlueK.beep()` is absent | `smoke-kotlite-browser`, `test:runtime-state` and `test:ui` passed (2026-10-09); audible output depends on device and is not verified here |
 | RT-107 | Expected type widens inferred type arguments (declaration, assignment, return, if/when, call parameters); wrong types stay errors | Curriculum RT-107 (values checked with kotlinc), generics, Kotlin surface, references, testing and runtime suites passed; conformance 832 (+12, none lost); full hosted GUI 194/194 and offline 6/6 passed (2026-10-09) |
 | RT-108 | `Number` supertype of Int/Long/Double/Byte with conversions; `listOf(1, 2.5)` is `List<Number>` | Curriculum RT-108 and Kotlin surface (269 supported) passed; same conformance and GUI runs as RT-107 (2026-10-09) |
 | RT-106 | Common supertype as in Kotlin for mixed arguments (`listOf(40, 40, false)`, mixed set/map/array, nested lists, if/else); invariant receiver keeps `add` type-safe; `containsKey` via Kotlite stdlib | Curriculum RT-106 (values checked with kotlinc), generics, Kotlin surface, references and testing suites passed; conformance 820 (+1 `lambda/lambda_kt80285.kt`, none lost); full hosted GUI 193/193 and offline 6/6 passed (2026-10-09) |

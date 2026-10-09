@@ -36,8 +36,8 @@ export interface ManifestClass{
 export interface SymbolManifest{ version:1; classes:ManifestClass[]; functions:(ManifestCallable & {sourceLine:number})[]; library?: ProjectLibrary }
 export interface Diagnostic { fileName?:string; line:number; column:number; severity:'error'|'warning'; message:string }
 export interface CompileResult{generationId:string;sourceRevision:number;classes:ClassMeta[];diagnostics:Diagnostic[]}
-/** `beep`: BlueK.beep(); `resource`: BluePlay playSound() with the resolved project resource path. */
-export type RuntimeEffect = { type: 'sound'; name: 'beep' } | { type: 'sound'; name: 'resource'; path: string };
+/** `terminalBell`: ASCII BEL (`\u0007`); `resource`: BluePlay playSound() with its resolved project resource path. */
+export type RuntimeEffect = { type: 'sound'; name: 'terminalBell' } | { type: 'sound'; name: 'resource'; path: string };
 
 export interface BluePlayImageFrame {
   resourcePath?: string;
@@ -161,7 +161,7 @@ interface RuntimeEventBase {
   output?: string;
 }
 export type RuntimeEvent =
-  | (RuntimeEventBase & { kind: 'started' | 'output' | 'snapshot' | 'inputRequested'; inputRequestId?: number; snapshot: RuntimeSnapshot })
+  | (RuntimeEventBase & { kind: 'started' | 'output' | 'snapshot' | 'inputRequested'; inputRequestId?: number; snapshot: RuntimeSnapshot; effects?: RuntimeEffect[] })
   | (RuntimeEventBase & { kind: 'frame'; frame: SimulationFrame; effects?: RuntimeEffect[] });
 
 export interface TestMetadata { fileName: string; methods: { name: string; line: number; ignored: boolean }[] }
