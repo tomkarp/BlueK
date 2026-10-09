@@ -63,7 +63,7 @@
     "htmlExport": "Create a standalone program page that runs its main without BlueK.",
     "linkReload": "Opening a project link replaces this tab's draft and removes the project payload from the address bar. Reload keeps your changes. To start from the original again, open the original link explicitly.",
     "readmeAndResources": "README and resources",
-    "resources": "Click the document in the diagram to edit the project's README using Markdown. Name the project in the top bar. Import custom images and sounds through project JSON or a BlueJ project; the resource browsers cannot add files yet.",
+    "resources": "Click the document in the diagram to edit the project's README using Markdown. Name the project in the top bar. In BluePlay projects, add WAV or MP3 sounds with the Audio button in the toolbar; your own sounds can be renamed or removed there, the built-in ones cannot. Add PNG or JPEG images the same way with the Images button; transparent PNG pixels do not collide, a JPEG collides as a full rectangle.",
     "offlineCaution": "The offline version has had limited practical testing. Check your projects and browser before relying on it, and keep JSON backups."
   },
   "state": {
@@ -126,7 +126,7 @@
     "worldApi": "Size and background; show, act, addObject, removeObject, getObjects, getObjectsAt and showText.",
     "actorApi": "x, y, rotation, image and world; act, move, turn, turnTowards, collision queries and edge/click checks.",
     "imageApi": "Create a blank image, load a resource or copy an image; draw shapes/text/images, scale and change transparency.",
-    "resources": "Standard images such as duck.png, cat.png and pizza.png are included. Imported project resources with the same path take precedence. playSound uses project audio resources.",
+    "resources": "Standard images such as duck.png, cat.png and pizza.png are included. Imported project resources with the same path take precedence. BluePlay's standard sounds such as explosion.wav, jump.wav and pickup.wav are included as well. playSound(\"pickup.wav\") plays a sound from sounds/ once; sounds may overlap. Reset and Compile stop playing sounds.",
     "limits": "The browser API excludes JVM/AWT internals and file access. Fonts and text collision are approximate. Saving preparation can replay object creation and explicit calls, but cannot preserve a running simulation."
   },
   "shortcuts": {

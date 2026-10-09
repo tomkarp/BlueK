@@ -3,6 +3,7 @@ import { projectTemplate } from "../projectTemplates";
 import {
   ProjectDraftStorage,
   DRAFT_PREFIX,
+  type DraftSaveFailure,
   type ProjectDraftSummary,
 } from "../projectDraftStorage";
 import { untrack } from "svelte";
@@ -44,7 +45,15 @@ import {
 import { htmlExport } from "../htmlExport";
 import { blueJProjectFromEntries, type ImportEntry } from "../blueJImport";
 
-import { standardImages, withStandardImages } from "../standardImages";
+import { withStandardResources } from "../standardImages";
+import {
+  isMediaResource,
+  readMediaFile,
+  renamedMediaPath,
+  type MediaKind,
+  type MediaProblem,
+  type RenameProblem,
+} from "../projectMedia";
 import { loadProjectFromServer } from "../shareApi";
 
 import type {
@@ -53,6 +62,47 @@ import type {
   ProjectResource,
 } from "../../../runtime-contract/src/index";
 type Resource = ProjectResource;
+type MessageKey = import("../i18n/Language.svelte").MessageKey;
+
+const MEDIA_PROBLEM_TEXT: Record<MediaKind, Record<MediaProblem, MessageKey>> = {
+  sound: {
+    format: "ui.media.soundFormatUnsupported",
+    size: "ui.media.soundTooLarge",
+    dimensions: "ui.media.soundUnreadable",
+    unreadable: "ui.media.soundUnreadable",
+  },
+  image: {
+    format: "ui.media.imageFormatUnsupported",
+    size: "ui.media.imageTooLarge",
+    dimensions: "ui.media.imageTooManyPixels",
+    unreadable: "ui.media.imageUnreadable",
+  },
+};
+const RENAME_TEXT: Record<
+  MediaKind,
+  { prompt: MessageKey; removeConfirm: MessageKey; problems: Record<RenameProblem, MessageKey> }
+> = {
+  sound: {
+    prompt: "ui.media.renameSoundPrompt",
+    removeConfirm: "ui.media.removeSoundConfirm",
+    problems: {
+      empty: "ui.media.soundNameEmpty",
+      invalid: "ui.media.soundNameInvalid",
+      extension: "ui.media.soundNameExtension",
+      taken: "ui.media.soundNameTaken",
+    },
+  },
+  image: {
+    prompt: "ui.media.renameImagePrompt",
+    removeConfirm: "ui.media.removeImageConfirm",
+    problems: {
+      empty: "ui.media.imageNameEmpty",
+      invalid: "ui.media.imageNameInvalid",
+      extension: "ui.media.imageNameExtension",
+      taken: "ui.media.imageNameTaken",
+    },
+  },
+};
 
 import type { ObjectWorkspace } from "./ObjectWorkspace.svelte";
 import type { ExecutionWorkspace } from "./ExecutionWorkspace.svelte";
@@ -98,7 +148,14 @@ export class ProjectWorkspace {
   });
   recentProjects: ProjectDraftSummary[] = $state.raw([]);
   savedProjectsNotice = $state(false);
-  autosaveWarning = $state("");
+  /** Why the browser draft is not stored; `session` means it cannot be restored after a reload. */
+  autosaveWarning: DraftSaveFailure | { reason: "session" } | null =
+    $state(null);
+  /** The reason of a warning the user closed; it stays closed until the reason changes. */
+  autosaveWarningDismissed = $state("");
+  dismissAutosaveWarning = () => {
+    this.autosaveWarningDismissed = this.autosaveWarning?.reason ?? "";
+  };
   refreshRecentProjects = () => {
     this.recentProjects = this.drafts.list();
     if (!this.recentProjects.length) this.savedProjectsNotice = false;
@@ -195,7 +252,9 @@ export class ProjectWorkspace {
   readmeOpen = $state(false);
   readmeHelp = $state(false);
   imageLibraryOpen = $state(false);
-  mediaNotice = $state("");
+  soundLibraryOpen = $state(false);
+  /** Why the last add or rename in the Images/Audio dialog failed. */
+  mediaErrors: Record<MediaKind, string> = $state({ sound: "", image: "" });
   shareNotice = $state("");
   shareLinkDialog: { url: string; code: string; copied: boolean } | null =
     $state(null);
@@ -232,8 +291,10 @@ export class ProjectWorkspace {
   currentFile = $derived.by(() => {
     return this.files[this.selected];
   });
+  soundResources = $derived(this.resources.filter(isMediaResource("sound")));
+  imageResources = $derived(this.resources.filter(isMediaResource("image")));
   runtimeResources = $derived.by(() => {
-    return withStandardImages(this.resources, standardImages);
+    return withStandardResources(this.resources);
   });
   orderedBluePlayFiles = (projectFiles: ProjectFile[]) => {
     const rank = (file: ProjectFile) => {
@@ -334,12 +395,12 @@ export class ProjectWorkspace {
     try {
       this.drafts.save(payload);
       this.autosaveWarning = this.drafts.sessionAvailable
-        ? ""
-        : "Automatic project recovery is unavailable. Use Save / Export to keep your work.";
-    } catch {
-      this.autosaveWarning =
-        "Your changes could not be saved in this browser. Use Save / Export to keep your work.";
+        ? null
+        : { reason: "session" };
+    } catch (error) {
+      this.autosaveWarning = this.drafts.failure(error, payload);
     }
+    if (!this.autosaveWarning) this.autosaveWarningDismissed = "";
   };
   refreshInheritanceEdges = () => {
     const next = measureInheritanceEdges(
@@ -840,30 +901,62 @@ export class ProjectWorkspace {
       this.host.session().markUncompiled();
     }
   };
-  importMedia = async (event: Event) => {
-    const input = event.currentTarget as HTMLInputElement;
-    const imported = await Promise.all(
-      Array.from(input.files || []).map(
-        (file) =>
-          new Promise<Resource>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () =>
-              resolve({
-                path: `${file.type.startsWith("audio/") ? "sounds" : "images"}/${file.name}`,
-                data: String(reader.result),
-              });
-            reader.onerror = () => reject(reader.error);
-            reader.readAsDataURL(file);
-          }),
-      ),
-    );
-    input.value = "";
+  /** Adds chosen files as resources of `kind`; a file with the same name is replaced. */
+  addMedia = async (kind: MediaKind, chosen: File[]) => {
+    this.mediaErrors[kind] = "";
+    const added: Resource[] = [];
+    const problems: string[] = [];
+    for (const file of chosen) {
+      const result = await readMediaFile(kind, file);
+      if (typeof result !== "string") added.push(result);
+      else problems.push(this.text(MEDIA_PROBLEM_TEXT[kind][result], [file.name]));
+    }
+    this.mediaErrors[kind] = problems.join(" ");
+    if (!added.length) return;
     this.resources = [
       ...this.resources.filter(
-        (item) => !imported.some((value) => value.path === item.path),
+        (item) => !added.some((value) => value.path === item.path),
       ),
-      ...imported,
+      ...added,
     ];
+    this.host.session().markUncompiled();
+  };
+  /** Renames a project image or sound in place; the source keeps the old name. */
+  renameMedia = (kind: MediaKind, path: string) => {
+    const current = path.split("/").at(-1)!;
+    const entered = window.prompt(
+      this.text(RENAME_TEXT[kind].prompt, [current]),
+      current,
+    );
+    if (entered === null) return;
+    const next = renamedMediaPath(
+      kind,
+      path,
+      entered,
+      this.resources.filter(isMediaResource(kind)).map((item) => item.path),
+    );
+    if (next in RENAME_TEXT[kind].problems) {
+      this.mediaErrors[kind] = this.text(
+        RENAME_TEXT[kind].problems[next as RenameProblem],
+        [entered.trim(), `.${current.split(".").at(-1)}`],
+      );
+      return;
+    }
+    this.mediaErrors[kind] = "";
+    if (next === path) return;
+    this.resources = this.resources.map((item) =>
+      item.path === path ? { ...item, path: next } : item,
+    );
+    this.host.session().markUncompiled();
+  };
+  removeMedia = (kind: MediaKind, path: string) => {
+    if (
+      !window.confirm(
+        this.text(RENAME_TEXT[kind].removeConfirm, [path.split("/").at(-1)!]),
+      )
+    )
+      return;
+    this.resources = this.resources.filter((item) => item.path !== path);
     this.host.session().markUncompiled();
   };
   chooseTemplate = async (choice: string) => {

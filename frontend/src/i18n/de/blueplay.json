@@ -66,7 +66,7 @@
     "step": "Führt einen Schritt aus, während die Simulation pausiert ist.",
     "getSpeed": "Aktuelle Geschwindigkeit von 1 bis 100.",
     "setSpeed": "Setzt die Geschwindigkeit von 1 bis 100.",
-    "playSound": "Spielt eine WAV-Datei aus sounds/ ab.",
+    "playSound": "Spielt eine WAV- oder MP3-Datei aus sounds/ einmal ab.",
     "summary": "Funktionen für Eingabe, Ton und Simulationssteuerung."
   },
   "sections": {

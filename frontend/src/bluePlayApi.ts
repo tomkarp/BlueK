@@ -35,7 +35,7 @@ const descriptions: Record<string, Record<string, string>> = {
   },
   BluePlayFunctions: {
     isKeyDown: 'Whether the named key is held down.', start: 'Starts repeated simulation steps.', stop: 'Pauses the simulation.', step: 'Runs one step while the simulation is paused.',
-    getSpeed: 'Current speed from 1 to 100.', setSpeed: 'Sets the speed from 1 to 100.', playSound: 'Plays a WAV file from sounds/.',
+    getSpeed: 'Current speed from 1 to 100.', setSpeed: 'Sets the speed from 1 to 100.', playSound: 'Plays a WAV or MP3 file from sounds/ once.',
   },
 };
 const order: Record<string, string[]> = {

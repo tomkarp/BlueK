@@ -87,6 +87,7 @@ class KotliteSession {
     // visible before their position only within their own source.
     private val sourceUnitStarts = mutableListOf<Int>()
     private var analyzedScript: ScriptNode? = null
+    /** JSON objects of the `RuntimeEffect`s since the last [takeEffects]. */
     private val pendingEffects = mutableListOf<String>()
     private val inputLines = mutableListOf<String>()
     private var inputContinuation: Continuation<RuntimeValue>? = null
@@ -97,7 +98,9 @@ class KotliteSession {
     private var executionCompleted: ((String) -> Unit)? = null
     private var faulted = false
     private var bluePlayEnabled = false
-    private val bluePlay = BluePlayEngine()
+    private val bluePlay = BluePlayEngine { path ->
+        pendingEffects += "{\"type\":\"sound\",\"name\":\"resource\",\"path\":\"${escape(path)}\"}"
+    }
     private val projectFunctionRanges = mutableListOf<Triple<String, Int, Int>>()
     private val mainFunctionNames = linkedMapOf<String, String>()
     // Files whose main takes `args: Array<String>`; BlueK passes an empty array (RT-96).
@@ -228,7 +231,7 @@ class KotliteSession {
             }
         ))
         environment.registerClass(BlueKClass.definition())
-        environment.registerFunction(BlueKClass.beepFunction { pendingEffects += "beep" })
+        environment.registerFunction(BlueKClass.beepFunction { pendingEffects += "{\"type\":\"sound\",\"name\":\"beep\"}" })
         val modules = AllStdLibModules { text -> appendOutput(text) }.modules +
             listOf(GenericCollectionsModule, BlueKStdlibModule)
         modules.forEach(environment::install)
@@ -1183,7 +1186,7 @@ class KotliteSession {
     fun renderBluePlay() = bluePlay.render()
 
     fun takeEffects(): String {
-        val effects = pendingEffects.joinToString(",", "[", "]") { "{\"type\":\"sound\",\"name\":\"${escape(it)}\"}" }
+        val effects = pendingEffects.joinToString(",", "[", "]")
         pendingEffects.clear()
         return effects
     }

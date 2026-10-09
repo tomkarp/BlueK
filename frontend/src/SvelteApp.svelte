@@ -95,6 +95,30 @@
   const offlineBuild = import.meta.env.VITE_BLUEK_OFFLINE === "1";
   const OFFLINE_DOWNLOAD = `${import.meta.env.BASE_URL}downloads/BlueK-offline.zip`;
 
+  // The reason a draft is not stored, translated at display time; a closed
+  // warning stays closed until the reason changes.
+  const storageWarning = $derived.by(() => {
+    const warning = project.autosaveWarning;
+    if (!warning || warning.reason === project.autosaveWarningDismissed) return "";
+    if (warning.reason === "session")
+      return t("ui.transfer.automaticProjectRecoveryIsUnavailableUseSaveExport");
+    if (warning.reason === "blocked") return t("ui.workspace.draftStorageBlocked");
+    if (warning.reason === "unknown")
+      return t("ui.workspace.draftStorageFailed", [warning.detail]);
+    const megabytes = new Intl.NumberFormat(language.locale, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    });
+    // A nonempty size never reads as zero.
+    const size = (chars: number) =>
+      megabytes.format(chars ? Math.max(0.1, chars / 1024 / 1024) : 0);
+    return t("ui.workspace.draftStorageFull", [
+      size(warning.projectChars),
+      warning.otherProjects,
+      size(warning.otherChars),
+    ]);
+  });
+
   // Each controller owns its UI state; runtime data has one client and one snapshot.
   $effect(() =>
     untrack(() => {
@@ -218,13 +242,15 @@
       return () => {
         ui.settingsNotice = false;
       };
-    if (project.mediaNotice)
-      return () => {
-        project.mediaNotice = "";
-      };
     if (project.imageLibraryOpen)
       return () => {
+        project.mediaErrors.image = "";
         project.imageLibraryOpen = false;
+      };
+    if (project.soundLibraryOpen)
+      return () => {
+        project.mediaErrors.sound = "";
+        project.soundLibraryOpen = false;
       };
     if (project.shareLinkDialog)
       return () => {
@@ -389,7 +415,7 @@
     files={project.files}
     libraryId={project.library?.id || ""}
     bind:imageLibraryOpen={project.imageLibraryOpen}
-    bind:mediaNotice={project.mediaNotice}
+    bind:soundLibraryOpen={project.soundLibraryOpen}
     bind:projectName={project.projectName}
     bind:terminalOpen={terminal.terminalOpen}
     bind:terminalSplit={terminal.terminalSplit}
@@ -516,14 +542,16 @@
     >
       {language.message(project.shareNotice)}
     </div>{/if}
-  {#if project.savedProjectsNotice || project.autosaveWarning}
+  {#if project.savedProjectsNotice || storageWarning}
     <div class="project-recovery-notice" role="status" aria-live="polite">
-      <span
-        >{project.autosaveWarning
-          ? language.message(project.autosaveWarning)
-          : t("ui.workspace.savedProjectsNotice")}</span
-      >
-      {#if !project.autosaveWarning}
+      <span>{storageWarning || t("ui.workspace.savedProjectsNotice")}</span>
+      {#if storageWarning}
+        <button
+          aria-label={t("ui.workspace.dismissStorageWarning")}
+          title={t("ui.workspace.dismiss")}
+          onclick={project.dismissAutosaveWarning}>×</button
+        >
+      {:else}
         <button
           aria-label={t("ui.workspace.dismissSavedProjectsNotice")}
           title={t("ui.workspace.dismiss")}
@@ -727,8 +755,14 @@
   />
   <MediaDialogs
     bind:imageLibraryOpen={project.imageLibraryOpen}
+    bind:soundLibraryOpen={project.soundLibraryOpen}
+    images={project.imageResources}
+    sounds={project.soundResources}
+    bind:mediaErrors={project.mediaErrors}
+    addMedia={project.addMedia}
+    renameMedia={project.renameMedia}
+    removeMedia={project.removeMedia}
     libraryId={project.library?.id || ""}
-    bind:mediaNotice={project.mediaNotice}
   />
   <SettingsDialogs
     bind:settingsNotice={ui.settingsNotice}

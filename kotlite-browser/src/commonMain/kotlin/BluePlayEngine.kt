@@ -40,8 +40,10 @@ import kotlin.math.sqrt
  * identities, collision geometry, keyboard and click state, speed, and the
  * rendered frame. Objects are identified by the shared root of their
  * inheritance parts (see [identity]), never by a student's `equals`.
+ * `playSound` hands the resolved resource path to [playSound], which the
+ * session publishes as an effect, so sounds play with or without a shown world.
  */
-internal class BluePlayEngine {
+internal class BluePlayEngine(private val playSound: (String) -> Unit = {}) {
     private class ActCall(val node: FunctionCallNode, val function: FunctionDeclarationNode)
 
     private inner class WorldEntry(instance: ClassInstance) {
@@ -249,7 +251,6 @@ internal class BluePlayEngine {
     /** Counts World.show() calls, so the UI can reopen a closed world window. */
     private var showCount = 0
     private var frame = ""
-    private val pendingSounds = mutableListOf<String>()
     /** While a step or main() runs, intermediate states are not rendered. */
     private var batching = false
     var speed = 50; private set
@@ -262,7 +263,7 @@ internal class BluePlayEngine {
     fun reset() {
         worlds.clear(); actors.clear(); shownWorld = null
         keysDown.clear(); clickX = null; clickY = null; clickActorId = null
-        nextActorId = 1; frameVersion = 0; showCount = 0; frame = ""; pendingSounds.clear()
+        nextActorId = 1; frameVersion = 0; showCount = 0; frame = ""
         batching = false; speed = 50; intent = ""
     }
 
@@ -306,11 +307,8 @@ internal class BluePlayEngine {
 
     fun takeStage(): String {
         if (frame.isEmpty()) render()
-        val stage = if (frame.isNotEmpty() && pendingSounds.isNotEmpty()) {
-            frame.removeSuffix("}}") + ",\"sounds\":${pendingSounds.joinToString(",", "[", "]") { "\"${escapeJson(it)}\"" }}}}"
-        } else frame
+        val stage = frame
         frame = ""
-        pendingSounds.clear()
         return stage
     }
 
@@ -466,7 +464,7 @@ internal class BluePlayEngine {
             interpreter.int((sin(args.int(0).toDouble() * PI / 180.0) * args.int(1)).roundToInt())
         }
         function("bluekPlaySound", "Unit", listOf(parameter("fileName", "String"))) { _, args, _ ->
-            pendingSounds += (args[0] as StringValue).value
+            playSound(requireSound((args[0] as StringValue).value))
             UnitValue
         }
         val step = CustomFunctionDefinition(
@@ -660,6 +658,25 @@ internal class BluePlayEngine {
                 (if (available.size > 12) ", ... (${available.size} in total)" else "") + "."
         throw IllegalArgumentException(
             "Image file not found: $path (expected e.g. in the folder 'images/').$names"
+        )
+    }
+
+    /**
+     * Resolves a sound like BluePlay: the given path, otherwise the file in
+     * `sounds/`. A missing file fails with BluePlay's message instead of
+     * staying silent.
+     */
+    private fun requireSound(fileName: String): String {
+        listOf(fileName, "sounds/$fileName").firstOrNull { it in resources }?.let { return it }
+        val available = resources.keys
+            .filter { it.startsWith("sounds/") }
+            .map { it.removePrefix("sounds/") }
+            .sorted()
+        val names = if (available.isEmpty()) ""
+            else " Available: " + available.take(12).joinToString(", ") +
+                (if (available.size > 12) ", ... (${available.size} in total)" else "") + "."
+        throw IllegalArgumentException(
+            "Sound file not found: $fileName (expected e.g. in the folder 'sounds/').$names"
         )
     }
 

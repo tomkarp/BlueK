@@ -73,6 +73,8 @@ Supporting modules:
 - `projectFormat.ts`: validates unknown external payloads, resource/card data,
   `testTarget` and default test class; no DOM/Svelte/runtime dependency.
   `projectTemplates.ts`: HTTP templates online, fresh embedded copies offline.
+  `projectMedia.ts`: accepted image/sound formats, limits, decoding checks and
+  rename rules for the Images/Audio dialogs; owns no project state.
 - `blueJImport.ts`: chooses the shallowest `package.bluej` in a ZIP/folder,
   imports Kotlin/resources/positions and substitutes the built-in library for
   historical BluePlay library source files.
@@ -96,6 +98,11 @@ per ID contains project data. Edits, template changes and explicit link imports
 replace that tab's entry without version history. Storage events derive Recent
 work from the saved entries. Web Locks prevent copied tabs sharing writes; the
 fallback forks on restoration. Legacy single-project autosave is migrated.
+
+A failed save names its reason: a full Local Storage quota (with the sizes of
+this project and the other drafts), storage blocked by the browser, or the
+error text. The warning stays until closed or until saving succeeds; a closed
+warning returns only for a different reason.
 
 Deleting saved drafts requires confirmation and keeps settings/open projects.
 An unchanged tab does not recreate a deleted entry on close or BFCache return;

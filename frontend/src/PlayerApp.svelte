@@ -8,7 +8,7 @@
   import { MAX_PROJECT_LINK_LENGTH, exportFileName, type ExportedProgram } from "./programExport";
   import { appendTerminal, combineTerminalOutput, encodeBlueKLink, terminalParts } from "./uiParity";
   import { prepareRuntimeResources } from "./imageAlpha";
-  import { standardImages, withStandardImages } from "./standardImages";
+  import { withStandardResources } from "./standardImages";
   import {
     StageAudio, StageRenderer, decorateStage, measureImageSizes, stageKeyName, stageStyle,
     type ImageSizes, type StageFrame,
@@ -25,7 +25,7 @@
   const model = projectModelFromPayload(program.project, (index) => `file-${index}`);
   const bluePlay = model.library?.id === "blueplay";
   const title = model.projectName || "BlueK program";
-  const resources = withStandardImages(model.resources, standardImages);
+  const resources = withStandardResources(model.resources);
   const client = new LocalRuntimeClient(createWorker);
   const renderer = new StageRenderer(() => scheduleDraw());
   const audio = new StageAudio();
@@ -140,6 +140,7 @@
 
   async function resetWorld() {
     if (!canReset) return;
+    audio.stopAll();
     clearTerminal();
     problem = "";
     try {
@@ -214,13 +215,13 @@
         outputFrame ||= requestAnimationFrame(flushOutput);
       }
       value.effects?.forEach((effect) => {
-        if (effect.type === "sound" && effect.name === "beep") audio.beep();
+        if (effect.name === "beep") audio.beep();
+        else audio.playResource(effect.path, resources);
       });
     }),
     client.stageStream((value) => {
       stage = decorateStage(value, resources, sizes);
       speed = Number(value.speed) || speed;
-      audio.playFrameSounds(value, resources);
       scheduleDraw();
     }),
   ];
@@ -296,13 +297,16 @@
           on:click={stageClick}
         ></canvas>
         <div class="player-controls" aria-label="BluePlay controls">
-          <button on:click={() => simulation("step")} disabled={!canStep}>Step</button>
-          {#if stageRunning}
-            <button on:click={() => simulation("stop")}>Pause</button>
-          {:else}
-            <button on:click={() => simulation("start")} disabled={runtime.phase !== "ready"}>Run</button>
-          {/if}
-          <button on:click={resetWorld} disabled={!canReset}>Reset</button>
+          <!-- Same order and stable sizes as the world window in BlueK. -->
+          <div class="player-buttons">
+            <button on:click={() => simulation("step")} disabled={!canStep}>Act</button>
+            <button
+              on:click={() => simulation(stageRunning ? "stop" : "start")}
+              disabled={!stageRunning && runtime.phase !== "ready"}
+              aria-label={stageRunning ? "Pause" : "Run"}
+            ><span class="toggle-labels" aria-hidden="true"><span class:inactive-label={stageRunning}>Run</span><span class:inactive-label={!stageRunning}>Pause</span></span></button>
+            <button on:click={resetWorld} disabled={!canReset}>Reset</button>
+          </div>
           <label>Speed <input type="range" min="1" max="100" bind:value={speed} on:input={() => simulation("setSpeed")} /></label>
         </div>
       {:else if loading}
@@ -354,6 +358,10 @@
   }
   .player-stage:focus-visible { outline: 3px solid #0a9dcc; outline-offset: 2px; }
   .player-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .player-buttons { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; }
+  .toggle-labels { display: inline-grid; }
+  .toggle-labels > span { grid-area: 1 / 1; }
+  .toggle-labels > .inactive-label { visibility: hidden; }
   .player-controls label { display: flex; align-items: center; gap: 6px; color: #555; font-size: 12px; }
   .player-controls input { width: 110px; }
   .player-placeholder { color: #555; }

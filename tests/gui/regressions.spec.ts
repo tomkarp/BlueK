@@ -1709,17 +1709,15 @@ test('GUI-79 Files is gone and only BluePlay projects get Images and Audio', asy
   await expect(images.locator('.standard-image-tile').first()).toHaveAccessibleName('Add image');
   await expect(images.getByLabel('duck.png', { exact: true })).toContainText('duck.png');
   await expect(images.getByRole('img', { name: 'duck.png' })).toBeVisible();
-  await images.getByRole('button', { name: 'Add image' }).click();
-  const notice = page.getByRole('alertdialog', { name: 'Not implemented' });
-  await expect(notice).toContainText('Adding images is not implemented yet.');
-  await notice.getByRole('button', { name: 'OK' }).click();
+  await expect(images).toContainText('Your project has no images of its own yet.');
   await images.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(images).toHaveCount(0);
 
   await audioButton.click();
-  await expect(notice).toContainText('Audio support is not implemented yet.');
-  await notice.getByRole('button', { name: 'OK' }).click();
-  await expect(notice).toHaveCount(0);
+  const audio = page.getByRole('dialog', { name: 'Audio' });
+  await expect(audio).toContainText('Your project has no sounds of its own yet.');
+  await audio.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(audio).toHaveCount(0);
 });
 
 test('GUI-14 output is visible before a long loop finishes', async ({ page }) => {

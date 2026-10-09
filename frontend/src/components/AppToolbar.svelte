@@ -10,7 +10,7 @@
   export let files: ProjectFile[];
   export let libraryId: string;
   export let imageLibraryOpen: boolean;
-  export let mediaNotice: string;
+  export let soundLibraryOpen: boolean;
   export let projectName: string;
   export let terminalOpen: boolean;
   export let terminalSplit: boolean;
@@ -76,7 +76,7 @@
     </button>
     <button
       class="toolbar-icon-button media-tool-button"
-      on:click={() => (mediaNotice = "Audio support is not implemented yet.")}
+      on:click={() => (soundLibraryOpen = true)}
       aria-label={t("ui.toolbar.audio")}
       title={t("ui.toolbar.audio")}
     >

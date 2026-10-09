@@ -34,14 +34,18 @@ stop/reset/speed; the client has no parallel timer. Step calls World.act then
 act on still-present actors. Empty default act bodies may be skipped without
 changing behavior. Calling step while Run is active is ignored.
 
-Plan the next step after `max(1, 100 - speed - elapsed)` milliseconds, including
-computation/publication cost. Do not accumulate catch-up steps. simulationTimer
+Plan the next step after `max(0, stepInterval(speed) - elapsed)` milliseconds,
+including computation/publication cost. `stepInterval` is exponential like
+Greenfoot's slider (ln of the interval is a parabola through 1 s at speed 1,
+30 ms at 50 and 1 ms at 100), but keeps a real delay at the fastest end; the
+BlueJ BluePlay reference uses `100 - speed` ms. A speed change during a wait
+continues counting from the same step start. Do not accumulate catch-up steps. simulationTimer
 waits mainly with a timer and uses event-loop tasks for the last 4 ms, avoiding
 nested-browser-timer clamping while admitting input/Pause events.
 
 Run emits narrow frame events, not full snapshots every tick. Rendering/sending
-is throttled to at most once every 10 ms; intervening ticks accumulate output,
-audio and effects into the next frame. The client merges frame fields into its
+is throttled to at most once every 10 ms; intervening ticks accumulate output
+and effects into the next frame. The client merges frame fields into its
 existing snapshot, retaining metadata/reference identities. Run ending, through
 stop or exception, publishes a full snapshot including inspection.
 
@@ -59,7 +63,12 @@ actors referencing indices. Image descriptions refresh only after changes.
 
 bluePlayStage.ts derives canvas content: decorateStage resolves/caches image
 content; StageRenderer draws/hit-tests; stageKeyName translates keys; StageAudio
-plays sound/beep effects. Caches and alpha masks are bounded; no world state is
+plays sound effects: `playSound` resolves the resource in the engine (given
+path, then `sounds/`, otherwise “Sound file not found”) and publishes a
+`{type:'sound', name:'resource', path}` effect, independent of a shown world.
+StageAudio decodes each resource once with Web Audio (bounded cache, media
+element fallback), starts a separate source per call and stops all on
+clearWorld (Reset/Compile). Caches and alpha masks are bounded; no world state is
 owned there. The IDE owns focus, pressed keys and render timing. Draw at most
 once per requestAnimationFrame; unloaded images get deterministic hittable
 placeholders.
@@ -74,7 +83,7 @@ open documentation rather than source editors.
 imageAlpha decodes project resources before compile, sending transient size and
 alpha masks to the worker. Export/autosave retain only resource paths/Data URLs.
 Report known resource paths even without masks to distinguish missing files.
-Standard images and masks are generated from assets and bundled; project
+Standard images with masks and standard sounds are generated from assets and bundled; project
 resources override same-named defaults.
 
 Collision uses rotated AABB rejection, inverse rotation/scale, shared world-pixel

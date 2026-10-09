@@ -285,15 +285,53 @@ test("GUI-125 unavailable storage reports the limitation and leaves editing and 
   await expect(
     page.getByRole("button", { name: "Hund", exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".project-recovery-notice")).toContainText(
-    "could not be saved",
+  const notice = page.locator(".project-recovery-notice");
+  await expect(notice).toContainText(
+    "Your changes could not be saved in this browser because its storage for BlueK is full",
   );
+  await expect(notice).toContainText(/This project needs about \d+\.\d MB; 0 other saved projects use about 0\.0 MB\./);
+  await expect(notice).toContainText("Open / Import → Recent work");
   await page.getByRole("button", { name: "Save / Export" }).click();
   await expect(
     page
       .getByRole("dialog", { name: "Save / Export" })
       .getByRole("button", { name: "Export Project JSON" }),
   ).toBeEnabled();
+  await page.keyboard.press("Escape");
+
+  // The warning stays until it is closed, and further edits with the same
+  // reason do not bring it back.
+  await notice.getByRole("button", { name: "Close storage warning" }).click();
+  await expect(notice).toHaveCount(0);
+  await page.getByRole("button", { name: "Hund", exact: true }).dblclick();
+  await page.keyboard.type("// changed\n");
+  await page.keyboard.press("Escape");
+  await expect(notice).toHaveCount(0);
+});
+
+test("GUI-125 blocked storage and other storage errors name their reason", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Storage.prototype.setItem = () => {
+      throw new DOMException("The operation is insecure.", "SecurityError");
+    };
+  });
+  await page.goto(link(project("Blocked")));
+  const notice = page.locator(".project-recovery-notice");
+  await expect(notice).toContainText(
+    "this browser does not allow the page to store data, for example in private browsing",
+  );
+
+  await page.addInitScript(() => {
+    Storage.prototype.setItem = () => {
+      throw new TypeError("Disk unavailable");
+    };
+  });
+  await page.goto(link(project("Failing")));
+  await expect(notice).toContainText(
+    "Your changes could not be saved in this browser (TypeError: Disk unavailable).",
+  );
 });
 
 test("GUI-126 browser restart keeps multiple projects in the persistent profile", async ({

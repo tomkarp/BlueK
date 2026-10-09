@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import assert from 'node:assert/strict';
 import vm from 'node:vm';
 
 const bundle = await readFile(new URL('../frontend/public/kotlite/bluek-kotlite-browser.js', import.meta.url), 'utf8');
@@ -44,9 +45,28 @@ nativeEval('step()', 'public step');
 if (JSON.parse(nativeSession.takeStage()).stage.objects[0]?.x !== 102) throw new Error('Public step() did not dispatch the actor callback.');
 nativeEval('class CallbackWorld : World(40,30,1) { var acts = 0; override fun act() { acts += 1 } }; val callbacks = CallbackWorld(); callbacks.show(); step()', 'world override');
 if (nativeEval('callbacks.acts', 'world act result').display !== '1') throw new Error('Public step() ignored World.act().');
-nativeEval('callbacks.showText("hello",2,3); callbacks.showText("replaced",2,3); callbacks.setBackground(12,34,56); setSpeed(101); playSound("step.wav")', 'text, color, speed and sound');
+nativeEval('callbacks.showText("hello",2,3); callbacks.showText("replaced",2,3); callbacks.setBackground(12,34,56); setSpeed(101)', 'text, color and speed');
 const decorated = JSON.parse(nativeSession.takeStage()).stage;
-if (decorated.texts.length !== 1 || decorated.texts[0].text !== 'replaced' || decorated.background.operations[0] !== 'fill|rgb(12,34,56)' || decorated.speed !== 100 || decorated.sounds[0] !== 'step.wav') throw new Error('World decorations or sound/speed bridge failed.');
+if (decorated.texts.length !== 1 || decorated.texts[0].text !== 'replaced' || decorated.background.operations[0] !== 'fill|rgb(12,34,56)' || decorated.speed !== 100) throw new Error('World decorations or speed bridge failed.');
+
+// playSound() resolves the project resource like BluePlay (given path, then sounds/),
+// emits a sound effect independent of the shown world, and fails loudly for a missing file.
+const soundSession = api.bluekCreateKotliteSession();
+soundSession.configureBluePlay(true, 'sound-smoke');
+soundSession.setBluePlayResources(`${standardManifest}\nsounds/step.wav\0\0\0\nsounds/music.mp3\0\0\0`);
+expectOk(await awaitCompletion((onInput, onComplete) => soundSession.startLoadProject([], [], 'blueplay', 1, onInput, onComplete)), 'sound project load');
+const soundEval = (source) => JSON.parse(soundSession.evaluate('<BluePlay sound>', source));
+expectOk(soundEval('playSound("step.wav"); playSound("sounds/music.mp3"); playSound("step.wav")'), 'play sounds without a world');
+assert.deepEqual(JSON.parse(soundSession.takeEffects()), [
+  { type: 'sound', name: 'resource', path: 'sounds/step.wav' },
+  { type: 'sound', name: 'resource', path: 'sounds/music.mp3' },
+  { type: 'sound', name: 'resource', path: 'sounds/step.wav' },
+]);
+assert.deepEqual(JSON.parse(soundSession.takeEffects()), []);
+const missingSound = soundEval('playSound("stpe.wav")');
+if (missingSound.kind !== 'error' || !missingSound.display.includes("Sound file not found: stpe.wav (expected e.g. in the folder 'sounds/'). Available: music.mp3, step.wav."))
+  throw new Error(`A missing sound did not fail like BluePlay: ${missingSound.display}`);
+if (JSON.parse(soundSession.takeEffects()).length) throw new Error('A missing sound produced an effect.');
 nativeEval('callbacks.showText("",2,3)', 'remove text');
 if (JSON.parse(nativeSession.takeStage()).stage.texts.length) throw new Error('An empty string did not remove world text.');
 nativeEval('val moving = Actor(); moving.x = 10; moving.y = 10; moving.rotation = 45; moving.move(10)', 'diagonal movement');

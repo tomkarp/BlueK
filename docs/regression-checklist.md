@@ -76,6 +76,8 @@ Unless explicitly stated, visual user acceptance remains pending.
 | RT-04 | Suspendable Thread.sleep, cancellation and invalid arguments | Recorded runtime/browser pass |
 | RT-05 | Custom setter visibility, including private set | Recorded runtime pass |
 | RT-06 | BlueK.beep emits optional sound effect | Host-effect test recorded; audible output depends on device, not verified here |
+| RT-105 | Exponential speed slider (1 s at 1, 30 ms at 50, 1 ms at 100, strictly faster per step); Run acts at once; raising the speed ends a long wait | smoke-runtime-state passed with the final 1 s curve (2026-10-09); BluePlay/player GUI selection 40/40 incl. PERF-01 passed with an earlier 3 s variant; full suite not rerun after the change to 1 s; feel not user-accepted |
+| RT-104 | playSound resolves given path or sounds/, emits a resource effect without a shown world, missing file raises “Sound file not found” | smoke-blueplay-browser passed (2026-10-08); audible output not verified |
 | RT-07 | Shared namespace, name release, aliases and handle reachability | Recorded runtime/browser pass; `test:references`, `test:runtime-state` |
 | RT-08 | Generic classes, variance, reified calls and lexical type captures | Coverage: runtime; no specific passing run asserted here; `test:generics`, `tests/gui/generics.spec.ts` |
 | RT-09 | Inline/noinline/crossinline returns, labels, recursion and finally | Coverage: implementation/test reference; no specific passing run asserted here; `smoke-generics-boundaries.mjs` |
@@ -121,7 +123,7 @@ Unless explicitly stated, visual user acceptance remains pending.
 | GUI-80 | Editable project name, persistence and export naming | Format checks and direct browser inspection recorded; original Playwright run blocked by missing browser install; later full run recorded below |
 | GUI-77 | Start main wording distinct from world Run | Recorded browser pass |
 | GUI-78 | Toggle selected-line comments by button and Cmd/Ctrl+/ | Recorded browser pass |
-| GUI-79 | Images/Audio actions replace removed Files; media dialogs | Recorded browser pass |
+| GUI-79 | Images/Audio actions replace removed Files; media dialogs | Recorded browser pass; Audio now opens the sound dialog (GUI-131), passed 2026-10-08 |
 | GUI-80 | Editor/terminal maximize to full viewport | Recorded browser pass |
 | GUI-81 | Closed world stays closed during unrelated codepad operations | Recorded browser pass |
 | GUI-83 | Output/input brings terminal above editors | Recorded browser pass |
@@ -268,15 +270,55 @@ Unless explicitly stated, visual user acceptance remains pending.
 | GUI-122 | Fresh-start saved-work notice and complete recent-project restore | 9/9 draft cases passed; included in final affected 18/18 run (2026-10-07); manual acceptance pending |
 | GUI-123 | Legacy migration, corrupt entries and explicit-link startup | 9/9 draft cases passed; included in final affected 18/18 run (2026-10-07); manual acceptance pending |
 | GUI-124 | Same draft on project/template changes; clear absent defaults | 9/9 draft cases passed; included in final affected 18/18 run (2026-10-07); manual acceptance pending |
-| GUI-125 | Storage failure reporting and unchanged-save fingerprinting | 9/9 draft cases passed; included in final affected 18/18 run (2026-10-07); manual acceptance pending |
+| GUI-125 | Storage failure reporting and unchanged-save fingerprinting; the warning names its reason (full storage with project/other sizes, blocked storage, other error text) and can be closed until the reason changes | 9/9 draft cases passed (2026-10-07); reasons and closing added, 2/2 GUI-125 cases passed (2026-10-09); live German check inspected; manual acceptance pending |
 | GUI-126 | Drafts survive full browser-process restart | 9/9 draft cases passed; included in final affected 18/18 run (2026-10-07); manual acceptance pending |
 | GUI-127 | Confirm/cancel individual draft deletion and cross-tab lists | 9/9 draft cases passed; included in final affected 18/18 run (2026-10-07); manual acceptance pending |
 | GUI-128 | Confirm/cancel Delete all, settings retained, no unchanged resurrection | 9/9 draft cases passed; included in final affected 18/18 run (2026-10-07); manual acceptance pending |
 | GUI-129 | Bundled user manual, section navigation, adaptive shortcuts, small viewports, dark mode and offline use | Hosted selection 3/3 and offline manual 1/1 passed (2026-10-08); screenshots inspected; user acceptance pending |
 
+| GUI-131 | Audio dialog adds WAV/MP3 ≤ 1 MB, rejects other/oversized/undecodable files, previews, confirms removal, lists the 13 bundled BluePlay standard sounds without removal; playSound starts Web Audio playback of project and standard sounds from the codepad | Chromium GUI case passed (2026-10-08) counting started buffer sources; agent screenshots light/dark inspected; audible output and user acceptance pending |
+| GUI-132 | Project sounds rename in place, keep their extension, refuse empty/path/other-type/taken names, cancel leaves them unchanged; standard sounds have no rename; playSound uses the new name | Chromium GUI case passed (2026-10-08); agent screenshot inspected; user acceptance pending |
+| GUI-133 | Images dialog adds PNG/JPEG ≤ 1 MB and ≤ 2048 px per side, rejects GIF/oversized/undecodable files, renames (type kept, .jpg = .jpeg) and confirms removal of project images; standard images unchangeable; PNG transparency excluded from collisions, JPEG collides as rectangle | Chromium GUI case passed (2026-10-08); live dev-server codepad check false/true; agent screenshot inspected; user acceptance pending |
+| GUI-134 | World controls Act, Run, Reset from left to right; Run turns into Pause while running (no separate Pause button); all three buttons keep the same size in both states, in BlueK and the exported player | RT-11 and EXP-06 extended, passed (2026-10-09); live check 76×33 px paused and running; agent screenshot inspected; user acceptance pending |
 | GUI-130 | Supported browser-language default with English fallback, persisted German/English choice, unchanged source/live state/diagnostics, translated dialogs/manual/editor search and offline use | 188/188 full GUI cases and final affected 11/11 selection passed (2026-10-08); nine localization cases passed; offline language case passed; agent screenshots inspected, user acceptance pending |
 
 ## Recorded verification
+
+### BluePlay sounds — 2026-10-08
+
+playSound moved from the frame `sounds` field to the effect channel, so it plays
+without a shown world. The Audio toolbar button opens a sound dialog instead of
+the “not implemented” notice. Accepted formats: WAV and MP3, at most 1 MB.
+
+- `npm run build:kotlite`, typecheck (0 errors), browser-smoke, blueplay-stage,
+  player-worker, i18n (610 messages) and UI helper suites passed.
+- Full hosted GUI run **190/190 passed**, including GUI-131 and updated GUI-79.
+  Offline build test and offline GUI run 6/6 passed.
+- Live dev-server check: one Web Audio source started for a codepad playSound.
+  A first GUI-131 draft failed by pressing Enter before Compile finished; the
+  test now waits for Start main to become enabled.
+- Not verified: audible output, Safari/Firefox decoding, sound in the exported
+  player beyond the shared StageAudio code path.
+
+Follow-up the same day: the 13 standard sounds of BluePlay's `sounds/` folder
+(tomkarp/BluePlay `c8ace58`, MIT, about 217 KB WAV) are bundled from
+`assets/standard-sounds/` like the standard images; the player template grew to
+1113 KB. Typecheck, i18n (611 messages), BluePlay browser/stage and player-worker
+smokes passed; affected BluePlay, player, localization and regression GUI
+selection 42/42 passed; offline build and browser tests passed. Live dev-server
+check: `playSound("explosion.wav")` started one Web Audio source. The full GUI
+suite was not rerun after this follow-up.
+
+Second follow-up: project sounds can be renamed (GUI-132), standard sounds not.
+Typecheck and i18n (617 messages) passed; GUI-131/GUI-132 passed 2/2.
+
+Third follow-up: own images (GUI-133). Sound and image rules share
+`projectMedia.ts`; the “not implemented” media notice was removed. Found in
+passing, not fixed (no speculative Kotlite work): `listOf(40, 40, false)` is
+rejected with “Call argument's type Int cannot be mapped to type
+Comparable<Any>”, although Kotlin infers a common supertype.
+Full rerun after all follow-ups: typecheck, all smoke/helper suites, i18n
+(631 messages), hosted GUI **192/192 passed**, offline build and GUI 6/6 passed.
 
 ### Interface languages — 2026-10-08
 

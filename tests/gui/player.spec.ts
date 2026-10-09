@@ -149,7 +149,7 @@ async function redPixels(page: Page) {
   });
 }
 
-test('EXP-06 BluePlay program shows its world and reacts to Step, keys, clicks, Run, Pause and Reset', async ({ page }, testInfo) => {
+test('EXP-06 BluePlay program shows its world and reacts to Act, keys, clicks, Run, Pause and Reset', async ({ page }, testInfo) => {
   const requests = await openPlayer(page, await exportFile(testInfo, 'blueplay', rocketGame, 'Game.kt', { library: { id: 'blueplay', version: 1 } }));
   const world = page.getByRole('button', { name: 'BluePlay world' });
   const output = page.getByRole('region', { name: 'Terminal' }).locator('pre');
@@ -159,25 +159,35 @@ test('EXP-06 BluePlay program shows its world and reacts to Step, keys, clicks, 
   await expect.poll(() => redPixels(page)).toBeGreaterThan(100);
 
   const controls = page.getByLabel('BluePlay controls');
-  await controls.getByRole('button', { name: 'Step' }).click();
+  await controls.getByRole('button', { name: 'Act' }).click();
   await expect(output).toHaveText('start\nx=50\n');
 
   await world.focus();
   await page.keyboard.down('ArrowRight');
-  await controls.getByRole('button', { name: 'Step' }).click();
+  await controls.getByRole('button', { name: 'Act' }).click();
   await expect(output).toHaveText('start\nx=50\nx=55\n');
   // The key was pressed on the world and is released while a button has focus.
   await page.keyboard.up('ArrowRight');
-  await controls.getByRole('button', { name: 'Step' }).click();
+  await controls.getByRole('button', { name: 'Act' }).click();
   await expect(output).toHaveText('start\nx=50\nx=55\nx=55\n');
 
   const box = (await world.boundingBox())!;
   await page.mouse.click(box.x + box.width * (55.5 / 200), box.y + box.height * (50.5 / 100));
-  await controls.getByRole('button', { name: 'Step' }).click();
+  await controls.getByRole('button', { name: 'Act' }).click();
   await expect(output).toContainText('clicked\nx=55\n');
 
+  // Act, Run/Pause, Reset: one toggle that keeps its size in both states.
+  const buttons = controls.getByRole('button');
+  await expect(buttons).toHaveCount(3);
+  for (const [index, name] of ['Act', 'Run', 'Reset'].entries()) await expect(buttons.nth(index)).toHaveAccessibleName(name);
+  const widths = () => buttons.evaluateAll((elements) => elements.map((element) => Math.round(element.getBoundingClientRect().width)));
+  const pausedWidths = await widths();
+  expect(new Set(pausedWidths).size).toBe(1);
   await controls.getByRole('button', { name: 'Run' }).click();
   await expect(page.getByRole('status')).toHaveText('Running');
+  await expect(controls.getByRole('button', { name: 'Run' })).toHaveCount(0);
+  await expect(buttons.nth(1)).toHaveAccessibleName('Pause');
+  expect(await widths()).toEqual(pausedWidths);
   await expect(controls.getByRole('button', { name: 'Reset' })).toBeDisabled();
   await expect.poll(async () => (await output.textContent())!.split('x=').length).toBeGreaterThan(10);
   await controls.getByRole('button', { name: 'Pause' }).click();
@@ -185,7 +195,7 @@ test('EXP-06 BluePlay program shows its world and reacts to Step, keys, clicks, 
 
   await controls.getByRole('button', { name: 'Reset' }).click();
   await expect(output).toHaveText('start\n');
-  await controls.getByRole('button', { name: 'Step' }).click();
+  await controls.getByRole('button', { name: 'Act' }).click();
   await expect(output).toHaveText('start\nx=50\n');
   expect(requests).toEqual([]);
 });
@@ -201,7 +211,7 @@ test('EXP-07 the player runs console and BluePlay programs in WebKit', async ({}
 
     await openPlayer(page, await exportFile(testInfo, 'webkit-blueplay', rocketGame, 'Game.kt', { library: { id: 'blueplay', version: 1 } }));
     await expect.poll(() => redPixels(page)).toBeGreaterThan(100);
-    await page.getByLabel('BluePlay controls').getByRole('button', { name: 'Step' }).click();
+    await page.getByLabel('BluePlay controls').getByRole('button', { name: 'Act' }).click();
     await expect(page.getByRole('region', { name: 'Terminal' }).locator('pre')).toHaveText('start\nx=50\n');
   } finally {
     await browser.close();

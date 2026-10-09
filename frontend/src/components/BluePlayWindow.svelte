@@ -76,29 +76,36 @@
       ></canvas>
     </div>
     <div class="game-controls" aria-label={t("ui.blueplay.bluePlayControls")}>
-      {#if mainEntries.length}<button
-          on:click={resetGame}
-          disabled={!canExecute}
-          aria-label={t("ui.blueplay.resetBluePlayWorld")}
-          >{t("ui.blueplay.reset")}</button
-        >{/if}
-      <button
-        on:click={() => bluePlayAction("step")}
-        disabled={!canExecute || stageRunning}
-        aria-label={t("ui.blueplay.actOnce")}>{t("ui.blueplay.act")}</button
-      >
-      <button
-        on:click={() => bluePlayAction("start")}
-        disabled={!canExecute || stageRunning}
-        aria-label={t("ui.blueplay.runBluePlayWorld")}
-        >{t("ui.blueplay.run")}</button
-      >
-      <button
-        on:click={() => bluePlayAction("stop")}
-        disabled={!stageRunning}
-        aria-label={t("ui.blueplay.pauseBluePlayWorld")}
-        >{t("ui.blueplay.pause")}</button
-      >
+      <!-- Equal columns, and Run/Pause reserves room for both labels, so no
+           button changes size with the state. -->
+      <div class="game-buttons">
+        <button
+          on:click={() => bluePlayAction("step")}
+          disabled={!canExecute || stageRunning}
+          aria-label={t("ui.blueplay.actOnce")}>{t("ui.blueplay.act")}</button
+        >
+        <button
+          class="game-run-toggle"
+          on:click={() => bluePlayAction(stageRunning ? "stop" : "start")}
+          disabled={stageRunning ? false : !canExecute}
+          aria-label={stageRunning
+            ? t("ui.blueplay.pauseBluePlayWorld")
+            : t("ui.blueplay.runBluePlayWorld")}
+          ><span class="toggle-labels" aria-hidden="true"
+            ><span class:inactive-label={stageRunning}
+              >{t("ui.blueplay.run")}</span
+            ><span class:inactive-label={!stageRunning}
+              >{t("ui.blueplay.pause")}</span
+            ></span
+          ></button
+        >
+        {#if mainEntries.length}<button
+            on:click={resetGame}
+            disabled={!canExecute}
+            aria-label={t("ui.blueplay.resetBluePlayWorld")}
+            >{t("ui.blueplay.reset")}</button
+          >{/if}
+      </div>
       <label
         >{t("ui.blueplay.speed")}
         <input

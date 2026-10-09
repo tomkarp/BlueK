@@ -11,6 +11,18 @@ export type ProjectDraftSummary = {
   fileCount: number;
 };
 type ProjectDraft = { id: string; updatedAt: number; project: SavedProject };
+
+/**
+ * Why the draft of this tab could not be stored. Sizes are characters of the
+ * stored JSON, which browsers count against a Local Storage quota of about
+ * five million per site.
+ */
+export type DraftSaveFailure =
+  | { reason: "quota"; projectChars: number; otherProjects: number; otherChars: number }
+  | { reason: "blocked" }
+  | { reason: "unknown"; detail: string };
+
+const QUOTA_ERRORS = ["QuotaExceededError", "NS_ERROR_DOM_QUOTA_REACHED"];
 type DraftStorageHost = {
   local: () => Storage;
   session: () => Storage;
@@ -186,6 +198,29 @@ export class ProjectDraftStorage {
     // A fork gets persisted even if no source is edited after restoring.
     if (this.id === id) this.lastSaved = JSON.stringify(draft.project);
     return draft.project;
+  }
+
+  /** Classifies an error thrown by [save]; storage that cannot be measured counts as empty. */
+  failure(error: unknown, project: SavedProject): DraftSaveFailure {
+    const name = error instanceof Error || error instanceof DOMException ? error.name : "";
+    if (QUOTA_ERRORS.includes(name)) {
+      let otherProjects = 0, otherChars = 0;
+      try {
+        const storage = this.host.local();
+        for (let i = 0; i < storage.length; i++) {
+          const key = storage.key(i);
+          if (!key?.startsWith(DRAFT_PREFIX) || key === DRAFT_PREFIX + this.id) continue;
+          otherProjects += 1;
+          otherChars += key.length + (storage.getItem(key)?.length ?? 0);
+        }
+      } catch {
+        /* Only the project size is known then. */
+      }
+      return { reason: "quota", projectChars: JSON.stringify(project).length, otherProjects, otherChars };
+    }
+    if (name === "SecurityError") return { reason: "blocked" };
+    const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+    return { reason: "unknown", detail };
   }
 
   save(project: SavedProject): void {

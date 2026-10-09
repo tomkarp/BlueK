@@ -35,8 +35,8 @@ Student Kotlin is interpreted, not compiled. `npm run build` builds these tools:
 4. **vite build**: builds the hosted IDE into `frontend/dist/`.
 
 `npm run build:svelte` builds the frontend without rebuilding Kotlin.
-`npm run build:standard-images` regenerates the committed image/alpha-mask
-module after changing `assets/standard-images/`.
+`npm run build:standard-images` regenerates the committed image/alpha-mask and
+sound modules after changing `assets/standard-images/` or `assets/standard-sounds/`.
 
 `predev` builds the player template if missing or older than the interpreter,
 and the offline ZIP only if missing. An existing offline ZIP may therefore

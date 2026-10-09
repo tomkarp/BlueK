@@ -13,6 +13,7 @@ async function loadModule(path) {
 const { LocalRuntimeClient } = await loadModule('frontend/src/localRuntimeClient.ts');
 const { RuntimeHost } = await loadModule('frontend/src/runtimeHost.ts');
 const { InspectorModel } = await loadModule('frontend/src/inspectorModel.ts');
+const { stepInterval } = await loadModule('frontend/src/simulationTimer.ts');
 vm.runInThisContext(await readFile('frontend/public/kotlite/bluek-kotlite-browser.js', 'utf8'));
 const createSession = globalThis['bluek-kotlite-browser'].bluekCreateKotliteSession;
 const workers = [];
@@ -346,6 +347,44 @@ projectClient.invalidate();
   assert.ok(stages.at(-1).objects[0].x >= 6, 'Run must publish frames of its steps');
   assert.ok(effects.some(effect => effect.name === 'beep'), 'effects of steps during Run must reach the client');
   assert.equal(replacedClasses, false, 'frames of a Run must not replace the class metadata');
+  runner.invalidate();
+}
+// RT-105: the speed slider is exponential like Greenfoot's, from 1 s through
+// 30 ms to 1 ms, and a faster speed shortens a wait that is already running.
+{
+  const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < expected * 1e-9, `${actual} != ${expected}`);
+  close(stepInterval(1), 1000);
+  close(stepInterval(50), 30);
+  close(stepInterval(100), 1);
+  close(stepInterval(0), 1000);
+  close(stepInterval(150), 1);
+  for (let speed = 1; speed < 100; speed++)
+    assert.ok(stepInterval(speed + 1) < stepInterval(speed), `speed ${speed + 1} must be faster than ${speed}`);
+  assert.ok(stepInterval(25) > 150 && stepInterval(25) < 200, 'the left half still spans hundreds of ms');
+  assert.ok(stepInterval(75) > 3 && stepInterval(75) < 10, 'the right half still delays');
+
+  const runner = new LocalRuntimeClient(() => new TestWorker());
+  const files = [
+    { id: 'Counter', fileName: 'Counter.kt', kind: 'class', revision: 1, source: 'class Counter : Actor() { override fun act() { x += 1 } }' },
+    { id: 'Main', fileName: 'Main.kt', kind: 'functions', revision: 1, source: 'fun main() { val w = World(100, 10, 1); w.addObject(Counter(), 1, 1); w.show() }' },
+  ];
+  assert.deepEqual((await runner.compile(files, 1, { id: 'blueplay', version: 1 })).diagnostics, []);
+  assert.notEqual((await runner.execute({ op: 'main', fileName: 'Main.kt' })).kind, 'error');
+  const stages = [];
+  const stopStages = runner.stageStream(value => stages.push(value));
+  await runner.simulation('setSpeed', 1);
+  await runner.simulation('start');
+  const started = Date.now();
+  while (!(stages.at(-1)?.objects[0]?.x >= 2) && Date.now() - started < 2000) await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(stages.at(-1).objects[0].x, 2, 'the first step of Run starts at once');
+  await new Promise(resolve => setTimeout(resolve, 300));
+  assert.equal(stages.at(-1).objects[0].x, 2, 'speed 1 waits a second before the next step');
+  const faster = Date.now();
+  await runner.simulation('setSpeed', 100);
+  while (!(stages.at(-1)?.objects[0]?.x >= 3) && Date.now() - faster < 2000) await new Promise(resolve => setTimeout(resolve, 5));
+  assert.ok(Date.now() - faster < 500, 'raising the speed ends a long wait instead of finishing it');
+  await runner.simulation('stop');
+  stopStages();
   runner.invalidate();
 }
 // RT-82: an exception in act() stops Run and goes to the terminal like in Kotlin;

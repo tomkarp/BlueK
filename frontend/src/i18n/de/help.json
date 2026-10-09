@@ -63,7 +63,7 @@
     "htmlExport": "Eine eigenständige Programmseite erstellen, die main ohne BlueK ausführt.",
     "linkReload": "Ein Projektlink ersetzt den Entwurf dieses Tabs und entfernt die Projektdaten aus der Adressleiste. Neuladen behält deine Änderungen. Öffne den ursprünglichen Link erneut, um zum Ausgangsprojekt zurückzukehren.",
     "readmeAndResources": "README und Ressourcen",
-    "resources": "Klicke auf das Dokument im Diagramm, um die README in Markdown zu bearbeiten. Benenne das Projekt in der oberen Leiste. Importiere eigene Bilder und Töne über Projekt-JSON oder ein BlueJ-Projekt; die Ressourcenansichten können noch keine Dateien hinzufügen.",
+    "resources": "Klicke auf das Dokument im Diagramm, um die README in Markdown zu bearbeiten. Benenne das Projekt in der oberen Leiste. In BluePlay-Projekten fügst du WAV- oder MP3-Sounds über die Audio-Schaltfläche in der Werkzeugleiste hinzu; eigene Sounds kannst du dort umbenennen oder entfernen, die eingebauten nicht. PNG- oder JPEG-Bilder fügst du genauso über die Bilder-Schaltfläche hinzu; transparente PNG-Pixel kollidieren nicht, ein JPEG kollidiert als ganzes Rechteck.",
     "offlineCaution": "Die Offline-Version wurde bisher wenig in der Praxis getestet. Prüfe deine Projekte und deinen Browser, bevor du dich darauf verlässt, und sichere sie als JSON."
   },
   "state": {
@@ -126,7 +126,7 @@
     "worldApi": "Größe und Hintergrund; show, act, addObject, removeObject, getObjects, getObjectsAt und showText.",
     "actorApi": "x, y, rotation, image und world; act, move, turn, turnTowards, Kollisionsabfragen sowie Rand- und Klickprüfungen.",
     "imageApi": "Ein leeres Bild erzeugen, eine Ressource laden oder ein Bild kopieren; Formen, Text und Bilder zeichnen, skalieren und Transparenz ändern.",
-    "resources": "Standardbilder wie duck.png, cat.png und pizza.png sind enthalten. Importierte Ressourcen mit demselben Pfad haben Vorrang. playSound verwendet Audioressourcen des Projekts.",
+    "resources": "Standardbilder wie duck.png, cat.png und pizza.png sind enthalten. Importierte Ressourcen mit demselben Pfad haben Vorrang. Auch die Standardsounds von BluePlay wie explosion.wav, jump.wav und pickup.wav sind enthalten. playSound(\"pickup.wav\") spielt einen Sound aus sounds/ einmal ab; Sounds dürfen sich überlagern. Reset und Kompilieren stoppen laufende Sounds.",
     "limits": "Die Browser-API unterstützt keine JVM/AWT-Interna oder Dateizugriffe. Schrift und Textkollision sind Näherungen. Gespeicherte Vorbereitung kann Objekterzeugung und ausdrückliche Aufrufe wiederholen, aber keine laufende Simulation erhalten."
   },
   "shortcuts": {

@@ -249,30 +249,106 @@ export class StageRenderer {
   }
 }
 
-/** Plays the sounds a frame requests and BlueK's built-in beep. Audio failures never fail a program. */
+/** Decoded sounds kept per resource; enough for the sounds of a game. */
+const SOUND_CACHE_LIMIT = 32;
+
+/**
+ * Plays BlueK's built-in beep and the project sounds that playSound() requests.
+ * Each call starts a separate playback, so sounds may overlap as in BluePlay.
+ * Audio failures never fail a program.
+ */
 export class StageAudio {
   private context: AudioContext | null = null;
+  private buffers = new Map<string, Promise<AudioBuffer | null>>();
+  private playing = new Set<AudioScheduledSourceNode | HTMLAudioElement>();
+  /** Increases on stopAll(), so a sound still decoding does not start afterwards. */
+  private epoch = 0;
 
-  beep() {
+  private audioContext() {
     try {
       this.context ||= new AudioContext();
-      const oscillator = this.context.createOscillator();
-      const gain = this.context.createGain();
+      if (this.context.state === "suspended") void this.context.resume().catch(() => undefined);
+      return this.context;
+    } catch {
+      return null;
+    }
+  }
+
+  beep() {
+    const context = this.audioContext();
+    if (!context) return;
+    try {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
       oscillator.frequency.value = 880;
-      gain.gain.setValueAtTime(0.08, this.context.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, this.context.currentTime + 0.15);
-      oscillator.connect(gain).connect(this.context.destination);
+      gain.gain.setValueAtTime(0.08, context.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.15);
+      oscillator.connect(gain).connect(context.destination);
+      this.track(oscillator);
       oscillator.start();
-      oscillator.stop(this.context.currentTime + 0.15);
+      oscillator.stop(context.currentTime + 0.15);
     } catch {
       // Audio is optional.
     }
   }
 
-  playFrameSounds(stage: Pick<BluePlayStage, "sounds">, resources: ProjectResource[]) {
-    (stage.sounds || []).forEach((sound) => {
-      const data = resourceData(resources, `sounds/${sound}`);
-      if (data) new Audio(data).play().catch(() => undefined);
+  /** Plays the resource at `path` (as resolved by the runtime) once. */
+  playResource(path: string, resources: ProjectResource[]) {
+    const data = resources.find((item) => item.path === path)?.data;
+    if (data) void this.play(data);
+  }
+
+  /** Stops every sound that is playing, e.g. on Reset or Compile. */
+  stopAll() {
+    this.epoch += 1;
+    this.playing.forEach((sound) => {
+      try {
+        if (sound instanceof HTMLAudioElement) sound.pause();
+        else sound.stop();
+      } catch {
+        // Already ended.
+      }
     });
+    this.playing.clear();
+  }
+
+  private async play(data: string) {
+    const epoch = this.epoch;
+    const context = this.audioContext();
+    const buffer = context ? await this.decoded(context, data) : null;
+    if (epoch !== this.epoch) return;
+    if (context && buffer) {
+      try {
+        const source = context.createBufferSource();
+        source.buffer = buffer;
+        source.connect(context.destination);
+        this.track(source);
+        source.start();
+        return;
+      } catch {
+        // Fall back to a media element.
+      }
+    }
+    const element = new Audio(data);
+    this.track(element);
+    element.play().catch(() => this.playing.delete(element));
+  }
+
+  private decoded(context: AudioContext, data: string) {
+    let buffer = this.buffers.get(data);
+    if (!buffer) {
+      buffer = fetch(data)
+        .then((response) => response.arrayBuffer())
+        .then((bytes) => context.decodeAudioData(bytes))
+        .catch(() => null);
+      if (this.buffers.size >= SOUND_CACHE_LIMIT) this.buffers.delete(this.buffers.keys().next().value!);
+      this.buffers.set(data, buffer);
+    }
+    return buffer;
+  }
+
+  private track(sound: AudioScheduledSourceNode | HTMLAudioElement) {
+    this.playing.add(sound);
+    (sound as EventTarget).addEventListener("ended", () => this.playing.delete(sound), { once: true });
   }
 }

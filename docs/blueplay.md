@@ -18,7 +18,14 @@ fun main() {
 }
 ```
 
-The world window has **Act**, **Run/Pause**, **Reset** and **Speed** controls.
+The world window has, from left to right, **Act**, **Run** and **Reset**, then
+**Speed**. While the world runs, Run turns into **Pause**; the three buttons keep
+the same size in every state. Exported players use the same controls.
+Speed works exponentially like Greenfoot's slider: about 1 s per step at 1,
+30 ms at the default 50 and 1 ms at 100; the left half therefore slows down
+considerably. Run performs its first step at once, and raising the speed
+shortens a wait that is already running. Programs tuned for BlueJ's BluePlay
+(`100 - speed` ms) run somewhat faster at the default speed.
 One step calls World.act and then act on actors still present in the world.
 Showing a world pauses simulation and reopens a previously closed world window.
 Reset invokes the chosen main again in the existing session; it does not rerun
@@ -62,8 +69,42 @@ Missing images raise “Image file not found”. Image dimensions are at least o
 pixel. drawImage copies source content/transparency at call time; scale changes
 existing content. Loaded images can have additional drawing operations.
 
-Adding your own images/sounds through the UI is not enabled yet. Import them
-through a BlueJ project or project JSON. playSound uses project sounds.
+BluePlay's 13 standard sounds are bundled as well: `beep.wav`, `cat.wav`,
+`dog.wav`, `explosion.wav`, `frog.wav`, `hit.wav`, `jump.wav`, `lose.wav`,
+`magic.wav`, `pickup.wav`, `shoot.wav`, `step.wav` and `win.wav`. Like the
+standard images they are not stored in the project, and a project sound with
+the same name takes precedence.
+
+Add sounds with the **Audio** button of a BluePlay project. It lists the
+project's sounds and the standard sounds and previews them. Project sounds can
+be renamed and, after confirmation, removed; standard sounds cannot. A rename
+keeps the file type (a name without extension gets the old one) and refuses a
+name another project sound already has. Calls in the source keep the old name,
+so update `playSound` calls yourself. Accepted
+formats are **WAV** and **MP3**, at most 1 MB per file: WAV for short effects
+and BlueJ compatibility, MP3 for longer sounds or music. Other formats such as
+OGG or M4A are rejected because not every browser or BlueJ plays them; files
+the browser cannot decode are rejected as well. Adding or removing a sound
+requires Compile.
+
+`playSound("pop.wav")` plays `sounds/pop.wav` once; `playSound("sounds/pop.wav")`
+works too. Sounds overlap and also play without a shown world, e.g. from the
+codepad. A missing file raises “Sound file not found”. Reset and Compile stop
+playing sounds. Audible output depends on the device and on the browser's
+autoplay rules, which allow sound after a click or key press.
+
+Add images with the **Images** button. Accepted formats are **PNG** and
+**JPEG** (`.jpg`/`.jpeg`), at most 1 MB and 2048 pixels per side, for actors as
+well as world backgrounds. Collisions, `isTouching` and clicks use the image's
+alpha channel pixel by pixel (alpha above 16, as in BlueJ): transparent PNG
+pixels never collide, while a JPEG has no transparency and collides as its full
+rectangle. GIF (only its first frame would be used and transparency is 1-bit),
+WebP (not readable by BlueJ), SVG (no fixed pixels for a mask), BMP and AVIF are
+rejected; convert them to PNG. Project images can be renamed and, after
+confirmation, removed like sounds; the file type is kept (`.jpg` and `.jpeg`
+count as one type). Standard images cannot be changed but are replaced by a
+project image with the same name. Adding, renaming or removing requires
+Compile; `Image("…")` calls in the source keep their old names.
 
 ## Compatibility
 

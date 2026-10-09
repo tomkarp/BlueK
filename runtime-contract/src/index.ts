@@ -36,7 +36,8 @@ export interface ManifestClass{
 export interface SymbolManifest{ version:1; classes:ManifestClass[]; functions:(ManifestCallable & {sourceLine:number})[]; library?: ProjectLibrary }
 export interface Diagnostic { fileName?:string; line:number; column:number; severity:'error'|'warning'; message:string }
 export interface CompileResult{generationId:string;sourceRevision:number;classes:ClassMeta[];diagnostics:Diagnostic[]}
-export interface RuntimeEffect { type: 'sound'; name: string }
+/** `beep`: BlueK.beep(); `resource`: BluePlay playSound() with the resolved project resource path. */
+export type RuntimeEffect = { type: 'sound'; name: 'beep' } | { type: 'sound'; name: 'resource'; path: string };
 
 export interface BluePlayImageFrame {
   resourcePath?: string;
@@ -71,7 +72,6 @@ export interface BluePlayStage {
   texts: BluePlayTextFrame[];
   speed: number;
   simulation: 'running' | 'paused' | 'stopping';
-  sounds?: string[];
 }
 export type SimulationState = 'inactive' | 'paused' | 'running' | 'stopping' | 'waiting' | 'faulted';
 

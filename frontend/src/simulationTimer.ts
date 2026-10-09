@@ -29,6 +29,21 @@ const postTask: (task: Task) => void = (() => {
   return (task: Task) => { setTimeout(task, 0); };
 })();
 
+/**
+ * Interval in ms between the starts of two steps at `speed` (1..100). Like
+ * Greenfoot the slider works exponentially, so its left half slows down a lot
+ * while its right half spans milliseconds; unlike Greenfoot, which ends at no delay, the
+ * fastest setting still waits 1 ms. ln(interval) is the parabola through
+ * 1 s at speed 1, 30 ms at speed 50 and 1 ms at speed 100.
+ */
+export function stepInterval(speed: number): number {
+  const s = Math.max(1, Math.min(100, speed));
+  // Lagrange form of the parabola; ln(1 ms) = 0 drops the third term.
+  const slowest = Math.log(1000) * ((s - 50) * (s - 100)) / ((1 - 50) * (1 - 100));
+  const middle = Math.log(30) * ((s - 1) * (s - 100)) / ((50 - 1) * (50 - 100));
+  return Math.exp(slowest + middle);
+}
+
 /** Calls `task` after `delay` ms; the returned function cancels it. */
 export function scheduleAfter(delay: number, task: Task): () => void {
   const due = performance.now() + delay;

@@ -1,5 +1,8 @@
 import { untrack } from "svelte";
-import type { BluePlayStage } from "../../../runtime-contract/src/index";
+import type {
+  BluePlayStage,
+  RuntimeEffect,
+} from "../../../runtime-contract/src/index";
 
 import { beginWindowDrag } from "../windowInteraction";
 
@@ -217,10 +220,6 @@ export class BluePlayWorkspace {
     }
     if (!this.stageWindowDismissed) this.stageWindowOpen = true;
     this.speed = Number(value.speed) || this.speed;
-    this.stageAudio.playFrameSounds(
-      value,
-      this.host.project().runtimeResources,
-    );
   };
   connect = () => {
     $effect(() => {
@@ -253,6 +252,7 @@ export class BluePlayWorkspace {
     });
   };
   clearWorld = () => {
+    this.stageAudio.stopAll();
     this.stage = null;
     this.shownCount = 0;
     this.stageWindowOpen = false;
@@ -265,7 +265,12 @@ export class BluePlayWorkspace {
     this.allowWorld();
     this.stageWindowOpen = true;
   };
-  beep = () => {
-    this.stageAudio.beep();
+  playEffect = (effect: RuntimeEffect) => {
+    if (effect.name === "beep") this.stageAudio.beep();
+    else
+      this.stageAudio.playResource(
+        effect.path,
+        this.host.project().runtimeResources,
+      );
   };
 }

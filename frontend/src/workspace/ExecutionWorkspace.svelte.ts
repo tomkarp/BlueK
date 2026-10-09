@@ -22,7 +22,7 @@ import type { TerminalWorkspace } from "./TerminalWorkspace.svelte";
 interface ExecutionWorkspaceHost {
   play: () => Pick<
     BluePlayWorkspace,
-    "clearWorld" | "allowWorld" | "acceptFrame" | "beep"
+    "clearWorld" | "allowWorld" | "acceptFrame" | "playEffect"
   >;
   objects: () => Pick<
     ObjectWorkspace,
@@ -358,10 +358,7 @@ export class ExecutionWorkspace {
     });
     const output = this.client.onResponse((value) => {
       if (value.output) this.host.terminal().appendOutput(value.output);
-      value.effects?.forEach((effect) => {
-        if (effect.type === "sound" && effect.name === "beep")
-          this.host.play().beep();
-      });
+      value.effects?.forEach(this.host.play().playEffect);
     });
     const stage = this.client.stageStream(this.host.play().acceptFrame);
     return () => {
