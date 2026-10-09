@@ -16,6 +16,8 @@ import com.sunnychung.lib.multiplatform.kotlite.model.IteratorValue
 import com.sunnychung.lib.multiplatform.kotlite.model.LambdaValue
 import com.sunnychung.lib.multiplatform.kotlite.model.LibraryModule
 import com.sunnychung.lib.multiplatform.kotlite.model.LongValue
+import com.sunnychung.lib.multiplatform.kotlite.model.ByteValue
+import com.sunnychung.lib.multiplatform.kotlite.model.NumberValue
 import com.sunnychung.lib.multiplatform.kotlite.model.ListValue
 import com.sunnychung.lib.multiplatform.kotlite.model.PairValue
 import com.sunnychung.lib.multiplatform.kotlite.model.NullValue
@@ -103,6 +105,7 @@ object BlueKStdlibModule : LibraryModule("bluek-stdlib") {
         (arguments.firstOrNull() as? DelegatedValue<*>)?.value as? List<RuntimeValue> ?: emptyList()
 
     private fun ints(value: RuntimeValue): Int = (value as IntValue).value
+    private fun number(value: RuntimeValue?): Number = ((value as NumberValue<*>).value as Number)
 
     /** The sum of `sumOf` results: `Int`, `Long` or `Double` as the selector returns (RT-95). */
     private fun sumValues(values: List<RuntimeValue>, resultType: DataType?, symbolTable: SymbolTable): RuntimeValue = when {
@@ -222,6 +225,12 @@ object BlueKStdlibModule : LibraryModule("bluek-stdlib") {
         function("Int", "toFloat", "Double") { interpreter, receiver, _, _ ->
             DoubleValue(ints(receiver!!).toDouble(), interpreter.symbolTable())
         },
+        // Kotlin's Number members for a value typed as Number (RT-108); Float is Double.
+        function("Number", "toInt", "Int") { interpreter, receiver, _, _ -> IntValue(number(receiver).toInt(), interpreter.symbolTable()) },
+        function("Number", "toLong", "Long") { interpreter, receiver, _, _ -> LongValue(number(receiver).toLong(), interpreter.symbolTable()) },
+        function("Number", "toDouble", "Double") { interpreter, receiver, _, _ -> DoubleValue(number(receiver).toDouble(), interpreter.symbolTable()) },
+        function("Number", "toFloat", "Double") { interpreter, receiver, _, _ -> DoubleValue(number(receiver).toDouble(), interpreter.symbolTable()) },
+        function("Number", "toByte", "Byte") { interpreter, receiver, _, _ -> ByteValue(number(receiver).toByte(), interpreter.symbolTable()) },
         function("Int", "toChar", "Char") { interpreter, receiver, _, _ ->
             CharValue(ints(receiver!!).toChar(), interpreter.symbolTable())
         },

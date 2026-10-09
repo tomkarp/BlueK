@@ -391,6 +391,21 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         }
     }
 
+    /**
+     * Gives the calls that produce the value of [node] the expected [type], also
+     * through the branches of `if`/`when` and the last statement of a block, so
+     * that their type arguments can be inferred from it as in Kotlin (RT-107).
+     */
+    private fun propagateExpectedType(node: ASTNode?, type: TypeNode) {
+        when (node) {
+            is FunctionCallNode -> if (node.expectedReturnType == null) node.expectedReturnType = type
+            is IfNode -> { propagateExpectedType(node.trueBlock, type); propagateExpectedType(node.falseBlock, type) }
+            is WhenNode -> node.entries.forEach { propagateExpectedType(it.body, type) }
+            is BlockNode -> propagateExpectedType(node.statements.lastOrNull(), type)
+            else -> {}
+        }
+    }
+
     /** A type without type parameters still to be inferred, and more specific than `Any`/`Unit` (RT-100). */
     private fun isConcreteType(type: TypeNode): Boolean {
         if (type is FunctionTypeNode || type.name in setOf("Any", "Unit", "Nothing", "*")) return false
@@ -1322,6 +1337,8 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             value.receiverType = subjectRawType.receiverType
         }
 
+        // `liste = mutableListOf(1, 2)` takes its type arguments from the variable (RT-107).
+        if (operator == "=" && subjectRawType !is FunctionTypeNode) propagateExpectedType(value, subjectRawType)
         value.visit(modifier = modifier)
         requireWhenValue(value)
         val valueType = value.type().toDataType()
@@ -1467,7 +1484,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 initialValue.returnTypeUpperBound = declaredType.returnType
                 initialValue.receiverType = declaredType.receiverType
             }
-            if (declaredType != null && initialValue is FunctionCallNode) initialValue.expectedReturnType = declaredType
+            if (declaredType != null) propagateExpectedType(initialValue, declaredType)
             initialValue?.visit(modifier = modifier)
             requireWhenValue(initialValue)
             if (PropertyModifier.const in modifiers) checkConstProperty(this, isClassProperty)
@@ -1868,9 +1885,8 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         if (body != null) {
             body.returnTypeUpperBound = declaredReturnType
             // `fun leer(): List<Int> = emptyList()` takes its type arguments from the return type (RT-93).
-            val expression = body.statements.singleOrNull() as? FunctionCallNode
-            if (body.format == FunctionBodyFormat.Expression && declaredReturnType != null && expression != null && expression.expectedReturnType == null) {
-                expression.expectedReturnType = declaredReturnType
+            if (body.format == FunctionBodyFormat.Expression && declaredReturnType != null) {
+                body.statements.singleOrNull()?.let { propagateExpectedType(it, declaredReturnType) }
             }
             val previousReified = activeReifiedTypeParameters.toMap()
             typeParameters.forEach { activeReifiedTypeParameters[it.name] = it.isReified }
@@ -2156,6 +2172,19 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
         class FunctionInfo(val valueParameters: List<Any>, val typeParameters: List<TypeParameterNode>, val receiverType: TypeNode?, val returnType: TypeNode)
 
+        // Argument types for choosing the callable. With `isWidened`, the type arguments of
+        // a generic call without explicit ones stay open, because its inference then
+        // follows the parameter type as in Kotlin: `g(mutableListOf(1, 2))` for a
+        // `MutableList<Any>` parameter (RT-107). Only used when nothing matched otherwise.
+        fun argumentInfos(isWidened: Boolean) = arguments.map {
+            val type = it.type(ResolveTypeModifier(isSkipGenerics = true))
+            val call = it.value as? FunctionCallNode
+            val open = isWidened && call != null && call.declaredTypeArguments.isEmpty() &&
+                !call.inferredTypeArguments.isNullOrEmpty() && !type.arguments.isNullOrEmpty()
+            val matched = if (open) TypeNode(type.position, type.name, type.arguments!!.map { TypeNode.createRepeatedTypeNode("${PROVISIONAL_TYPE_PREFIX}argument>") }, type.isNullable) else type
+            FunctionCallArgumentInfo(it.name, matched.toDataType())
+        }
+
         var resolvedDeclaration: FunctionDeclarationNode? = null
         var extraTypeResolutions = emptyMap<String, TypeNode>()
 
@@ -2166,13 +2195,14 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     is TypeNode -> function.name
                     else -> throw UnsupportedOperationException()
                 }
-                val resolutions = currentScope.findMatchingCallables(
+                fun search(isWidened: Boolean) = currentScope.findMatchingCallables(
                     currentSymbolTable = currentScope,
                     originalName = functionName,
                     receiverType = null,
-                    arguments = arguments.map { FunctionCallArgumentInfo(it.name, it.type(ResolveTypeModifier(isSkipGenerics = true)).toDataType()) },
+                    arguments = argumentInfos(isWidened),
                     modifierFilter = if (function is TypeNode) SearchFunctionModifier.ConstructorOnly else modifierFilter!!,
                 )
+                val resolutions = search(isWidened = false).ifEmpty { search(isWidened = true) }
                 if (resolutions.size > 1) {
                     throw SemanticException(position, "Ambiguous function call for `${functionName}`. ${resolutions.size} candidates match:\n${resolutions.joinToString("") { "- ${it.toDisplayableSignature()}\n" }}")
                 }
@@ -2290,15 +2320,16 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 // only the most specific one (member of `Int` over `Any?.toString()`).
                 // The nullable type is a fallback, like in NavigationNode.visitMember.
                 // Merging both searches made such pairs ambiguous.
-                val resolutions = lookupReceiverTypes.firstNotNullOfOrNull {
+                fun search(isWidened: Boolean) = lookupReceiverTypes.firstNotNullOfOrNull {
                     currentScope.findMatchingCallables(
                         currentSymbolTable = currentScope,
                         originalName = function.member.name,
                         receiverType = it,
-                        arguments = arguments.map { FunctionCallArgumentInfo(it.name, it.type(ResolveTypeModifier(isSkipGenerics = true)).toDataType()) },
+                        arguments = argumentInfos(isWidened),
                         modifierFilter = modifierFilter!!,
                     ).takeIf { it.isNotEmpty() }
                 } ?: emptyList()
+                val resolutions = search(isWidened = false).ifEmpty { search(isWidened = true) }
                 if (resolutions.size > 1) {
                     throw SemanticException(position, "Ambiguous function call for `${function.member.name}`. ${resolutions.size} candidates match:\n${resolutions.joinToString("") { "- ${it.toDisplayableSignature()}\n" }}")
                 }
@@ -2806,12 +2837,27 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         // Like Kotlin, infer the remaining type arguments from the expected type,
         // e.g. `val karten: MutableList<Karte> = mutableListOf()`.
         val expectedType = expectedReturnType
-        if (typeArguments.size != typeParameters.size && expectedType != null && declaredTypeArguments.isEmpty()) {
+        // An inferred type argument that fits into the expected one is widened to it,
+        // as the expected type also constrains Kotlin's inference:
+        // `val m: MutableList<Any> = mutableListOf(1, 2)` (RT-107).
+        if (expectedType != null && declaredTypeArguments.isEmpty()) {
             val resolved = (inferredTypeArguments ?: typeParameters.map { null }).toMutableList()
+            val ownTypeParameters = typeParameters.map { it.name }.toSet()
+            fun open(type: TypeNode): Boolean = type is FunctionTypeNode || type.name in ownTypeParameters ||
+                type.name.startsWith("<") || type.arguments.orEmpty().any { open(it) }
+            fun widens(current: TypeNode, expected: TypeNode): Boolean = !open(current) && !open(expected) &&
+                try {
+                    currentScope.assertToDataType(expected).isConvertibleFrom(currentScope.assertToDataType(current))
+                } catch (_: Exception) {
+                    false
+                }
             fun unify(declared: TypeNode, target: TypeNode) {
                 val index = typeParameters.indexOfFirst { it.name == declared.name }
                 if (index >= 0 && declared.arguments.isNullOrEmpty()) {
-                    if (resolved[index] == null) resolved[index] = target.copy(isNullable = target.isNullable && !declared.isNullable)
+                    val expectedArgument = target.copy(isNullable = target.isNullable && !declared.isNullable)
+                    val current = resolved[index]
+                    if (current == null) resolved[index] = expectedArgument
+                    else if (current != expectedArgument && widens(current, expectedArgument)) resolved[index] = expectedArgument
                     return
                 }
                 val declaredArguments = declared.arguments ?: return
@@ -2972,9 +3018,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         }
 
         // `return emptyList()` takes its type arguments from the declared return type (RT-93).
-        if (value is FunctionCallNode && (value as FunctionCallNode).expectedReturnType == null && declaredReturnType != null && declaredReturnType !is UnitType) {
-            (value as FunctionCallNode).expectedReturnType = declaredReturnType.toTypeNode()
-        }
+        if (declaredReturnType != null && declaredReturnType !is UnitType) propagateExpectedType(value, declaredReturnType.toTypeNode())
         value?.visit(modifier = modifier)
         requireWhenValue(value)
         val valueType = value?.type()?.toDataType() ?: UnitType()

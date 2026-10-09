@@ -77,18 +77,18 @@ supported.
   `items::add`, `::Card`), but not expressions such as `Calculator(10)::times`.
 - Function-valued properties can be called as methods, but explicit `.invoke()`
   requires a named receiver (`k.f.invoke()`, not `K(4).f.invoke()`).
-- Type arguments can be inferred from declarations, returns, Elvis expressions,
-  expected lambda results and enclosing call arguments, but not from branches
-  of an `if` expression. Specify `emptyList<Int>()` in that case.
+- Type arguments are inferred from the arguments and from the expected type, as
+  in Kotlin: declarations, assignments, returns, Elvis expressions, `if`/`when`
+  branches, expected lambda results and parameters of the enclosing call
+  (`val m: MutableList<Any> = mutableListOf(1, 2)`, `g(mutableListOf(1, 2))`
+  for a `MutableList<Any>` parameter).
 - Values of different types get a common supertype as in Kotlin:
   `listOf(40, 40, false)` and `listOf(1, "two")` are `List<Comparable<*>>`,
-  `mapOf(1 to "a", "b" to 2)` and nested lists work. Kotlin's intersection types
-  are reduced to one type, and there is no `Number`, so `listOf(1, 2.5)` offers
-  only Comparable members (no `toDouble()`). `mutableListOf(1, "a").add(true)`
-  is accepted, while Kotlin rejects it. An expected type does not widen an
-  invariant collection: write `mutableListOf<Any>(1, 2)` instead of
-  `val m: MutableList<Any> = mutableListOf(1, 2)`, and `setOf<Any>(…)` for a
-  `Set<Any>`.
+  `listOf(1, 2.5)` is a `List<Number>`. `Number` is the supertype of Int, Long,
+  Double and Byte with toInt/toLong/toDouble/toFloat/toByte. Kotlin's
+  intersection types are reduced to one type (Number before Comparable): Kotlin
+  infers `Comparable<*> & Serializable` for `listOf(1, "two")`, BlueK only
+  `Comparable<*>`.
 - Smart casts support simple names and one-level `name.property` paths for
   eligible `val` properties. They do not support `this.property`, longer paths,
   `this is Type` in extensions, `is T` for type parameters, safe-call conditions,

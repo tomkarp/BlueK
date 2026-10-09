@@ -30,6 +30,13 @@ const supported = [
   ['listOf(1 < 1.5, 1.5 > 1, (-0.0).compareTo(0.0) < 0).joinToString()', 'true, true, true'],
   ['fun nullableAssertionValue(): String? = "okay"; fun assertionContract(): Int { val assertedValue = nullableAssertionValue(); assertNotNull(assertedValue); return assertedValue.length }; assertionContract()', '4'],
 
+  // Number as the common supertype of the numeric types and its conversions (RT-108).
+  ['val nu1: Number = 2.5; nu1.toInt()', '2'],
+  ['val nu2: Number = 7; "${nu2.toLong()} ${nu2.toDouble()} ${nu2.toFloat()}"', '7 7.0 7.0'],
+  ['val nu3: Number = 300; nu3.toByte()', '44'],
+  ['val nu4: Any = 3L; nu4 is Number', 'true'],
+  ['listOf(1, 2.5).map { it.toDouble() }', '[1.0, 2.5]'],
+
   // Numbers: minOf/maxOf/coerce* and the Int/Char conversions (BlueKStdlibModule, group B).
   ['val ok1: String? = "ab"; ok1?.length', '2'],
   ['val ok2: String? = "ab"; ok2!!.length', '2'],

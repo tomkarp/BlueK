@@ -1038,3 +1038,23 @@ Coverage: `node scripts/smoke-kotlin-surface.mjs` (RT-100), `npm run test:confor
   dort `add`) und die Verbreiterung durch einen erwarteten invarianten Typ.
 - Nachweis: RT-106 in `smoke-curriculum-kotlin.mjs` (Erwartungswerte mit
   kotlinc geprüft), RT-63 weiterhin abgelehnt, `smoke-kotlin-surface.mjs`.
+
+## 2026-10-09: erwarteter Typ und `Number` (RT-107, RT-108)
+
+- Der erwartete Typ legt abgeleitete Typargumente auch dann fest, wenn die
+  Argumente einen engeren Typ ergeben, der in ihn passt:
+  `val m: MutableList<Any> = mutableListOf(1, 2)`. Bisher galt er nur für noch
+  offene Typargumente (`mutableListOf()`). `propagateExpectedType` reicht ihn
+  von Deklaration, Zuweisung, `return` und Ausdrucksfunktion durch `if`/`when`
+  und Blöcke an die Aufrufe weiter.
+- Passt kein Callable, wird die Auswahl mit offenen Typargumenten generischer
+  Argument-Aufrufe wiederholt (vorläufige Typen wie RT-100); der gewählte
+  Parametertyp wird dann zum erwarteten Typ des Arguments:
+  `g(mutableListOf(1, 2))` für `MutableList<Any>`. Gültiger Code wählt
+  unverändert, weil der zweite Versuch nur nach einem leeren ersten läuft.
+- `Number` ist ein eingebautes Interface vor `Comparable` in Int, Long, Double
+  und Byte, damit der gemeinsame Obertyp von `1` und `2.5` `Number` ist. Die
+  Umwandlungen sind native Erweiterungen in `BlueKStdlibModule`.
+- Nachweis: RT-107/108 in `smoke-curriculum-kotlin.mjs` (Erwartungswerte mit
+  kotlinc geprüft), Number in `smoke-kotlin-surface.mjs`.
+

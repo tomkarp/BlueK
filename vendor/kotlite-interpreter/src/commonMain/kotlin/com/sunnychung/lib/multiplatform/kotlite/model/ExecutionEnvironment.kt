@@ -28,6 +28,7 @@ class ExecutionEnvironment(
     init {
         registerInitClass(AnyClass.clazz)
         registerInitClass(ComparableInterface.interfaze)
+        registerInitClass(NumberInterface.interfaze)
         registerClass(ThreadClass.definition())
         ThreadClass.sleepFunctions(sleepHandler).forEach(::registerFunction)
 
@@ -168,7 +169,11 @@ class ExecutionEnvironment(
                         }
                     }
 
-                    val interfaces = when (className) {
+                    // Number comes first, so the common supertype of Int and Double is Number (RT-108).
+                    val number = if (className in NumberInterface.numericTypes) {
+                        listOf(TypeNode(SourcePosition.BUILTIN, "Number", null, false) to emptyList<CustomFunctionDeclarationNode>())
+                    } else emptyList()
+                    val interfaces = number + when (className) {
                         in setOf("Int", "Double", "Long", "Boolean", "String", "Char") -> {
                             listOf(
                                 TypeNode(

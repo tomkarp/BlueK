@@ -13,7 +13,7 @@ so documentation can be updated. Developer placement/build rules:
 
 | Area | Operations |
 | --- | --- |
-| Numbers | Int/Double minOf/maxOf (multiple values), coerceIn/coerceAtLeast/coerceAtMost; Int/Long limits; Double limits/infinities/NaN; Char limits/code/digitToInt/digitToIntOrNull; Int.toChar/mod/rem/toString(radix)/toFloat; Int/Long and/or/xor/shl/shr/ushr/inv |
+| Numbers | Int/Double minOf/maxOf (multiple values), coerceIn/coerceAtLeast/coerceAtMost; Int/Long limits; Double limits/infinities/NaN; Char limits/code/digitToInt/digitToIntOrNull; Int.toChar/mod/rem/toString(radix)/toFloat; Int/Long and/or/xor/shl/shr/ushr/inv; `Number` as supertype of Int/Long/Double/Byte with toInt/toLong/toDouble/toFloat/toByte |
 | Collections/ranges | emptyList/emptySet/emptyMap, sum, average, sumOf, reduce, flatten, indices, chunked, windowed, character ranges, withIndex; slice, zipWithNext, ifEmpty, indexed add, addFirst/addLast, reverse, removeIf, associateBy; ArrayList/HashMap constructors, arrayListOf/hashMapOf/hashSetOf, Set.random |
 | Maps | entries, containsKey, getOrDefault, putAll, toSortedMap; entries compare/hash by key and value and print as a=1 |
 | String | character iteration/indexing, split(String/Char), toList, indices, lines, zip, count; ifBlank/ifEmpty, replaceFirstChar (Char/String result), Char indexOf/lastIndexOf, map/mapIndexed, find/findLast, single, sumOf, groupBy, associateWith, toSet/toMutableList, chunked/windowed, minOrNull/maxOrNull, elementAt, withIndex, trimIndent/trimMargin, toLong/toLongOrNull |

@@ -171,6 +171,7 @@ controlStructures/forInArray/forInArrayWithArrayPropertyUpdatedInLoopBody.kt
 controlStructures/forInArray/forIntArray.kt
 controlStructures/forInArray/forNullableIntArray.kt
 controlStructures/forInArray/forPrimitiveIntArray.kt
+controlStructures/forInCharSequenceMut.kt
 controlStructures/forInSmartCastToArray.kt
 controlStructures/forNullableCharInString.kt
 controlStructures/ifConst1.kt
@@ -236,6 +237,7 @@ dataClasses/hashCode/char.kt
 dataClasses/hashCode/double.kt
 dataClasses/hashCode/float.kt
 dataClasses/hashCode/genericNull.kt
+dataClasses/hashCode/int.kt
 dataClasses/hashCode/long.kt
 dataClasses/hashCode/null.kt
 dataClasses/kt49715.kt
@@ -278,6 +280,7 @@ defaultArguments/kt59326.kt
 defaultArguments/kt47073_nested.kt
 defaultArguments/private/memberFunction.kt
 defaultArguments/useThisInLambda.kt
+elvis/elvisToCommonType.kt
 elvis/genericElvisWithMoreSpecificLHS.kt
 elvis/kt87816.kt
 elvis/nullNullOk.kt
@@ -484,12 +487,17 @@ primitiveTypes/equalityWithObject/whenIntAsNullableAny.kt
 primitiveTypes/intLiteralIsNotNull.kt
 primitiveTypes/kt1054.kt
 primitiveTypes/kt1055.kt
+primitiveTypes/kt14868.kt
+primitiveTypes/kt1508.kt
 primitiveTypes/kt1634.kt
+primitiveTypes/kt16732.kt
 primitiveTypes/kt2269.kt
 primitiveTypes/kt242.kt
 primitiveTypes/kt2269NotOptimizable.kt
+primitiveTypes/kt2275.kt
 primitiveTypes/kt248.kt
 primitiveTypes/kt3517.kt
+primitiveTypes/kt3576.kt
 primitiveTypes/kt3613.kt
 primitiveTypes/kt4097.kt
 primitiveTypes/kt4251.kt
@@ -504,6 +512,7 @@ primitiveTypes/nullableCharBoolean.kt
 primitiveTypes/nullableAsIndex.kt
 primitiveTypes/nullAsNullableIntIsNull.kt
 primitiveTypes/kt882.kt
+primitiveTypes/numberEqualsHashCodeToString.kt
 primitiveTypes/stringEqualsHashCodeToString.kt
 primitiveTypes/substituteIntForGeneric.kt
 primitiveTypes/unboxComparable.kt
@@ -631,6 +640,7 @@ ranges/forInUntil/forInUntilIntMaxValue.kt
 ranges/forInUntil/forInUntilIntMinValue.kt
 ranges/forInUntil/forInUntilIntMinValueNonConst.kt
 ranges/forInUntil/forInUntilLesserInt.kt
+ranges/forInUntil/forInUntilLong.kt
 ranges/forInUntil/forInUntilLongMaxValue.kt
 ranges/forInUntil/forInUntilLongMinValue.kt
 ranges/forInUntil/forInUntilLongMinValueNonConst.kt
@@ -705,6 +715,7 @@ super/basicproperty.kt
 super/kt14243.kt
 super/kt14243_2.kt
 super/kt14243_class.kt
+super/superConstructor/kt17464_arrayOf.kt
 traits/abstractClassWithFakeOverride.kt
 traits/genericMethod.kt
 traits/inheritedFun.kt
@@ -740,6 +751,7 @@ try/try3.kt
 try/try5.kt
 try/try4.kt
 vararg/kt1978.kt
+vararg/kt37715.kt
 when/callProperty.kt
 when/emptyWhen.kt
 when/enumOptimization/bigEnum.kt

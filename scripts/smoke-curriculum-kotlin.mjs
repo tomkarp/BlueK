@@ -1570,4 +1570,40 @@ fails((await project({ 'Anzeige.kt': 'class Anzeige {\n    fun zeige(text: Strin
   fails(p.evaluate('val q106: Pair<String, Int> = 1 to 2'), 'RT-106 Pair', /actual type is `Pair<Int, Int>`/);
 }
 
+// RT-107: the expected type also determines inferred type arguments, as in Kotlin:
+// declarations, assignments, returns, if/when branches and parameters of a call.
+// RT-108: Number is the supertype of Int/Long/Double/Byte and their common supertype.
+// Expected values come from kotlinc 2.x for the same code.
+{
+  const p = await project({ 'Main.kt': 'fun main() {}' });
+  ok(p.result, 'RT-107 project');
+  const cases = [
+    ['val m107: MutableList<Any> = mutableListOf(1, 2); m107.add("x"); m107', '[1, 2, x]'],
+    ['val q107: MutableList<Any?> = mutableListOf(1, null); q107', '[1, null]'],
+    ['val mm107: MutableMap<String, Any> = mutableMapOf("a" to 1); mm107["b"] = "x"; mm107', '{a=1, b=x}'],
+    ['fun f107(): MutableList<Any> = mutableListOf(1, 2); f107()', '[1, 2]'],
+    ['fun r107(): MutableList<Any> { return mutableListOf(1, 2) }; r107()', '[1, 2]'],
+    ['val s107: Set<Any> = setOf(1, 2); s107', '[1, 2]'],
+    ['var v107: MutableList<Any> = mutableListOf(); v107 = mutableListOf(1, 2); v107', '[1, 2]'],
+    ['val n107: MutableList<Any> = if (true) mutableListOf(1) else mutableListOf("a"); n107', '[1]'],
+    ['val w107: MutableList<Any> = when (1) { 1 -> mutableListOf(1); else -> mutableListOf() }; w107', '[1]'],
+    ['fun g107(l: MutableList<Any>) = l.size; g107(mutableListOf(1, 2))', '2'],
+    ['class Bag107(val items: MutableList<Any>); Bag107(mutableListOf(1, 2)).items', '[1, 2]'],
+    ['fun t107(m: MutableMap<String, Any>) = m; t107(mutableMapOf("a" to 1))', '{a=1}'],
+    ['val all107 = mutableListOf<Any>(); all107.addAll(mutableListOf(1, 2)); all107', '[1, 2]'],
+    ['val n108: Number = 2.5; n108.toInt()', '2'],
+    ['listOf(1, 2.5).map { it.toDouble() }', '[1.0, 2.5]'],
+    ['val l108: Number = 7L; l108 is Long', 'true'],
+    ['fun h108(n: Number) = n.toDouble() * 2; h108(3) + h108(1.5)', '9.0'],
+    ['listOf(1, 2.5).sumOf { it.toDouble() }', '3.5'],
+    ['listOf(3, 1.5).maxOf { it.toDouble() }', '3.0'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-107/108 ${source}`).display, expected, `RT-107/108 ${source}`);
+  // Only a fitting expected type widens; wrong ones stay errors.
+  fails(p.evaluate('val x107: MutableList<String> = mutableListOf(1, 2)'), 'RT-107 MutableList<String>', /actual type is `MutableList<Int>`/);
+  fails(p.evaluate('fun s107(l: MutableList<String>) = l.size; s107(mutableListOf(1, 2))'), 'RT-107 parameter', /MutableList<Int> cannot be mapped to type MutableList<String>/);
+  fails(p.evaluate('val y108: String = listOf(1, 2.5)'), 'RT-108 List<Number>', /actual type is `List<Number>`/);
+  fails(p.evaluate('val z108: Number = "a"'), 'RT-108 String', /Expected type is `Number`/);
+}
+
 console.log('Curriculum Kotlin smoke test passed.');
