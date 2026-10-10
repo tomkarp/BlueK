@@ -23,7 +23,6 @@ object KotlinSurfaceHints {
     private val gaps: Map<String, String> = mapOf(
         "Math" to "`Math` belongs to Java and is not available in BlueK. Kotlin writes `abs(x)`, `sqrt(x)` and `PI` directly.",
         "java" to "Java libraries are not available in BlueK. Use the Kotlin standard library instead.",
-        "kotlin" to "BlueK does not support fully qualified calls such as `kotlin.math.abs(x)`. Write `import kotlin.math.abs` at the top of the file and then `abs(x)`.",
     )
 
     /** Members BlueK deliberately provides for one receiver only. */

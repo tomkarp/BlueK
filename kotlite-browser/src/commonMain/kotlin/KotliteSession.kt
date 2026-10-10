@@ -236,12 +236,17 @@ class KotliteSession {
         val modules = AllStdLibModules { text -> appendOutput(text) }.modules +
             listOf(GenericCollectionsModule, BlueKStdlibModule)
         modules.forEach(environment::install)
+        modules.filter { it.name == "Math" }.forEach { environment.installQualified(it, "kotlin.math") }
         // Names BlueK actually provides, used to tell a misspelling from an
         // unsupported piece of Kotlin. See KotlinSurfaceHints.
         knownNames.clear()
         modules.forEach { module ->
             module.functions.forEach { knownNames += it.functionName }
             module.properties.forEach { knownNames += it.declaredName }
+            if (module.name == "Math") {
+                module.functions.filter { it.receiverType == null }.forEach { knownNames += "kotlin.math.${it.functionName}" }
+                module.globalProperties.forEach { knownNames += "kotlin.math.${it.declaredName}" }
+            }
         }
         knownNames += setOf("readln", "readLine", "readlnOrNull", "println", "print", "main")
         environment.registerFunction(CustomFunctionDefinition(

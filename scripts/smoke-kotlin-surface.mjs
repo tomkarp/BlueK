@@ -318,7 +318,6 @@ const supported = [
 const gaps = [
   'fun spr(vararg x: Int) = x.sum(); spr(*intArrayOf(1, 2))', // the spread operator; `spr(1, 2)` works
   'String(charArrayOf(\'a\'))',   // would hide `String.format`; `concatToString()` works
-  'kotlin.math.abs(-5)',        // fully qualified calls (import + abs(-5) works)
   'Math.abs(-1)',               // Java, correctly unavailable
   'mapOf(1 to 2).forEach { k, v -> }', // the JVM's two-parameter form; `forEach { it.key }` works
 ];
@@ -331,7 +330,6 @@ const messages = [
   ['val ar19: IntArray = arrayOf(1)', /Expected type is `IntArray`, but actual type is `Array<Int>`/],
   // 1. documented gap -> named alternative
   ['Math.abs(-1)', /`Math` belongs to Java and is not available in BlueK/],
-  ['kotlin.math.abs(-5)', /does not support fully qualified calls.*import kotlin\.math\.abs/],
   ['val (d1, d2) = 5', /Destructuring declaration initializer of type Int must have a 'component1\(\)' function/],
   // 2. close to a name BlueK has -> suggestion
   ['minOff(1, 2)', /`minOff` is not available in BlueK\. Did you mean `minOf`\?/],

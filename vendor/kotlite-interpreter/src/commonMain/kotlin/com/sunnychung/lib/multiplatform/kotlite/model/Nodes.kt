@@ -612,6 +612,8 @@ data class NavigationNode(
     @ModifyByAnalyzer var memberType: MemberType? = null,
     @ModifyByAnalyzer var transformedRefName: String? = null, // for extension property use
 ) : ASTNode {
+    /** A package-qualified library constant, resolved without evaluating a package receiver. */
+    @ModifyByAnalyzer var qualifiedProperty: VariableReferenceNode? = null
     /** The analyzer synthesizes this access for a for-loop's iterator call. */
     @ModifyByAnalyzer var isForLoopIterator: Boolean = false
 

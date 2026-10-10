@@ -2,7 +2,7 @@
 
 BlueK interprets a subset of Kotlin, extended from Kotlite. This is not full
 Kotlin/JVM compatibility. This reference describes the checked-in interpreter
-as of **8 October 2026**. See also the [standard library](kotlin-surface.md),
+as of **9 October 2026**. See also the [standard library](kotlin-surface.md),
 [tests and saved state](testing.md) and [implementation notes](kotlite.md).
 
 ## Project files
@@ -10,8 +10,10 @@ as of **8 October 2026**. See also the [standard library](kotlin-surface.md),
 A file contains one class, interface or enum, or top-level functions and
 properties. Top-level statements are compile errors in project files but are
 allowed in the codepad. Imports must be from `kotlin.*`; `java.*` and `javax.*`
-are rejected with a file and line diagnostic. Package declarations are not
-supported.
+are rejected with a file and line diagnostic. Available `kotlin.math` top-level
+functions and constants can also be qualified directly, such as
+`kotlin.math.abs(-3)`, `kotlin.math.sqrt(16.0)` and `kotlin.math.PI`. Other
+package-qualified library expressions and package declarations are not supported.
 
 ## Supported language features
 

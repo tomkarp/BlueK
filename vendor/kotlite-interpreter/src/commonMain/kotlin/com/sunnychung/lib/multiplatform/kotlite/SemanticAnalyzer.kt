@@ -2125,7 +2125,30 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         runCatching { argument.type(ResolveTypeModifier(isSkipGenerics = true)).descriptiveName() }.getOrDefault("?")
     }
 
+    /** Only ordinary dotted identifiers can denote a host-provided package member. */
+    private fun ASTNode.qualifiedLibraryName(): String? {
+        val parts = mutableListOf<String>()
+        var node = this
+        while (node is NavigationNode && node.operator == ".") {
+            parts.add(0, node.member.name)
+            node = node.subject
+        }
+        val root = node as? VariableReferenceNode ?: return null
+        if (parts.isEmpty() || currentScope.hasProperty(root.variableName) || currentScope.findClass(root.variableName) != null) return null
+        parts.add(0, root.variableName)
+        return parts.joinToString(".")
+    }
+
     fun FunctionCallNode.visit(modifier: Modifier = Modifier(), isSkipConstructionSecurityCheck: Boolean = false, isSuperClassInvocation: Boolean = false) {
+        function.qualifiedLibraryName()?.takeIf(executionEnvironment::isQualifiedFunction)?.let { name ->
+            val direct = copy(function = VariableReferenceNode(function.position, name), resolvedInvoke = null)
+            direct.expectedReturnType = expectedReturnType
+            direct.visit(modifier, isSkipConstructionSecurityCheck, isSuperClassInvocation)
+            resolvedInvoke = direct
+            returnType = direct.returnType
+            evaluateAndRegisterReturnType(this)
+            return
+        }
         // Function values have no class member table. Route explicit invoke through
         // the same resolution and inline-escape checks as the ordinary f(...) form.
         val navigation = function as? NavigationNode
@@ -3110,6 +3133,16 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     }
 
     fun NavigationNode.visit(modifier: Modifier = Modifier(), lookupType: IdentifierClassifier = IdentifierClassifier.Property, isCheckWriteAccess: Boolean = false): DataType {
+        if (lookupType == IdentifierClassifier.Property) {
+            qualifiedLibraryName()?.takeIf(executionEnvironment::isQualifiedProperty)?.let { name ->
+                if (isCheckWriteAccess) throw SemanticException(position, "val `$name` cannot be reassigned")
+                val reference = VariableReferenceNode(position, name)
+                reference.visit(modifier)
+                qualifiedProperty = reference
+                type = reference.type()
+                return type!!.toDataType()
+            }
+        }
         if (lookupType == IdentifierClassifier.Property && (subject as? VariableReferenceNode)?.variableName == "this") {
             noteSelfCallingAccessor(member.position, member.name, isWrite = isCheckWriteAccess, scopeLevel = null)
         }

@@ -1058,3 +1058,20 @@ Coverage: `node scripts/smoke-kotlin-surface.mjs` (RT-100), `npm run test:confor
 - Nachweis: RT-107/108 in `smoke-curriculum-kotlin.mjs` (Erwartungswerte mit
   kotlinc geprüft), Number in `smoke-kotlin-surface.mjs`.
 
+
+## 2026-10-09: qualified math expressions (Issue 22)
+
+`ExecutionEnvironment.installQualified` registers explicit package names for
+native top-level function overloads and read-only constants. BlueK supplies
+`kotlin.math` from its installed Math module. Qualified functions preserve
+native callback/suspension metadata and use the normal call path and depth
+accounting. The analyzer resolves dotted AST identifiers to those exports;
+constant access evaluates the resolved property without treating a package as
+an object. It rejects writes to qualified constants. A property or class with
+the package root's name retains ordinary member semantics. Neither source text
+nor strings/comments are rewritten, and diagnostics retain source positions.
+No general package declarations or import-alias semantics are added.
+
+The obsolete unsupported-qualified-math gap/hint expectations were removed.
+Interpreter build and manual browser observations are recorded in the
+regression checklist; no new automated tests are claimed.

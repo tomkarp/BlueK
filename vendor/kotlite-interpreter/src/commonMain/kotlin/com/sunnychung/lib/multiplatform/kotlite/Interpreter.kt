@@ -1917,7 +1917,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         }
     }
 
-    suspend fun NavigationNode.eval(): RuntimeValue = evalOn(subject.eval() as RuntimeValue)
+    suspend fun NavigationNode.eval(): RuntimeValue = qualifiedProperty?.eval() ?: evalOn(subject.eval() as RuntimeValue)
 
     /** Reads the member of an already evaluated [subjectValue]. */
     suspend fun NavigationNode.evalOn(subjectValue: RuntimeValue): RuntimeValue {

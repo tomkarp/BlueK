@@ -33,6 +33,19 @@ reverse, clear, isEmpty, length, indexing and toString. Random supports unbounde
 and bounded nextInt/nextDouble plus nextBoolean, with or without
 `import kotlin.random.Random`; **Random(seed) is unavailable**.
 
+## Qualified math names
+
+The available top-level functions and constants from `kotlin.math` support
+their qualified spelling without an import: `kotlin.math.abs(-3)`,
+`kotlin.math.sqrt(16.0)`, `kotlin.math.max(3, 7)`, `kotlin.math.min(3, 7)`,
+`kotlin.math.PI` and `kotlin.math.E`. They use the same native overloads as the
+short names and stay distinct from project functions or variables named
+`abs`, `sqrt` or `PI`. Local objects named `kotlin` still use ordinary member
+access. Strings, comments and source locations are unchanged.
+
+Qualification does not provide missing library members. Other package-qualified
+library expressions are not supported yet; use the available short names.
+
 ## Arrays
 
 Supported types: Array<T>, IntArray, LongArray, DoubleArray, BooleanArray,
@@ -80,7 +93,6 @@ locale. `%e`, `%g`, dates (`%t`) and the `(` flag are unsupported.
 
 | Missing form | Alternative |
 | --- | --- |
-| `kotlin.math.abs(-5)` fully qualified call | `import kotlin.math.abs`, then `abs(-5)` |
 | `Math.abs`, java.* | Java APIs are deliberately unavailable |
 | `map.forEach { k, v -> }` | `map.forEach { (k, v) -> }` or use it.key/it.value |
 | `String(charArray)` | chars.concatToString() or joinToString("") |

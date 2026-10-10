@@ -21,6 +21,36 @@ class ExecutionEnvironment(
     private val globalProperties: MutableList<GlobalProperty> = mutableListOf()
     private val providedClasses: MutableList<ProvidedClassDefinition> = mutableListOf()
     private val initiallyProvidedClasses: MutableList<ProvidedClassDefinition> = mutableListOf()
+    private val qualifiedFunctions = mutableSetOf<String>()
+    private val qualifiedProperties = mutableSetOf<String>()
+
+    /** Host-provided package names, separate from the globally available short names. */
+    fun installQualified(module: LibraryModule, packageName: String) {
+        module.functions.filter { it.receiverType == null }.forEach { function ->
+            val name = "$packageName.${function.functionName}"
+            val alias = function.copy(functionName = name).also {
+                it.extraTypeParameters = function.extraTypeParameters
+                it.suspendExecutable = function.suspendExecutable
+                it.isReplayable = function.isReplayable
+            }
+            if (functionRegistrationFilter(alias)) {
+                registerFunction(alias)
+                qualifiedFunctions += name
+            }
+        }
+        // Qualified values currently expose read-only library constants.
+        module.globalProperties.filter { !it.isMutable }.forEach { property ->
+            val name = "$packageName.${property.declaredName}"
+            val alias = GlobalProperty(property.position, name, property.type, false, property.getter)
+            if (globalPropertyRegistrationFilter(alias)) {
+                registerGlobalProperty(alias)
+                qualifiedProperties += name
+            }
+        }
+    }
+
+    fun isQualifiedFunction(name: String): Boolean = name in qualifiedFunctions
+    fun isQualifiedProperty(name: String): Boolean = name in qualifiedProperties
 
     private val generatedMapping: MutableMap<MappingKey, AnalyzedMapping> = mutableMapOf()
     private val specialFunctionLookupCache: MutableMap<MappingKey, FunctionDeclarationNode> = mutableMapOf()
