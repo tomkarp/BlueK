@@ -15,8 +15,12 @@ npm run dev     # http://localhost:5173
 ```
 
 The interpreter bundle is checked in, so development does not normally need
-Gradle. Vite forwards `/api` to the optional share server at `127.0.0.1:8787`;
-start that with `npm run share:server` when testing short links.
+Gradle. Vite forwards project-sharing `/api` requests to the optional service at
+`127.0.0.1:8787`; start it with `npm run share:server` for short links. Feedback
+requests use the configured service at `https://bluek.de`, so local development
+does not need a copy of its GitHub token. Set `BLUEK_FEEDBACK_PROXY_TARGET` to a
+local service URL when developing the backend. Server-only credentials are
+described in [feedback](docs/feedback.md).
 
 ## Build pipeline
 

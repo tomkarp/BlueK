@@ -20,6 +20,7 @@
   export let commentShortcutLabel: string;
   export let editorNextShortcutLabel: string;
   export let editorPrevShortcutLabel: string;
+  export let openFeedback: () => void;
 </script>
 
 {#if settingsNotice}<div class="modal topmost-modal" role="presentation">
@@ -93,7 +94,7 @@
     </div>
   </div>{/if}
 {#if shortcutsHelpOpen}
-  <UserHelpDialog close={() => (shortcutsHelpOpen = false)}>
+  <UserHelpDialog close={() => (shortcutsHelpOpen = false)} {openFeedback}>
     <ul slot="shortcuts" class="shortcuts-help-list">
       <li>
         <strong>{compileShortcutLabel}</strong><span

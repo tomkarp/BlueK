@@ -925,6 +925,51 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 .sidebar-utilities .settings-button svg{fill:currentColor;stroke:none}
 .sidebar-utilities .utility-icon-button:hover,.sidebar-utilities .utility-icon-button:focus-visible{border-color:#08a6d2;background:#e2f2f7;color:#075b70}
 .dark .sidebar-utilities .utility-icon-button:hover,.dark .sidebar-utilities .utility-icon-button:focus-visible{background:#45454a;color:#fff}
+.sidebar button.sidebar-feedback-button{flex:0 0 auto;height:auto;padding:7px 0;font-size:13px;background:transparent;box-shadow:none;border-color:transparent;color:#555}
+.sidebar button.sidebar-feedback-button:hover,.sidebar button.sidebar-feedback-button:focus-visible{color:#075b70;background:#e2f2f7;border-color:#08a6d2}
+.dark .sidebar button.sidebar-feedback-button{color:#bbb}
+.dark .sidebar button.sidebar-feedback-button:hover,.dark .sidebar button.sidebar-feedback-button:focus-visible{background:#45454a;color:#fff}
+.feedback-modal{z-index:110}
+.dialog.feedback-dialog{width:min(640px,calc(100vw - 24px));min-width:0;max-height:calc(100dvh - 24px);padding:0;display:flex;flex-direction:column;overflow:hidden;background:#fafafa}
+.feedback-dialog>header{padding:18px 22px 0;flex:none;display:flex;align-items:baseline;justify-content:space-between;gap:12px;position:relative}
+.feedback-privacy{flex:none;position:relative}
+.feedback-dialog button.feedback-privacy-button{display:block;padding:0 3px;margin:0;border:0;box-shadow:none;background:transparent;color:#666;font-size:21px;line-height:1;cursor:pointer}
+.feedback-dialog button.feedback-privacy-button:hover,.feedback-dialog button.feedback-privacy-button:focus-visible{color:#075b70}
+.feedback-privacy-note{position:absolute;top:100%;right:0;width:min(550px,calc(100vw - 68px));box-sizing:border-box;z-index:2;max-height:min(65dvh,460px);overflow:auto;padding:14px 16px;border:1px solid #bbb;border-radius:6px;background:#fff;box-shadow:0 4px 14px #0003;color:#333;font-size:13px;line-height:1.45}
+.feedback-privacy-note p{margin:10px 0 0}
+.feedback-dialog form{display:flex;flex-direction:column;min-height:0}
+.feedback-content{padding:0 22px 18px;overflow:auto;min-height:0;line-height:1.45}
+.feedback-dialog fieldset{border:0;margin:0;padding:0;min-width:0}
+.feedback-dialog label{font-size:14px;font-weight:600;margin-bottom:14px}
+.feedback-dialog input,.feedback-dialog textarea,.feedback-dialog select{display:block;width:100%;min-width:0;margin:5px 0 0;padding:8px;border:1px solid #aaa;border-radius:4px;background:#fff;color:inherit;font:14px Arial,sans-serif}
+.feedback-dialog textarea{resize:vertical;min-height:54px;max-height:240px;line-height:1.4}
+.feedback-fields{display:grid;grid-template-columns:1fr 1.4fr;gap:14px}
+.feedback-intro{margin-top:0;color:#555;font-size:14px}
+.feedback-hint{font-size:12px;color:#666;margin:6px 0 12px;font-weight:400}
+.feedback-attachments{padding:12px 14px;border:1px solid #ddd;border-radius:5px;background:#f1f2f3}
+.feedback-dialog label.feedback-project-toggle{display:flex;gap:9px;align-items:center;margin:0}
+.feedback-dialog .feedback-project-toggle input{width:16px;height:16px;margin:0;flex:none;accent-color:#168fbd}
+.feedback-attachments .feedback-hint{margin:6px 0 0}
+.feedback-details{margin-top:14px;font-size:13px}
+.feedback-details summary{cursor:pointer;color:#075b70;padding:4px 0}
+.feedback-details pre{margin:8px 0 0;max-height:230px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#eee;padding:10px;font:12px/1.4 monospace;border-radius:4px}
+.feedback-dialog .dialog-actions{display:flex;align-items:center;margin:0;padding:12px 22px;border-top:1px solid #ddd;background:#f1f2f3;flex:none;color:inherit}
+.feedback-dialog .dialog-actions button{font-size:13px;white-space:nowrap}
+.feedback-dialog button.feedback-send{background:#087da8;color:#fff;border:1px solid #076589;border-radius:4px}
+.feedback-dialog button:disabled{opacity:.55;cursor:default}
+.feedback-notice{font-size:13px;background:#fff4d6;border:1px solid #d9a400;padding:8px;border-radius:4px}
+.dialog button.feedback-inline-button,.codepad button.feedback-inline-button{display:inline-block;font:12px Arial,sans-serif;padding:3px 5px;margin:3px 0;border:0;border-radius:3px;box-shadow:none;background:transparent;color:#075b70;text-decoration:underline;cursor:pointer}
+.codepad-error .feedback-inline-button{display:block}
+.dark .feedback-dialog{background:#252526}
+.dark .feedback-intro,.dark .feedback-hint{color:#bbb}
+.dark .feedback-dialog button.feedback-privacy-button{color:#bbb}
+.dark .feedback-dialog button.feedback-privacy-button:hover,.dark .feedback-dialog button.feedback-privacy-button:focus-visible{color:#8fd3f7}
+.dark .feedback-privacy-note{background:#303034;border-color:#666;color:#ddd}
+.dark .feedback-attachments,.dark .feedback-dialog .dialog-actions,.dark .feedback-details pre{background:#303034;border-color:#55555c}
+.dark .feedback-details summary,.dark .dialog button.feedback-inline-button,.dark .codepad button.feedback-inline-button{color:#8fd3f7}
+.dark .feedback-dialog input,.dark .feedback-dialog select,.dark .feedback-dialog textarea{background:#3c3c3c;border-color:#5a5a5a}
+.dark .feedback-notice{background:#493b1c;border-color:#97731e;color:#f2d895}
+@media(max-width:500px){.feedback-fields{grid-template-columns:1fr;gap:0}.feedback-dialog .dialog-actions{flex-wrap:wrap;padding:10px 14px;gap:6px}.feedback-content{padding:0 14px 14px}.feedback-dialog>header{padding:14px 14px 0}}
 
 /* The manual is bundled with the app, including the offline edition. */
 .user-help-dialog{width:min(960px,calc(100vw - 24px));min-width:0;height:calc(100dvh - 24px);max-height:calc(100dvh - 24px);display:flex;flex-direction:column;padding:20px;overflow:hidden}

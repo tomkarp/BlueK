@@ -11,6 +11,7 @@
   export let error: string;
   /** An exception ended a call (RT-82); the runtime stays usable. */
   export let exception = false;
+  export let openFeedback: () => void;
 </script>
 
 {#if compilerDialog}<div class="modal topmost-modal" role="presentation">
@@ -45,6 +46,7 @@
           class="compiler-error-message">{diagnostic.message}</pre>{/each}{#if !compilerDiagnostics.length}<pre
           class="compiler-error-text">{error}</pre>{/if}
       <div class="dialog-actions">
+        <button on:click={openFeedback}>{t("ui.feedback.title")}</button>
         <button use:focusOnMount on:click={() => (compilerDialog = false)}
           >{t("ui.common.close")}</button
         >

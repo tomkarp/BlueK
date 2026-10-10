@@ -140,7 +140,7 @@
     "theInspectorShowsAnError": "The inspector shows an error",
     "aDraftIsMissing": "A draft is missing",
     "theGeneratedStateCannotBeSaved": "The generated state cannot be saved",
-    "reporting": "<a href=\"https://github.com/tomkarp/BlueK/issues/new\" target=\"_blank\" rel=\"noopener noreferrer\">report a bug on GitHub</a>. Include a small project, the steps to reproduce it, the error and your browser/version.",
+    "reporting": "Use “Report a problem…” to tell the BlueK developer about bugs or missing Kotlin support. You can review the included data and optionally attach your current project before sending.",
     "main": "Add a top-level main function in a functions file, then compile. Class methods are not entry points.",
     "sessionReset": "Compile, test runs and state saving start fresh sessions. Load state to recreate saved preparation.",
     "stop": "Check the terminal for an input request. Use Stop for an endless loop or to cancel execution.",

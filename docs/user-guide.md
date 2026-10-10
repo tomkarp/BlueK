@@ -125,5 +125,10 @@ projects and browser before relying on it. Browser autosave may depend on the
 location of BlueK.html; moving the file can make previous drafts unavailable.
 Use JSON export for submissions and backups.
 
-[Report a bug on GitHub](https://github.com/tomkarp/BlueK/issues/new)
-when online. Package instructions: [offline README](../scripts/offline/LIESMICH.txt).
+Use **Report a problem…** in the sidebar or from a compiler/codepad error to
+tell the developer about a bug or missing Kotlin support.
+Review the included version, browser and diagnostic data before
+sending. The current project is included only if you select its checkbox.
+An optional email lets the developer reply manually. Sending requires an
+internet connection, including in the offline application.
+Package instructions: [offline README](../scripts/offline/LIESMICH.txt).

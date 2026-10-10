@@ -24,6 +24,8 @@
   import ObjectNameDialog from "./components/ObjectNameDialog.svelte";
   import AppToolbar from "./components/AppToolbar.svelte";
   import AppSidebar from "./components/AppSidebar.svelte";
+  import FeedbackDialog from "./components/FeedbackDialog.svelte";
+  import { FeedbackWorkspace } from "./workspace/FeedbackWorkspace.svelte";
   import ClassDiagram from "./components/ClassDiagram.svelte";
   import ObjectBenchCodepad from "./components/ObjectBenchCodepad.svelte";
   import AppStatusBar from "./components/AppStatusBar.svelte";
@@ -81,6 +83,14 @@
     editor: () => editor,
     objects: () => objects,
   });
+  const feedback = new FeedbackWorkspace({
+    project: project.projectPayload,
+    context: () => ({
+      diagnostics: editor.compilerDiagnostics,
+      error: ui.error,
+    }),
+    language: () => language.locale,
+  });
   const isTestFile = (
     file: import("../../runtime-contract/src/index").ProjectFile,
   ) =>
@@ -99,10 +109,14 @@
   // warning stays closed until the reason changes.
   const storageWarning = $derived.by(() => {
     const warning = project.autosaveWarning;
-    if (!warning || warning.reason === project.autosaveWarningDismissed) return "";
+    if (!warning || warning.reason === project.autosaveWarningDismissed)
+      return "";
     if (warning.reason === "session")
-      return t("ui.transfer.automaticProjectRecoveryIsUnavailableUseSaveExport");
-    if (warning.reason === "blocked") return t("ui.workspace.draftStorageBlocked");
+      return t(
+        "ui.transfer.automaticProjectRecoveryIsUnavailableUseSaveExport",
+      );
+    if (warning.reason === "blocked")
+      return t("ui.workspace.draftStorageBlocked");
     if (warning.reason === "unknown")
       return t("ui.workspace.draftStorageFailed", [warning.detail]);
     const megabytes = new Intl.NumberFormat(language.locale, {
@@ -148,6 +162,7 @@
       ui.setVimMode(!ui.vimMode);
     };
     const captureShortcut = (event: KeyboardEvent) => {
+      if (feedback.open) return;
       const mod = (event.metaKey || event.ctrlKey) && !event.altKey;
       if (mod && !event.shiftKey && event.key === "Enter") {
         event.preventDefault();
@@ -171,6 +186,7 @@
     };
   });
   function escapeWindowAction(): (() => void) | null {
+    if (feedback.open) return feedback.close;
     if (objects.inspectorError)
       return () => {
         objects.inspectorError = null;
@@ -449,6 +465,7 @@
       {offlineBuild}
       bind:offlineDownloadOpen={ui.offlineDownloadOpen}
       bind:shortcutsHelpOpen={ui.shortcutsHelpOpen}
+      openFeedback={() => feedback.show()}
     />
     <section
       class="workspace"
@@ -506,6 +523,7 @@
         beginBenchResize={ui.beginBenchResize}
         requestObjectOnBench={objects.requestObjectOnBench}
         submitCodepad={session.submitCodepad}
+        openFeedback={feedback.show}
       />
       <AppStatusBar
         selectedObjectId={ui.selectedObjectId}
@@ -606,12 +624,17 @@
     formatEditor={editor.formatEditor}
     markDiagnostics={editor.markDiagnostics}
     closeFormatError={editor.closeFormatError}
+    openFeedback={feedback.show}
   />
   <CompilerDialog
     bind:compilerDialog={session.compilerDialog}
     exception={session.callException}
     compilerDiagnostics={editor.compilerDiagnostics}
     error={ui.error}
+    openFeedback={() => {
+      session.compilerDialog = false;
+      feedback.show();
+    }}
   />
   <InspectorWindows
     inspectorViews={objects.inspectorViews}
@@ -721,6 +744,10 @@
   />
   <OfflineDownloadDialog
     bind:open={ui.offlineDownloadOpen}
+    openFeedback={() => {
+      ui.offlineDownloadOpen = false;
+      feedback.show();
+    }}
     downloadUrl={OFFLINE_DOWNLOAD}
   />
   <ProjectTransferDialogs
@@ -761,6 +788,10 @@
     libraryId={project.library?.id || ""}
   />
   <SettingsDialogs
+    openFeedback={() => {
+      ui.shortcutsHelpOpen = false;
+      feedback.show();
+    }}
     bind:settingsNotice={ui.settingsNotice}
     bind:shortcutsHelpOpen={ui.shortcutsHelpOpen}
     bind:darkMode={ui.darkMode}
@@ -787,4 +818,5 @@
     bind:codepadMenu={session.codepadMenu}
     bind:history={session.history}
   />
+  <FeedbackDialog {feedback} />
 </div>

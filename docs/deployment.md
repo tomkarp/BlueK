@@ -1,7 +1,8 @@
 # Deployment
 
 BlueK is a static application. An optional Node/SQLite service provides short
-project links. Caddy serves static files and proxies `/api/*` to that service.
+project links and [private feedback](feedback.md). Caddy serves static files
+and proxies `/api/*` to that service.
 
 ## Workflows
 
@@ -89,8 +90,10 @@ bluek.de {
     handle /api/* {
         reverse_proxy 127.0.0.1:8787
     }
-    try_files {path} /index.html
-    file_server
+    handle {
+        try_files {path} /index.html
+        file_server
+    }
 }
 
 beta.bluek.de {
@@ -98,8 +101,10 @@ beta.bluek.de {
     handle /api/* {
         reverse_proxy 127.0.0.1:8787
     }
-    try_files {path} /index.html
-    file_server
+    handle {
+        try_files {path} /index.html
+        file_server
+    }
 }
 ```
 

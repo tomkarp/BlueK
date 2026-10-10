@@ -41,7 +41,8 @@ for a backup or submission; browser storage is not a reliable backup.
 - [Kotlin support](docs/kotlin-support.md) and [standard library](docs/kotlin-surface.md).
 - [Development](DEVELOPMENT.md): local setup, builds and tests.
 
-Please [report bugs on GitHub](https://github.com/tomkarp/BlueK/issues/new).
+Use **Report a problem…** in BlueK to tell the developer about bugs or missing
+Kotlin support. Project attachments are optional.
 For offline use, test your own projects and browser first; the offline version
 has not yet been widely tested in practice.
 

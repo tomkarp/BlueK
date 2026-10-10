@@ -4,6 +4,7 @@ import { mkdir, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
+import { createFeedbackService } from "./feedback.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(here, "..");
@@ -33,6 +34,7 @@ database.exec(`
 const deleteExpired = database.prepare("DELETE FROM projects WHERE expires_at <= ?");
 const insertProject = database.prepare("INSERT INTO projects (code, created_at, expires_at, size_bytes, project_json) VALUES (?, ?, ?, ?, ?)");
 const selectProject = database.prepare("SELECT expires_at, project_json FROM projects WHERE code = ?");
+const feedback = await createFeedbackService(database);
 
 const words = (await readFile(wordListPath, "utf8")).split(/\r?\n/).map((word) => word.trim()).filter((word) => /^[a-z]{4,6}$/.test(word));
 if (words.length < 100) throw new Error("The BlueK share word list is unexpectedly small.");
@@ -82,6 +84,7 @@ function storeProject(project) {
 async function handle(request, response) {
   cleanup();
   const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
+  if (await feedback.handle(request, response, url.pathname)) return;
   if (request.method === "OPTIONS") {
     response.writeHead(204, { "access-control-allow-origin": "*", "access-control-allow-methods": "GET, POST, OPTIONS", "access-control-allow-headers": "content-type" });
     response.end();
@@ -113,7 +116,7 @@ export function createShareServer() {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const server = createShareServer();
   server.listen(port, host, () => console.log(`BlueK share API listening on http://${host}:${port}`));
-  const stop = () => { database.close(); server.close(() => undefined); };
+  const stop = () => { server.close(async () => { await feedback.close(); database.close(); }); };
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
   setInterval(() => cleanup(), 60 * 60 * 1000).unref();

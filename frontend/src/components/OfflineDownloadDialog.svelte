@@ -6,6 +6,7 @@
   import { containClicks } from "../uiActions";
   export let open: boolean;
   export let downloadUrl: string;
+  export let openFeedback: () => void;
 </script>
 
 {#if open}
@@ -35,11 +36,8 @@
           {t("ui.offline.theOfflineVersionHasNotYetBeenWidely")}
         </p>
         <p>
-          <a
-            class="offline-download-report"
-            href="https://github.com/tomkarp/BlueK/issues/new"
-            target="_blank"
-            rel="noopener noreferrer">{t("ui.offline.reportABugOnGitHub")}</a
+          <button class="feedback-inline-button" on:click={openFeedback}
+            >{t("ui.feedback.title")}</button
           >
           {t("ui.offline.internetConnectionRequired")}
         </p>

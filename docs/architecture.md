@@ -1,5 +1,10 @@
 # BlueK architecture
 
+Private feedback is a separate presentation/service domain; see
+[feedback](feedback.md). Its controller reads project/diagnostic snapshots through
+narrow capabilities and sends an explicitly reviewed report. GitHub credentials
+belong exclusively to the Node service, never the browser or runtime snapshot.
+
 Binding development contract; see [AGENTS.md](../AGENTS.md).
 Svelte is the only maintained frontend. Build commands are in
 [DEVELOPMENT.md](../DEVELOPMENT.md).
@@ -45,6 +50,7 @@ only the tools are compiled at build time.
 | `BluePlayWorkspace.svelte.ts` | World window, canvas/input/audio presentation |
 | `TerminalWorkspace.svelte.ts` | Terminal output/window presentation |
 | `WorkspaceUi.svelte.ts` | Shared focus, status, settings and pane sizes |
+| `FeedbackWorkspace.svelte.ts` | In-memory report draft, captured project/diagnostic context, opt-in attachments and private-service receipts |
 
 Controllers use one `$state`/`$derived` instance per domain. Host interfaces
 are narrow `Pick` capabilities; foreign domain data is `Readonly`. Mutations

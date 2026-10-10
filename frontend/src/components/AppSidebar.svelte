@@ -32,6 +32,7 @@
   export let shortcutsHelpOpen: boolean;
   export let settingsNotice: boolean;
   export let runMain: () => Promise<void>;
+  export let openFeedback: () => void;
 </script>
 
 <nav class="sidebar">
@@ -106,6 +107,9 @@
     </div>
   </details>
   <div class="side-spacer"></div>
+  <button class="sidebar-feedback-button" on:click={openFeedback}
+    >{t("ui.feedback.title")}</button
+  >
   <div
     class="sidebar-utilities"
     role="group"

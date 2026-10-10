@@ -46,6 +46,9 @@
     reveal?: boolean,
   ) => boolean;
   export let closeFormatError: () => void;
+  export let openFeedback: (
+    context: import("../feedbackApi").FeedbackContext,
+  ) => void;
   const onlyWarnings = (diagnostics: Diagnostic[] = []) =>
     diagnostics.length > 0 && !diagnostics.some(isCompileError);
 </script>
@@ -220,7 +223,13 @@
                       ])}</strong
                     >
                     {diagnostic.message}</span
-                  >{/each}</span
+                  >{/each}<button
+                  class="feedback-inline-button"
+                  on:click={() =>
+                    openFeedback({
+                      diagnostics: diagnosticsByFile[editorFile.fileName],
+                    })}>{t("ui.feedback.title")}</button
+                ></span
               ><button
                 type="button"
                 class="dialog-error-close"
@@ -400,7 +409,13 @@
                         ])}</strong
                       >
                       {diagnostic.message}</span
-                    >{/each}</span
+                    >{/each}<button
+                    class="feedback-inline-button"
+                    on:click={() =>
+                      openFeedback({
+                        diagnostics: diagnosticsByFile[editorFile.fileName],
+                      })}>{t("ui.feedback.title")}</button
+                  ></span
                 ><button
                   type="button"
                   class="dialog-error-close"

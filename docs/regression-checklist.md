@@ -288,7 +288,49 @@ Unless explicitly stated, visual user acceptance remains pending.
 | GUI-136 | Images dialog uses equal-sized project and standard tiles, with unobtrusive rename/remove icons beside the filename, leaving the preview uncovered; buttons have a background on hover/focus, long filenames truncate with their full name in the tooltip; only its content scrolls, keeping the title and Close button visible | Live local browser screenshots inspected at the top and bottom of the image list, including the caption-action follow-up (2026-10-09); typecheck passed with zero errors/warnings before the CSS follow-ups; no automated case added or run; user visually accepted the final layout (2026-10-09) |
 | GUI-130 | Supported browser-language default with English fallback, persisted German/English choice, unchanged source/live state/diagnostics, translated dialogs/manual/editor search and offline use | 188/188 full GUI cases and final affected 11/11 selection passed (2026-10-08); nine localization cases passed; offline language case passed; agent screenshots inspected, user acceptance pending |
 
+| GUI-137 | Private bug/Kotlin-support report dialog, diagnostic context, explicit project opt-in, JSON preview, durable private delivery and receipt; footer offers Cancel/Send without a report download | Local dialog/preview and initial published main/beta dialog visually inspected (2026-10-10); final wording/information notice approved for publication, final typecheck: zero errors/warnings. Hosted/offline builds completed. No automated tests added/run. Private repo/labels/watch and protected restricted token installed; main/beta/local feedback configuration available. Actual issue/attachment delivery remains unverified by the agent. |
+
 ## Recorded verification
+
+### Private feedback — 2026-10-10
+
+- User approved committing and publishing the complete feature and wording
+  follow-ups on beta/main. Final typecheck: zero errors/warnings; server syntax
+  checks passed. No automated tests added/run.
+- Reporting help, user-facing documentation and submission receipts now refer
+  to the developer/report number instead of GitHub accounts/issues. The storage
+  notice retains the actual GitHub destination. Local wording follow-up;
+  no automated tests added/run.
+- User requested a shorter introduction and contextual storage information.
+  Added a header information button for hover, keyboard focus and click,
+  describing transmitted data, optional project, server/GitHub storage,
+  repository access and retention in German/English. Local follow-up; no
+  automated tests added/run. Local screenshot of the opened notice inspected;
+  user subsequently approved publication.
+- User requested removing the report download. Removed the button, controller
+  method and unused translations/styles; adjusted error guidance and user docs.
+  Local browser screenshot shows only Cancel/Send in the footer. This follow-up
+  remains local; no automated tests added/run.
+- Local browser: opened the German sidebar dialog and expanded its JSON preview;
+  project inclusion was unchecked and the preview contained no project. Sending
+  remained unavailable without the server token. No report was submitted.
+- `npm run typecheck`: zero errors/warnings. Hosted and offline builds completed;
+  existing formatter/import-meta/chunk warnings remain. Node syntax checks passed.
+- `tomkarp/BlueK-Feedback` created private, category labels installed and watched.
+  Backend modules deployed to the existing server; `/api/health` returned `ok:true`
+  and feedback configuration initially returned `available:false` without a token.
+- Restricted non-expiring token installed only in the protected server file;
+  daily private-repository access keeps it used during pauses. Main, beta and
+  local Vite feedback configuration now return `available:true`. The first beta
+  probe returned SPA HTML: Caddy's static fallback was moved inside its own
+  `handle`, preserving `/api/*` routing; validation/reload succeeded.
+- Main/beta frontends published. Both German dialogs opened with the unavailable
+  notice absent and project inclusion unchecked; main screenshot saved. No
+  report was submitted by the agent. Source was initially kept local for review;
+  the user subsequently approved committing and pushing beta/main.
+- End-to-end issue/attachment delivery, retries, limits, dark/offline browser
+  behavior and email receipt are not verified. No automated tests added or run.
+  Account email preferences remain an owner step.
 
 ### BluePlay sounds — 2026-10-08
 

@@ -32,4 +32,6 @@ The offline version has not yet been widely tested in practice. Test it with
 your own projects and browser before relying on it. Automated local-file
 checks cover Chromium and WebKit; they are not a guarantee for every browser.
 
-Report bugs when online: https://github.com/tomkarp/BlueK/issues/new
+Use “Report a problem…” in BlueK to report bugs or missing Kotlin support.
+Sending requires internet.
+You can review the included data and choose whether to attach the project.

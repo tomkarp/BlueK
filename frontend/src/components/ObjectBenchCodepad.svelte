@@ -34,6 +34,9 @@
   export let beginBenchResize: (event: PointerEvent) => void;
   export let requestObjectOnBench: (value: RuntimeValue) => void;
   export let submitCodepad: (event: KeyboardEvent) => void;
+  export let openFeedback: (
+    context: import("../feedbackApi").FeedbackContext,
+  ) => void;
 </script>
 
 <div class:codepad-collapsed={!codepadOpen} class="lower">
@@ -133,6 +136,12 @@
               </button>
             {:else if entry.error}<div class="codepad-error">
                 {entry.error}
+                <button
+                  class="feedback-inline-button"
+                  on:click={() =>
+                    openFeedback({ error: entry.error, code: entry.code })}
+                  >{t("ui.feedback.title")}</button
+                >
               </div>
             {:else if entry.result}<div class="codepad-result">
                 <span class="codepad-value-icon" aria-hidden="true"></span><span

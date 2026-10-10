@@ -140,7 +140,7 @@
     "theInspectorShowsAnError": "Der Inspektor zeigt einen Fehler",
     "aDraftIsMissing": "Ein Entwurf fehlt",
     "theGeneratedStateCannotBeSaved": "Der erzeugte Zustand lässt sich nicht speichern",
-    "reporting": "<a href=\"https://github.com/tomkarp/BlueK/issues/new\" target=\"_blank\" rel=\"noopener noreferrer\">Fehler auf GitHub melden</a>. Gib ein kleines Beispielprojekt, die Schritte zum Reproduzieren, den Fehler und deinen Browser mit Version an.",
+    "reporting": "Mit „Problem melden…“ kannst du den BlueK-Entwickler auf Fehler oder fehlende Kotlin-Unterstützung hinweisen. Vor dem Senden kannst du die mitgesendeten Daten ansehen und bei Bedarf dein aktuelles Projekt anhängen.",
     "main": "Füge eine main-Funktion auf Dateiebene in einer Funktionsdatei hinzu und kompiliere. Klassenmethoden sind keine Einstiegspunkte.",
     "sessionReset": "Kompilieren, Testläufe und das Speichern des Zustands starten neue Sitzungen. Lade den Zustand, um gespeicherte Objekte wiederherzustellen.",
     "stop": "Prüfe, ob das Terminal auf Eingabe wartet. Stopp beendet die Ausführung auch bei Endlosschleifen.",

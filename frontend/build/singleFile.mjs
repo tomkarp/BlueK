@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
+import { buildInfo } from './buildInfo.mjs';
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 export async function iife(entry, name, plugins) {
@@ -9,6 +10,7 @@ export async function iife(entry, name, plugins) {
     root: repository,
     logLevel: 'warn',
     plugins,
+    define: { __BLUEK_BUILD_INFO__: JSON.stringify(buildInfo()) },
     build: {
       write: false,
       minify: true,

@@ -5,6 +5,7 @@
   $: t = $language.t;
   import { containClicks, focusOnMount } from "../uiActions";
   export let close: () => void;
+  export let openFeedback: () => void;
   const sections = [
     ["start", "Quick start"],
     ["objects", "Objects & codepad"],
@@ -354,6 +355,7 @@ fun main() {
             </dd>
           </dl>
           <p><TranslatedText message="help.troubleshooting.reporting" /></p>
+          <button on:click={openFeedback}>{t("ui.feedback.title")}</button>
         {/if}
       </article>
     </div>
