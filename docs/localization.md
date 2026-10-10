@@ -17,6 +17,8 @@ No global language singleton or second runtime store is used.
 Changing language updates labels, tooltips, dialogs, the bundled manual and
 BluePlay API explanations. Editor language extensions are reconfigured without
 replacing their documents, selections or undo history.
+CodeMirror phrases retain their object identity while the locale is unchanged;
+source edits must not reconfigure the language extension or reset Vim insert mode.
 
 The diagram stereotype `«functions»` stays English in every language.
 Kotlin source, generated Kotlin, identifiers, user README/content, program

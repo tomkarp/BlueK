@@ -79,11 +79,14 @@ export class Language {
     const text = catalogs[this.locale][key] ?? en[key];
     return formatMessage(text, values);
   };
-  get editorPhrases(): Record<string, string> {
-    return Object.fromEntries(
+  // Keep the CodeMirror extension stable on source edits. Reconfiguration can
+  // reset editor plugins (including Vim's insert mode); only a locale change
+  // should replace the phrases.
+  editorPhrases = $derived.by(() =>
+    Object.fromEntries(
       Object.entries(editorKeys).map(([phrase, key]) => [phrase, this.t(key)]),
-    );
-  }
+    ),
+  );
   /** For existing UI metadata. Unknown text is preserved, never machine-translated. */
   message = (text: string): string => {
     const key = englishKeys.get(text);

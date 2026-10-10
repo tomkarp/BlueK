@@ -114,7 +114,7 @@ Unless explicitly stated, visual user acceptance remains pending.
 | GUI-65 | Compact diagnostics and dismiss/retry behavior | Recorded browser pass |
 | GUI-66 | README sheet visibility and editor/preview | Recorded browser pass; `smoke-project-format` |
 | GUI-67 | Optional README opening from full and short links | Recorded browser pass |
-| GUI-68 | Vim toggle, settings and keyboard editing | Recorded browser pass |
+| GUI-68 | Vim toggle, settings and keyboard editing; insert mode survives source updates after `i`/`cc` | Recorded browser pass; Chromium/WebKit EN/DE regression |
 | GUI-69 | Bundled standard images and resource precedence | Recorded browser pass; `smoke-blueplay-browser` |
 | GUI-70 | Generated standard-image masks match decoded pixels | Recorded browser pass |
 | GUI-71 | Dark-mode presentation across editors/windows/dialogs | Recorded browser pass |
@@ -605,3 +605,15 @@ keep detailed cases in tests and avoid accumulating duplicate narratives.
   wording is unrelated and unchanged. After renaming the IDs,
   `npm run test:project-format` passed and the repeated typecheck passed with
   zero errors/warnings.
+
+### Vim insert mode — 2026-10-10
+
+GUI-68: reproduced the existing bug on `main` in Chromium: the first inserted
+character changed the mode back to Normal. `Language.editorPhrases` now derives
+one stable object per locale, avoiding language-extension reconfiguration on
+every source update. New browser cases type multiple characters after `i` and
+`cc`, then check Escape and undo in English and German. Both cases passed in
+Chromium and WebKit. The focused Chromium run passed 12/12 cases (GUI-42,
+GUI-68 and GUI-130), and the rebuilt offline GUI-130 case passed 1/1.
+`npm run typecheck` passed with zero errors/warnings; `npm run test:i18n`
+passed (666 messages). The user confirmed the local Vim fix works on 2026-10-10.
