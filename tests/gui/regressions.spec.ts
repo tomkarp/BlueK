@@ -1398,7 +1398,7 @@ test('GUI-35 short project links can be saved and loaded', async ({ page }) => {
   await page.getByRole('dialog', { name: 'Save / Export' }).getByRole('button', { name: /Short Link/ }).click();
   const linkDialog = page.getByRole('dialog', { name: 'Short project link' });
   await expect(linkDialog.getByLabel('Three-word project code')).toHaveText('green-lamp-river');
-  await expect(linkDialog.getByLabel('Complete project link')).toHaveText('http://127.0.0.1:5194/load/green-lamp-river');
+  await expect(linkDialog.getByLabel('Complete project link')).toHaveText('http://127.0.0.1:5194/bluek/green-lamp-river');
 });
 
 test('GUI-43 loading a saved project clears the load URL', async ({ page }) => {
@@ -1435,6 +1435,53 @@ test('GUI-44 Open / Import loads a shared project from three words', async ({ pa
   await dialog.getByRole('button', { name: 'Load project', exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(page.locator('.classcard')).toContainText('Geteilt');
+});
+
+test('GUI-138 an unavailable share link explains itself and keeps the tab project', async ({ page }) => {
+  const kept = { format: 'bluek-project', version: 1, projectName: 'Kept work', files: [{ fileName: 'Kept.kt', kind: 'class', source: 'class Kept {}' }] };
+  const shared = { format: 'bluek-project', version: 1, projectName: 'Shared work', files: [{ fileName: 'Geteilt.kt', kind: 'class', source: 'class Geteilt {}' }] };
+  const drafts = () => page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith('bluek.project-draft.v1.')).length);
+  await page.route('**/api/projects/abcd-efgh-ijkl', route => route.fulfill({ status: 404, json: { error: 'Project not found or expired.' } }));
+  await page.route('**/api/projects/fresh-book-apple', route => route.fulfill({ status: 403, json: { error: 'This program does not allow opening in BlueK.' } }));
+  await page.route('**/api/projects/green-lamp-river', route => route.fulfill({ json: { project: shared } }));
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(kept)).toString('base64url'));
+  await expect(page.getByLabel('Project name')).toHaveValue('Kept work');
+  await expect.poll(drafts).toBe(1);
+
+  // A failed link must not replace the tab's draft with an empty project.
+  await page.goto('/bluek/abcd-efgh-ijkl');
+  const notice = page.locator('.link-problem-notice');
+  await expect(notice).toContainText('Project not found or expired. Short links are kept for 30 days.');
+  await expect(page.getByLabel('Project name')).toHaveValue('Kept work');
+  await expect(page.locator('.classcard')).toContainText('Kept');
+  await expect(page).toHaveURL('http://127.0.0.1:5194/');
+  await page.getByRole('button', { name: 'Dismiss link message' }).click();
+  await expect(notice).toHaveCount(0);
+
+  await page.goto('/bluek/fresh-book-apple');
+  await expect(notice).toContainText('This program does not allow opening in BlueK.');
+  await expect(notice).not.toContainText('30 days');
+  await expect(page.getByLabel('Project name')).toHaveValue('Kept work');
+
+  // A hash-only link on the open IDE reloads into the same import path; undecodable data is named.
+  await page.evaluate(() => { window.location.hash = '#bluek=p1.bm90LWpzb24'; });
+  await expect(notice).toContainText('Invalid BlueK project link.');
+  await expect(page.getByLabel('Project name')).toHaveValue('Kept work');
+  expect(await drafts()).toBe(1);
+
+  await page.getByRole('button', { name: 'Open / Import', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Open / Import' });
+  await dialog.getByLabel('Three-word project code').fill('fresh book apple');
+  await dialog.getByRole('button', { name: 'Load project', exact: true }).click();
+  await expect(dialog.getByRole('alert')).toHaveText('This program does not allow opening in BlueK.');
+  await dialog.getByLabel('Three-word project code').fill('green lamp river');
+  await dialog.getByRole('button', { name: 'Load project', exact: true }).click();
+  await expect(page.getByLabel('Project name')).toHaveValue('Shared work');
+  await expect(notice).toHaveCount(0);
+
+  await page.evaluate(() => localStorage.setItem('bluek-language', 'de'));
+  await page.goto('/bluek/abcd-efgh-ijkl');
+  await expect(notice).toContainText('Das Projekt wurde nicht gefunden oder ist abgelaufen. Kurzlinks werden 30 Tage aufbewahrt.');
 });
 
 test('GUI-05 history works immediately after execution and terminal output', async ({ page }) => {
@@ -1735,6 +1782,15 @@ test('GUI-63 the sidebar explains the offline version before downloading it', as
   await project(page);
   let downloads = 0;
   page.on('download', () => { downloads++; });
+  // The dev server proxies feedback to bluek.de; answer locally and send nothing.
+  const feedbackRequests: string[] = [];
+  await page.route('**/api/feedback**', route => {
+    const request = route.request();
+    feedbackRequests.push(`${request.method()} ${new URL(request.url()).pathname}`);
+    return request.method() === 'GET' && new URL(request.url()).pathname === '/api/feedback/config'
+      ? route.fulfill({ json: { available: true } })
+      : route.abort();
+  });
   const downloadButton = page.locator('.sidebar-utilities').getByRole('button', { name: /Offline Version/ });
   await downloadButton.click();
   const dialog = page.getByRole('dialog', { name: 'BlueK Offline' });
@@ -1743,11 +1799,18 @@ test('GUI-63 the sidebar explains the offline version before downloading it', as
   await expect(dialog).toContainText('Autosave');
   await expect(dialog).toContainText('not yet been widely tested in practice');
   await expect(dialog).toContainText('with your own projects and browser before relying on it');
-  const reportBug = dialog.getByRole('link', { name: 'Report a bug on GitHub', exact: true });
-  await expect(reportBug).toHaveAttribute('href', 'https://github.com/tomkarp/BlueK/issues/new');
-  await expect(reportBug).toHaveAttribute('target', '_blank');
-  await expect(reportBug).toHaveAttribute('rel', 'noopener noreferrer');
+  // Problems are reported through the private in-app dialog, not a public GitHub issue.
+  await expect(dialog.getByRole('link', { name: /GitHub/ })).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Report a problem…', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  const report = page.getByRole('dialog', { name: 'Report a problem…', exact: true });
+  await expect(report.getByRole('button', { name: 'Send report', exact: true })).toBeVisible();
+  await report.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(report).toHaveCount(0);
+  expect(feedbackRequests.length).toBeGreaterThan(0);
+  expect(feedbackRequests.every(request => request === 'GET /api/feedback/config')).toBe(true);
   expect(downloads).toBe(0);
+  await downloadButton.click();
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await downloadButton.click();
@@ -1978,9 +2041,9 @@ test('GUI-67 a link can open the README, and the export dialog attaches that to 
   // The dialog offers exactly that for the links it copies.
   await page.getByRole('button', { name: 'Save / Export' }).click();
   const save = page.getByRole('dialog', { name: 'Save / Export' });
-  // The links come first, then the file exports.
+  // The project view offers project links and editable file exports.
   await expect(save.locator('.project-choice-list button strong')).toHaveText([
-    'Copy Full Project Link', 'Copy Short Link', 'Export Project JSON', 'Export as HTML (Beta)', 'Export BlueJ Project (.zip)',
+    'Copy Full Project Link', 'Copy Short Link', 'Export Project JSON', 'Export BlueJ Project (.zip)',
   ]);
   // One shared option row applies to both kinds of project links.
   await expect(save.getByLabel(/Open README.md with the link/)).toHaveCount(1);

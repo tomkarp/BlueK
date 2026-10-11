@@ -55,9 +55,9 @@ export type ObjectMenu = {
   object?: BenchObject;
 };
 export type CodepadMenu = { x: number; y: number; text?: string };
-export type MainAction = "start" | "reset" | "export";
+export type MainAction = "start" | "reset" | "export" | "shareFullProgram" | "shareShortProgram";
 export type MainDialog = { action: MainAction; generationId: string };
-export type ShareLinkDialog = { url: string; code: string; copied: boolean };
+export type ShareLinkDialog = { url: string; code: string; copied: boolean; program?: boolean };
 export type NewClassType =
   "class" | "interface" | "open" | "abstract" | "data" | "test" | "functions";
 export type CardPosition = { x: number; y: number };

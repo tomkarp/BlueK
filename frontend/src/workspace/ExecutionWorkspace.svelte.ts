@@ -36,7 +36,7 @@ interface ExecutionWorkspaceHost {
   project: () => Readonly<
     Pick<
       ProjectWorkspace,
-      "files" | "library" | "runtimeResources" | "writeHtmlExport"
+      "files" | "library" | "runtimeResources" | "writeHtmlExport" | "writeProgramLink"
     >
   >;
   terminal: () => Pick<
@@ -166,6 +166,8 @@ export class ExecutionWorkspace {
     this.mainDialog = null;
     if (request?.action === "export")
       await this.host.project().writeHtmlExport(fileName, request.generationId);
+    else if (request?.action === "shareFullProgram" || request?.action === "shareShortProgram")
+      await this.host.project().writeProgramLink(fileName, request.generationId, request.action === "shareShortProgram");
     else if (request)
       await this.executeMain(fileName, request.action, request.generationId);
   };
@@ -380,8 +382,8 @@ export class ExecutionWorkspace {
     if (this.runtime.phase !== "uncompiled") await this.client.stop();
     this.host.play().clearWorld();
   };
-  requestExport = (generationId: string) => {
-    this.mainDialog = { action: "export", generationId };
+  requestExport = (generationId: string, action: "export" | "shareFullProgram" | "shareShortProgram" = "export") => {
+    this.mainDialog = { action, generationId };
   };
   reportCallError = (message: string, exception = false) => {
     this.host.ui().error = message;

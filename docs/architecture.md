@@ -303,17 +303,69 @@ no remembered selection. Invalidation closes pending choices. Direct codepad
 ## Export and offline
 
 `programExport.ts` validates `{ format: "bluek-program", version: 1, mainFile,
-blueKUrl, project }`, reusing project validation. The embedded JSON escapes
+blueKUrl, project }`, reusing project validation. Optional `allowDownload`,
+`allowBlueK`, `showProjectName`, `autoRun`, `showControls` and `showSpeed` booleans configure the
+player. Missing action/control flags preserve older exports; missing autostart
+means paused. A BluePlay payload cannot hide buttons without autostart.
+The embedded JSON escapes
 HTML-sensitive characters and U+2028/U+2029; embedded scripts escape closing
 script tokens/comments. `playerMain.ts` creates a Blob worker, using the same
 client, runtime and resource preparation as the IDE. Decompression avoids
 `Blob.stream()` for WebKit file:// compatibility.
 
-Console exports start immediately; Restart recompiles. BluePlay exports load
-paused with Step/Run/Reset/Speed. Project download preserves JSON; Open in BlueK
-is offered only within the 1 MB link limit. IDE export compiles on demand,
+Console exports start immediately; Restart recompiles. BluePlay always invokes
+main on opening, then optionally starts simulation. Reset respects autostart.
+The player does not display execution status text. `showProjectName: false`
+hides the heading and uses a generic tab title without changing project data.
+When name and actions are disabled, the header is omitted.
+Project download preserves JSON. Open in BlueK uses a full project link within
+the 1 MB limit, or the stored program code for a short link. Player presentation
+uses its own app-local language instance with the same bundled catalogs.
+IDE export compiles on demand,
 chooses main, checks unchanged generation, obtains the generated template and
-downloads HTML.
+downloads HTML. Projects use `#bluek=<payload>` or `/bluek/<code>`; runnable
+exports use `#run=<payload>` or `/run/<code>`. Execution options and main choice
+remain inside the program envelope. `entry.ts` dynamically loads only
+the selected IDE or hosted player. `linkNavigation.ts` is the only hash-navigation
+handler: hosted and offline entries reload when a `#bluek` or `#run` link opens
+on the same page, and the IDE stores its draft on pagehide.
+`playerBootstrap.ts` validates and mounts the same player for hosted links and
+standalone HTML. Hosted links use the existing module worker; standalone HTML
+uses the embedded Blob worker. Neither program path initializes project drafts.
+When no program can be loaded, `PlayerProblem.svelte` shows a translated
+explanation in the player style: expired short links mention the 30-day
+retention, a project code opened under `/run/` links to `/bluek/<code>`, and
+hosted links lead back to the BlueK start page.
+`shareRoutes.ts` recognizes paths below the configured deployment prefix and
+accepts capitalized codes.
+Permanent `#bluek` links retain their format; `/load/<code>` is transitional
+([cleanup issue #26](https://github.com/tomkarp/BlueK/issues/26)).
+`shareLinks.ts` preserves the deployment prefix and supplies the common base;
+`programLinks.ts` owns program URL construction and the full-link size limit; no separate
+IDE/runtime path is introduced. The Save / Export dialog has fixed dimensions
+bounded by the viewport, a scrolling content area and a persistent action footer.
+One shared program options panel covers full links, short links and HTML.
+`ProjectWorkspace` owns export options and routes
+main selection through `ExecutionWorkspace`. Generation checks prevent handing
+out stale exports after asynchronous template loading, encoding or storage.
+
+The share service stores program envelopes in the existing SQLite table with
+the same 30-day expiry and size limit. `/api/programs` validates the envelope,
+main membership and options. The service decides which view a code may open:
+`GET /api/projects/<code>` returns a project, or a runnable export's project
+unless its author disabled “Open in BlueK” (403). `GET /api/programs/<code>`
+answers project codes with 409. `/bluek/<code>` and manual code import open
+the editable IDE view through `loadEditableProjectFromServer` with one request,
+without running main or adopting execution options. `/run/<code>` opens the
+stored execution package with its main and presentation options.
+`shareApi.ts` turns the 400/403/404/409 replies into `ShareCodeError` reasons
+with catalog texts, so a server's English wording never reaches the interface.
+
+An IDE link that cannot be loaded (`/bluek/`, `/load/`, `#bluek` or the BluePlay
+example) restores the tab's draft instead of leaving an empty project that
+would overwrite it. A dismissible link notice explains the failure and
+disappears when a project loads; the link address is removed so a reload
+starts normally.
 
 The offline IDE embeds the same app, formatter, assets and player template.
 Only worker/asset factories change; no alternate execution model. Short links

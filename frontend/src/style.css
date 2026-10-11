@@ -900,9 +900,12 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 .recent-project-list .recent-project{display:flex;flex-direction:column;align-items:flex-start;gap:5px;flex-shrink:0;width:100%;margin:0;padding:10px 12px;text-align:left;box-shadow:none}
 .recent-project strong{overflow-wrap:anywhere}
 .recent-project span{color:#666;font-size:12px}
-.project-recovery-notice{position:fixed;z-index:100;top:72px;right:20px;display:flex;align-items:center;gap:12px;max-width:min(470px,calc(100vw - 40px));padding:12px 14px;border:1px solid #a6afb5;border-radius:6px;background:#f2f6f8;color:#43515a;box-shadow:0 2px 6px #0002;font-size:13px;line-height:1.5}
-.project-recovery-notice button{flex-shrink:0;padding:2px 6px;border:0;background:transparent;box-shadow:none;color:inherit;font-size:19px;cursor:pointer}
+.workspace-notices{position:fixed;z-index:100;top:72px;right:20px;display:flex;flex-direction:column;align-items:flex-end;gap:8px;max-width:min(470px,calc(100vw - 40px))}
+.project-recovery-notice,.link-problem-notice{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid #a6afb5;border-radius:6px;background:#f2f6f8;color:#43515a;box-shadow:0 2px 6px #0002;font-size:13px;line-height:1.5}
+.project-recovery-notice button,.link-problem-notice button{flex-shrink:0;padding:2px 6px;border:0;background:transparent;box-shadow:none;color:inherit;font-size:19px;cursor:pointer}
 .dark .project-recovery-notice{background:#29363e;color:#dee8ee;border-color:#667982}
+.link-problem-notice{border-color:#d49a9a;background:#fff3f3;color:#8a0000}
+.dark .link-problem-notice{background:#3a2526;color:#ffd9d9;border-color:#8c5b5d}
 .dark .recent-project span,.dark .recent-projects p{color:#b9bdc3}
 .recent-project-row{display:flex;align-items:stretch;gap:6px}
 .recent-project-row .recent-project{flex:1;min-width:0;width:auto}
@@ -1000,3 +1003,41 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 .dark .user-help-layout a{color:#8dd8ee}
 .dark .user-help-dialog>.dialog-actions{border-color:#555}
 @media(max-width:600px){.user-help-dialog{padding:14px}.user-help-layout{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);gap:14px}.user-help-layout nav{flex-direction:row;flex-wrap:wrap;max-height:115px;gap:3px}.user-help-layout nav button{padding:6px 8px;font-size:12px}}
+
+/* Export choices are grouped by the view the recipient opens. */
+.export-mode-switch{display:flex;gap:6px;margin:16px 0 10px}
+.export-mode-switch button{flex:1;padding:9px 12px;border:1px solid #aaa;border-radius:6px;background:#eee;color:inherit;cursor:pointer}
+.export-mode-switch button.active{background:#e0f3fa;border-color:#098bb4;box-shadow:inset 0 -2px #098bb4}
+.export-mode-description{color:#666}
+.program-source-note{grid-column:1/-1;margin:4px 0;font-size:12px;color:#666;line-height:1.4}
+.dark .export-mode-switch button{background:#38383d;border-color:#666}
+.dark .export-mode-switch button.active{background:#203d48;border-color:#43b9dd}
+.dark .export-mode-description,.dark .program-source-note{color:#bbb}
+@media(max-width:560px){.export-mode-switch{flex-wrap:wrap}.export-mode-switch button{flex-basis:100%}}
+
+.program-blueplay-options{grid-column:1/-1;border:1px solid #bbb;border-radius:6px;margin:4px 0;padding:12px;display:flex;flex-wrap:wrap;gap:12px 20px}
+.program-blueplay-options legend{font-size:13px;color:#555;padding:0 5px}
+.program-blueplay-options p{flex-basis:100%;margin:0;font-size:12px;color:#666;line-height:1.4}
+.dark .program-blueplay-options{border-color:#666}
+.dark .program-blueplay-options legend,.dark .program-blueplay-options p{color:#bbb}
+
+.toolbar-dialog{max-width:calc(100vw - 32px);max-height:calc(100dvh - 32px);overflow:auto}
+.toolbar-dialog .share-link-option{white-space:normal}
+
+/* Keep the export window stable across views/options; only its content scrolls. */
+.save-export-dialog{width:min(760px,calc(100vw - 32px));height:min(680px,calc(100dvh - 32px));min-width:0;display:flex;flex-direction:column;overflow:hidden}
+.save-export-dialog>h3,.save-export-dialog>p,.save-export-dialog>.export-mode-switch,.save-export-dialog>.dialog-actions{flex:none}
+.save-export-dialog>.dialog-actions{padding-top:12px;border-top:1px solid #ccc}
+.export-dialog-content{flex:1;min-height:0;overflow:auto;scrollbar-gutter:stable}
+.save-export-dialog .export-mode-description{margin:0 0 16px;min-height:34px;line-height:1.4}
+.program-export-layout{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:20px;align-items:start}
+.program-export-choices{align-content:start}
+.program-export-choices>button{min-height:80px}
+.program-export-options{display:flex;flex-direction:column;gap:16px;min-width:0}
+.program-shared-options{display:flex;flex-direction:column;align-items:flex-start;gap:12px;color:#666}
+.program-shared-options>span{font-size:13px;font-weight:bold}
+.program-export-options .program-blueplay-options{margin:0;flex-direction:column;gap:12px;min-width:0}
+.program-export-options .program-source-note{margin:0}
+.dark .save-export-dialog>.dialog-actions{border-color:#555}
+.dark .program-shared-options{color:#bbb}
+@media(max-width:560px){.save-export-dialog{padding:16px}.program-export-layout{grid-template-columns:minmax(0,1fr)}.program-export-options{padding-top:8px}.save-export-dialog .export-mode-switch{margin:8px 0 12px}.save-export-dialog .export-mode-description{min-height:0}}

@@ -48,6 +48,14 @@ function projectCode() {
 function validProject(value) {
   return value && typeof value === "object" && value.format === "bluek-project" && value.version === 1 && Array.isArray(value.files) && value.files.length > 0 && value.files.every((file) => file && typeof file.fileName === "string" && /^[-A-Za-z0-9_.]+\.kt$/.test(file.fileName) && typeof file.source === "string");
 }
+function validProgram(value) {
+  if (!value || value.format !== "bluek-program" || value.version !== 1 || !validProject(value.project)) return false;
+  if (!value.project.files.some(file => file.fileName === value.mainFile)) return false;
+  if (["allowDownload", "allowBlueK", "showProjectName", "autoRun", "showControls", "showSpeed"].some(key => value[key] !== undefined && typeof value[key] !== "boolean")) return false;
+  if (value.project.library?.id === "blueplay" && value.autoRun !== true && value.showControls === false) return false;
+  try { return ["http:", "https:"].includes(new URL(value.blueKUrl).protocol); }
+  catch { return false; }
+}
 function validCode(value) { return typeof value === "string" && /^(?:[a-z]{4,6}-){2,3}[a-z]{4,6}$/.test(value); }
 function json(response, status, value) {
   const body = JSON.stringify(value);
@@ -91,22 +99,39 @@ async function handle(request, response) {
     return;
   }
   if (request.method === "GET" && url.pathname === "/api/health") return json(response, 200, { ok: true });
-  if (request.method === "POST" && url.pathname === "/api/projects") {
+  if (request.method === "POST" && ["/api/projects", "/api/programs"].includes(url.pathname)) {
     try {
       const project = JSON.parse(await requestBody(request));
-      if (!validProject(project)) return json(response, 400, { error: "Invalid BlueK project." });
+      const program = url.pathname === "/api/programs";
+      if (!(program ? validProgram(project) : validProject(project))) return json(response, 400, { error: program ? "Invalid BlueK program." : "Invalid BlueK project." });
       return json(response, 201, storeProject(project));
     } catch (error) {
       return json(response, 400, { error: error instanceof Error ? error.message : "Invalid request." });
     }
   }
-  const match = url.pathname.match(/^\/api\/projects\/([^/]+)$/);
+  const match = url.pathname.match(/^\/api\/(projects|programs)\/([^/]+)$/);
   if (request.method === "GET" && match) {
-    if (!validCode(match[1])) return json(response, 400, { error: "Invalid project code." });
-    const record = selectProject.get(match[1]);
-    if (!record || Date.parse(record.expires_at) <= Date.now()) return json(response, 404, { error: "Project not found or expired." });
-    try { return json(response, 200, { project: JSON.parse(record.project_json), expiresAt: record.expires_at }); }
-    catch { return json(response, 404, { error: "Project not found or expired." }); }
+    const program = match[1] === "programs";
+    const missing = { error: program ? "Program not found or expired." : "Project not found or expired." };
+    if (!validCode(match[2])) return json(response, 400, { error: "Invalid project code." });
+    const record = selectProject.get(match[2]);
+    if (!record || Date.parse(record.expires_at) <= Date.now()) return json(response, 404, missing);
+    let payload;
+    try { payload = JSON.parse(record.project_json); }
+    catch { return json(response, 404, missing); }
+    const expiresAt = record.expires_at;
+    if (program) {
+      if (validProgram(payload)) return json(response, 200, { program: payload, expiresAt });
+      // A project code opened as a program: the player offers the editable project instead.
+      if (validProject(payload)) return json(response, 409, { error: "This code belongs to an editable BlueK project, not to a runnable program." });
+    } else {
+      if (validProject(payload)) return json(response, 200, { project: payload, expiresAt });
+      // A runnable export opens as its project unless its author disabled "Open in BlueK".
+      if (validProgram(payload)) return payload.allowBlueK === false
+        ? json(response, 403, { error: "This program does not allow opening in BlueK." })
+        : json(response, 200, { project: payload.project, expiresAt });
+    }
+    return json(response, 404, missing);
   }
   return json(response, 404, { error: "Not found." });
 }

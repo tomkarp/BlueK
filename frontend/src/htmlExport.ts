@@ -1,6 +1,6 @@
 import offlineAssets from "./offlineAssets";
 import type { SavedProject } from "./projectFormat";
-import { blueKUrlForExport, createExportedProgram, embedProgram, PUBLIC_BLUEK_URL } from "./programExport";
+import { blueKUrlForExport, createExportedProgram, embedProgram, PUBLIC_BLUEK_URL, type ProgramOptions } from "./programExport";
 
 /**
  * Builds the runnable HTML file of a project from the player template that is
@@ -25,8 +25,8 @@ export function loadPlayerTemplate(basePath: string, pageUrl: string): Promise<s
   return template;
 }
 
-export async function htmlExport(project: SavedProject, mainFile: string, basePath: string, pageUrl: string): Promise<string> {
+export async function htmlExport(project: SavedProject, mainFile: string, basePath: string, pageUrl: string, options: ProgramOptions = {}): Promise<string> {
   const url = new URL(pageUrl);
-  const program = createExportedProgram(project, mainFile, url.protocol === "file:" ? PUBLIC_BLUEK_URL : blueKUrlForExport(url.origin, new URL(basePath, url).pathname));
+  const program = createExportedProgram(project, mainFile, url.protocol === "file:" ? PUBLIC_BLUEK_URL : blueKUrlForExport(url.origin, new URL(basePath, url).pathname), options);
   return embedProgram(await loadPlayerTemplate(basePath, pageUrl), program);
 }

@@ -93,7 +93,7 @@ test("GUI-118 project links optionally load the default state and open README", 
   await expect(
     save.getByRole("group", { name: "When opening a link:" }),
   ).toBeVisible();
-  // Link options stay beside the two links; the three file exports span the full list.
+  // Link options stay beside the two links; the file exports span the full list.
   await page.setViewportSize({ width: 800, height: 700 });
   const choiceBounds = await save
     .locator(".project-choice-list button")
@@ -192,7 +192,7 @@ test("GUI-119 short links carry both options and unavailable state is reported",
     name: "Complete project link",
     exact: true,
   });
-  await expect(shortLink).toContainText("/load/green-lamp-river?state=1");
+  await expect(shortLink).toContainText("/bluek/green-lamp-river?state=1");
   await page
     .getByRole("dialog", { name: "Short project link" })
     .getByRole("button", { name: "Close", exact: true })
@@ -201,7 +201,7 @@ test("GUI-119 short links carry both options and unavailable state is reported",
   await save.getByLabel("Open README.md with the link").last().check();
   await save.getByRole("button", { name: "Copy Short Link" }).click();
   await expect(shortLink).toContainText(
-    "/load/green-lamp-river?readme=1&state=1",
+    "/bluek/green-lamp-river?readme=1&state=1",
   );
   const url = await shortLink.innerText();
   await page.goto(url);

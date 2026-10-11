@@ -1,5 +1,8 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from "svelte";
+  import type { Language } from "./i18n/Language.svelte";
+  export let language: Language;
+  $: t = $language.t;
   import type { Diagnostic, RuntimeSnapshot } from "../../runtime-contract/src/index";
   import { LocalRuntimeClient } from "./localRuntimeClient";
   import { isCompileError } from "./compileDiagnostics";
@@ -21,6 +24,7 @@
    */
   export let program: ExportedProgram;
   export let createWorker: () => Worker;
+  export let developerUrl: string | undefined = undefined;
 
   const model = projectModelFromPayload(program.project, (index) => `file-${index}`);
   const bluePlay = model.library?.id === "blueplay";
@@ -69,16 +73,6 @@
   $: loading = runtime.phase === "compiling";
   $: canStep = Boolean(stage) && !stageRunning && runtime.phase === "ready";
   $: canReset = !stageRunning && runtime.phase !== "compiling" && runtime.phase !== "running" && runtime.phase !== "uncompiled";
-  $: failed = Boolean(problem || diagnostics.length || runtime.phase === "faulted");
-  $: status = loading ? "Loading…"
-    : diagnostics.length ? "Compile error"
-    : failed ? "Stopped with an error"
-    : inputReady ? "Waiting for input"
-    : stageRunning ? "Running"
-    : runtime.phase === "running" ? "Running"
-    : bluePlay && stage ? "Paused"
-    : runtime.phase === "ready" ? "Finished"
-    : "";
   $: if (inputReady) tick().then(() => inputElement?.focus());
 
   let drawPending = false;
@@ -118,6 +112,8 @@
         : await client.execute({ op: "main", fileName: program.mainFile });
       if (current === run && "kind" in result && result.kind === "error")
         problem = result.display || "The program stopped with an error.";
+      else if (current === run && bluePlay && program.autoRun && stage && runtime.phase === "ready")
+        simulation("start");
     } catch (reason) {
       // A restart replaces the runtime; the old run's rejection is not an error.
       if (current === run) problem = message(reason);
@@ -146,6 +142,7 @@
     try {
       const result = await client.reset(program.mainFile);
       if ("kind" in result && result.kind === "error") problem = result.display || "Reset failed.";
+      else if (program.autoRun && stage && runtime.phase === "ready") simulation("start");
     } catch (reason) {
       problem = message(reason);
     }
@@ -227,7 +224,7 @@
   ];
 
   onMount(() => {
-    document.title = title;
+    document.title = program.showProjectName === false ? "BlueK program" : title;
     measureImageSizes(resources).then((measured) => {
       sizes = measured;
       if (stage) {
@@ -235,7 +232,8 @@
         scheduleDraw();
       }
     });
-    encodeBlueKLink(program.project)
+    if (program.allowBlueK !== false && developerUrl) blueKLink = developerUrl;
+    else if (program.allowBlueK !== false) encodeBlueKLink(program.project)
       .then((encoded) => {
         const link = `${program.blueKUrl}#bluek=${encoded}`;
         linkTooLong = link.length > MAX_PROJECT_LINK_LENGTH;
@@ -253,24 +251,23 @@
 <svelte:window on:keydown={(event) => stageKey(event, true)} on:keyup={(event) => stageKey(event, false)} on:blur={releaseKeys} />
 
 <main class="player" class:blueplay={bluePlay}>
+  {#if program.showProjectName !== false || program.allowBlueK !== false || program.allowDownload !== false}
   <header class="player-header">
-    <div class="player-title">
-      <h1>{title}</h1>
-      <span class="player-status" role="status">{status}</span>
-    </div>
-    <nav class="player-actions" aria-label="Project">
-      {#if blueKLink}
-        <a class="player-button" href={blueKLink} target="_blank" rel="noopener">Open in BlueK</a>
-      {:else if linkTooLong}
-        <span class="player-note">Too large for a link: download the project and open it in BlueK.</span>
+    {#if program.showProjectName !== false}<h1>{title}</h1>{/if}
+    {#if program.allowBlueK !== false || program.allowDownload !== false}<nav class="player-actions" aria-label={t("ui.player.project")}>
+      {#if program.allowBlueK !== false && blueKLink}
+        <a class="player-button" href={blueKLink} target="_blank" rel="noopener">{t("ui.player.openBlueK")}</a>
+      {:else if program.allowBlueK !== false && linkTooLong}
+        <span class="player-note">{t(program.allowDownload !== false ? "ui.player.linkTooLarge" : "ui.player.linkUnavailable")}</span>
       {/if}
-      <button class="player-button" on:click={downloadProject}>Download project (.bluek.json)</button>
-    </nav>
+      {#if program.allowDownload !== false}<button class="player-button" on:click={downloadProject}>{t("ui.player.download")}</button>{/if}
+    </nav>{/if}
   </header>
+  {/if}
 
   {#if diagnostics.length}
-    <section class="player-problem" role="alert" aria-label="Compile errors">
-      <strong>The program could not be compiled.</strong>
+    <section class="player-problem" role="alert" aria-label={t("ui.player.compileErrors")}>
+      <strong>{t("ui.player.compileFailed")}</strong>
       <ul>
         {#each diagnostics as diagnostic}
           <li><code>{diagnostic.fileName ?? "?"}:{diagnostic.line}:{diagnostic.column}</code> {diagnostic.message}</li>
@@ -278,39 +275,39 @@
       </ul>
     </section>
   {:else if problem || runtime.phase === "faulted"}
-    <section class="player-problem" role="alert" aria-label="Error">
-      <strong>The program stopped.</strong>
+    <section class="player-problem" role="alert" aria-label={t("ui.player.error")}>
+      <strong>{t("ui.player.stopped")}</strong>
       <pre>{problem || runtime.error || "Runtime error."}</pre>
     </section>
   {/if}
 
   {#if bluePlay}
-    <section class="player-world" aria-label="BluePlay world">
+    <section class="player-world" aria-label={t("ui.player.world")}>
       {#if stage}
         <canvas
           bind:this={canvas}
           class="player-stage"
-          aria-label="BluePlay world"
+          aria-label={t("ui.player.world")}
           role="button"
           tabindex="0"
           style={stageStyle(stage)}
           on:click={stageClick}
         ></canvas>
-        <div class="player-controls" aria-label="BluePlay controls">
+        {#if program.showControls !== false || program.showSpeed !== false}<div class="player-controls" aria-label={t("ui.player.controls")}>
           <!-- Same order and stable sizes as the world window in BlueK. -->
-          <div class="player-buttons">
+          {#if program.showControls !== false}<div class="player-buttons">
             <button on:click={() => simulation("step")} disabled={!canStep}>Act</button>
             <button
               on:click={() => simulation(stageRunning ? "stop" : "start")}
               disabled={!stageRunning && runtime.phase !== "ready"}
-              aria-label={stageRunning ? "Pause" : "Run"}
-            ><span class="toggle-labels" aria-hidden="true"><span class:inactive-label={stageRunning}>Run</span><span class:inactive-label={!stageRunning}>Pause</span></span></button>
-            <button on:click={resetWorld} disabled={!canReset}>Reset</button>
-          </div>
-          <label>Speed <input type="range" min="1" max="100" bind:value={speed} on:input={() => simulation("setSpeed")} /></label>
-        </div>
+              aria-label={t(stageRunning ? "ui.player.pause" : "ui.player.run")}
+            ><span class="toggle-labels" aria-hidden="true"><span class:inactive-label={stageRunning}>{t("ui.player.run")}</span><span class:inactive-label={!stageRunning}>{t("ui.player.pause")}</span></span></button>
+            <button on:click={resetWorld} disabled={!canReset}>{t("ui.player.reset")}</button>
+          </div>{/if}
+          {#if program.showSpeed !== false}<label>{t("ui.player.speed")} <input type="range" min="1" max="100" bind:value={speed} on:input={() => simulation("setSpeed")} /></label>{/if}
+        </div>{/if}
       {:else if loading}
-        <p class="player-placeholder">Loading…</p>
+        <p class="player-placeholder">{t("ui.player.loading")}</p>
       {/if}
     </section>
   {/if}
@@ -321,12 +318,12 @@
       <div class="player-input-row">
         <input
           bind:this={inputElement}
-          aria-label="Program input"
-          placeholder={inputReady ? "Enter a line; press Return" : ""}
+          aria-label={t("ui.player.programInput")}
+          placeholder={inputReady ? t("ui.player.inputHint") : ""}
           disabled={!inputReady}
           on:keydown={sendInput}
         />
-        {#if !bluePlay}<button on:click={() => void start()} disabled={loading}>Restart</button>{/if}
+        {#if !bluePlay}<button on:click={() => void start()} disabled={loading}>{t("ui.player.restart")}</button>{/if}
       </div>
     </section>
   {/if}
@@ -337,10 +334,8 @@
   :global(body) { margin: 0; background: #e5e6e7; color: #222; font: 14px Arial, sans-serif; }
   .player { max-width: 1100px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; min-height: 100vh; }
   .player-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
-  .player-title { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
   h1 { margin: 0; font-size: 22px; overflow-wrap: anywhere; }
-  .player-status { color: #555; font-size: 13px; }
-  .player-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .player-actions { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .player-button, .player-controls button, .player-input-row button {
     padding: 6px 12px; border: 1px solid #999; border-radius: 5px; background: linear-gradient(#fff, #d9d9d9);
     color: #222; font: inherit; text-decoration: none; cursor: pointer;

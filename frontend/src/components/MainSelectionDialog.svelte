@@ -23,6 +23,8 @@
       <p>
         {mainDialog.action === "export"
           ? t("ui.execution.whichMainShouldTheExportedHTMLFileStart")
+          : mainDialog.action === "shareFullProgram" || mainDialog.action === "shareShortProgram"
+          ? t("ui.transfer.chooseProgramMain")
           : t("ui.execution.whichMainShould0Run", [
               mainDialog.action === "reset" ? "Reset" : "Start main",
             ])}

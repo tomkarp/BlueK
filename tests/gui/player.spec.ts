@@ -43,12 +43,12 @@ test('EXP-01 console program runs from file:// with input, restart and no networ
   await expect(output).toHaveText('Name?\n');
   await expect(input).toBeEnabled();
   await expect(input).toBeFocused();
-  await expect(page.getByRole('status')).toHaveText('Waiting for input');
+  await expect(page.getByRole('status')).toHaveCount(0);
   await input.fill('Ada');
   await input.press('Enter');
   await expect(output).toHaveText('Name?\nAda\nHello, Ada\n');
   await expect(output.locator('.player-input-echo')).toHaveText('Ada');
-  await expect(page.getByRole('status')).toHaveText('Finished');
+  await expect(page.getByRole('status')).toHaveCount(0);
   await expect(input).toBeDisabled();
 
   await page.getByRole('button', { name: 'Restart' }).click();
@@ -72,7 +72,7 @@ test('EXP-03 compile errors, a missing main and runtime errors are shown instead
   const compile = page.getByRole('alert', { name: 'Compile errors' });
   await expect(compile).toContainText('The program could not be compiled.');
   await expect(compile).toContainText('App.kt:2:');
-  await expect(page.getByRole('status')).toHaveText('Compile error');
+  await expect(page.getByRole('status')).toHaveCount(0);
 
   await openPlayer(page, await exportFile(testInfo, 'no-main', [
     { fileName: 'App.kt', source: 'fun helper() {}' },
@@ -154,7 +154,7 @@ test('EXP-06 BluePlay program shows its world and reacts to Act, keys, clicks, R
   const world = page.getByRole('button', { name: 'BluePlay world' });
   const output = page.getByRole('region', { name: 'Terminal' }).locator('pre');
   await expect(world).toBeVisible();
-  await expect(page.getByRole('status')).toHaveText('Paused');
+  await expect(page.getByRole('button', { name: 'Run', exact: true })).toBeEnabled();
   await expect(output).toHaveText('start\n');
   await expect.poll(() => redPixels(page)).toBeGreaterThan(100);
 
@@ -184,14 +184,14 @@ test('EXP-06 BluePlay program shows its world and reacts to Act, keys, clicks, R
   const pausedWidths = await widths();
   expect(new Set(pausedWidths).size).toBe(1);
   await controls.getByRole('button', { name: 'Run' }).click();
-  await expect(page.getByRole('status')).toHaveText('Running');
+  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeEnabled();
   await expect(controls.getByRole('button', { name: 'Run' })).toHaveCount(0);
   await expect(buttons.nth(1)).toHaveAccessibleName('Pause');
   expect(await widths()).toEqual(pausedWidths);
   await expect(controls.getByRole('button', { name: 'Reset' })).toBeDisabled();
   await expect.poll(async () => (await output.textContent())!.split('x=').length).toBeGreaterThan(10);
   await controls.getByRole('button', { name: 'Pause' }).click();
-  await expect(page.getByRole('status')).toHaveText('Paused');
+  await expect(page.getByRole('button', { name: 'Run', exact: true })).toBeEnabled();
 
   await controls.getByRole('button', { name: 'Reset' }).click();
   await expect(output).toHaveText('start\n');

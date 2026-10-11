@@ -5,19 +5,29 @@ import { parseProject, type SavedProject } from "./projectFormat";
  * The project part is exactly the `.bluek.json` payload, so the player can hand
  * it back to BlueK as a file or link unchanged.
  *
- * Which files declare a parameterless `main()` is only known after compiling;
+ * Which files declare a supported `main` is only known after compiling;
  * the exporter chooses from the runtime manifest and the player checks the
  * choice again against its own compile.
  */
 export type ExportedProgram = {
   format: "bluek-program";
   version: 1;
-  /** File whose parameterless `main()` starts the program. */
+  /** File whose supported `main` starts the program. */
   mainFile: string;
   /** BlueK instance that "Open in BlueK" links to. */
   blueKUrl: string;
   project: SavedProject;
+  /** Presentation choices; absent in older exports means enabled. */
+  allowDownload?: boolean;
+  allowBlueK?: boolean;
+  showProjectName?: boolean;
+  /** Shared games start simulation after main; older HTML exports stay paused. */
+  autoRun?: boolean;
+  showControls?: boolean;
+  showSpeed?: boolean;
 };
+
+export type ProgramOptions = Pick<ExportedProgram, "allowDownload" | "allowBlueK" | "showProjectName" | "autoRun" | "showControls" | "showSpeed">;
 
 /** The template element whose text the exporter fills with the program JSON. */
 export const PROGRAM_ELEMENT_ID = "bluek-program";
@@ -58,17 +68,29 @@ export function parseExportedProgram(value: unknown): ExportedProgram {
   if (!isRecord(value) || value.format !== "bluek-program" || value.version !== 1)
     throw new Error("Invalid BlueK program.");
   const project = parseProject(value.project);
+  for (const key of ["allowDownload", "allowBlueK", "showProjectName", "autoRun", "showControls", "showSpeed"] as const) {
+    if (value[key] !== undefined && typeof value[key] !== "boolean")
+      throw new Error("Invalid BlueK program options.");
+  }
+  if (project.library?.id === "blueplay" && value.autoRun !== true && value.showControls === false)
+    throw new Error("A paused BluePlay program needs its Run button.");
   return {
     format: "bluek-program",
     version: 1,
     mainFile: validateMainFile(value.mainFile, project),
     blueKUrl: validateBlueKUrl(value.blueKUrl),
     project,
+    allowDownload: value.allowDownload as boolean | undefined,
+    allowBlueK: value.allowBlueK as boolean | undefined,
+    showProjectName: value.showProjectName as boolean | undefined,
+    autoRun: value.autoRun as boolean | undefined,
+    showControls: value.showControls as boolean | undefined,
+    showSpeed: value.showSpeed as boolean | undefined,
   };
 }
 
-export function createExportedProgram(project: SavedProject, mainFile: string, blueKUrl: string): ExportedProgram {
-  return parseExportedProgram({ format: "bluek-program", version: 1, mainFile, blueKUrl, project });
+export function createExportedProgram(project: SavedProject, mainFile: string, blueKUrl: string, options: ProgramOptions = {}): ExportedProgram {
+  return parseExportedProgram({ ...options, format: "bluek-program", version: 1, mainFile, blueKUrl, project });
 }
 
 /**

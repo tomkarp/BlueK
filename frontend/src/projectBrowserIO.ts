@@ -1,5 +1,5 @@
 import { encodeBlueKLink } from "./uiParity";
-import { loadProjectFromServer, saveProjectToServer } from "./shareApi";
+import { loadEditableProjectFromServer, saveProjectToServer } from "./shareApi";
 import {
   blueJProjectFromEntries,
   entriesFromZip,
@@ -7,6 +7,7 @@ import {
 } from "./blueJImport";
 import type { SavedProject as ProjectSource } from "./projectFormat";
 import type { ShareLinkDialog } from "./uiTypes";
+import { applicationUrl, shortShareUrl } from "./shareLinks";
 
 export function downloadFile(content: string, type: string, fileName: string) {
   const link = document.createElement("a");
@@ -65,12 +66,7 @@ export async function copyFullProjectLink(
   state: boolean,
   promptLabel = "Copy this project link:",
 ): Promise<boolean> {
-  const url = new URL(
-    window.location.protocol === "file:"
-      ? "https://bluek.de/"
-      : window.location.href,
-  );
-  url.search = "";
+  const url = applicationUrl(import.meta.env.BASE_URL, window.location.href);
   url.hash = `bluek=${await encodeBlueKLink(payload)}${readme ? "&readme=1" : ""}${state ? "&state=1" : ""}`;
   return copyLink(url.href, promptLabel);
 }
@@ -82,7 +78,12 @@ export async function saveShortProjectLink(
   promptLabel = "Copy this project link:",
 ): Promise<ShareLinkDialog> {
   const { code } = await saveProjectToServer(payload);
-  const url = new URL(`/load/${code}`, window.location.origin);
+  const url = shortShareUrl(
+    "bluek",
+    code,
+    import.meta.env.BASE_URL,
+    window.location.href,
+  );
   if (readme) url.searchParams.set("readme", "1");
   if (state) url.searchParams.set("state", "1");
   return { url: url.href, code, copied: await copyLink(url.href, promptLabel) };
@@ -97,7 +98,7 @@ export async function readSharedProject(code: string): Promise<unknown> {
   if (words.length !== 3 || words.some((word) => !/^[a-z]{4,6}$/.test(word))) {
     throw new Error("Enter exactly three words, each 4–6 letters long.");
   }
-  return loadProjectFromServer(words.join("-"));
+  return loadEditableProjectFromServer(words.join("-"));
 }
 
 export async function readProjectFile(file: File): Promise<unknown> {

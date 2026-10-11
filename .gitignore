@@ -17,5 +17,6 @@ vendor/kotlite-interpreter/.gradle/
 vendor/kotlite-interpreter/build/
 .gradle-local/
 .DS_Store
-server/data/projects.sqlite*
+# Local share-service data, including SQLite databases and WAL/SHM sidecars.
+server/data/
 .cache/

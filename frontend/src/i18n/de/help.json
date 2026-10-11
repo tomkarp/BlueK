@@ -64,7 +64,10 @@
     "linkReload": "Ein Projektlink ersetzt den Entwurf dieses Tabs und entfernt die Projektdaten aus der Adressleiste. Neuladen behält deine Änderungen. Öffne den ursprünglichen Link erneut, um zum Ausgangsprojekt zurückzukehren.",
     "readmeAndResources": "README und Ressourcen",
     "resources": "Klicke auf das Dokument im Diagramm, um die README in Markdown zu bearbeiten. Benenne das Projekt in der oberen Leiste. In BluePlay-Projekten fügst du WAV- oder MP3-Sounds über die Audio-Schaltfläche in der Werkzeugleiste hinzu; eigene Sounds kannst du dort umbenennen oder entfernen, die eingebauten nicht. PNG- oder JPEG-Bilder fügst du genauso über die Bilder-Schaltfläche hinzu; transparente PNG-Pixel kollidieren nicht, ein JPEG kollidiert als ganzes Rechteck.",
-    "offlineCaution": "Die Offline-Version wurde bisher wenig in der Praxis getestet. Prüfe deine Projekte und deinen Browser, bevor du dich darauf verlässt, und sichere sie als JSON."
+    "offlineCaution": "Die Offline-Version wurde bisher wenig in der Praxis getestet. Prüfe deine Projekte und deinen Browser, bevor du dich darauf verlässt, und sichere sie als JSON.",
+    "exportViews": "Speichern / Exportieren bietet „BlueK-Projekt“ für bearbeitbare Projekte und „Ausführbares Programm“ für Player-Links und HTML.",
+    "programLinks": "Die gewählte main direkt ohne Entwickleransicht starten. Vollständige Links enthalten das gesamte Programm ohne Ablaufdatum; kurze Links speichern es für 30 Tage.",
+    "programOptions": "Player-Links und HTML teilen Optionen für die Anzeige des Projektnamens, Projekt-Download und „In BlueK öffnen“. Der Quellcode bleibt Bestandteil des Programms. BluePlay kann automatisch starten; Buttons und Speedleiste lassen sich dann unabhängig ausblenden. Ohne Autostart bleibt Start verfügbar. Zurücksetzen berücksichtigt den Autostart."
   },
   "state": {
     "whatGetsSaved": "Was gespeichert wird",

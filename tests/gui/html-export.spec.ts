@@ -34,6 +34,7 @@ const greeter: Files = [
 test('EXP-08 Export as HTML compiles on demand, asks for a name and downloads a runnable file', async ({ page }, testInfo) => {
   await project(page, greeter);
   await page.getByRole('button', { name: 'Save / Export' }).click();
+  await page.getByRole('button', { name: 'Runnable program', exact: true }).click();
   const button = exportButton(page);
   await expect(button).toContainText('Export as HTML (Beta)');
   await expect(button).toContainText('A single web page that runs the program, without BlueK.');
@@ -65,6 +66,7 @@ test('EXP-09 with several mains the export asks which one to start and Cancel do
   const chooser = page.getByRole('dialog', { name: 'Choose main', exact: true });
 
   await page.getByRole('button', { name: 'Save / Export' }).click();
+  await page.getByRole('button', { name: 'Runnable program', exact: true }).click();
   await exportButton(page).click();
   await expect(chooser).toContainText('Which main() should the exported HTML file start?');
   await expect(chooser.getByRole('button', { name: /\.kt — main\(\)/ })).toHaveCount(2);
@@ -74,6 +76,7 @@ test('EXP-09 with several mains the export asks which one to start and Cancel do
   expect(downloads).toHaveLength(0);
 
   await page.getByRole('button', { name: 'Save / Export' }).click();
+  await page.getByRole('button', { name: 'Runnable program', exact: true }).click();
   await exportButton(page).click();
   const [download] = await Promise.all([
     page.waitForEvent('download'),
@@ -89,9 +92,11 @@ test('EXP-10 a project without main cannot be exported and compile errors stop t
   const downloads: Download[] = [];
   page.on('download', download => downloads.push(download));
   await page.getByRole('button', { name: 'Save / Export' }).click();
+  await page.getByRole('button', { name: 'Runnable program', exact: true }).click();
   await exportButton(page).click();
   await expect(page.getByRole('status').filter({ hasText: 'Export as HTML needs a file with a parameterless main().' })).toBeVisible();
   await page.getByRole('button', { name: 'Save / Export' }).click();
+  await page.getByRole('button', { name: 'Runnable program', exact: true }).click();
   await expect(exportButton(page)).toBeDisabled();
   await expect(exportButton(page)).toContainText('Needs a file with a parameterless main().');
   await page.getByRole('dialog', { name: 'Save / Export' }).getByRole('button', { name: 'Cancel' }).click();
@@ -101,6 +106,7 @@ test('EXP-10 a project without main cannot be exported and compile errors stop t
   await page.reload();
   await expect(page.getByLabel('Project name')).toHaveValue('Fehler');
   await page.getByRole('button', { name: 'Save / Export' }).click();
+  await page.getByRole('button', { name: 'Runnable program', exact: true }).click();
   await exportButton(page).click();
   // As with Compile, the file opens with its error marked; nothing is downloaded.
   await expect(page.getByRole('dialog', { name: 'App.kt' }).getByText(/Line 2: TypeMismatchException/)).toBeVisible();
@@ -112,11 +118,14 @@ test('EXP-11 a BluePlay project exported from the IDE shows its world', async ({
   await project(page, [{ fileName: 'Spiel.kt', source: 'fun main() {\n    println("Spiel")\n    World(160, 80, 1).show()\n}\n' }],
     { projectName: 'Spiel', library: { id: 'blueplay', version: 1 } });
   await page.getByRole('button', { name: 'Save / Export' }).click();
+  await page.getByRole('button', { name: 'Runnable program', exact: true }).click();
+  await page.getByLabel('Start game automatically').uncheck();
   const [download] = await Promise.all([page.waitForEvent('download'), exportButton(page).click()]);
   expect(download.suggestedFilename()).toBe('Spiel.html');
   const { program, player } = await openExportedFile(page, download, testInfo);
   expect(program.project.library).toEqual({ id: 'blueplay', version: 1 });
   await expect(player.getByRole('button', { name: 'BluePlay world' })).toBeVisible();
-  await expect(player.getByRole('status')).toHaveText('Paused');
+  await expect(player.getByRole('button', { name: 'Run', exact: true })).toBeEnabled();
+  await expect(player.getByRole('status')).toHaveCount(0);
   await expect(player.getByRole('region', { name: 'Terminal' }).locator('pre')).toHaveText('Spiel\n');
 });

@@ -105,6 +105,7 @@ test('GUI-62 local formatter and HTML program export work from the single file',
   await expect(editor.locator('.cm-line').nth(1)).toHaveText('    println("exportiert")');
   await editor.getByRole('button', { name: 'Close editor' }).click();
   await page.getByRole('button', { name: 'Save / Export', exact: true }).click();
+  await page.getByRole('button', { name: 'Runnable program', exact: true }).click();
   const [download] = await Promise.all([
     page.waitForEvent('download'), page.getByRole('button', { name: /^Export as HTML/ }).click(),
   ]);

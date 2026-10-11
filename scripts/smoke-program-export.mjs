@@ -35,6 +35,10 @@ assert.deepEqual(JSON.parse(text), json(program), 'Escaped JSON is the same valu
 // Round trip through a browser's HTML parser, as the player reads it.
 const template = `<!doctype html><title>BlueK</title>${PROGRAM_PLACEHOLDER}<script>window.ok = 1</script>`;
 const html = embedProgram(template, program);
+const linksBundle = await rolldown({ input: 'frontend/src/programLinks.ts' });
+const linksOutput = await linksBundle.generate({ format: 'esm' });
+await linksBundle.close();
+const linksModule = 'data:text/javascript;base64,' + Buffer.from(linksOutput.output[0].code).toString('base64');
 const browser = await chromium.launch();
 try {
   const page = await browser.newPage();
@@ -51,6 +55,31 @@ try {
   assert.deepEqual(dialogs, [], 'Embedded sources never execute');
   assert.deepEqual(json(parseEmbeddedProgram(parsed.text)), json(program));
   assert.equal(parseEmbeddedProgram(parsed.text).project.files[1].source, hostile);
+  const links = await page.evaluate(async ({ moduleUrl, project }) => {
+    const { programForLink, fullProgramLink, shortProgramLink } = await import(moduleUrl);
+    const program = programForLink(project, 'App.kt', '/BlueK/', 'https://example.github.io/BlueK/', { allowBlueK: false });
+    // Exercise the uncompressed fallback as well as the shared URL length guard.
+    Object.defineProperty(window, 'CompressionStream', { configurable: true, value: undefined });
+    delete window.CompressionStream;
+    let largeError = '';
+    try {
+      await fullProgramLink({ ...program, project: { ...project, files: [{ fileName: 'App.kt', kind: 'functions', source: 'x'.repeat(1_000_000) }] } }, '/BlueK/', 'https://example.github.io/BlueK/');
+    } catch (error) { largeError = error.message; }
+    return {
+      hosted: program.blueKUrl,
+      offline: programForLink(project, 'App.kt', './', 'file:///tmp/BlueK.html', {}).blueKUrl,
+      developer: program.blueKUrl,
+      full: await fullProgramLink(program, '/BlueK/', 'https://example.github.io/BlueK/'),
+      short: shortProgramLink('green-lamp-river', '/BlueK/', 'https://example.github.io/BlueK/'),
+      largeError,
+    };
+  }, { moduleUrl: linksModule, project });
+  assert.equal(links.hosted, 'https://example.github.io/BlueK/');
+  assert.equal(links.offline, 'https://bluek.de/');
+  assert.equal(links.developer, 'https://example.github.io/BlueK/');
+  assert.match(links.full, /^https:\/\/example\.github\.io\/BlueK\/#run=p1\./);
+  assert.equal(links.short, 'https://example.github.io/BlueK/run/green-lamp-river');
+  assert.match(links.largeError, /too large for a full link/);
 } finally {
   await browser.close();
 }
@@ -74,6 +103,17 @@ assert.equal(blueKUrlForExport('https://example.github.io', '/BlueK/'), 'https:/
 assert.equal(blueKUrlForExport('http://localhost:5173', '/'), PUBLIC_BLUEK_URL, 'Development server');
 assert.equal(blueKUrlForExport('http://127.0.0.1:8765', '/'), PUBLIC_BLUEK_URL, 'Offline package');
 assert.equal(blueKUrlForExport('http://[::1]:8765', '/'), PUBLIC_BLUEK_URL);
+
+assert.equal(parseExportedProgram(program).allowDownload, undefined, 'Old HTML exports retain their actions');
+const restricted = createExportedProgram(project, 'App.kt', PUBLIC_BLUEK_URL, { allowDownload: false, allowBlueK: false, showProjectName: false, autoRun: true, showControls: false, showSpeed: false });
+assert.equal(parseEmbeddedProgram(programScriptText(restricted)).allowDownload, false);
+assert.equal(parseEmbeddedProgram(programScriptText(restricted)).showControls, false);
+assert.equal(parseEmbeddedProgram(programScriptText(restricted)).showProjectName, false);
+assert.equal(parseExportedProgram(program).showProjectName, undefined, 'Older exports continue showing the project name');
+for (const key of ['allowDownload', 'allowBlueK', 'showProjectName', 'autoRun', 'showControls', 'showSpeed'])
+  assert.throws(() => parseExportedProgram({ ...program, [key]: 'false' }), /options/);
+assert.throws(() => createExportedProgram({ ...project, library: { id: 'blueplay', version: 1 } }, 'App.kt', PUBLIC_BLUEK_URL,
+  { autoRun: false, showControls: false }), /Run button/);
 
 assert.equal(exportFileName('  Mein <Spiel>  ', '.html'), 'Mein -Spiel-.html');
 assert.equal(exportFileName('', '.bluek.json'), 'bluek-project.bluek.json');

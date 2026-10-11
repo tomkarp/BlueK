@@ -124,6 +124,7 @@ counter.value`}</code
             {t("help.projects.retention")}
           </p>
           <h5>{t("help.projects.importAndExportReference")}</h5>
+          <p>{t("help.projects.exportViews")}</p>
           <dl>
             <dt>{t("ui.common.openImport")}</dt>
             <dd>
@@ -141,6 +142,8 @@ counter.value`}</code
             <dd>
               {t("help.projects.shortLink")}
             </dd>
+            <dt>{t("ui.transfer.runnableProgram")}</dt>
+            <dd>{t("help.projects.programLinks")}</dd>
             <dt>{t("ui.common.exportAsHTMLBeta")}</dt>
             <dd>
               {t("help.projects.htmlExport")}
@@ -149,6 +152,7 @@ counter.value`}</code
             <dd>{t("help.projects.notImplementedYet")}</dd>
           </dl>
           <p><TranslatedText message="help.projects.linkOptions" /></p>
+          <p>{t("help.projects.programOptions")}</p>
           <p>
             {t("help.projects.linkReload")}
           </p>

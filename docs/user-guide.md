@@ -91,20 +91,63 @@ folders. Historical BluePlay library source files are replaced by the built-in
 library when applicable; Kotlin files, card positions, images and sounds are
 imported. Java source is not interpreted.
 
-**Save / Export** offers:
+**Save / Export** keeps the same window size when switching views or changing
+options. The content scrolls on smaller screens; Cancel stays available.
+Choose the view recipients will open:
 
-- **Copy Full Project Link**: the complete project is encoded in the URL.
-- **Copy Short Link**: the optional share service stores the project for 30 days.
-  Anyone with the link can open it.
-- **Export Project JSON**: a reusable `.bluek.json` file.
-- **Export as HTML (Beta)**: a standalone program page with the runtime embedded.
-  It requires a supported `main` and runs without a server or network.
-- **Export BlueJ Project (.zip)** is not implemented yet.
+- **BlueK project**: full project link, 30-day short link and reusable project
+  JSON. These open the editable developer workspace. BlueJ ZIP export is not
+  implemented yet.
+- **Runnable program**: full program link, 30-day short program link and
+  **Export as HTML (Beta)**. These start the chosen `main()` in a console or
+  BluePlay player, without classes, an object bench or editors. If several
+  files have a supported main, choose one for each export. `main()` and
+  `main(args: Array<String>)` are supported; args is an empty array.
 
-The two link actions share **Open README** and **Load state** options.
-Load state requires a default test class and automatically restores its state
-on opening the link. Both options can be selected together.
-Regular JSON imports and autosave restoration do not automatically load state.
+Full links contain the complete project, resources, selected main and player
+options in the URL, with no server storage or expiry. Very large programs
+need a short link or HTML export. Short links store the same payload for 30
+days on the optional share service. Anyone with the link can open it.
+HTML exports embed the runtime and run without a server or network.
+
+Project links use `#bluek=…` or `/bluek/three-word-code`; runnable exports use
+`#run=…` or `/run/three-word-code`. Both forms preserve the BlueK base address
+and select the developer workspace or player without a filename in the link.
+Main selection and all execution options travel inside the runnable package.
+Existing permanent `#bluek=…` links remain valid. The old `/load/…` short-link
+route is temporarily supported while those stored links expire.
+
+An expired or unknown short link shows an explanation instead of a program or
+an empty project; ask the person who shared it for a new link. Opening a link
+that cannot be loaded keeps the work previously open in that browser tab.
+If a project code is opened as a program, the player offers to open the
+project in BlueK instead.
+
+Project links share **Open README** and **Load state** options. Load state
+requires a default test class and automatically restores its state on opening
+the link. Both options can be selected together. Regular JSON imports and
+autosave restoration do not automatically load state.
+
+All three runnable export actions use one shared **For links and HTML** options
+panel beside the equally sized actions (stacked on small screens).
+Program links and HTML exports share independent **Show project name**,
+**Allow source download** and **Include “Open in BlueK”** options. Hiding the
+name removes the page heading and uses a generic browser-tab title; the saved
+project name is preserved. The player has no running/paused status label. The download is the complete editable
+`.bluek.json` project. The developer link opens that project in normal BlueK;
+for a short program link it uses the same stored copy and expiry. Without
+**Include “Open in BlueK”**, a short program code also cannot be opened as a
+project through `/bluek/…` or **Open / Import**. These options do not provide
+source confidentiality: the interpreter needs the source, which remains part of
+the exported program and can be extracted with browser developer tools.
+
+BluePlay additionally offers **Start game automatically**, **Show Act / Run /
+Reset buttons** and **Show speed slider**. New exports start automatically by
+default. Buttons and speed can be hidden independently when autostart is on.
+With autostart off, buttons remain visible so the game can be started. Main
+always runs when the player opens; autostart controls the subsequent simulation.
+Reset runs the selected main again and resumes simulation when autostart is on.
+Older HTML exports retain their original paused start and visible controls.
 
 After importing a link, BlueK removes the project payload from the address bar.
 Reload then restores your own draft. To return to the original assignment,
@@ -118,7 +161,7 @@ browser. No installation, server, Node.js or Python is needed.
 
 The editor, interpreter, BluePlay images, templates, formatter and HTML export
 are embedded. Short links require the online service and are hidden offline.
-Full project links point to the online BlueK site; opening them needs internet.
+Full project and program links point to the online BlueK site; opening them needs internet.
 
 The offline version has not yet been widely tested in practice. Test your own
 projects and browser before relying on it. Browser autosave may depend on the

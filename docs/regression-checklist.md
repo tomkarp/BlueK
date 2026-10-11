@@ -109,7 +109,7 @@ Unless explicitly stated, visual user acceptance remains pending.
 | GUI-60 | BlueJ ZIP import, wrapper folders and metadata noise | Recorded browser pass |
 | GUI-61 | BlueJ BluePlay migration to built-in library | Recorded import checks; folder-drop visual acceptance pending |
 | GUI-62 | Standalone offline IDE with file:// operation | Four offline Chromium/WebKit file:// checks passed (2026-10-01) |
-| GUI-63 | Offline instructions/warning/GitHub link before ZIP download | GUI-63 Chromium passed (2026-10-08); link attributes checked, no issue submitted; dark colors not separately inspected |
+| GUI-63 | Offline instructions/warning and in-app problem report before ZIP download | GUI-63 Chromium passed (2026-10-08); updated from the removed GitHub link to the private report dialog, Chromium passed 1/1 (2026-10-11) with the feedback service mocked and no report sent; dark colors not separately inspected |
 | GUI-64 | Compiler diagnostics open the relevant editor/source location | Recorded browser pass |
 | GUI-65 | Compact diagnostics and dismiss/retry behavior | Recorded browser pass |
 | GUI-66 | README sheet visibility and editor/preview | Recorded browser pass; `smoke-project-format` |
@@ -176,6 +176,14 @@ Unless explicitly stated, visual user acceptance remains pending.
 | EXP-10 | No HTML export without a supported main | Recorded automated pass |
 | EXP-11 | IDE-to-player world/output transfer | Recorded automated pass |
 | EXP-12 | Shared ANSI/text-sizing terminal parser in player | Recorded browser pass; `npm run build:player` |
+| EXP-13 | Full runnable link, explicit main/cancel, console input, project download and developer view | Chromium browser pass, 2026-10-10 |
+| EXP-14 | 30-day runnable short link, stored options, developer import and expiry | Chromium with mocked API and real SQLite service checks passed, 2026-10-10; production deployment pending |
+| EXP-15 | BluePlay autostart/buttons/speed combinations, required Run button, reset and HTML options | Six valid combinations and IDE/HTML flow passed in Chromium, 2026-10-10; agent inspected desktop/mobile screenshots; user acceptance pending |
+| EXP-16 | Optional project heading/tab title for full/short links and HTML; no status label or empty header | Format/server checks and Chromium browser cases passed, 2026-10-10; agent inspected mobile options; user acceptance pending |
+| EXP-17 | Stable export window across views/options, persistent Cancel and one options panel for full/short/HTML | Chromium bounds and identical exported settings passed, 2026-10-10; agent inspected desktop/mobile; user acceptance pending |
+| EXP-18 | bluek/run fragments and short paths, player/IDE navigation, deployment prefixes and transitional /load | Chromium/WebKit and prefixed production routing passed, 2026-10-11; user acceptance pending |
+| EXP-19 | Unavailable program links: translated player explanation for expired/unknown codes (30-day note, BlueK link), malformed codes and undecodable `#run`; a project code under /run/ offers its project; capitalized codes play | Chromium GUI, real-service routing (Chromium/WebKit) and agent end-to-end passed, 2026-10-11; German player screen inspected; user acceptance pending |
+| EXP-20 | A short program code opens its project under /bluek/ and in code import with one request; disabled “Open in BlueK” refuses both (403) | Share-server smoke, real-service routing (Chromium/WebKit), GUI-138 and agent end-to-end passed, 2026-10-11; production deployment pending |
 | RT-37 | Suspendable binary-stdlib lambda replay and canSuspend boundary | Recorded Node/bundle pass; dedicated browser check not performed in original record |
 | RT-38 | Typed native exceptions and non-catchable interpreter faults | Node/bundle pass; linked browser regression coverage |
 | RT-39 | Kotlin substring bound validation | Recorded runtime pass; `smoke-curriculum-kotlin.mjs` |
@@ -289,6 +297,7 @@ Unless explicitly stated, visual user acceptance remains pending.
 | GUI-130 | Supported browser-language default with English fallback, persisted German/English choice, unchanged source/live state/diagnostics, translated dialogs/manual/editor search and offline use | 188/188 full GUI cases and final affected 11/11 selection passed (2026-10-08); nine localization cases passed; offline language case passed; agent screenshots inspected, user acceptance pending |
 
 | GUI-137 | Private bug/Kotlin-support report dialog, diagnostic context, explicit project opt-in, JSON preview, durable private delivery and receipt; footer offers Cancel/Send without a report download | Local dialog/preview and initial published main/beta dialog visually inspected (2026-10-10); final wording/information notice approved for publication, final typecheck: zero errors/warnings. Hosted/offline builds completed. No automated tests added/run. Private repo/labels/watch and protected restricted token installed; main/beta/local feedback configuration available. Actual issue/attachment delivery remains unverified by the agent. |
+| GUI-138 | A failed IDE link (expired, blocked, undecodable or BluePlay example) keeps the tab draft, shows a dismissible translated notice and cleans the URL; same-page `#bluek`/`#run` links reload through one handler, also offline | Chromium GUI case and offline Chromium/WebKit agent check passed, 2026-10-11; German light/dark notice inspected; user acceptance pending |
 
 ## Recorded verification
 
@@ -606,6 +615,68 @@ keep detailed cases in tests and avoid accumulating duplicate narratives.
   `npm run test:project-format` passed and the repeated typecheck passed with
   zero errors/warnings.
 
+
+## Runnable sharing and export choices — 10 October 2026
+
+- Save / Export now separates editable BlueK projects from runnable programs.
+  Program links and HTML use the same player and option payload; older HTML
+  retains its defaults. BluePlay cannot hide its buttons without autostart.
+- Passed: typecheck (0 errors/warnings), i18n, player/hosted builds, static and
+  Svelte architecture checks, workspace controllers, program-export helpers
+  (including URL size limit, offline and /BlueK/ paths), and share-service tests
+  with a temporary SQLite database (roundtrip, options, 30-day expiry/cleanup).
+- Browser evidence: existing HTML/player cases EXP-01–12 passed (13 cases,
+  including WebKit file://). New EXP-13–15 and GUI-118/119 passed (11 cases);
+  localization and affected GUI-22/23/44/67, RT-33 passed in the preceding
+  20-case focused run. API calls in EXP-14 are mocked; SQLite behavior is checked
+  independently by `test:share-server`.
+- Offline package: all six Chromium/WebKit file:// cases passed, including HTML
+  export and German language/manual. Agent inspected the desktop and German
+  390×720 export-dialog screenshots. The mobile dialog scrolls to its remaining
+  text/actions; user visual acceptance has not yet been recorded.
+- Initial browser run: 14/22 passed. EXP-14 found that the developer program-code
+  link was missing from explicit project import detection; fixed and rerun.
+  Seven BluePlay failures came from an invalid test fixture mixing a class and
+  top-level main in one file; split into valid files and rerun successfully.
+- Sandbox initially prevented local listeners and browser startup; those checks
+  subsequently passed with approved execution outside the sandbox.
+- Local development/share servers run on 5173/8787 for user testing. Entire
+  `server/data/` is Git-ignored; no stored data is tracked. Production short
+  program links require the updated service. No deployment or commit performed.
+
+
+Follow-up — 10 October 2026: removed the player's execution-status label and
+added **Show project name** to all runnable exports. Turning it off hides the
+heading and uses a generic tab title while preserving the saved project name.
+With name, download and developer link off, there is no header.
+
+- Passed: typecheck (0 errors/warnings), i18n (717 messages), player/hosted builds,
+  export-format/URL helpers and real share-service checks including boolean
+  validation and roundtrip for `showProjectName`.
+- Actual browsers: 23/23 HTML/player/program-link cases passed in Chromium,
+  including the existing WebKit player case; 6/6 offline Chromium/WebKit cases
+  passed. Short-link API calls in GUI coverage remain mocked; the service test
+  uses a temporary SQLite database. Agent inspected the updated German mobile
+  options screenshot. User visual acceptance is pending.
+- Local share service restarted with the updated validation; development server
+  remains available on 5173. No commit, push or production deployment.
+
+
+Follow-up — 10 October 2026: the Save / Export window now keeps fixed dimensions
+bounded by the viewport (760×680 on desktop). Only its content scrolls, keeping
+Cancel visible. Program full link, short link and HTML actions share one options
+panel labelled **For links and HTML**; all three actions have the same styling.
+
+- Passed: typecheck (0 errors/warnings), i18n and hosted build. The 22-case
+  focused Chromium run covered HTML/program exports and GUI-118/119. EXP-17
+  checks unchanged bounds across project/program, six checkbox changes and
+  view changes for English/German at 1440×1000, 800×700 and 390×720.
+- A separate actual browser export test confirmed identical settings in the
+  full URL, stored short-link payload (mocked API) and downloaded HTML. All six
+  offline Chromium/WebKit cases passed after the layout change.
+- Agent inspected German desktop/mobile screenshots; user visual acceptance is
+  pending. Local development/share servers remain running. No commit or push.
+
 ### Vim insert mode — 2026-10-10
 
 GUI-68: reproduced the existing bug on `main` in Chromium: the first inserted
@@ -617,3 +688,57 @@ Chromium and WebKit. The focused Chromium run passed 12/12 cases (GUI-42,
 GUI-68 and GUI-130), and the rebuilt offline GUI-130 case passed 1/1.
 `npm run typecheck` passed with zero errors/warnings; `npm run test:i18n`
 passed (666 messages). The user confirmed the local Vim fix works on 2026-10-10.
+
+### Unified share-link addresses — 2026-10-11
+
+EXP-18: permanent project links retain `#bluek=<payload>`. Runnable exports use
+`#run=<program>`, with main and all execution options in the envelope. New short
+links use `/bluek/<code>` and `/run/<code>` below the configured deployment base.
+`/bluek/` can open the project part of a runnable export; manual code import can
+also retrieve it. The transitional `/load/` cleanup is tracked in
+[issue #26](https://github.com/tomkarp/BlueK/issues/26), which records the removal
+date.
+
+- Passed: typecheck (zero errors/warnings), hosted/player/offline builds,
+  program-export helpers, workspace controllers, static/Svelte architecture.
+- Chromium: 38/39 focused export/link/GUI-118/119 cases passed. EXP-17's payload
+  comparison still looked for the old `play` fragment; after correcting that
+  test fixture to `run`, its isolated rerun passed (1/1). Selected main,
+  complete options in full/short/HTML exports, expiry, README/state options,
+  legacy `/load/` loading and URL cleanup were covered.
+- WebKit: all five targeted program-link cases passed. Production routing tests
+  passed in Chromium and WebKit against an actual `/BlueK/` build with a SPA
+  fallback, covering all four generated URL forms, source retrieval from a
+  run code, transitional `/load/`, no IDE code/CSS preloading and no project
+  drafts created by the player. API fixtures are mocked; unchanged storage
+  validation/expiry has separate share-server coverage.
+- Offline: all six file:// cases passed, including HTML export and WebKit.
+  Manual user acceptance of the new URL format remains pending.
+
+### Share-link error handling — 2026-10-11
+
+EXP-19/20, GUI-138: the share service decides which view a code may open
+(403 for a runnable code with “Open in BlueK” disabled, 409 for a project code
+under `/run/`); the client words every reason from the catalogs. Two defects
+found during review were fixed: a failed IDE link overwrote the tab's draft
+with an empty project, and manual code import reset the URL to `/` below a
+deployment prefix.
+
+- Passed: typecheck (zero errors/warnings), i18n (729 messages), static/Svelte
+  architecture, program export, share server (editable programs and 400/403/
+  404/409 replies), workspace controllers, project drafts, player worker, UI
+  behavior, player build and offline 6/6.
+- Full Chromium GUI suite: 217/218. GUI-63 failed because `bbf50d9` removed the
+  offline dialog's GitHub bug link without updating the test; unrelated to this
+  change. The test now checks the private report button instead: it closes the
+  offline dialog and opens the report dialog without sending anything (1/1).
+  After the final link-decoding and GUI-138 edits,
+  37/37 link/draft/export and 19/19 player/HTML/offline cases passed.
+- `smoke-share-routing.mjs` now runs against the real share service with a
+  temporary database instead of mocked replies; passed in Chromium and WebKit.
+- Agent end-to-end check (production builds at `/` and `/BlueK/`, real service,
+  Chromium/WebKit): 64/64 after updating its own expectations for capitalized
+  codes and blocked `/bluek/`. Offline hash navigation with a kept draft and the
+  empty template's error without links passed in Chromium and WebKit.
+- Pending: user acceptance; deploying the share service together with the
+  frontend.

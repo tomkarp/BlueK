@@ -556,21 +556,40 @@
     >
       {language.message(project.shareNotice)}
     </div>{/if}
-  {#if project.savedProjectsNotice || storageWarning}
-    <div class="project-recovery-notice" role="status" aria-live="polite">
-      <span>{storageWarning || t("ui.workspace.savedProjectsNotice")}</span>
-      {#if storageWarning}
-        <button
-          aria-label={t("ui.workspace.dismissStorageWarning")}
-          title={t("ui.workspace.dismiss")}
-          onclick={project.dismissAutosaveWarning}>×</button
-        >
-      {:else}
-        <button
-          aria-label={t("ui.workspace.dismissSavedProjectsNotice")}
-          title={t("ui.workspace.dismiss")}
-          onclick={() => (project.savedProjectsNotice = false)}>×</button
-        >
+  {#if project.linkProblem || project.savedProjectsNotice || storageWarning}
+    <div class="workspace-notices">
+      {#if project.linkProblem}
+        <div class="link-problem-notice" role="alert">
+          <span
+            >{language.message(project.linkProblem.message)}{project.linkProblem
+              .expired
+              ? ` ${t("ui.transfer.shortLinkExpired")}`
+              : ""}</span
+          >
+          <button
+            aria-label={t("ui.workspace.dismissLinkProblem")}
+            title={t("ui.workspace.dismiss")}
+            onclick={() => (project.linkProblem = null)}>×</button
+          >
+        </div>
+      {/if}
+      {#if project.savedProjectsNotice || storageWarning}
+        <div class="project-recovery-notice" role="status" aria-live="polite">
+          <span>{storageWarning || t("ui.workspace.savedProjectsNotice")}</span>
+          {#if storageWarning}
+            <button
+              aria-label={t("ui.workspace.dismissStorageWarning")}
+              title={t("ui.workspace.dismiss")}
+              onclick={project.dismissAutosaveWarning}>×</button
+            >
+          {:else}
+            <button
+              aria-label={t("ui.workspace.dismissSavedProjectsNotice")}
+              title={t("ui.workspace.dismiss")}
+              onclick={() => (project.savedProjectsNotice = false)}>×</button
+            >
+          {/if}
+        </div>
       {/if}
     </div>
   {/if}
@@ -767,6 +786,15 @@
     files={project.files}
     htmlExportBlocked={session.htmlExportBlocked}
     htmlExporting={project.htmlExporting}
+    bind:programAllowDownload={project.programAllowDownload}
+    bind:programAllowBlueK={project.programAllowBlueK}
+    bind:programShowProjectName={project.programShowProjectName}
+    bluePlay={project.library?.id === "blueplay"}
+    bind:programAutoRun={project.programAutoRun}
+    bind:programShowControls={project.programShowControls}
+    bind:programShowSpeed={project.programShowSpeed}
+    shareFullProgram={project.shareFullProgram}
+    shareShortProgram={project.shareShortProgram}
     openProjectDrop={project.openProjectDrop}
     importProject={project.importProject}
     loadSharedProjectFromCode={project.loadSharedProjectFromCode}

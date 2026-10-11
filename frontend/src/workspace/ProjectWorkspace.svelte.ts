@@ -54,7 +54,13 @@ import {
   type MediaProblem,
   type RenameProblem,
 } from "../projectMedia";
-import { loadProjectFromServer } from "../shareApi";
+import {
+  loadEditableProjectFromServer,
+  saveProgramToServer,
+  ShareCodeError,
+} from "../shareApi";
+import { shareRoute } from "../shareRoutes";
+import { programForLink, fullProgramLink, shortProgramLink } from "../programLinks";
 
 import type {
   ProjectFile,
@@ -148,6 +154,8 @@ export class ProjectWorkspace {
   });
   recentProjects: ProjectDraftSummary[] = $state.raw([]);
   savedProjectsNotice = $state(false);
+  /** Why the opened link could not be loaded; cleared when a project loads. */
+  linkProblem: { message: string; expired: boolean } | null = $state(null);
   /** Why the browser draft is not stored; `session` means it cannot be restored after a reload. */
   autosaveWarning: DraftSaveFailure | { reason: "session" } | null =
     $state(null);
@@ -256,13 +264,29 @@ export class ProjectWorkspace {
   /** Why the last add or rename in the Images/Audio dialog failed. */
   mediaErrors: Record<MediaKind, string> = $state({ sound: "", image: "" });
   shareNotice = $state("");
-  shareLinkDialog: { url: string; code: string; copied: boolean } | null =
+  shareLinkDialog: import("../uiTypes").ShareLinkDialog | null =
     $state(null);
   toolbarDialog: "open" | "save" | null = $state(null);
   shareCodeInput = $state("");
   shareCodeError = $state("");
   shareWithReadme = $state(false);
   shareWithState = $state(false);
+  programAllowDownload = $state(true);
+  programAllowBlueK = $state(true);
+  programShowProjectName = $state(true);
+  programAutoRun = $state(true);
+  programShowControls = $state(true);
+  programShowSpeed = $state(true);
+  programOptions = () => ({
+    allowDownload: this.programAllowDownload,
+    allowBlueK: this.programAllowBlueK,
+    showProjectName: this.programShowProjectName,
+    ...(this.library?.id === "blueplay" ? {
+      autoRun: this.programAutoRun,
+      showControls: !this.programAutoRun || this.programShowControls,
+      showSpeed: this.programShowSpeed,
+    } : {}),
+  });
   canShareState = $derived.by(
     () =>
       Boolean(this.defaultTestClass) &&
@@ -665,7 +689,10 @@ export class ProjectWorkspace {
     );
     this.host.ui().status = "Project exported";
   };
-  exportHtml = async () => {
+  exportHtml = () => this.exportProgram("export");
+  shareFullProgram = () => this.exportProgram("shareFullProgram");
+  shareShortProgram = () => this.exportProgram("shareShortProgram");
+  exportProgram = async (action: "export" | "shareFullProgram" | "shareShortProgram") => {
     if (
       !this.files.length ||
       this.htmlExporting ||
@@ -684,15 +711,18 @@ export class ProjectWorkspace {
     if (!entries.length) {
       this.host.ui().status = "Export failed";
       this.showExportNotice(
-        "Export as HTML needs a file with a parameterless main().",
+        action === "export"
+          ? "Export as HTML needs a file with a parameterless main()."
+          : this.text("ui.transfer.programNeedsMain"),
       );
       return;
     }
     if (entries.length > 1) {
-      this.host.session().requestExport(snapshot.generationId);
+      this.host.session().requestExport(snapshot.generationId, action);
       return;
     }
-    await this.writeHtmlExport(entries[0], snapshot.generationId);
+    if (action === "export") await this.writeHtmlExport(entries[0], snapshot.generationId);
+    else await this.writeProgramLink(entries[0], snapshot.generationId, action === "shareShortProgram");
   };
   showExportNotice = (text: string) => {
     this.shareNotice = text;
@@ -711,7 +741,9 @@ export class ProjectWorkspace {
         mainFile,
         import.meta.env.BASE_URL,
         window.location.href,
+        this.programOptions(),
       );
+      if (generationId !== this.host.session().runtime.generationId) return;
       downloadFile(
         html,
         "text/html",
@@ -723,6 +755,25 @@ export class ProjectWorkspace {
       this.showExportNotice(
         reason instanceof Error ? reason.message : String(reason),
       );
+    } finally {
+      this.htmlExporting = false;
+    }
+  };
+  writeProgramLink = async (mainFile: string, generationId: string, short: boolean) => {
+    if (generationId !== this.host.session().runtime.generationId || this.htmlExporting) return;
+    this.htmlExporting = true;
+    try {
+      const program = programForLink(this.projectPayload(), mainFile, import.meta.env.BASE_URL, window.location.href, this.programOptions());
+      const saved = short ? await saveProgramToServer(program) : null;
+      const url = saved
+        ? shortProgramLink(saved.code, import.meta.env.BASE_URL, window.location.href)
+        : await fullProgramLink(program, import.meta.env.BASE_URL, window.location.href);
+      if (generationId !== this.host.session().runtime.generationId) return;
+      const copied = await copyLink(url, this.text("ui.transfer.copyThisProgramLink"));
+      if (saved) this.shareLinkDialog = { url, code: saved.code, copied, program: true };
+      this.showExportNotice(this.text(copied ? "ui.transfer.programLinkCopied" : "ui.transfer.programLinkReady"));
+    } catch (reason) {
+      this.showExportNotice(reason instanceof Error ? reason.message : String(reason));
     } finally {
       this.htmlExporting = false;
     }
@@ -764,7 +815,11 @@ export class ProjectWorkspace {
         await readSharedProject(this.shareCodeInput),
         "Shared BlueK project loaded. Compile the project.",
       );
-      window.history.replaceState(window.history.state, "", "/");
+      window.history.replaceState(
+        window.history.state,
+        "",
+        window.location.pathname,
+      );
       this.shareCodeInput = "";
       this.shareCodeError = "";
       this.toolbarDialog = null;
@@ -791,6 +846,7 @@ export class ProjectWorkspace {
     );
     this.saveAutosave();
     this.savedProjectsNotice = false;
+    this.linkProblem = null;
     const librarySourceFiles = new Set([
       "World.kt",
       "Actor.kt",
@@ -1002,6 +1058,7 @@ export class ProjectWorkspace {
   moveCard = this.diagram.moveCard;
   endCardDrag = this.diagram.endCardDrag;
   initialize = async (): Promise<void> => {
+    const route = shareRoute(import.meta.env.BASE_URL, window.location.href);
     const linkOpensReadme =
       (new URLSearchParams(window.location.hash.slice(1)).get("readme") ??
         new URLSearchParams(window.location.search).get("readme")) === "1";
@@ -1012,82 +1069,92 @@ export class ProjectWorkspace {
       if (linkLoadsState) await this.host.tests().loadDefaultFixture();
       if (linkOpensReadme) this.openReadme();
     };
-    const loadExample = async () => {
-      const serverMatch = window.location.pathname.match(
-        /^\/load\/((?:[a-z]{4,6}-){2,3}[a-z]{4,6})\/?$/,
-      );
-      if (serverMatch) {
-        try {
-          await this.loadProject(
-            await loadProjectFromServer(serverMatch[1]),
-            "Shared BlueK project loaded. Compile the project.",
-          );
-          window.history.replaceState(window.history.state, "", "/");
-          await applyLinkOptions();
-        } catch (reason) {
-          this.host.ui().status = "Project error";
-          this.host.ui().error =
-            reason instanceof Error
-              ? reason.message
-              : "Could not load the shared BlueK project.";
-        }
-        return;
+    type LinkProblem = NonNullable<ProjectWorkspace["linkProblem"]>;
+    const linkProblem = (reason: unknown, fallback: string): LinkProblem => {
+      this.host.ui().status = "Project error";
+      return {
+        message: reason instanceof Error ? reason.message : fallback,
+        expired:
+          reason instanceof ShareCodeError && reason.problem === "missing",
+      };
+    };
+    const openShared = async (
+      load: () => Promise<unknown>,
+      fallback: string,
+      cleanUrl: string,
+    ): Promise<LinkProblem | null> => {
+      try {
+        await this.loadProject(
+          await load(),
+          "Shared BlueK project loaded. Compile the project.",
+        );
+      } catch (reason) {
+        return linkProblem(reason, fallback);
+      } finally {
+        // A failed link is reported once; reloading starts normally.
+        window.history.replaceState(window.history.state, "", cleanUrl);
       }
+      await applyLinkOptions();
+      return null;
+    };
+    const openLinkedProject = async (): Promise<LinkProblem | null> => {
+      // Legacy /load/ cleanup is tracked in https://github.com/tomkarp/BlueK/issues/26.
+      if (route && route.kind !== "run")
+        return openShared(
+          () => loadEditableProjectFromServer(route.code),
+          "Could not load the shared BlueK project.",
+          route.basePath,
+        );
       const shared = new URLSearchParams(window.location.hash.slice(1)).get(
         "bluek",
       );
-      if (shared) {
-        try {
-          await this.loadProject(
-            await decodeProjectLink(shared),
-            "Shared BlueK project loaded. Compile the project.",
-          );
-          window.history.replaceState(
-            window.history.state,
-            "",
-            window.location.pathname,
-          );
-          await applyLinkOptions();
-        } catch (reason) {
-          this.host.ui().status = "Project error";
-          this.host.ui().error =
-            reason instanceof Error
-              ? reason.message
-              : "Could not load the BlueK project link.";
-        }
-        return;
-      }
+      if (shared)
+        return openShared(
+          () =>
+            decodeProjectLink(shared).catch(() => {
+              throw new Error("Invalid BlueK project link.");
+            }),
+          "Could not load the BlueK project link.",
+          window.location.pathname,
+        );
       if (
         new URLSearchParams(window.location.search).get("example") !==
         "blueplay"
       )
-        return;
+        return null;
       try {
         await this.loadProject(
           await projectTemplate("blueplay"),
           "BluePlay example loaded.",
         );
+        return null;
       } catch {
-        this.host.ui().status = "Project error";
-        this.host.ui().error = "Could not load the BluePlay example.";
+        return linkProblem(null, "Could not load the BluePlay example.");
       }
     };
-    this.drafts.migrateLegacy();
-    const hasExplicitProject = Boolean(
-      window.location.pathname.match(/^\/load\//) ||
-      new URLSearchParams(window.location.hash.slice(1)).get("bluek") ||
-      new URLSearchParams(window.location.search).get("example") === "blueplay",
-    );
-    if (!hasExplicitProject) {
+    const restoreTab = async () => {
       const saved = await this.drafts.restore();
       if (saved) await this.loadProject(saved, "Local project restored.");
       else {
         this.refreshRecentProjects();
         this.savedProjectsNotice = this.recentProjects.length > 0;
       }
-    } else {
+    };
+    this.drafts.migrateLegacy();
+    const hasExplicitProject = Boolean(
+      route ||
+      new URLSearchParams(window.location.hash.slice(1)).get("bluek") ||
+      new URLSearchParams(window.location.search).get("example") === "blueplay",
+    );
+    if (!hasExplicitProject) await restoreTab();
+    else {
       await this.drafts.resumeTab();
-      await loadExample();
+      const problem = await openLinkedProject();
+      if (problem) {
+        // A failed link must not replace this tab's work with an empty project.
+        await restoreTab();
+        this.linkProblem = problem;
+      }
     }
     this.autosaveReady = true;
     this.saveAutosave();
@@ -1129,25 +1196,15 @@ export class ProjectWorkspace {
       if (event.key === null || event.key.startsWith(DRAFT_PREFIX))
         this.refreshRecentProjects();
     };
-    const linkNavigation = () => {
-      // Opening the same origin's full project link can be a hash-only
-      // navigation. Reload explicitly so it runs the normal import path.
-      if (new URLSearchParams(window.location.hash.slice(1)).has("bluek")) {
-        this.saveAutosave();
-        window.location.reload();
-      }
-    };
     window.addEventListener("pagehide", pagehide);
     window.addEventListener("pageshow", pageshow);
     window.addEventListener("storage", storageChanged);
-    window.addEventListener("hashchange", linkNavigation);
     return () => {
       pagehide();
       window.clearInterval(timer);
       window.removeEventListener("pagehide", pagehide);
       window.removeEventListener("pageshow", pageshow);
       window.removeEventListener("storage", storageChanged);
-      window.removeEventListener("hashchange", linkNavigation);
     };
   };
   selectFile = (id: string) => {

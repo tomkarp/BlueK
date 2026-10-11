@@ -99,6 +99,7 @@ a helper passing does not prove a visible browser interaction.
 | `npm run test:offline` | Build/ZIP checks and real Chromium/WebKit file:// execution without HTTP |
 | `npm run test:gui` | Chromium against a dedicated Vite server on port 5194 |
 | `npm run test:share-server` | Share service with a temporary SQLite database |
+| `node scripts/smoke-share-routing.mjs` | Production build below `/BlueK/` with a SPA fallback and the real share service (temporary database); four share-link forms, transitional `/load/`, player/developer navigation and unavailable/blocked codes in Chromium/WebKit |
 | `npm run test:performance` | Interpreter benchmarks with thresholds; avoid competing heavy loads |
 | `npm run test:conformance` | Pinned official Kotlin box tests; separate from regression suite, downloads corpus initially |
 | `node scripts/benchmark-blueplay.mjs` | Tick/frame and collision costs with 0–400 shots |
