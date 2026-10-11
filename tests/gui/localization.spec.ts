@@ -205,6 +205,7 @@ test("GUI-130 compiler and runtime diagnostics stay English in German UI", async
   await expect(page.locator(".editor-diagnostics")).toContainText(
     "Expected type is `Int`, but actual type is `String`",
   );
+  await expect(page.locator(".editor-diagnostics")).not.toContainText("TypeMismatchException");
 });
 
 test("GUI-130 invalid or unavailable storage falls back to English; switching still works", async ({

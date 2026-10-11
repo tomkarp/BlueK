@@ -34,7 +34,7 @@
     "nameOfInstance": "Instanzname",
     "cancel": "Abbrechen",
     "inspect": "Untersuchen",
-    "compilerErrors": "Compilerfehler",
+    "compilerErrors": "Kompilierfehler",
     "editorActions": "Editoraktionen",
     "toggleLineComments": "Zeilenkommentare umschalten",
     "commentUncommentLines0": "Zeilen kommentieren / Kommentar entfernen ({0})",
@@ -175,7 +175,7 @@
     "line01": "Zeile {0}{1}:",
     "warning": " (Warnung)",
     "closeCompilerWarnings": "Compilerwarnungen schließen",
-    "closeCompilerErrors": "Compilerfehler schließen",
+    "closeCompilerErrors": "Kompilierfehler schließen",
     "resizeEditor0": "Größe des Editors {0} ändern",
     "collectEditorWindowsIntoTabs": "Editorfenster als Tabs zusammenfassen",
     "closeEditor": "Editor schließen"
@@ -189,7 +189,7 @@
     "showErrorFor0": "Fehler für {0} anzeigen",
     "edit0": "{0} bearbeiten",
     "theSetterIsPrivate": "Der Setter ist privat",
-    "noFields": "Keine Felder",
+    "noFields": "Keine Attribute",
     "propertyError": "Eigenschaftsfehler:"
   },
   "execution": {
@@ -579,7 +579,7 @@
     "pause": "Pause",
     "reset": "Zurücksetzen",
     "speed": "Geschwindigkeit",
-    "compileErrors": "Compilerfehler",
+    "compileErrors": "Kompilierfehler",
     "error": "Fehler",
     "cannotStart": "Dieses Programm kann nicht gestartet werden."
   }

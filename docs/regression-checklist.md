@@ -110,7 +110,7 @@ Unless explicitly stated, visual user acceptance remains pending.
 | GUI-61 | BlueJ BluePlay migration to built-in library | Recorded import checks; folder-drop visual acceptance pending |
 | GUI-62 | Standalone offline IDE with file:// operation | Four offline Chromium/WebKit file:// checks passed (2026-10-01) |
 | GUI-63 | Offline instructions/warning and in-app problem report before ZIP download | GUI-63 Chromium passed (2026-10-08); updated from the removed GitHub link to the private report dialog, Chromium passed 1/1 (2026-10-11) with the feedback service mocked and no report sent; dark colors not separately inspected |
-| GUI-64 | Compiler diagnostics open the relevant editor/source location | Recorded browser pass |
+| GUI-64 | Compiler diagnostics open the relevant editor/source location; show the English diagnosis without internal semantic exception class names | Chromium editor cases passed in English/German (2026-10-11); type errors also checked in German UI, HTML export and standalone player; runtime evidence below; user visual acceptance pending |
 | GUI-65 | Compact diagnostics and dismiss/retry behavior | Recorded browser pass |
 | GUI-66 | README sheet visibility and editor/preview | Recorded browser pass; `smoke-project-format` |
 | GUI-67 | Optional README opening from full and short links | Recorded browser pass |
@@ -742,3 +742,21 @@ deployment prefix.
   empty template's error without links passed in Chromium and WebKit.
 - Pending: user acceptance; deploying the share service together with the
   frontend.
+
+### Compiler diagnostic wording — 2026-10-11
+
+- GUI-64: the English diagnostic omits `SemanticException` and its subclasses;
+  English/German editors retain the correct file, line and error marking. German
+  error categories say “Kompilierfehler”. Student runtime exceptions retain
+  their Kotlin class names. The existing “Keine Attribute” translation is kept.
+- Kotlin build, curriculum smoke (including the new diagnostic cases), runtime
+  state integration, typecheck and translation catalog checks passed.
+- Chromium: GUI-64 and all hosted/offline GUI-130 cases passed 10/10. EXP-10
+  HTML export and EXP-03 standalone player also passed with the concrete type
+  mismatch message and no internal exception class name.
+- The new runtime assertion failed against the old bundle as expected. The
+  first browser selection passed 4/6; the two new cases used the wrong editor
+  accessible name. Correcting their locator produced the passing run above.
+  Initial sandbox restrictions on Gradle's cache and the local test port were
+  resolved by approved retries.
+- User visual acceptance remains pending.

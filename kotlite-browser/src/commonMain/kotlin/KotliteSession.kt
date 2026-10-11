@@ -10,6 +10,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.ClassSecondaryConstructorN
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.error.EvaluateRuntimeException
 import com.sunnychung.lib.multiplatform.kotlite.error.InterpreterStateException
+import com.sunnychung.lib.multiplatform.kotlite.error.SemanticException
 import com.sunnychung.lib.multiplatform.kotlite.error.controlflow.NormalControlFlowException
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassInstance
 import com.sunnychung.lib.multiplatform.kotlite.model.StandardExceptionValue
@@ -1296,7 +1297,9 @@ class KotliteSession {
         // BlueK says instead which side the gap is on; the exception class name
         // would only add noise there.
         return KotlinSurfaceHints.rewrite(message, knownNames, declaredNames())
-            ?: "${error.fullClassName}: $message"
+            // SemanticException and its subclasses describe compile diagnostics,
+            // not exceptions thrown by the student's program.
+            ?: if (error is SemanticException) message else "${error.fullClassName}: $message"
     }
     /**
      * Names the student declared in the analyzed source. Kotlite reports a

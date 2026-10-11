@@ -1883,6 +1883,25 @@ test('GUI-64 a compiler error is marked in the source and reported below the edi
   await expect(editor.locator('.cm-bluek-error-line')).toHaveCount(0);
 });
 
+for (const locale of ['en', 'de']) {
+  test(`GUI-64 uninitialized property shows its English diagnosis without an exception name (${locale})`, async ({ page }) => {
+    await page.addInitScript(language => localStorage.setItem('bluek-language', language), locale);
+    const payload = { format: 'bluek-project', version: 1, files: [
+      { fileName: 'Tier.kt', kind: 'class', source: 'class Tier {\n    var name\n}' },
+    ] };
+    await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+    await page.getByRole('button', { name: locale === 'de' ? 'Kompilieren' : 'Compile', exact: true }).click();
+    const editor = page.locator('.editor-dialog');
+    await expect(editor.locator('.editor-header h3')).toHaveText('Tier.kt');
+    await expect(editor.getByRole('alert', { name: locale === 'de' ? 'Kompilierfehler' : 'Compiler errors', exact: true })).toBeVisible();
+    await expect(editor.locator('.editor-diagnostic')).toHaveText(
+      `${locale === 'de' ? 'Zeile' : 'Line'} 2: Property \`name\` must be initialized`,
+    );
+    await expect(editor.locator('.cm-bluek-error-line')).toContainText('var name');
+    await expect(page.locator('.classcard.uncompiled')).toHaveCount(1);
+  });
+}
+
 test('RT-50 nullable for-loop reports iterator requirement at the subject', async ({ page }) => {
   // Keep an explicitly nullable test property independent of Actor.world's API.
   const source = 'class Krokodil { val world: World? = null\n    fun act() {\n        for (ente in world?.getObjects<Ente>()) {}\n    }\n}';

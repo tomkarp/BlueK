@@ -72,6 +72,8 @@ test('EXP-03 compile errors, a missing main and runtime errors are shown instead
   const compile = page.getByRole('alert', { name: 'Compile errors' });
   await expect(compile).toContainText('The program could not be compiled.');
   await expect(compile).toContainText('App.kt:2:');
+  await expect(compile).toContainText('Expected type is `Int`, but actual type is `String`');
+  await expect(compile).not.toContainText('TypeMismatchException');
   await expect(page.getByRole('status')).toHaveCount(0);
 
   await openPlayer(page, await exportFile(testInfo, 'no-main', [

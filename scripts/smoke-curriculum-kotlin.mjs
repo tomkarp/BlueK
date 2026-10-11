@@ -152,7 +152,27 @@ const fails = (value, label, pattern) => {
 }
 
 // A property needs a value (unless an init block assigns it).
-fails((await project({ 'Auto.kt': 'class Auto {\n    var marke: String\n}' })).result, 'uninitialized property', /Property `marke` must be initialized/);
+for (const declaration of ['var name', 'var name: String']) {
+  const result = fails((await project({ 'Tier.kt': `class Tier {\n    ${declaration}\n}` })).result,
+    'GUI-64 uninitialized property diagnostic', /^Property `name` must be initialized at \[/);
+  assert.equal(result.phase, 'analysis');
+  assert.equal(result.fatal, false);
+  assert.equal(result.diagnostics[0].fileName, 'Tier.kt');
+  assert.equal(result.diagnostics[0].line, 2);
+  assert.equal(result.diagnostics[0].severity, 'error');
+  assert.match(result.diagnostics[0].message, /^Property `name` must be initialized at \[/);
+}
+{
+  const result = fails((await project({ 'Tier.kt': 'class Tier {\n    var name: Int = "wrong"\n}' })).result,
+    'GUI-64 type mismatch diagnostic', /^Expected type is `Int`, but actual type is `String` at \[/);
+  assert.equal(result.diagnostics[0].line, 2);
+  assert.match(result.diagnostics[0].message, /^Expected type is `Int`, but actual type is `String` at \[/);
+  const p = await project({ 'Main.kt': 'fun main() {}' });
+  fails(p.evaluate('val number: Int = "wrong"'), 'GUI-64 codepad analysis diagnostic',
+    /^Expected type is `Int`, but actual type is `String` at \[/);
+  fails(p.evaluate('throw IllegalArgumentException("Keep this text")'), 'GUI-64 runtime exception keeps its name',
+    /^IllegalArgumentException: Keep this text$/);
+}
 ok((await project({ 'Auto.kt': 'class Auto {\n    var marke: String\n    init {\n        marke = "BMW"\n    }\n}' })).result, 'property assigned in init');
 
 // Arguments of a member call are evaluated in the caller's scope (implicit this).

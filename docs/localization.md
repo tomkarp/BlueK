@@ -26,6 +26,10 @@ output and compiler/runtime diagnostics remain unchanged. Runtime test errors
 are displayed verbatim; finite UI status labels are translated. Native browser
 confirmations/prompts receive localized UI text.
 
+Compile diagnostics show the English message without the interpreter's internal
+`SemanticException` class name (including subclasses such as
+`TypeMismatchException`). Runtime exceptions retain their Kotlin class names.
+
 ## Adding or maintaining translations
 
 - Each locale has three files in `frontend/src/i18n/<locale>/`:

@@ -109,7 +109,8 @@ test('EXP-10 a project without main cannot be exported and compile errors stop t
   await page.getByRole('button', { name: 'Runnable program', exact: true }).click();
   await exportButton(page).click();
   // As with Compile, the file opens with its error marked; nothing is downloaded.
-  await expect(page.getByRole('dialog', { name: 'App.kt' }).getByText(/Line 2: TypeMismatchException/)).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'App.kt' }).locator('.editor-diagnostic'))
+    .toHaveText('Line 2: Expected type is `Int`, but actual type is `String`');
   await page.waitForTimeout(300);
   expect(downloads).toHaveLength(0);
 });
