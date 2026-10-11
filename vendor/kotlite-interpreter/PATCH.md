@@ -7,12 +7,8 @@ https://github.com/sunny-chung/kotlite at commit
 license is included in `LICENSE`; `CHANGELOG.md` is upstream's changelog and
 does not list BlueK changes.
 
-**This directory is the source of truth.** The GitHub fork
-https://github.com/tomkarp/kotlite only contains the first three changes
-(up to commit `1cf1eeaa19fb5ebfb8624b07bfeb39ff8e32135a`: builtin extensions
-across repeated analysis, private properties, backing fields in custom
-accessors). Everything else below exists only here. The fork is not part of
-the build.
+**This directory is the source of truth.** All BlueK interpreter changes are
+made and recorded here; there is no separate repository.
 
 `kotlite-browser/settings.gradle.kts` includes this directory as a Gradle
 composite build. Gradle therefore substitutes it for every dependency on
@@ -27,6 +23,26 @@ It is kept as a source dependency so BlueK can apply small, reviewable
 browser-session fixes without replacing Kotlite with a separate interpreter.
 
 ## Changes
+
+Builtin extensions across repeated analysis: a long-lived session analyzes
+several snippets against one execution environment, and each pass regenerates
+the transformed names of builtin extensions. When the registered name is no
+longer found, the interpreter resolves the extension by receiver type
+(including supertypes) and declared name, so later calls such as `list[0]`,
+`count()` and `add()` keep working.
+
+Private properties: `private` is a property modifier. The semantic analyzer
+rejects reads and writes of a private property outside its declaring class
+(`ClassDefinition.isPrivateMemberProperty`, `findMemberPropertyOwnerName`);
+companion access was added later (`canAccessPrivateMembersOf`).
+
+Backing fields in custom accessors: a property may have an initial value and
+custom accessors; without an explicit type, simple literal initial values
+supply it. Getters and setters see `field`, backed by
+`RuntimeValueDelegate.backing`, and a missing getter or setter reads or writes
+that field directly. Constructor initialization assigns the backing field
+without invoking the setter (`ClassInstance.assignBacking`).
+Coverage for both class changes: `scripts/smoke-kotlite-browser.mjs`.
 
 Nullable for-loop subjects (RT-50): the synthetic `iterator()` navigation
 is marked by the analyzer and points at the loop subject (the receiver's

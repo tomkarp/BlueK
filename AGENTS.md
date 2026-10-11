@@ -31,8 +31,8 @@ Shared instructions for coding agents. Do not add tool-specific files such as
   explicitly asked to change it. Runtime state is authoritative; derive UI views
   from the snapshot. Use narrow typed capabilities, no second runtime store,
   general event bus, or Kotlin grammar/source-text regex in the UI.
-- Kotlin semantics belong in `vendor/kotlite-interpreter/`, the source of truth,
-  rather than the historical GitHub fork. Record every change in its `PATCH.md`.
+- Kotlin semantics belong in `vendor/kotlite-interpreter/`, the source of truth.
+  Record every change in its `PATCH.md`.
   Add missing stdlib functions natively in
   `kotlite-browser/.../BlueKStdlibModule.kt`, with `docs/kotlin-surface.md` and
   `scripts/smoke-kotlin-surface.mjs` updated together.

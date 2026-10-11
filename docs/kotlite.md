@@ -16,8 +16,7 @@ are user references; this page records implementation contracts.
 `kotlite-browser/settings.gradle.kts` includes the vendored interpreter as a
 Gradle composite build. It substitutes every
 `io.github.sunny-chung:kotlite-interpreter` dependency, including the stdlib's
-transitive dependency. The historical `tomkarp/kotlite` GitHub fork is not the
-source used by BlueK. Record local interpreter changes in
+transitive dependency. Record local interpreter changes in
 [PATCH.md](../vendor/kotlite-interpreter/PATCH.md); upstream CHANGELOG remains
 unchanged. Preserve binary API compatibility with stdlib 1.1.0.
 
@@ -68,7 +67,7 @@ companion-initialization/default-argument limitations in
 
 ## Suspension and native callbacks
 
-The fork evaluates AST nodes with `suspend` functions. Loop checkpoints, input
+The vendored interpreter evaluates AST nodes with `suspend` functions. Loop checkpoints, input
 and `Thread.sleep` can return control to the worker without losing interpreter
 scopes. A host function that pauses **must check `Interpreter.canSuspend`
 before suspension**. If false, throw `InterpreterStateException`; no student
