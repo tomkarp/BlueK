@@ -81,6 +81,11 @@ package-qualified library expressions and package declarations are not supported
 
 ### Calls, inference and smart casts
 
+When a call has one concrete matching signature but an incompatible argument,
+the error uses Kotlin 2.2.21's argument type mismatch wording, naming actual and
+expected types and pointing at the argument. Diagnostics for unsuccessful
+overloads or generic inference may still differ from the Kotlin compiler.
+
 - Callable references accept a name before `::` (`::f`, `String::length`,
   `items::add`, `::Card`), but not expressions such as `Calculator(10)::times`.
 - Function-valued properties can be called as methods, but explicit `.invoke()`

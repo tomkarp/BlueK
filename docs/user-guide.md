@@ -41,6 +41,8 @@ Following a stored object reference does not create a new object.
 
 The codepad accepts expressions and statements. Variables remain available
 until Compile or Reset. Use **Get** on a result to put it on the object bench.
+If the result comes from a direct variable read, such as `s`, Get suggests that
+same name. A method result or new object uses the usual class-based suggestion.
 The terminal supports `print`, `println`, `readln`, `readLine` and
 `readlnOrNull`, including waiting for input, EOF and Stop.
 Settings → Terminal lets you change the terminal font size from 10 to 30 px and

@@ -358,11 +358,11 @@ const nullableReceiver = [
   ['val nl4: String? = null; nl4.zzz()', /`zzz` is unknown for String/],
 ];
 
-// A name that exists but is called wrongly is NOT a gap: Kotlite words both the
-// same way, and only its message names the argument types. It must pass through.
+// A name that exists but is called wrongly is NOT a gap: argument/overload
+// diagnostics must pass through without being replaced by missing-name hints.
 const passedThrough = [
   ['"a,b".split(1, 2, 3)', /No matching function `split`.*argument types \(Int, Int, Int\)/],
-  ['fun zeige(text: String) {}; zeige(5)', /No matching function.*`zeige`.*argument types \(Int\)/],
+  ['fun zeige(text: String) {}; zeige(5)', /argument type mismatch: actual type is 'Int', but 'String' was expected\./],
 ];
 
 const failures = [];

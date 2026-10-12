@@ -1,6 +1,7 @@
 package com.sunnychung.lib.multiplatform.kotlite
 
 import com.sunnychung.lib.multiplatform.kotlite.error.CannotInferTypeException
+import com.sunnychung.lib.multiplatform.kotlite.error.ArgumentTypeMismatchException
 import com.sunnychung.lib.multiplatform.kotlite.error.IdentifierClassifier
 import com.sunnychung.lib.multiplatform.kotlite.error.SemanticException
 import com.sunnychung.lib.multiplatform.kotlite.error.TypeMismatchException
@@ -2165,7 +2166,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         arguments.forEachIndexed { index, argument ->
             val expected = parameterTypes[index].toDataType()
             val actual = argument.type(ResolveTypeModifier(isSkipGenerics = true)).toDataType()
-            if (!expected.isAssignableFrom(actual)) throw TypeMismatchException(argument.position, expected.nameWithNullable, actual.nameWithNullable)
+            if (!expected.isAssignableFrom(actual)) throw ArgumentTypeMismatchException(argument.value.position, expected.descriptiveName, actual.descriptiveName)
         }
         callableType = CallableType.Property
         val result: TypeNode = functionType.returnType ?: typeRegistry["Unit"]!!
@@ -2260,6 +2261,30 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             FunctionCallArgumentInfo(it.name, matched.toDataType())
         }
 
+        fun reportArgumentTypeMismatch(functionName: String, receiverType: DataType?) {
+            val callable = currentScope.findCallablesForArgumentDiagnostic(
+                currentScope, functionName, receiverType, argumentInfos(false),
+                if (function is TypeNode) SearchFunctionModifier.ConstructorOnly else modifierFilter!!,
+            ).singleOrNull() ?: return
+            // Without a unique concrete signature, a specific expected type would
+            // be misleading. Normal overload selection and inference stay unchanged.
+            if (callable.typeParameters.isNotEmpty() || callable.extraTypeParameters.isNotEmpty()) return
+            arguments.forEachIndexed { index, argument ->
+                val parameterIndex = when {
+                    callable.isVararg -> 0
+                    argument.name != null -> callable.arguments.indexOfFirst { (it as? FunctionValueParameterNode)?.name == argument.name }
+                    index == arguments.lastIndex && argument.type(ResolveTypeModifier(isSkipGenerics = true)) is FunctionTypeNode -> callable.arguments.lastIndex
+                    else -> index
+                }
+                val parameter = callable.arguments.getOrNull(parameterIndex) ?: return
+                val expected = runCatching { currentScope.toDataType(parameter, emptyList()) }.getOrNull() ?: return
+                val actual = argument.type(ResolveTypeModifier(isSkipGenerics = true)).toDataType()
+                if (!expected.isConvertibleFrom(actual)) {
+                    throw ArgumentTypeMismatchException(argument.value.position, expected.descriptiveName, actual.descriptiveName)
+                }
+            }
+        }
+
         var resolvedDeclaration: FunctionDeclarationNode? = null
         var extraTypeResolutions = emptyMap<String, TypeNode>()
 
@@ -2289,6 +2314,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                         evaluateAndRegisterReturnType(this)
                         return
                     }
+                    reportArgumentTypeMismatch(functionName, null)
                     throw SemanticException(position, "No matching function or constructor `${functionName}` found for the argument types (${describeArgumentTypes()})")
                 }
                 if (function is VariableReferenceNode) {
@@ -2367,6 +2393,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             }
 
             is NavigationNode -> {
+                val memberName = function.member.name
                 // `compareBy { it.a }.thenBy { it.n }` as argument: the receiver call gets its expected
                 // type from this call's expected type once this call is resolved (RT-100)
                 val chainedReceiver = (function.subject as? FunctionCallNode)
@@ -2408,8 +2435,10 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 if (resolutions.size > 1) {
                     throw SemanticException(position, "Ambiguous function call for `${function.member.name}`. ${resolutions.size} candidates match:\n${resolutions.joinToString("") { "- ${it.toDisplayableSignature()}\n" }}")
                 }
-                val resolution = resolutions.firstOrNull()
-                    ?: throw SemanticException(position, "No matching function `${function.member.name}` found for type ${receiverType.nameWithNullable} and the argument types (${describeArgumentTypes()})")
+                val resolution = resolutions.firstOrNull() ?: run {
+                    lookupReceiverTypes.forEach { reportArgumentTypeMismatch(memberName, it) }
+                    throw SemanticException(position, "No matching function `$memberName` found for type ${receiverType.nameWithNullable} and the argument types (${describeArgumentTypes()})")
+                }
                 fun isProvisional(type: TypeNode?): Boolean = type != null &&
                     (type.name == "<Repeated>" && type.arguments?.firstOrNull()?.name?.startsWith(PROVISIONAL_TYPE_PREFIX) == true ||
                         type.arguments.orEmpty().any { isProvisional(it) })
@@ -2905,7 +2934,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         arguments.forEachIndexed { i, callArgument ->
             val functionArgumentType = argumentInfos[callArgumentMappedIndexes[i]].type
             if (!functionArgumentType.isConvertibleFrom(callArgument.type().toDataType())) {
-                throw SemanticException(callArgument.position, "Call argument's type ${callArgument.type().descriptiveName()} cannot be mapped to type ${argumentInfos[callArgumentMappedIndexes[i]].type.descriptiveName}")
+                throw ArgumentTypeMismatchException(callArgument.value.position, functionArgumentType.descriptiveName, callArgument.type().descriptiveName())
             }
         }
 

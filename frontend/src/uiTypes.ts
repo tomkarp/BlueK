@@ -13,6 +13,7 @@ export type HistoryEntry = {
   objectResult?: boolean;
   objectId?: string;
   className?: string;
+  name?: string;
 };
 export type WindowPosition = { left: number; top: number };
 export type WindowSize = { width: number; height: number };

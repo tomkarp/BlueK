@@ -377,7 +377,7 @@ export class ObjectWorkspace {
         kind: "object",
         objectId: entry.objectId,
         className: entry.className || "Object",
-        name: entry.className || "Object",
+        name: entry.name,
       });
   };
   confirmObjectOnBench = async () => {

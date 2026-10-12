@@ -64,12 +64,26 @@ const make = () => {
     executeUserCommand: (command, trigger) => { assert.equal(trigger, "interactive"); return client.execute(command); },
     reportCallError: message => { throw new Error(message); },
   };
-  return { ui, objects: new ObjectWorkspace({
+  return { ui, session, objects: new ObjectWorkspace({
     ui: () => ui, session: () => session, play: () => ({ showWorld() {} }),
     editor: () => ({ hasWindows: false }), terminal: () => ({ terminalOpen: false }),
   }) };
 };
 const first = make(), second = make();
+first.objects.requestObjectOnBench({ kind: 'object', objectId: 'named', className: 'Counter', name: 's' });
+assert.equal(first.objects.objectName, 's', 'Get prefers the supplied Codepad name');
+first.objects.requestObjectOnBench({ kind: 'object', objectId: 'named', className: 'Counter' });
+assert.equal(first.objects.objectName, 'counter', 'Unnamed returns keep the class-based suggestion');
+first.session.history = [{ code: 's', objectId: 'named', className: 'Counter', name: 's' }];
+first.session.runtime.liveObjectIds = ['named'];
+first.objects.getLastCodepadObject();
+assert.equal(first.objects.objectName, 's', 'Getting the last result also preserves the supplied name');
+first.session.history = [{ code: 'Counter()', objectId: 'named', className: 'Counter' }];
+first.objects.getLastCodepadObject();
+assert.equal(first.objects.objectName, 'counter', 'Getting the last result uses the same unnamed fallback');
+first.objects.objectNamePrompt = null;
+first.session.history = [];
+first.session.runtime.liveObjectIds = [];
 first.objects.createObject('Counter');
 first.objects.createName = 'counter1';
 first.objects.createArgs[0] = '7';

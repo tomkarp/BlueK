@@ -23,6 +23,30 @@ const evaluate = (s, code) => ok(s.evaluate('<Codepad>', code));
 const snapshot = (s) => JSON.parse(s.referenceSnapshot());
 const named = (s, name) => snapshot(s).references.find(r => r.name === name);
 
+// GUI-142: the AST's direct variable read supplies the Get suggestion; identity
+// alone must not turn a returned value into a named result.
+{
+  const s = session();
+  evaluate(s, 'val field = Timer()');
+  const direct = evaluate(s, '/* direct read */ field');
+  assert.equal(direct.name, 'field');
+  const alias = evaluate(s, 'val another = field; another');
+  assert.equal(alias.name, 'another');
+  assert.equal(alias.objectId, direct.objectId);
+  ok(s.bind(alias.objectId, alias.name));
+  assert.equal(named(s, 'another').onBench, true);
+  assert.equal(named(s, 'another').origin, 'persistent');
+  assert.equal(snapshot(s).references.filter(r => r.onBench).length, 1);
+  evaluate(s, 'fun existing(): Timer = field');
+  const returned = evaluate(s, 'existing()');
+  assert.equal(returned.objectId, direct.objectId);
+  assert.equal(returned.name, undefined, 'Method results do not borrow an alias');
+  assert.equal(evaluate(s, 'run { val local = field; local }').name, undefined);
+  assert.equal(evaluate(s, 'val box = Box(field); box.item').name, undefined);
+  assert.equal(evaluate(s, 'Timer()').name, undefined);
+  assert.equal(evaluate(s, 'val count = 17; count').name, 'count');
+}
+
 // User's exact failure: an unrelated declaration immediately after removal.
 {
   const s = session();

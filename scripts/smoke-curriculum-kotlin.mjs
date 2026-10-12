@@ -264,8 +264,8 @@ ok((await project({ 'Auto.kt': 'class Auto {\n    var marke: String\n    init {\
   assert.equal(ok(p.evaluate('val s = Stapel(); s.fuellen(); s.karten.size'), 'implicit receiver in argument').display, '3');
 }
 
-// Type errors name the argument types, e.g. showText(Int, Int, Int).
-fails((await project({ 'Anzeige.kt': 'class Anzeige {\n    fun zeige(text: String) {}\n    fun test() { zeige(5) }\n}' })).result, 'argument type mismatch', /argument types \(Int\)/);
+// Unambiguous argument type errors use Kotlin's actual/expected wording (RT-112).
+fails((await project({ 'Anzeige.kt': 'class Anzeige {\n    fun zeige(text: String) {}\n    fun test() { zeige(5) }\n}' })).result, 'argument type mismatch', /argument type mismatch: actual type is 'Int', but 'String' was expected\./);
 
 // Classes that reference each other compile and run in any file order (RT-40): property,
 // nullable and generic types, parameter and return types, constructor parameters, constructor
@@ -855,7 +855,7 @@ fails((await project({ 'Anzeige.kt': 'class Anzeige {\n    fun zeige(text: Strin
     ['val hund = Hund("A"); hund.lerne("Sitz"); hund.lerne("Platz"); "${hund.anzahl()} ${hund.tricks}"', '2 [Sitz, Platz]'],
   ];
   for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-63 ${source}`).display, expected, `RT-63 ${source}`);
-  // Unknown names and wrong argument types keep their messages.
+  // Unknown names and unresolved generic calls keep their fallback messages.
   fails(p.evaluate('mutableListOf(1).apply { gibtsNicht(2) }'), 'RT-63 unknown', /`gibtsNicht` is unknown/);
   fails(p.evaluate('mutableListOf(1).apply { add("x") }'), 'RT-63 wrong argument', /No matching function or constructor `add` found for the argument types \(String\)/);
 }
@@ -1148,7 +1148,7 @@ fails((await project({ 'Anzeige.kt': 'class Anzeige {\n    fun zeige(text: Strin
     ['val k2: K? = K(3); k2?.f()', '6'], ['val k3: K? = null; k3?.f()', 'null'], ['K.fabrik(7).n', '7'],
   ];
   for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-75 ${source}`).display, expected, `RT-75 ${source}`);
-  fails(p.evaluate('k.aktion("a")'), 'RT-75 argument type', /Expected type is `Int`, but actual type is `String`/);
+  fails(p.evaluate('k.aktion("a")'), 'RT-75 argument type', /argument type mismatch: actual type is 'String', but 'Int' was expected\./);
   fails(p.evaluate('k.f(1)'), 'RT-75 argument count', /`f` expects 0 argument\(s\), but 1 were given/);
 }
 
@@ -1539,7 +1539,7 @@ fails((await project({ 'Anzeige.kt': 'class Anzeige {\n    fun zeige(text: Strin
     ['keine()', '[]'], ['nichts()', '[]'],
   ];
   for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-93 ${source}`).display, expected, `RT-93 ${source}`);
-  fails(p.evaluate('Box<Int>(listOf("x"))'), 'RT-93 wrong type', /List<String> cannot be mapped to type List<Int>/);
+  fails(p.evaluate('Box<Int>(listOf("x"))'), 'RT-93 wrong type', /actual type is 'List<String>', but 'List<Int>' was expected/);
   // The message names the type arguments, not only `List`.
   fails((await project({ 'F.kt': 'fun f(): List<Int> = listOf("a")' })).result, 'RT-93 message', /Expected type is `List<Int>`, but actual type is `List<String>`/);
 }
@@ -1703,7 +1703,7 @@ fails((await project({ 'Anzeige.kt': 'class Anzeige {\n    fun zeige(text: Strin
   for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-107/108 ${source}`).display, expected, `RT-107/108 ${source}`);
   // Only a fitting expected type widens; wrong ones stay errors.
   fails(p.evaluate('val x107: MutableList<String> = mutableListOf(1, 2)'), 'RT-107 MutableList<String>', /actual type is `MutableList<Int>`/);
-  fails(p.evaluate('fun s107(l: MutableList<String>) = l.size; s107(mutableListOf(1, 2))'), 'RT-107 parameter', /MutableList<Int> cannot be mapped to type MutableList<String>/);
+  fails(p.evaluate('fun s107(l: MutableList<String>) = l.size; s107(mutableListOf(1, 2))'), 'RT-107 parameter', /actual type is 'MutableList<Int>', but 'MutableList<String>' was expected/);
   fails(p.evaluate('val y108: String = listOf(1, 2.5)'), 'RT-108 List<Number>', /actual type is `List<Number>`/);
   fails(p.evaluate('val z108: Number = "a"'), 'RT-108 String', /Expected type is `Number`/);
 }

@@ -850,7 +850,13 @@ class KotliteSession {
             // list.removeAt). Its old history handles stay invalid, but this
             // new result is transferable under a fresh provisional handle.
             if (objectId != null && objectId !in handles) objectId = registerExpressionValue(value)
-            result("value", value, objectId, inspection = inspection)
+            // Only a direct read of a user binding suggests its name. A method
+            // result may share its identity, but has no directly used name.
+            val reference = newNodes.lastOrNull() as? VariableReferenceNode
+            val resultName = reference?.variableName?.takeIf {
+                objectId != null && !inspection && references[it]?.symbol == reference.transformedRefName
+            }
+            result("value", value, objectId, name = resultName, inspection = inspection)
         } catch (error: Throwable) {
             faulted = error.isFatal
             if (program) reportUncaught(error)

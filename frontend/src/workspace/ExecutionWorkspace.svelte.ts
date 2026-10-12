@@ -281,6 +281,7 @@ export class ExecutionWorkspace {
                     ? undefined
                     : codepadResult(response),
                 objectId: response.objectId,
+                name: response.name,
                 className:
                   response.className || response.type?.displayName || "Object",
               }

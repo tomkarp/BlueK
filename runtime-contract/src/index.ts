@@ -86,6 +86,7 @@ export interface RuntimeValue {
   type?: TypeRef;
   objectId?: string;
   className?: string;
+  /** Name supplied by create/bind, or the user binding read directly by eval. */
   name?: string;
   fields?: InspectedField[];
   phase?: 'request' | 'analysis' | 'runtime' | 'transport';

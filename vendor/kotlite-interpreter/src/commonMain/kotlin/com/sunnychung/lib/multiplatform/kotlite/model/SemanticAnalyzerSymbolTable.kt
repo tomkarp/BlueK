@@ -93,7 +93,7 @@ class SemanticAnalyzerSymbolTable(
     }
 
     // only use in semantic analyzer
-    private fun findAllMatchingCallables(currentSymbolTable: SymbolTable, originalName: String, receiverClass: ClassDefinition?, receiverType: DataType?, arguments: List<FunctionCallArgumentInfo>, modifierFilter: SearchFunctionModifier): List<FindCallableResult> {
+    private fun findAllMatchingCallables(currentSymbolTable: SymbolTable, originalName: String, receiverClass: ClassDefinition?, receiverType: DataType?, arguments: List<FunctionCallArgumentInfo>, modifierFilter: SearchFunctionModifier, checkArgumentTypes: Boolean = true): List<FindCallableResult> {
         beforeFunctionLookup?.invoke(originalName)
         var thisScopeCandidates = mutableListOf<FindCallableResult>()
         if (receiverClass == null) {
@@ -120,7 +120,7 @@ class SemanticAnalyzerSymbolTable(
             implicitReceiverType(currentSymbolTable)?.let { receiver ->
                 val clazz = (receiver as? ObjectType)?.clazz
                 if (clazz != null) {
-                    findAllMatchingCallables(currentSymbolTable, originalName, clazz, receiver, arguments, modifierFilter)
+                    findAllMatchingCallables(currentSymbolTable, originalName, clazz, receiver, arguments, modifierFilter, checkArgumentTypes)
                         .filter { it.type == CallableType.ClassMemberFunction }
                         .let { thisScopeCandidates += it }
                 }
@@ -268,6 +268,7 @@ class SemanticAnalyzerSymbolTable(
                 })
                 try {
                     if (callable.isVararg) {
+                        if (!checkArgumentTypes) return@filter arguments.all { it.name == null }
                         val functionArgType = currentSymbolTable.typeNodeToDataType(
                             // Keep callable type parameters as placeholders
                             // while matching. Resolving `Pair<K, V>` to
@@ -286,7 +287,7 @@ class SemanticAnalyzerSymbolTable(
                     when (callable.arguments.first()) {
                         is DataType /* is a lambda */ -> return@filter arguments.size == callable.arguments.size &&
                                 arguments.all { it.name == null } &&
-                                callable.arguments.foldIndexed(true) { i, acc, it -> acc && (it as DataType).isAssignableFrom(arguments[i].type) }
+                                (!checkArgumentTypes || callable.arguments.foldIndexed(true) { i, acc, it -> acc && (it as DataType).isAssignableFrom(arguments[i].type) })
                         is FunctionValueParameterNode -> {
                             if (arguments.size > callable.arguments.size) return@filter false
                             val argumentsReordered = arrayOfNulls<FunctionCallArgumentInfo>(callable.arguments.size)
@@ -305,6 +306,7 @@ class SemanticAnalyzerSymbolTable(
                                     }
                                     findIndex
                                 }
+                                if (!checkArgumentTypes && argumentsReordered[newIndex] != null) return@filter false
                                 argumentsReordered[newIndex] = arg
                             }
                             callable.arguments.foldIndexed(true) { i, acc, it ->
@@ -312,6 +314,8 @@ class SemanticAnalyzerSymbolTable(
                                 val callArg = argumentsReordered[i]
                                 acc && if (callArg == null) {
                                     functionArg.defaultValue != null
+                                } else if (!checkArgumentTypes) {
+                                    true
                                 } else {
                                     currentSymbolTable.typeNodeToDataType(functionArg.type)?.isConvertibleFrom(callArg.type) == true
                                         || currentSymbolTable.assertToDataType(functionArg.type.resolveGenericParameterTypeToUpperBound(callable.typeParameters + callable.extraTypeParameters + (receiverClass?.typeParameters ?: emptyList()) )).isConvertibleFrom(callArg.type)
@@ -325,7 +329,17 @@ class SemanticAnalyzerSymbolTable(
                     popTempTypeAlias()
                 }
             }.toMutableList()
-        return thisScopeCandidates + ((parentScope as? SemanticAnalyzerSymbolTable)?.findAllMatchingCallables(currentSymbolTable, originalName, receiverClass, receiverType, arguments, modifierFilter) ?: emptyList())
+        return thisScopeCandidates + ((parentScope as? SemanticAnalyzerSymbolTable)?.findAllMatchingCallables(currentSymbolTable, originalName, receiverClass, receiverType, arguments, modifierFilter, checkArgumentTypes) ?: emptyList())
+    }
+
+    /** Diagnostic-only candidates: preserve names/arity/defaults and receiver lookup,
+     * but retain incompatible argument types. Never use these for execution. */
+    fun findCallablesForArgumentDiagnostic(currentSymbolTable: SymbolTable, originalName: String, receiverType: DataType?, arguments: List<FunctionCallArgumentInfo>, modifierFilter: SearchFunctionModifier): List<FindCallableResult> {
+        val receiverClass = receiverType
+            ?.let { if (it is TypeParameterType) it.upperBound else it }
+            ?.let { findClass(it.nameWithNullable)?.first }
+        return findAllMatchingCallables(currentSymbolTable, originalName, receiverClass, receiverType, arguments, modifierFilter, checkArgumentTypes = false)
+            .distinctBy { it.definition to it.secondaryConstructorIndex }
     }
 
     fun assertToDataTypeWithTypeParameters(type: TypeNode, typeParameters: List<TypeParameterNode>): DataType {

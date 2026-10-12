@@ -24,6 +24,18 @@ browser-session fixes without replacing Kotlite with a separate interpreter.
 
 ## Changes
 
+Argument type diagnostics (RT-112): when normal overload resolution fails,
+reuse the existing callable lookup with argument types ignored for diagnostics
+only. A unique concrete signature with matching names/arity/defaults supplies
+the actual and expected type at the argument expression, using Kotlin 2.2.21's
+`argument type mismatch: actual type is '<actual>', but '<expected>' was expected.`
+Multiple candidates, generic function inference and malformed argument lists
+retain the existing fallback; no diagnostic candidate is used for execution.
+Function-valued member arguments and final checks after generic resolution use
+the same wording and source position.
+Coverage: `scripts/smoke-argument-diagnostics.mjs`, curriculum/Kotlin surface,
+runtime-state and the English/German RT-112 editor cases.
+
 Missing method `override` (RT-111): report Kotlin 2.2.21's
 `'<method>' hides member of supertype '<type>' and needs an 'override' modifier.`
 instead of Kotlite's generic explanation. The member resolver supplies the

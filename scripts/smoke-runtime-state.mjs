@@ -110,6 +110,7 @@ await ok({ op: 'eval', code: 'child.n = 12' });
 assert.equal(field(first.objectId), '12');
 const same = await ok({ op: 'invoke', objectId: first.objectId, name: 'self', args: [] });
 assert.equal(same.objectId, first.objectId, 'identity must be canonical');
+assert.equal(same.name, undefined, 'Method results have no direct variable name');
 await ok({ op: 'bind', objectId: same.objectId, name: 'alias' });
 await ok({ op: 'eval', code: 'alias.add()' });
 assert.equal(field(first.objectId), '13');
@@ -117,6 +118,7 @@ await ok({ op: 'inspect', objectId: first.objectId });
 assert.equal(field(first.objectId), '13', 'inspection must not call computed getters');
 assert.equal(field(first.objectId, 'computed'), '<computed>');
 const shared = await ok({ op: 'eval', code: 'shared' });
+assert.equal(shared.name, 'shared', 'Codepad preserves the directly evaluated binding name');
 assert.equal(field(shared.objectId), '10', 'top-level initializer must run once');
 await ok({ op: 'main', fileName: 'Actions.kt' });
 assert.equal(field(shared.objectId), '15');
@@ -573,7 +575,8 @@ projectClient.invalidate();
     source: 'class Feld : World(60, 40, 1) {\n    var schritte = 0\n    override fun act() {\n        schritte++\n        showText(schritte, 10, 10)\n    }\n}' }], 1, { id: 'blueplay', version: 1 });
   assert.equal(result.diagnostics[0]?.fileName, 'Feld.kt');
   assert.equal(result.diagnostics[0]?.line, 5);
-  assert.match(result.diagnostics[0]?.message, /argument types \(Int, Int, Int\)/);
+  assert.equal(result.diagnostics[0]?.column, 18);
+  assert.match(result.diagnostics[0]?.message, /^argument type mismatch: actual type is 'Int', but 'String' was expected\./);
   diagnosticsClient.invalidate();
 }
 // RT-49: inspection catches ordinary getter failures per property without

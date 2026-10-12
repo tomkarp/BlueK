@@ -303,6 +303,10 @@ and terminal; context menus sit above them, modal action dialogs above menus.
 results. Every non-Unit result can receive a handle, including primitive values.
 Get uses `bind`; removing a persistent name's bench view does not erase its
 codepad variable.
+For a direct variable read, the session derives `RuntimeValue.name` from the
+analyzed final AST node and its namespace symbol. Codepad history forwards this
+name to Get as the dialog suggestion. Calls and other
+expressions retain the class-based suggestion, even if they return a named object.
 
 `mainEntries.ts` derives `main()` and `main(args: Array<String>)` from metadata;
 args is empty. Main/reset/export choose the only candidate or ask each time

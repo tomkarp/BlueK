@@ -116,6 +116,7 @@
                     kind: "object",
                     objectId: entry.objectId,
                     className: entry.className || "Object",
+                    name: entry.name,
                   })}
                 aria-label={t("ui.codepad.get0OnObjectBench", [
                   entry.className || "object",
