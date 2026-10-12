@@ -1,10 +1,11 @@
 /**
- * Rewrites Kotlite's generic "not found" analysis errors into BlueK's own
+ * Rewrites legacy property/member "not found" analysis errors into BlueK's own
  * wording, in the style of the existing `Import ... is not available in BlueK`
  * message.
  *
- * Kotlite reports a missing name the same way whether the student mistyped
- * something or wrote correct Kotlin that BlueK does not implement. BlueK
+ * Missing call names already use the analyzer's Kotlin diagnostic unchanged.
+ * For property/member errors, Kotlite uses the same wording for a mistyped
+ * name and correct Kotlin that BlueK does not implement. BlueK
  * cannot tell those apart in general - it knows its own names, but not the
  * full Kotlin standard library. So the rewrite answers in three ways:
  *
@@ -40,25 +41,19 @@ object KotlinSurfaceHints {
      * one of the "name not found" forms and should be passed through.
      * [knownNames] are the names BlueK actually provides.
      */
-    fun rewrite(message: String, knownNames: Set<String>, declaredNames: Set<String> = emptySet()): String? {
+    fun rewrite(message: String, knownNames: Set<String>): String? {
         val position = message.indexOf(" at [")
         val body = if (position >= 0) message.substring(0, position) else message
         val suffix = if (position >= 0) message.substring(position) else ""
 
-        val rewritten = rewriteBody(body, knownNames, declaredNames) ?: return null
+        val rewritten = rewriteBody(body, knownNames) ?: return null
         return rewritten + suffix
     }
 
-    private fun rewriteBody(body: String, knownNames: Set<String>, declaredNames: Set<String>): String? {
-        /**
-         * Kotlite reports a wrong argument type with the same wording as an
-         * unknown name. A name that exists somewhere is therefore an argument
-         * problem, and Kotlite's message - which lists the argument types - is
-         * the useful one. A documented gap is decided before this, because
-         * there the receiver makes the case clear (e.g. `map` exists, but not
-         * for String).
-         */
-        fun exists(name: String) = name in knownNames || name in declaredNames
+    private fun rewriteBody(body: String, knownNames: Set<String>): String? {
+        // The analyzer distinguishes unreachable call names from incompatible
+        // arguments. Never infer that distinction from a global name catalog.
+        if (noFunction.containsMatchIn(body) || noMemberFunction.containsMatchIn(body)) return null
 
         if (unsafeCall.containsMatchIn(body)) return body
         if (body == "Non-nullable value required to call 'iterator()' method in a for-loop.") return body
@@ -67,19 +62,6 @@ object KotlinSurfaceHints {
             val name = match.groupValues[1]
             // Unambiguous: the name is not in scope at all.
             return gaps[name] ?: unknown(name, knownNames)
-        }
-        noFunction.find(body)?.let { match ->
-            val name = match.groupValues[1]
-            gaps[name]?.let { return it }
-            if (exists(name)) return null
-            return unknown(name, knownNames)
-        }
-        noMemberFunction.find(body)?.let { match ->
-            val (name, receiver) = match.groupValues[1] to match.groupValues[2]
-            destructuringHint(receiver, name)?.let { return it }
-            definiteMemberHint(receiver, name)?.let { return it }
-            if (exists(name)) return null
-            return memberHint(receiver, name, knownNames)
         }
         noMember.find(body)?.let { match ->
             val (receiver, name) = match.groupValues[1] to match.groupValues[2]
@@ -95,12 +77,6 @@ object KotlinSurfaceHints {
         if (!Regex("component[1-9][0-9]*").matches(name)) return null
         return "Destructuring declaration initializer of type ${receiver.removeSuffix("?")} must have a '$name()' function. " +
             "BlueK destructures data classes, Pair, Triple, lists, map entries and withIndex()."
-    }
-
-    /** A documented gap for this receiver and name, if there is one. */
-    private fun definiteMemberHint(receiver: String, name: String): String? {
-        val plain = receiver.removeSuffix("?")
-        return memberGaps[plain to name] ?: gaps[name]
     }
 
     private fun memberHint(receiver: String, name: String, knownNames: Set<String>): String {

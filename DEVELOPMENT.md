@@ -90,7 +90,7 @@ a helper passing does not prove a visible browser interaction.
 | `npm run test:testing:portable` | Generated Kotlin unchanged under kotlin.test/JUnit Jupiter; requires Java, Gradle and Maven Central |
 | `npm run test:generics` | Generics, reified types, inline control flow and analysis boundaries |
 | `npm run test:kotlin-surface` | Promised stdlib operations and explicit known gaps |
-| `npm run test:argument-diagnostics` | Kotlin wording and positions for unambiguous argument type errors, with overload/rejection boundaries |
+| `npm run test:argument-diagnostics` | Kotlin call diagnostics and positions: scope/receiver reachability, argument types and overload/rejection boundaries |
 | `npm run test:blueplay-api` | Independent pinned BlueJ API, help manifest and original student examples |
 | `npm run test:blueplay-demos` | Space Invaders template in the interpreter |
 | `npm run test:inspector`, `test:codepad-flow`, `test:project-format`, `test:program-export`, `test:blueplay-stage`, `test:player-worker`, `test:ui` | Focused TypeScript/helper behavior |

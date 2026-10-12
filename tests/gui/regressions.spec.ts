@@ -1956,6 +1956,32 @@ for (const locale of ['en', 'de']) {
   });
 }
 
+for (const locale of ['en', 'de']) {
+  test(`RT-113 World method missing on Actor reports unresolved reference at the method (${locale})`, async ({ page }) => {
+    await page.addInitScript(language => localStorage.setItem('bluek-language', language), locale);
+    const payload = { format: 'bluek-project', version: 1, library: { id: 'blueplay', version: 1 }, files: [
+      { fileName: 'Ausreisser.kt', kind: 'class', source: 'class Ausreisser : Actor() {\n    override fun act() {\n        move(3)\n        turn(4)\n        if (isClicked) {\n            removeObject(this)\n        }\n    }\n}' },
+    ] };
+    await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+    const compile = page.getByRole('button', { name: locale === 'de' ? 'Kompilieren' : 'Compile', exact: true });
+    await compile.click();
+    const editor = page.locator('.editor-dialog');
+    await expect(editor.locator('.editor-header h3')).toHaveText('Ausreisser.kt');
+    await expect(editor.locator('.editor-diagnostic')).toHaveText(
+      `${locale === 'de' ? 'Zeile' : 'Line'} 6: unresolved reference 'removeObject'.`,
+    );
+    await expect(editor.locator('.cm-bluek-error-span')).toHaveText('removeObject');
+    await editor.locator('.cm-line').filter({ hasText: 'removeObject(this)' }).click();
+    await page.keyboard.press('End');
+    await page.keyboard.press('Shift+Home');
+    await page.keyboard.type('            world.removeObject(this)');
+    await compile.click();
+    await expect(editor.locator('.editor-diagnostics')).toHaveCount(0);
+    await expect(editor.locator('.cm-bluek-error-span')).toHaveCount(0);
+    await expect(page.locator('.classcard.uncompiled')).toHaveCount(0);
+  });
+}
+
 test('RT-50 nullable for-loop reports iterator requirement at the subject', async ({ page }) => {
   // Keep an explicitly nullable test property independent of Actor.world's API.
   const source = 'class Krokodil { val world: World? = null\n    fun act() {\n        for (ente in world?.getObjects<Ente>()) {}\n    }\n}';

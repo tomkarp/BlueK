@@ -3168,7 +3168,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
                 position = position, name = name, declaredModifiers = emptySet(), typeParameters = emptyList(),
                 receiver = null, declaredType = type, isMutable = isMutable,
                 initialValue = FunctionCallNode(
-                    function = NavigationNode(position, VariableReferenceNode(position, source), ".", ClassMemberReferenceNode(position, "component${index + 1}")),
+                    function = NavigationNode(position, VariableReferenceNode(position, source), ".", ClassMemberReferenceNode(position, "component${index + 1}")).apply { isDestructuringComponent = true },
                     arguments = emptyList(),
                     declaredTypeArguments = emptyList(),
                     position = position,

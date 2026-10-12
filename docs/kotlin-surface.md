@@ -103,11 +103,14 @@ specific contract, not a completeness claim.
 
 ## Missing-name diagnostics
 
-KotlinSurfaceHints distinguishes known gaps (with alternatives), close spellings
-(“Did you mean …?”) and unknown names (“neither declared in this project nor
-provided by BlueK”). It cannot generally distinguish a typo from missing Kotlin
-functionality. If a name already exists, preserve Kotlite's argument-type
-mismatch diagnostic rather than rewriting it as missing.
+The analyzer checks call names in lexical scope and on the actual receiver.
+Missing functions/methods use Kotlin's `unresolved reference '<name>'.`, even
+when another class declares that name. Existing callables with incompatible
+arguments retain their argument/overload diagnostic. Source-text declaration
+regexes and global name catalogs do not determine call reachability.
+For legacy property/member errors, KotlinSurfaceHints still distinguishes
+documented gaps, close spellings and unknown names; it cannot generally
+distinguish a typo from unsupported Kotlin functionality.
 
 Unsafe `.` on a nullable receiver gets the analyzer's safe-call/non-null-assertion
 diagnostic; an actually missing member remains unknown. The explicit gap table,

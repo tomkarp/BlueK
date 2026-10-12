@@ -417,7 +417,7 @@ fails((await project({ 'Anzeige.kt': 'class Anzeige {\n    fun zeige(text: Strin
     assert.equal(ok(p.evaluate('h.m'), 'RT-45 earlier property read through a class').display, '3');
   }
   fails((await project({ 'Main.kt': 'val a = f()', 'F.kt': 'fun f(): Int = a + 1' })).result, 'RT-45 own initializer through a function', /`a` is used before it is initialized: the initializer of `a` needs its value/);
-  fails((await project({ 'Main.kt': 'fun main() { println(fehlt()) }', 'Util.kt': 'fun hilfe(): Int = 1' })).result, 'RT-45 unknown function', /`fehlt` is unknown/);
+  fails((await project({ 'Main.kt': 'fun main() { println(fehlt()) }', 'Util.kt': 'fun hilfe(): Int = 1' })).result, 'RT-45 unknown function', /unresolved reference 'fehlt'\./);
   fails((await project({ 'A.kt': 'fun a() = b()', 'B.kt': 'fun b() = a()' })).result, 'RT-45 inference cycle', /Cannot infer return type/);
 
   // The BluePlay library is a source unit of its own: a project function named like one the
@@ -856,7 +856,7 @@ fails((await project({ 'Anzeige.kt': 'class Anzeige {\n    fun zeige(text: Strin
   ];
   for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-63 ${source}`).display, expected, `RT-63 ${source}`);
   // Unknown names and unresolved generic calls keep their fallback messages.
-  fails(p.evaluate('mutableListOf(1).apply { gibtsNicht(2) }'), 'RT-63 unknown', /`gibtsNicht` is unknown/);
+  fails(p.evaluate('mutableListOf(1).apply { gibtsNicht(2) }'), 'RT-63 unknown', /unresolved reference 'gibtsNicht'\./);
   fails(p.evaluate('mutableListOf(1).apply { add("x") }'), 'RT-63 wrong argument', /No matching function or constructor `add` found for the argument types \(String\)/);
 }
 
@@ -1047,7 +1047,7 @@ fails((await project({ 'Anzeige.kt': 'class Anzeige {\n    fun zeige(text: Strin
   for (const [source, expected] of cases) assert.equal(ok(p.evaluate(source), `RT-68 ${source}`).display, expected, `RT-68 ${source}`);
   // A real cycle needs a declared type, as in Kotlin.
   fails((await project({ 'K.kt': 'class K {\n    fun a() = b()\n    fun b() = a()\n}' })).result, 'RT-68 cycle', /Cannot infer return type of function a, because it depends on itself/);
-  fails((await project({ 'K.kt': 'class K {\n    fun a() = b() + 1\n    fun b() = unbekannt()\n}' })).result, 'RT-68 error in a function analyzed early', /`unbekannt` is unknown/);
+  fails((await project({ 'K.kt': 'class K {\n    fun a() = b() + 1\n    fun b() = unbekannt()\n}' })).result, 'RT-68 error in a function analyzed early', /unresolved reference 'unbekannt'\./);
 }
 
 // A method called by plain name inside a lambda that a library function runs (`map { f() }`) failed

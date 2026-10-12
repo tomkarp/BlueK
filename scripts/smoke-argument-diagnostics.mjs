@@ -8,7 +8,8 @@ async function load(source, library = null, fileName = 'Main.kt') {
   const session = api.bluekCreateKotliteSession();
   session.configureBluePlay(library === 'blueplay', 'argument-diagnostics');
   const result = await new Promise(resolve => {
-    const started = JSON.parse(session.startLoadProject([fileName], [source], library, 1, () => {}, value => resolve(JSON.parse(value))));
+    const files = typeof source === 'string' ? { [fileName]: source } : source;
+    const started = JSON.parse(session.startLoadProject(Object.keys(files), Object.values(files), library, 1, () => {}, value => resolve(JSON.parse(value))));
     if (started.kind === 'error') resolve(started);
   });
   return { session, result };
@@ -61,4 +62,43 @@ assert.equal(valid.session.takeOutput(), 'int\n');
 const fixed = await load(world.replace('showText(schritte,', 'showText(schritte.toString(),'), 'blueplay', 'Spielfeld.kt');
 assert.notEqual(fixed.result.kind, 'error', fixed.result.display);
 assert.equal(JSON.parse(fixed.session.evaluate('<argument-diagnostics>', 'val feld = Spielfeld(); feld.act(); feld.schritte')).display, '1');
-console.log('RT-112 argument diagnostics passed: eleven call forms, positions, rejection boundaries, overload selection and corrected BluePlay execution.');
+// RT-113: existence in another receiver/scope (or even a string/comment) is not
+// reachability. A missing name points at the callee, not its innocent argument.
+const missing = [
+  ['BluePlay wrong implicit receiver', { 'Ausreisser.kt': 'class Ausreisser : Actor() {\n    override fun act() {\n        removeObject(this)\n    }\n}' }, 'removeObject', 'blueplay'],
+  ['BluePlay wrong explicit receiver', { 'Ausreisser.kt': 'class Ausreisser : Actor() {\n    override fun act() {\n        this.removeObject(this)\n    }\n}' }, 'removeObject', 'blueplay'],
+  ['foreign class member', { 'Other.kt': 'class Other { fun hidden(value: Int) {} }', 'Main.kt': 'fun main() { hidden(17) }' }, 'hidden'],
+  ['method of another receiver', { 'Other.kt': 'class Other { fun hidden(value: Int) {} }', 'Empty.kt': 'class Empty { fun test() { this.hidden(17) } }' }, 'hidden'],
+  ['local function outside scope', { 'Main.kt': 'fun other() { fun hidden(value: Int) {} }\nfun main() { hidden(17) }' }, 'hidden'],
+  ['declaration text in string/comment', { 'Main.kt': 'val text = "fun hidden(value: Int) {}"\n// fun hidden(value: Int) {}\nfun main() { hidden(17) }' }, 'hidden'],
+  ['extension on another receiver', { 'Main.kt': 'fun String.decorate(value: Int) {}\nfun main() { listOf(1).decorate(17) }' }, 'decorate'],
+  ['unknown inside receiver lambda', { 'Main.kt': 'fun main() { mutableListOf(1).apply { hidden(17) } }' }, 'hidden'],
+];
+for (const [label, files, name, library = null] of missing) {
+  const { session, result } = await load(files, library);
+  assert.equal(result.kind, 'error', label);
+  assert.equal(result.phase, 'analysis', label);
+  const fileName = Object.keys(files).at(-1);
+  const source = files[fileName];
+  const offset = source.lastIndexOf(name);
+  const diagnostic = result.diagnostics[0];
+  assert.equal(diagnostic.fileName, fileName, label);
+  assert.equal(diagnostic.line, source.slice(0, offset).split('\n').length, label);
+  assert.equal(diagnostic.column, offset - source.lastIndexOf('\n', offset), label);
+  assert.equal(diagnostic.message.split(' at [')[0], `unresolved reference '${name}'.`, label);
+  assert.equal(session.takeOutput(), '', `${label}: no effects on rejection`);
+}
+for (const source of [
+  'fun main() { "abc".run { split(1, 2, 3) } }',
+  'class Parent { fun f() { g(17) }; fun g() {} }',
+  'val number = 1\nfun main() { number(17) }',
+  'val f: (Int) -> Int = { it }\nfun main() { f(1, 2) }',
+]) {
+  const { result } = await load(source);
+  assert.equal(result.kind, 'error', source);
+  assert.doesNotMatch(result.display, /unresolved reference/, source);
+}
+const removal = await load({ 'Ausreisser.kt': 'class Ausreisser : Actor() { override fun act() { world.removeObject(this) } }' }, 'blueplay');
+assert.notEqual(removal.result.kind, 'error', removal.result.display);
+assert.equal(JSON.parse(removal.session.evaluate('<argument-diagnostics>', 'val w = World(10, 10, 1); val a = Ausreisser(); w.addObject(a, 1, 1); a.act(); w.numberOfObjects')).display, '0');
+console.log('RT-112/113 diagnostics passed: eleven argument forms, eight unresolved calls, reachability/overload boundaries and corrected BluePlay execution.');

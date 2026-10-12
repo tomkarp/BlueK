@@ -93,7 +93,7 @@ class SemanticAnalyzerSymbolTable(
     }
 
     // only use in semantic analyzer
-    private fun findAllMatchingCallables(currentSymbolTable: SymbolTable, originalName: String, receiverClass: ClassDefinition?, receiverType: DataType?, arguments: List<FunctionCallArgumentInfo>, modifierFilter: SearchFunctionModifier, checkArgumentTypes: Boolean = true): List<FindCallableResult> {
+    private fun findAllMatchingCallables(currentSymbolTable: SymbolTable, originalName: String, receiverClass: ClassDefinition?, receiverType: DataType?, arguments: List<FunctionCallArgumentInfo>, modifierFilter: SearchFunctionModifier, checkArgumentTypes: Boolean = true, checkArgumentShape: Boolean = true): List<FindCallableResult> {
         beforeFunctionLookup?.invoke(originalName)
         var thisScopeCandidates = mutableListOf<FindCallableResult>()
         if (receiverClass == null) {
@@ -120,7 +120,7 @@ class SemanticAnalyzerSymbolTable(
             implicitReceiverType(currentSymbolTable)?.let { receiver ->
                 val clazz = (receiver as? ObjectType)?.clazz
                 if (clazz != null) {
-                    findAllMatchingCallables(currentSymbolTable, originalName, clazz, receiver, arguments, modifierFilter, checkArgumentTypes)
+                    findAllMatchingCallables(currentSymbolTable, originalName, clazz, receiver, arguments, modifierFilter, checkArgumentTypes, checkArgumentShape)
                         .filter { it.type == CallableType.ClassMemberFunction }
                         .let { thisScopeCandidates += it }
                 }
@@ -263,6 +263,7 @@ class SemanticAnalyzerSymbolTable(
                 }
             }
             .filter { callable ->
+                if (!checkArgumentShape) return@filter true
                 declareTempTypeAlias((callable.typeParameters + callable.extraTypeParameters).map {
                     it.name to it.typeUpperBoundOrAny()
                 })
@@ -329,7 +330,16 @@ class SemanticAnalyzerSymbolTable(
                     popTempTypeAlias()
                 }
             }.toMutableList()
-        return thisScopeCandidates + ((parentScope as? SemanticAnalyzerSymbolTable)?.findAllMatchingCallables(currentSymbolTable, originalName, receiverClass, receiverType, arguments, modifierFilter, checkArgumentTypes) ?: emptyList())
+        return thisScopeCandidates + ((parentScope as? SemanticAnalyzerSymbolTable)?.findAllMatchingCallables(currentSymbolTable, originalName, receiverClass, receiverType, arguments, modifierFilter, checkArgumentTypes, checkArgumentShape) ?: emptyList())
+    }
+
+    /** Whether a callable name is reachable here, independently of supplied arguments. */
+    fun hasCallableNamed(currentSymbolTable: SymbolTable, originalName: String, modifierFilter: SearchFunctionModifier, receiverType: DataType? = null): Boolean {
+        val receiverClass = receiverType
+            ?.let { if (it is TypeParameterType) it.upperBound else it }
+            ?.let { findClass(it.nameWithNullable)?.first }
+        return findAllMatchingCallables(currentSymbolTable, originalName, receiverClass, receiverType, emptyList(), modifierFilter,
+            checkArgumentTypes = false, checkArgumentShape = false).isNotEmpty()
     }
 
     /** Diagnostic-only candidates: preserve names/arity/defaults and receiver lookup,

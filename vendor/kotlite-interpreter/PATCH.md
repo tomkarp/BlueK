@@ -24,6 +24,17 @@ browser-session fixes without replacing Kotlite with a separate interpreter.
 
 ## Changes
 
+Call name reachability (RT-113): failed unqualified calls check the same lexical,
+constructor and implicit-receiver lookup independently of arguments. Missing
+calls raise `UnresolvedReferenceException` with Kotlin 2.2.21's
+`unresolved reference '<name>'.` at the callee. Dotted calls check their actual
+receiver, including extensions and function-valued properties. Existing callables
+with wrong arity/types retain argument diagnostics. Synthetic destructuring
+component accesses are marked by the parser to preserve their dedicated error.
+The session no longer guesses reachability from source-text declaration regexes
+or a global name catalog. Coverage: argument diagnostics, Kotlin surface,
+curriculum and the RT-113 English/German browser cases.
+
 Argument type diagnostics (RT-112): when normal overload resolution fails,
 reuse the existing callable lookup with argument types ignored for diagnostics
 only. A unique concrete signature with matching names/arity/defaults supplies

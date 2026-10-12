@@ -331,15 +331,15 @@ const messages = [
   // 1. documented gap -> named alternative
   ['Math.abs(-1)', /`Math` belongs to Java and is not available in BlueK/],
   ['val (d1, d2) = 5', /Destructuring declaration initializer of type Int must have a 'component1\(\)' function/],
-  // 2. close to a name BlueK has -> suggestion
-  ['minOff(1, 2)', /`minOff` is not available in BlueK\. Did you mean `minOf`\?/],
-  ['pritnln("a")', /Did you mean `println`\?/],
-  ['"abc".splitt(",")', /`splitt` is not available for String in BlueK\. Did you mean `split`\?/],
-  // 3. no idea -> name both possibilities, blame neither
+  // Missing call names use Kotlin wording, even for close spellings.
+  ['minOff(1, 2)', /unresolved reference 'minOff'\./],
+  ['pritnln("a")', /unresolved reference 'pritnln'\./],
+  ['"abc".splitt(",")', /unresolved reference 'splitt'\./],
+  // Name existence elsewhere cannot make an unreachable call valid.
   // (a name the session never declares - `quersumme` below is declared, and
   // would correctly be passed through as an argument-type error)
-  ['bruttosumme(5)', /`bruttosumme` is unknown: neither declared in this project nor provided by BlueK/],
-  ['listOf(1, 2).verdopple()', /`verdopple` is unknown for List<Int>: neither declared/],
+  ['bruttosumme(5)', /unresolved reference 'bruttosumme'\./],
+  ['listOf(1, 2).verdopple()', /unresolved reference 'verdopple'\./],
   // Kotlite's own wording must not leak for any of these.
   ['zzz(1)', /^(?!.*No matching function)/],
   ['"abc".zzz()', /^(?!.*has no member)/],
@@ -355,7 +355,7 @@ const nullableReceiver = [
   ['class NlHund2 {\n  var name: String? = null\n  fun laenge(): Int = name.length\n}', /nullable receiver of type 'String\?'/],
   ['val nl2: String? = null; nl2.length', /nullable receiver of type 'String\?'/],
   ['class NlBox(var n: Int); val nl3: NlBox? = null; nl3.n = 3', /nullable receiver of type 'NlBox\?'/],
-  ['val nl4: String? = null; nl4.zzz()', /`zzz` is unknown for String/],
+  ['val nl4: String? = null; nl4.zzz()', /unresolved reference 'zzz'\./],
 ];
 
 // A name that exists but is called wrongly is NOT a gap: argument/overload

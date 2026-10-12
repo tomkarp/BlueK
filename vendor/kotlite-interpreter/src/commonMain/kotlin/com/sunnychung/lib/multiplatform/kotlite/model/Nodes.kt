@@ -616,6 +616,8 @@ data class NavigationNode(
     @ModifyByAnalyzer var qualifiedProperty: VariableReferenceNode? = null
     /** The analyzer synthesizes this access for a for-loop's iterator call. */
     @ModifyByAnalyzer var isForLoopIterator: Boolean = false
+    /** The parser synthesized this access from a destructuring declaration. */
+    var isDestructuringComponent: Boolean = false
 
     // Interpreter only: the member resolution for the last class seen here.
     internal var resolvedClass: ClassDefinition? = null

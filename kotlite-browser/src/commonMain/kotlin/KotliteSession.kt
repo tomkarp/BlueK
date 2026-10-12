@@ -64,7 +64,6 @@ class KotliteSession {
     private val knownNames: MutableSet<String> = mutableSetOf()
 
     /** The source of the most recent analysis, used to explain a failed one. */
-    private var analysisCandidate: String = ""
 
     private var environment = ExecutionEnvironment()
     private lateinit var interpreter: Interpreter
@@ -818,7 +817,6 @@ class KotliteSession {
         if (faulted) return errorMessage("Runtime failed. Reset or compile before running more code.", "runtime", true)
         val boundary = analysisSource.length + 1
         val candidate = analysisSource + "\n" + source
-        analysisCandidate = candidate
         val units = listOf(boundary) + unitOffsets.map { boundary + it }
         val analyzed = try {
             ReplAnalyzer.analyze("<BlueK project>", candidate, environment, retiredProperties, sourceUnitStarts + units)
@@ -1299,24 +1297,14 @@ class KotliteSession {
         // `MyEx: x`, or `MyEx` without message, for the thrown object (also a student subclass).
         if (thrown != null) return thrown.wholeInstance().convertToString(isCallCustomFunction = false)
         val message = error.message ?: "Kotlite evaluation failed."
-        // A missing name is reported by Kotlite as an ordinary analysis error.
-        // BlueK says instead which side the gap is on; the exception class name
-        // would only add noise there.
-        return KotlinSurfaceHints.rewrite(message, knownNames, declaredNames())
+        // Callable diagnostics come from semantic lookup. Legacy property
+        // errors may still receive BlueK gap hints; exception class names add
+        // no useful information to either compile diagnosis.
+        return KotlinSurfaceHints.rewrite(message, knownNames)
             // SemanticException and its subclasses describe compile diagnostics,
             // not exceptions thrown by the student's program.
             ?: if (error is SemanticException) message else "${error.fullClassName}: $message"
     }
-    /**
-     * Names the student declared in the analyzed source. Kotlite reports a
-     * wrong argument type with the same wording as an unknown name, so a name
-     * found here must keep Kotlite's message - it lists the argument types.
-     */
-    private fun declaredNames(): Set<String> =
-        Regex("\\b(?:fun|class|val|var)\\s+([A-Za-z_][A-Za-z0-9_]*)")
-            .findAll(analysisCandidate)
-            .mapTo(mutableSetOf()) { it.groupValues[1] }
-
     private fun errorMessage(message: String, phase: String = "request", fatal: Boolean = false): String =
         "{\"kind\":\"error\",\"display\":\"${escape(message)}\",\"phase\":\"$phase\",\"fatal\":$fatal}"
     private fun escape(value: String): String = escapeJson(value)

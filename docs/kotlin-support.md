@@ -85,6 +85,9 @@ When a call has one concrete matching signature but an incompatible argument,
 the error uses Kotlin 2.2.21's argument type mismatch wording, naming actual and
 expected types and pointing at the argument. Diagnostics for unsuccessful
 overloads or generic inference may still differ from the Kotlin compiler.
+Missing call names use Kotlin 2.2.21's `unresolved reference '<name>'.` at the
+function/method name. Reachability follows lexical scope and the actual receiver;
+a method on a different class does not turn a missing call into an argument error.
 
 - Callable references accept a name before `::` (`::f`, `String::length`,
   `items::add`, `::Card`), but not expressions such as `Calculator(10)::times`.

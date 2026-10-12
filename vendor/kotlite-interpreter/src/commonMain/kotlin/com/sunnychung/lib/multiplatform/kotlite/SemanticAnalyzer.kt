@@ -2,6 +2,7 @@ package com.sunnychung.lib.multiplatform.kotlite
 
 import com.sunnychung.lib.multiplatform.kotlite.error.CannotInferTypeException
 import com.sunnychung.lib.multiplatform.kotlite.error.ArgumentTypeMismatchException
+import com.sunnychung.lib.multiplatform.kotlite.error.UnresolvedReferenceException
 import com.sunnychung.lib.multiplatform.kotlite.error.IdentifierClassifier
 import com.sunnychung.lib.multiplatform.kotlite.error.SemanticException
 import com.sunnychung.lib.multiplatform.kotlite.error.TypeMismatchException
@@ -2315,6 +2316,15 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                         return
                     }
                     reportArgumentTypeMismatch(functionName, null)
+                    val lookupFilter = if (function is TypeNode) SearchFunctionModifier.ConstructorOnly else modifierFilter!!
+                    val hasCallable = currentScope.hasCallableNamed(currentScope, functionName, lookupFilter) ||
+                        currentScope.getPropertyTypeOrNull("this")?.first?.type?.let {
+                            currentScope.hasCallableNamed(currentScope, functionName, lookupFilter, receiverType = it)
+                        } == true
+                    if (!hasCallable &&
+                        !(function is VariableReferenceNode && currentScope.hasProperty(functionName))) {
+                        throw UnresolvedReferenceException(function.position, functionName)
+                    }
                     throw SemanticException(position, "No matching function or constructor `${functionName}` found for the argument types (${describeArgumentTypes()})")
                 }
                 if (function is VariableReferenceNode) {
@@ -3358,6 +3368,9 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     return subjectType
                 }
             }
+        }
+        if (lookupType == IdentifierClassifier.Function && !isDestructuringComponent && !isForLoopIterator) {
+            throw UnresolvedReferenceException(member.position, memberName)
         }
         throw SemanticException(position, "Type `${subjectType.descriptiveName}` has no member `$memberName`")
     }
