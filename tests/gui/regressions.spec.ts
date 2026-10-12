@@ -1902,6 +1902,33 @@ for (const locale of ['en', 'de']) {
   });
 }
 
+for (const locale of ['en', 'de']) {
+  test(`RT-111 missing override shows the Kotlin compiler wording (${locale})`, async ({ page }) => {
+    await page.addInitScript(language => localStorage.setItem('bluek-language', language), locale);
+    const payload = { format: 'bluek-project', version: 1, library: { id: 'blueplay', version: 1 }, files: [
+      { fileName: 'Spielfeld.kt', kind: 'class', source: 'class Spielfeld : World(600, 400, 1) {\n    var schritte: Int = 0\n\n    fun act() {\n        schritte++\n        println(schritte)\n    }\n}' },
+    ] };
+    await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+    const compile = page.getByRole('button', { name: locale === 'de' ? 'Kompilieren' : 'Compile', exact: true });
+    await compile.click();
+    const editor = page.locator('.editor-dialog');
+    await expect(editor.locator('.editor-header h3')).toHaveText('Spielfeld.kt');
+    await expect(editor.locator('.editor-diagnostic')).toHaveText(
+      `${locale === 'de' ? 'Zeile' : 'Line'} 4: 'act' hides member of supertype 'World' and needs an 'override' modifier.`,
+    );
+    await expect(editor.locator('.cm-bluek-error-line')).toContainText('fun act()');
+    const spielfeld = page.locator('.classcard[aria-label="Spielfeld"]');
+    await expect(spielfeld).toHaveClass(/uncompiled/);
+    await editor.locator('.cm-line').filter({ hasText: 'fun act()' }).click();
+    await page.keyboard.press('Home');
+    await page.keyboard.type('    override ');
+    await compile.click();
+    await expect(editor.locator('.editor-diagnostics')).toHaveCount(0);
+    await expect(editor.locator('.cm-bluek-error-line')).toHaveCount(0);
+    await expect(spielfeld).not.toHaveClass(/uncompiled/);
+  });
+}
+
 test('RT-50 nullable for-loop reports iterator requirement at the subject', async ({ page }) => {
   // Keep an explicitly nullable test property independent of Actor.world's API.
   const source = 'class Krokodil { val world: World? = null\n    fun act() {\n        for (ente in world?.getObjects<Ente>()) {}\n    }\n}';

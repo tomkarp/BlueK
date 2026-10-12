@@ -18,9 +18,10 @@ fun main() {
 }
 ```
 
-The world window has, from left to right, **Act**, **Run** and **Reset**, then
-**Speed**. While the world runs, Run turns into **Pause**; the three buttons keep
-the same size in every state. Exported players use the same controls.
+The world window always has, from left to right, **Act**, **Run** and **Reset**, then
+**Speed**, including projects without a main function. While the world runs,
+Run turns into **Pause**; the three buttons keep the same size in every state.
+Exported players use the same controls.
 While the world runs, its window cannot be closed (the close button is
 disabled and Escape keeps it open); pause it first. If Run starts while the
 window is closed, for example through `start()` in the codepad, the window
@@ -33,7 +34,8 @@ shortens a wait that is already running. Programs tuned for BlueJ's BluePlay
 One step calls World.act and then act on actors still present in the world.
 Showing a world pauses simulation and reopens a previously closed world window.
 Reset invokes the chosen main again in the existing session; it does not rerun
-top-level property initialization. Keyboard/mouse input remains available during
+top-level property initialization. Without a main function, Reset has no effect.
+Keyboard/mouse input remains available during
 Run. Pause before using codepad/object operations.
 
 The canvas retains its real pixel size (`width * cellSize`, `height * cellSize`).

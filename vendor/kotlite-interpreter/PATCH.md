@@ -24,6 +24,13 @@ browser-session fixes without replacing Kotlite with a separate interpreter.
 
 ## Changes
 
+Missing method `override` (RT-111): report Kotlin 2.2.21's
+`'<method>' hides member of supertype '<type>' and needs an 'override' modifier.`
+instead of Kotlite's generic explanation. The member resolver supplies the
+declaring supertype, including ancestor classes, interfaces and `Any`.
+Coverage: `scripts/smoke-curriculum-kotlin.mjs` and the English/German RT-111
+editor cases in `tests/gui/regressions.spec.ts`.
+
 Builtin extensions across repeated analysis: a long-lived session analyzes
 several snippets against one execution environment, and each pass regenerates
 the transformed names of builtin extensions. When the registered name is no

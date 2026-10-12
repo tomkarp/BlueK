@@ -13,7 +13,6 @@
   export let speed: number;
   export let canExecute: boolean;
   export let stageRunning: boolean;
-  export let mainEntries: string[];
   export let phase: RuntimeSnapshot["phase"];
   export let simulation: RuntimeSnapshot["simulation"];
   export let libraryId: string;
@@ -99,12 +98,12 @@
             ></span
           ></button
         >
-        {#if mainEntries.length}<button
-            on:click={resetGame}
-            disabled={!canExecute}
-            aria-label={t("ui.blueplay.resetBluePlayWorld")}
-            >{t("ui.blueplay.reset")}</button
-          >{/if}
+        <button
+          on:click={resetGame}
+          disabled={!canExecute}
+          aria-label={t("ui.blueplay.resetBluePlayWorld")}
+          >{t("ui.blueplay.reset")}</button
+        >
       </div>
       <label
         >{t("ui.blueplay.speed")}

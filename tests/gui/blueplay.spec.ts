@@ -328,6 +328,45 @@ test('GUI-94 BluePlay Reset preserves maximized and restored window sizes', asyn
   expect(await stage.boundingBox()).toEqual(restoredBounds);
 });
 
+test('GUI-94 BluePlay without main keeps all three controls and Reset has no effect', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, library: { id: 'blueplay', version: 1 }, files: [
+    { fileName: 'Spielfeld.kt', kind: 'class', source: 'class Spielfeld : World(100, 100, 1) { var schritte = 0; override fun act() { schritte++ } }' },
+  ] };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  const input = page.getByLabel('Codepad input');
+  await input.fill('val feld = Spielfeld(); feld.show(); println("keep")');
+  await input.press('Enter');
+  const stage = page.getByRole('dialog', { name: 'BluePlay – World' });
+  await expect(stage).toBeVisible();
+  const buttons = stage.locator('.game-buttons button');
+  await expect(buttons).toHaveCount(3);
+  for (const [index, name] of ['Act once', 'Run BluePlay world', 'Reset BluePlay world'].entries()) {
+    await expect(buttons.nth(index)).toHaveAccessibleName(name);
+    await expect(buttons.nth(index)).toBeEnabled();
+  }
+  const initialFrameVersion = await stage.getAttribute('data-frame-version');
+  await buttons.nth(0).click();
+  await expect(stage).not.toHaveAttribute('data-frame-version', initialFrameVersion!);
+  await expect(stage).toHaveAttribute('data-simulation', 'paused');
+  const frameVersion = await stage.getAttribute('data-frame-version');
+  const historyCount = await page.locator('.codepad-entry').count();
+  await buttons.nth(2).click();
+  await expect(stage).toHaveAttribute('data-phase', 'ready');
+  await expect(stage).toHaveAttribute('data-frame-version', frameVersion!);
+  await expect(page.locator('.terminal-output pre')).toHaveText('keep\n');
+  await expect(page.locator('.codepad-entry')).toHaveCount(historyCount);
+  await input.fill('feld.schritte');
+  await input.press('Enter');
+  await expect(page.locator('.codepad-entry').last().locator('.codepad-result-value')).toHaveText('1');
+  await buttons.nth(1).click();
+  await expect(stage).toHaveAttribute('data-simulation', 'running');
+  await expect(buttons).toHaveCount(3);
+  await expect(buttons.nth(1)).toHaveAccessibleName('Pause BluePlay world');
+  await expect(buttons.nth(2)).toBeVisible();
+  await buttons.nth(1).click();
+  await expect(stage).toHaveAttribute('data-simulation', 'paused');
+});
+
 test('RT-11 Run stays active, Pause stops it, and speed can be dragged during Run', async ({ page }) => {
   const stage = await loadBluePlay(page);
   const run = stage.getByRole('button', { name: 'Run BluePlay world' });

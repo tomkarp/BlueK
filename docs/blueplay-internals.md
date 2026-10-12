@@ -54,7 +54,11 @@ stop or exception, publishes a full snapshot including inspection.
 Key/click acknowledgments update input only, never falsely set running phase or
 republish stale frames. During Run, execution commands are rejected until Pause.
 Reset selects main, stops scheduling and invokes it in the same session via
-startBluePlayMain. It may request input. World.show pauses; pure frame rendering
+startBluePlayMain. It may request input. The IDE world window always renders
+Act, Run/Pause and Reset.
+Without main, `ExecutionWorkspace.requestMain` returns before dispatch or UI
+cleanup, so Reset preserves the world, objects, terminal and history.
+World.show pauses; pure frame rendering
 does not. Its reopen effect must work even if the UI previously closed the world.
 
 ## Rendering

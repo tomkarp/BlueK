@@ -341,7 +341,8 @@ open class ClassDefinition(
                     thisFunc.inferredReturnType = identicalSuperClassFunctions.first().resolvedReturnType
                 }
                 if (hasOverridden && FunctionModifier.override !in thisFunc.modifiers) {
-                    throw SemanticException(thisFunc.position, "A function cannot override anything without the modifier `override`")
+                    val superTypeName = identicalSuperClassFunctions.first().enclosingTypeName
+                    throw SemanticException(thisFunc.position, "'${thisFunc.name}' hides member of supertype '$superTypeName' and needs an 'override' modifier.")
                 }
                 if (!hasOverridden && FunctionModifier.override in thisFunc.modifiers) {
                     throw SemanticException(thisFunc.position, "Function `${thisFunc.name}` of type `$fullQualifiedName` overrides nothing")

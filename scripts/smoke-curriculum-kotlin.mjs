@@ -175,6 +175,41 @@ for (const declaration of ['var name', 'var name: String']) {
 }
 ok((await project({ 'Auto.kt': 'class Auto {\n    var marke: String\n    init {\n        marke = "BMW"\n    }\n}' })).result, 'property assigned in init');
 
+// RT-111: missing method override uses the Kotlin 2.2.21 compiler wording,
+// including the declaring supertype rather than the immediate superclass.
+{
+  const source = 'class Spielfeld : World(600, 400, 1) {\n    var schritte: Int = 0\n\n    fun act() {\n        schritte++\n        println(schritte)\n    }\n}';
+  const cases = [
+    ['BluePlay World', { 'Spielfeld.kt': source }, 'blueplay', 'Spielfeld.kt', 4, 'act', 'World'],
+    ['BluePlay Actor', { 'Figur.kt': 'class Figur : Actor() {\n    fun act() {}\n}' }, 'blueplay', 'Figur.kt', 2, 'act', 'Actor'],
+    ['ancestor method', { 'Base.kt': 'open class Base { open fun act() {} }', 'Middle.kt': 'open class Middle : Base()', 'Leaf.kt': 'class Leaf : Middle() {\n    fun act() {}\n}' }, null, 'Leaf.kt', 2, 'act', 'Base'],
+    ['interface method', { 'Named.kt': 'interface Named { fun name(): String }', 'Entry.kt': 'class Entry : Named {\n    fun name(): String = "entry"\n}' }, null, 'Entry.kt', 2, 'name', 'Named'],
+    ['Any method', { 'Plain.kt': 'class Plain {\n    fun toString(): String = "plain"\n}' }, null, 'Plain.kt', 2, 'toString', 'Any'],
+  ];
+  for (const [label, files, library, fileName, line, method, supertype] of cases) {
+    const result = fails((await project(files, library)).result, `RT-111 ${label}`);
+    const expected = `'${method}' hides member of supertype '${supertype}' and needs an 'override' modifier.`;
+    assert.equal(result.phase, 'analysis', label);
+    assert.equal(result.fatal, false, label);
+    assert.equal(result.diagnostics.length, 1, label);
+    const diagnostic = result.diagnostics[0];
+    assert.equal(diagnostic.fileName, fileName, label);
+    assert.equal(diagnostic.line, line, label);
+    assert.equal(diagnostic.severity, 'error', label);
+    assert.equal(diagnostic.message.split(' at [')[0], expected, label);
+  }
+  const corrected = await project({ 'Spielfeld.kt': source.replace('fun act()', 'override fun act()') }, 'blueplay');
+  ok(corrected.result, 'RT-111 corrected override');
+  ok(corrected.evaluate('val feld = Spielfeld(); feld.act()'), 'RT-111 corrected override executes');
+  assert.equal(corrected.output(), '1\n');
+  ok((await project({ 'Spielfeld.kt': 'class Spielfeld : World(600, 400, 1) { fun act(step: Int) {} }' }, 'blueplay')).result,
+    'RT-111 overload needs no override');
+  const codepad = await project({ 'Base.kt': 'open class Base { open fun act() {} }' });
+  ok(codepad.result, 'RT-111 codepad base');
+  const error = fails(codepad.evaluate('class Leaf : Base() { fun act() {} }'), 'RT-111 codepad override');
+  assert.ok(error.display.startsWith("'act' hides member of supertype 'Base' and needs an 'override' modifier."));
+}
+
 // RT-110 / feedback #12: delayed local val initialization follows the selected
 // branch, rather than treating analysis of another branch as a second write.
 {

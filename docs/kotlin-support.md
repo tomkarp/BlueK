@@ -22,6 +22,9 @@ package-qualified library expressions and package declarations are not supported
 - Inheritance with `open`, `abstract`, `override` and `super`; interfaces with
   default methods and abstract properties; sealed classes/interfaces and
   exhaustive `when` over their subclasses.
+  Missing `override` on a method uses the Kotlin 2.2.21 compiler's diagnostic
+  wording, naming the method and its declaring supertype. Other diagnostics
+  may still differ from the Kotlin compiler.
 - Nested classes, enums, interfaces and objects; inner classes with access to
   the enclosing object and `this@Outer`.
 - Classes referring to each other across files regardless of declaration

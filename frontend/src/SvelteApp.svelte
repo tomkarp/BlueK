@@ -413,7 +413,6 @@
     bind:speed={play.speed}
     canExecute={session.canExecute}
     stageRunning={play.stageRunning}
-    mainEntries={session.mainEntries}
     phase={session.runtime.phase}
     simulation={session.runtime.simulation}
     libraryId={project.library?.id || ""}
