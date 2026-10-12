@@ -116,12 +116,14 @@ const transportFailure = first.objects.executeInspectorCommand({ op: 'inspect', 
 await Promise.resolve();
 pending.reject(new Error('Transport failed'));
 await assert.rejects(transportFailure, /Transport failed/, 'A real failure in the current generation is preserved');
+const deletedFiles = [];
+let invalidations = 0;
 const project = new ProjectWorkspace({
   tests: () => ({ async loadDefaultFixture() {} }),
   objects: () => ({ dismissMenu() {} }),
-  session: () => ({ markUncompiled() {}, sourceEdited() {} }),
+  session: () => ({ markUncompiled() { invalidations++; }, sourceEdited() {} }),
   ui: () => first.ui,
-  editor: () => ({ openEditor() {}, removeFile() {} }),
+  editor: () => ({ openEditor() {}, removeFile(id) { deletedFiles.push(id); } }),
 });
 project.files = [{ id: 'hund', fileName: 'Hund.kt', source: 'class Hund', kind: 'class', revision: 1 }];
 const attached = project.addTestClass(project.files[0], 'HundTest');
@@ -134,11 +136,34 @@ assert.equal(project.defaultTestClass, 'RenamedTest');
 project.duplicateFile(project.files.find(file => file.id === attached.id));
 assert.equal(project.files.at(-1).testTarget, undefined, 'A duplicate test card is independent');
 assert.equal(project.files.at(-1).isTestClass, true);
-project.deleteFile(project.files[0]);
-assert.equal(project.files.find(file => file.id === attached.id).testTarget, undefined, 'Deleting the parent frees its attached test card');
-project.deleteFile(project.files.find(file => file.id === attached.id));
-assert.equal(project.defaultTestClass, '', 'Deleting the default test clears the setting');
-assert.equal(project.canShareState, false, 'A deleted default class disables the link option');
+const deletionWindow = globalThis.window;
+const deletePrompts = [];
+let allowDelete = false;
+globalThis.window = { confirm(message) { deletePrompts.push(message); return allowDelete; } };
+try {
+  const before = JSON.stringify(project.files);
+  const positions = JSON.stringify(project.cardPositions);
+  const invalidationsBefore = invalidations;
+  project.deleteFile(project.files[0]);
+  assert.equal(JSON.stringify(project.files), before, 'Cancelling deletion preserves files and test attachments');
+  assert.equal(JSON.stringify(project.cardPositions), positions, 'Cancelling deletion preserves card positions');
+  assert.equal(project.defaultTestClass, 'RenamedTest', 'Cancelling deletion preserves the default test');
+  assert.equal(invalidations, invalidationsBefore, 'Cancelling deletion keeps the runtime session');
+  assert.deepEqual(deletedFiles, [], 'Cancelling deletion keeps editor windows');
+  allowDelete = true;
+  project.deleteFile(project.files[0]);
+  assert.equal(project.files.find(file => file.id === attached.id).testTarget, undefined, 'Deleting the parent frees its attached test card');
+  project.deleteFile(project.files.find(file => file.id === attached.id));
+  assert.equal(project.defaultTestClass, '', 'Deleting the default test clears the setting');
+  assert.equal(project.canShareState, false, 'A deleted default class disables the link option');
+  assert.deepEqual(deletePrompts, [
+    'Delete the file “Hund.kt” from this project?',
+    'Delete the file “Hund.kt” from this project?',
+    'Delete the file “RenamedTest.kt” from this project?',
+  ]);
+  assert.deepEqual(deletedFiles, ['hund', attached.id]);
+  assert.equal(invalidations, invalidationsBefore + 2, 'Confirmed deletions invalidate the runtime');
+} finally { globalThis.window = deletionWindow; }
 
 // GUI-137: reopening a cancelled report must capture the current complete
 // project, including functions/tests/resources and their matching diagnostics.

@@ -593,6 +593,8 @@ export class ProjectWorkspace {
     this.host.session().sourceEdited();
   };
   deleteFile = (file: ProjectFile) => {
+    if (!window.confirm(this.text("ui.objects.deleteFileConfirm", [file.fileName])))
+      return;
     const attached = this.files.filter(
       (item) => item.testTarget === file.fileName,
     );

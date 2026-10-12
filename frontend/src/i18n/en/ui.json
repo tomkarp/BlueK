@@ -119,6 +119,7 @@
     "saveStateFromObjectBench": "Save State from Object Bench",
     "openEditor": "Open Editor",
     "delete": "Delete",
+    "deleteFileConfirm": "Delete the file “{0}” from this project?",
     "duplicate": "Duplicate…",
     "inheritedFrom": "inherited from",
     "noAccessibleMethods": "(No accessible methods)",

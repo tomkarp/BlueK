@@ -119,6 +119,7 @@
     "saveStateFromObjectBench": "Zustand aus dem Objektbereich speichern",
     "openEditor": "Editor öffnen",
     "delete": "Löschen",
+    "deleteFileConfirm": "Die Datei „{0}“ aus diesem Projekt löschen?",
     "duplicate": "Duplizieren…",
     "inheritedFrom": "geerbt von",
     "noAccessibleMethods": "(Keine zugänglichen Methoden)",

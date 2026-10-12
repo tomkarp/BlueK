@@ -26,6 +26,10 @@ Each Kotlin file contains either one class, interface or enum, or top-level
 functions and properties. Inheritance appears as arrows in the diagram.
 A project can also have a name and a README note.
 
+Use **Delete** in a file card's context menu to remove it. BlueK asks for
+confirmation with the filename, including class, test and functions files.
+Cancel keeps the file and the current runtime session.
+
 The editor supports Kotlin syntax highlighting, formatting, tabs, windows,
 font settings, dark mode and an optional Vim mode. Formatting runs locally.
 Compile errors point to the relevant file and source position.

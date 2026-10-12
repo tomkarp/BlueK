@@ -119,6 +119,8 @@ error text. The warning stays until closed or until saving succeeds; a closed
 warning returns only for a different reason.
 
 Deleting saved drafts requires confirmation and keeps settings/open projects.
+Deleting a project source file also requires confirmation before changing files,
+test attachments, editor windows or the runtime session.
 An unchanged tab does not recreate a deleted entry on close or BFCache return;
 subsequent edits may save again. Normalize payloads before fingerprinting so
 JSON field order cannot create false updates. Keep the fingerprint when
