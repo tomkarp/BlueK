@@ -161,6 +161,9 @@ Compile terminates the old worker, rejects pending requests, creates a UUID
 and event carries the generation. Client epoch, host execution ID and input
 request ID prevent late or duplicate results from being applied. Related UI
 dialogs/handles are invalidated. Source edits invalidate the session.
+The IDE closes the BluePlay world when compilation begins, including compilation
+on demand. The previous world's canvas must not survive a replaced session.
+Compile does not automatically execute main.
 
 | Phase | Meaning |
 | --- | --- |

@@ -491,6 +491,22 @@ projectClient.invalidate();
     source: 'fun main() { starts += 10; println("Main $starts"); World(80, 50, 1).show() }' };
   const library = { id: 'blueplay', version: 1 };
   assert.deepEqual((await mains.compile([program], 1, library)).diagnostics, []);
+  // RT-114: a fresh compilation has no shown world. This is a request error,
+  // not a broken interpreter/simulation; main can still initialize the session.
+  for (const action of ['start', 'step']) {
+    const result = await mains.simulation(action);
+    assert.equal(result.kind, 'error');
+    assert.equal(result.display, 'No BluePlay world has been shown yet.');
+    assert.equal(mains.getSnapshot().simulation, 'inactive');
+    assert.equal(mains.getSnapshot().phase, 'ready');
+  }
+  assert.notEqual((await mains.execute({ op: 'eval', code: 'start()' })).kind, 'error');
+  const stoppedAt = Date.now();
+  while (mains.getSnapshot().simulation === 'running' && Date.now() - stoppedAt < 2000)
+    await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(mains.getSnapshot().simulation, 'paused', 'student start() without show() also recovers');
+  assert.equal(mains.getSnapshot().phase, 'ready');
+  assert.equal(mains.getSnapshot().error, 'No BluePlay world has been shown yet.');
   assert.notEqual((await mains.reset()).kind, 'error', 'single main outside Main.kt runs automatically');
   assert.equal(output.join(''), 'Program 1\n');
   assert.equal(mains.getSnapshot().stage.width, 60);

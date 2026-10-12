@@ -338,6 +338,10 @@ export class RuntimeHost {
       emit(this.publish(id, { kind: 'unit', display: 'Unit' }));
       return;
     }
+    // Compile creates a session without a shown world. Reject this request
+    // before scheduling a tick; absence of a world is not an interpreter fault.
+    if ((command.action === 'start' || command.action === 'step') && !this.snapshot.stage)
+      throw new RequestError('No BluePlay world has been shown yet.');
     if (command.action === 'start') {
       if (this.simulation.state === 'running' || this.simulation.state === 'stopping') { emit(this.publish(id, { kind: 'unit', display: 'Unit' })); return; }
       this.session.takeBluePlayIntent();
@@ -392,7 +396,13 @@ export class RuntimeHost {
       if (automatic && this.simulation.state === 'running') this.scheduleSimulationStep(performance.now() - startedAt);
     };
     const started = this.session.startBluePlayStep(onInput, onComplete); const initial = JSON.parse(started) as RuntimeValue;
-    if (initial.kind === 'error') { this.active = null; this.simulation.state = 'faulted'; if (automatic) this.emitSimulationSnapshot(executionId, emit, initial); else emit(this.publish(id, initial)); }
+    if (initial.kind === 'error') {
+      this.active = null;
+      this.simulation.state = initial.fatal ? 'faulted' : 'paused';
+      this.snapshot.phase = initial.fatal ? 'faulted' : 'ready';
+      if (automatic) this.emitSimulationSnapshot(executionId, emit, initial);
+      else emit(this.publish(id, initial));
+    }
   }
 
   /** Without `elapsed` (ms since the previous step began) Run starts, whose first step runs at once, as in Greenfoot. */

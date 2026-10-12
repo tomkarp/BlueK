@@ -1,0 +1,40 @@
+{
+  "format": "bluek-project",
+  "version": 1,
+  "library": {
+    "id": "blueplay",
+    "version": 1
+  },
+  "files": [
+    {
+      "fileName": "Spielfeld.kt",
+      "kind": "class",
+      "source": "class Spielfeld : World(600, 400, 1) {\n    var schritte: Int = 0\n\n    init {\n        addObject(Ausreisser(), 50, 50)\n        addObject(Ausreisser(), 300, 200)\n        addObject(Ausreisser(), 550, 350)\n        setBackground(\"dog.png\")\n    }\n\n    override fun act() {\n        schritte++\n        if (schritte % 50 == 0) {\n            addObject(Ausreisser(), 300, 200)\n        }\n        if (numberOfObjects == 0) {\n            showText(schritte.toString(), 100, 50)\n            stop()\n        }\n    }\n}\n"
+    },
+    {
+      "fileName": "Ausreisser.kt",
+      "kind": "class",
+      "source": "class Ausreisser : Actor() {\n    var geschwindigkeit = 2\n\n    init {\n        image = Image(\"cat.png\")\n    }\n\n    override fun act() {\n        geschwindigkeit++\n        move(geschwindigkeit)\n        turn(4)\n        if (isClicked) {\n            world.removeObject(this)\n        }\n    }\n}\n"
+    },
+    {
+      "fileName": "Main.kt",
+      "kind": "functions",
+      "source": "fun main() {\n    Spielfeld().show()\n}\n"
+    }
+  ],
+  "resources": [],
+  "cardPositions": {
+    "Spielfeld.kt": {
+      "x": 360,
+      "y": 220
+    },
+    "Ausreisser.kt": {
+      "x": 640,
+      "y": 220
+    },
+    "Main.kt": {
+      "x": 80,
+      "y": 220
+    }
+  }
+}

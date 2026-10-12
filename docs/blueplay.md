@@ -35,6 +35,9 @@ One step calls World.act and then act on actors still present in the world.
 Showing a world pauses simulation and reopens a previously closed world window.
 Reset invokes the chosen main again in the existing session; it does not rerun
 top-level property initialization. Without a main function, Reset has no effect.
+Compiling closes the previous world and replaces the runtime session, just as
+it removes objects from the object bench. It does not run main automatically;
+click **Start main** to create and show the world from the updated program.
 Keyboard/mouse input remains available during
 Run. Pause before using codepad/object operations.
 

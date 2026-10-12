@@ -380,6 +380,9 @@ export class ExecutionWorkspace {
     });
     const unsubscribe = this.client.subscribe(() => {
       this.runtime = this.client.getSnapshot();
+      // Every compile replaces the worker and its world, including compilation
+      // on demand from the Codepad. Do not leave a canvas from the old session.
+      if (this.runtime.phase === "compiling") this.host.play().clearWorld();
       this.host.objects().synchronize(this.runtime);
       if (
         this.runtime.phase === "waitingForInput" ||

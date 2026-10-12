@@ -58,6 +58,14 @@ startBluePlayMain. It may request input. The IDE world window always renders
 Act, Run/Pause and Reset.
 Without main, `ExecutionWorkspace.requestMain` returns before dispatch or UI
 cleanup, so Reset preserves the world, objects, terminal and history.
+The IDE clears the world on runtime snapshots in the `compiling` phase. This
+also covers Codepad compilation on demand and failed compilation. Compile
+replaces the session but never runs main automatically; users explicitly
+start main to create the new world. Source edits invalidate the session and
+disable the previous world's controls until compilation removes that view.
+Start/Act without a shown world is a recoverable request error. A nonfatal
+failure to begin a scheduled step pauses simulation and leaves the session
+ready; only fatal interpreter errors set simulation to `faulted`.
 World.show pauses; pure frame rendering
 does not. Its reopen effect must work even if the UI previously closed the world.
 
