@@ -387,6 +387,13 @@
     "describeTheProjectHereMarkdownWorksHeadingBold": "Beschreibe das Projekt hier. Markdown: # Überschrift, **fett**, - Liste"
   },
   "settings": {
+    "terminalFontSize": "Schriftgröße des Terminals",
+    "terminal": "Terminal",
+    "clearTerminalBefore": "Automatisch löschen vor …",
+    "interactiveCalls": "Interaktiven Aufrufen",
+    "codepadExecutions": "Codepad-Aufrufen",
+    "mainStarts": "Starten von main",
+    "clearTerminalFromCode": "Tipp: <code>print(\"\\u000C\")</code> löscht die Konsole im Kotlin-Code.",
     "general": "Allgemein",
     "language": "Sprache",
     "darkMode": "Dunkles Design",

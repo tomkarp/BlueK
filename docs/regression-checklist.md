@@ -122,7 +122,7 @@ Unless explicitly stated, visual user acceptance remains pending.
 | GUI-72 | Toolbar adapts to its available width | Recorded browser pass |
 | GUI-73 | Terminal splitter below BluePlay window | Recorded browser pass |
 | GUI-74 | Inheritance mode prompts for subclass then superclass | Recorded browser pass |
-| GUI-74 | Settings General/Editor groups, English-only language notice | Recorded browser pass; `npm run typecheck` |
+| GUI-74 | Settings General/Editor/Terminal groups and English/German language choice | Chromium browser pass, 2026-10-12; `npm run typecheck` passed |
 | GUI-75 | Diagram drag snaps to a 20 px grid | Recorded browser pass |
 | GUI-76 | BluePlay virtual-card/template placement order | Recorded browser pass |
 | GUI-80 | Editable project name, persistence and export naming | Format checks and direct browser inspection recorded; original Playwright run blocked by missing browser install; later full run recorded below |
@@ -300,6 +300,8 @@ Unless explicitly stated, visual user acceptance remains pending.
 | GUI-137 | Private bug/Kotlin-support report dialog, diagnostic context, explicit project opt-in, JSON preview, durable private delivery and receipt; footer offers Cancel/Send without a report download | Local dialog/preview and initial published main/beta dialog visually inspected (2026-10-10); final wording/information notice approved for publication, final typecheck: zero errors/warnings. Hosted/offline builds completed. No automated tests added/run on that date. Private repo/labels/watch and protected restricted token installed; main/beta/local feedback configuration available. Original delivery evidence retained; refreshed snapshots, complete project attachments and receipt wording verified by controller/Chromium tests (2026-10-12), see the dated record below. |
 
 | GUI-138 | A failed IDE link (expired, blocked, undecodable or BluePlay example) keeps the tab draft, shows a dismissible translated notice and cleans the URL; same-page `#bluek`/`#run` links reload through one handler, also offline | Chromium GUI case and offline Chromium/WebKit agent check passed, 2026-10-11; German light/dark notice inspected; user acceptance pending |
+| GUI-139 | Optional terminal auto-clear before interactive calls, Codepad and Start main; default off, personal persistence, code tip, cancellation/validation, fresh output/input/errors, inspector/BluePlay exclusions and offline use | All eight new behavior cases passed in Chromium and WebKit; offline language/settings case passed, 2026-10-12; German desktop/mobile screenshots inspected by agent; user acceptance pending |
+| GUI-140 | Terminal auto-clear controls and the one-line code tip share a labeled group (one row on wider screens, vertical on mobile) with concise German labels; terminal output/input font size is adjustable and persisted | Typecheck/i18n and Chromium settings/defaults case passed, 2026-10-12; desktop/mobile group screenshots inspected by agent; terminal font persistence not exercised; user acceptance pending |
 
 ## Recorded verification
 
@@ -780,3 +782,26 @@ deployment prefix.
   Initial sandbox restrictions on Gradle's cache and the local test port were
   resolved by approved retries.
 - User visual acceptance remains pending.
+
+### 2026-10-12 — Terminal auto-clear preferences (feedback #13)
+
+Settings adds three default-off preferences: interactive calls (methods,
+functions and constructors together), Codepad and Start main. The code tip is
+`print("\u000C")`; explicit program clearing remains independent. Action
+origins are supplied by the workspace controllers, so inspector getters and
+BluePlay ticks do not clear output. Preferences persist outside project data;
+the dialog scrolls within small viewports.
+
+- Helpers/checks: typecheck (0 errors/warnings), workspace controllers, i18n,
+  Codepad flow, UI behavior and Svelte architecture passed. Hosted production
+  build passed with Vite asset/externalization/chunk-size warnings.
+- Actual browsers: all eight GUI-139 behavior cases passed in Chromium across
+  the targeted runs and 8/8 passed in WebKit. The affected selection also passed all 19 existing call-activity,
+  localization and main-selection cases; six terminal/settings regressions
+  (GUI-12/13/15, GUI-39/40/71 and both GUI-74 meanings) passed. The fresh
+  offline build passed its German language/settings case without HTTP requests.
+- Initial runs had test-fixture failures (a Codepad binding was not on the
+  bench, an incorrect world label, and clicking disabled Invoke).
+  Corrected fixtures passed; no remaining functional failure or blocker.
+- Agent visual inspection: German settings at 800×600 and 390×520. User visual
+  acceptance and a separate run in the Safari application remain open.

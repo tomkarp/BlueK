@@ -2169,14 +2169,15 @@ test('GUI-71 Dark mode can be switched on and off in Settings', async ({ page })
   await expect(editor).not.toHaveCSS('background-color', 'rgb(30, 30, 30)');
 });
 
-test('GUI-74 Settings are grouped into General and Editor with English and German language choices', async ({ page }) => {
+test('GUI-74 Settings are grouped into General, Editor and Terminal with English and German language choices', async ({ page }) => {
   await project(page);
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   const settings = page.getByRole('dialog', { name: 'Settings' });
   const sections = settings.locator('.settings-section');
-  await expect(sections).toHaveCount(2);
+  await expect(sections).toHaveCount(3);
   await expect(sections.nth(0).getByRole('heading', { name: 'General', exact: true })).toBeVisible();
   await expect(sections.nth(1).getByRole('heading', { name: 'Editor', exact: true })).toBeVisible();
+  await expect(sections.nth(2).getByRole('heading', { name: 'Terminal', exact: true })).toBeVisible();
   const language = settings.getByLabel('Language', { exact: true });
   await expect(language).toHaveValue('en');
   await expect(language.locator('option')).toHaveText(['English', 'Deutsch']);

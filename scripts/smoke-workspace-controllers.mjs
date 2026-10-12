@@ -61,6 +61,7 @@ const make = () => {
   const ui = new WorkspaceUi();
   const session = {
     client, runtime: snapshot, classes: [meta], canExecute: true, history: [],
+    executeUserCommand: (command, trigger) => { assert.equal(trigger, "interactive"); return client.execute(command); },
     reportCallError: message => { throw new Error(message); },
   };
   return { ui, objects: new ObjectWorkspace({

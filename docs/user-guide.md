@@ -15,7 +15,8 @@ leaving Close available.
 
 Choose **English** or **Deutsch** in **Settings → Language**. BlueK uses the
 browser language when supported, otherwise English, and remembers an explicit
-choice in this browser. Kotlin code,
+choice in this browser. Dark mode, editor font size and Vim mode are also saved
+in this browser and restored when BlueK opens. Kotlin code,
 program output and compiler/runtime errors keep their original text.
 
 ## Projects and editing
@@ -38,7 +39,10 @@ The codepad accepts expressions and statements. Variables remain available
 until Compile or Reset. Use **Get** on a result to put it on the object bench.
 The terminal supports `print`, `println`, `readln`, `readLine` and
 `readlnOrNull`, including waiting for input, EOF and Stop.
-See [terminal formatting](terminal.md) for colors and control sequences.
+Settings → Terminal lets you change the terminal font size from 10 to 30 px and
+offers automatic clearing before interactive calls, Codepad executions or Start
+main; all clear options are off by default. Use `print("\u000C")` to clear from
+Kotlin code. See [terminal behavior and formatting](terminal.md) for details.
 
 ## Compile, main and Reset
 

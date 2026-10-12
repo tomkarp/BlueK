@@ -11,11 +11,15 @@ import { prepareRuntimeResources } from "../imageAlpha";
 
 import { compileProject, executeCodepad } from "../codepadFlow";
 import { isCompileError } from "../compileDiagnostics";
-import type { RuntimeSnapshot } from "../../../runtime-contract/src/index";
+import type {
+  RuntimeCommand,
+  RuntimeSnapshot,
+  RuntimeValue,
+} from "../../../runtime-contract/src/index";
 
 import type { BluePlayWorkspace } from "./BluePlayWorkspace.svelte";
 import type { ObjectWorkspace } from "./ObjectWorkspace.svelte";
-import type { WorkspaceUi } from "./WorkspaceUi.svelte";
+import type { TerminalClearTrigger, WorkspaceUi } from "./WorkspaceUi.svelte";
 import type { EditorWorkspace } from "./EditorWorkspace.svelte";
 import type { ProjectWorkspace } from "./ProjectWorkspace.svelte";
 import type { TerminalWorkspace } from "./TerminalWorkspace.svelte";
@@ -31,7 +35,7 @@ interface ExecutionWorkspaceHost {
     | "refreshComputedInspectors"
     | "synchronize"
   >;
-  ui: () => Pick<WorkspaceUi, "status" | "error">;
+  ui: () => Pick<WorkspaceUi, "status" | "error" | "terminalAutoClear">;
   editor: () => Pick<EditorWorkspace, "markDiagnostics" | "clearDiagnostics">;
   project: () => Readonly<
     Pick<
@@ -148,6 +152,23 @@ export class ExecutionWorkspace {
   runMain = async () => {
     await this.requestMain("start");
   };
+  /** Only explicit IDE actions clear output; runtime callbacks and inspections do not. */
+  executeUserCommand = (
+    command: RuntimeCommand,
+    trigger: TerminalClearTrigger,
+  ): Promise<RuntimeValue> => {
+    const snapshot = this.client.getSnapshot();
+    if (
+      snapshot.phase === "ready" &&
+      (snapshot.simulation === "inactive" ||
+        snapshot.simulation === "paused") &&
+      (!command.generationId ||
+        command.generationId === snapshot.generationId) &&
+      this.host.ui().terminalAutoClear[trigger]
+    )
+      this.host.terminal().clearTerminal();
+    return this.client.execute(command);
+  };
   requestMain = async (action: MainAction) => {
     if (!this.canExecute || !this.mainEntries.length) return;
     if (this.mainDialog) return;
@@ -189,11 +210,14 @@ export class ExecutionWorkspace {
     this.host.play().allowWorld();
     this.host.ui().status = "Running…";
     try {
-      const result = await this.client.execute({
-        op: "main",
-        fileName,
-        generationId,
-      });
+      const result = await this.executeUserCommand(
+        {
+          op: "main",
+          fileName,
+          generationId,
+        },
+        "main",
+      );
       if (result.kind === "error")
         this.host.ui().error = result.display || "Execution failed.";
       else this.host.ui().status = "Ready";
@@ -211,7 +235,11 @@ export class ExecutionWorkspace {
     this.codepad = "";
     this.codepadHistoryIndex = -1;
     const result = await executeCodepad(
-      this.client,
+      {
+        getSnapshot: () => this.client.getSnapshot(),
+        compile: (...args) => this.client.compile(...args),
+        execute: (command) => this.executeUserCommand(command, "codepad"),
+      },
       this.host.project().files,
       Date.now(),
       code,

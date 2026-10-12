@@ -1,5 +1,35 @@
 # Terminal formatting
 
+## Automatic clearing in the IDE
+
+Settings includes a saved Terminal font size and three independent options to
+clear output before interactive calls (methods, functions and constructors),
+Codepad executions, and Start main (including its keyboard shortcut). All three
+are disabled by default. The auto-clear options are saved under
+`bluek-terminal-auto-clear`; the font size shares `bluek-ui-settings` with the
+other display preferences. The three checkboxes share a labeled group, with
+a horizontal layout on wider screens and a vertical layout on small screens.
+These browser settings are separate from projects
+and exports. If storage is blocked, changes still work for the current page.
+
+Clearing occurs before the confirmed command, after local validation and any
+successful Codepad compile-on-demand. Opening or cancelling a dialog, invalid
+local arguments, a failed project compilation, and a rejected busy/stale call
+do not clear output. A confirmed call can clear even if it prints nothing or
+then fails Kotlin analysis or execution. New output/errors are preserved.
+Context-menu main calls count as interactive calls; Start main uses its own
+option. Automatic inspector reads, nested program calls and BluePlay ticks
+never trigger these preferences. Reset retains its existing clearing behavior.
+The terminal window geometry, input and Codepad history are unaffected.
+
+Code can clear the console explicitly at any time, independently of Settings:
+
+```kotlin
+print("\u000C")
+```
+
+## Program output
+
 BlueK and exported HTML programs support ANSI colors/styles, cursor movement
 and clearing, plus kitty text sizing. ESC (code 27) is `"\u001B"` in Kotlin.
 

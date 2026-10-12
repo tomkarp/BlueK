@@ -89,6 +89,14 @@ Supporting modules:
 - `terminalText.ts`: interprets raw output control sequences for IDE and player;
   text style/layout is presentation, never a replacement runtime output store.
 
+IDE terminal auto-clear preferences belong to `WorkspaceUi` and persist
+separately from projects. `ExecutionWorkspace.executeUserCommand` applies them
+to explicitly categorized interactive, Codepad or Start main actions before
+dispatch through the sole runtime client. Runtime command opcodes do not imply
+an action's origin: a context-menu function and the Codepad can both use `eval`.
+Inspector reads, internal calls and simulation ticks bypass this presentation
+policy. See [terminal behavior](terminal.md#automatic-clearing-in-the-ide).
+
 ### Interface language
 
 `SvelteApp` owns an app-local `Language` context for English/German presentation.

@@ -387,6 +387,13 @@
     "describeTheProjectHereMarkdownWorksHeadingBold": "Describe the project here. Markdown works: # Heading, **bold**, - list"
   },
   "settings": {
+    "terminalFontSize": "Terminal font size",
+    "terminal": "Terminal",
+    "clearTerminalBefore": "Automatically clear before …",
+    "interactiveCalls": "Interactive calls",
+    "codepadExecutions": "Codepad executions",
+    "mainStarts": "Starting main",
+    "clearTerminalFromCode": "Tip: Use <code>print(\"\\u000C\")</code> in your Kotlin code to clear the console at any time.",
     "general": "General",
     "language": "Language",
     "darkMode": "Dark mode",

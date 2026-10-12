@@ -143,17 +143,27 @@ test('GUI-129 user manual is bundled and readable without network', async ({ pag
   verify();
 });
 
-test('GUI-130 offline language choice and German manual work without network', async ({page}) => {
+test('GUI-130 GUI-139 offline language, terminal settings and German manual work without network', async ({page}) => {
   const verify = await open(page, 'fun main() {}');
   await page.getByRole('button', {name: 'Settings', exact: true}).click();
   await page.getByLabel('Language', {exact: true}).selectOption('de');
   await expect(page.getByRole('dialog', {name: 'Einstellungen', exact: true})).toBeVisible();
+  await page.getByLabel('Codepad-Aufrufen', {exact: true}).check();
+  await expect(page.locator('.settings-hint code')).toHaveText('print("\\u000C")');
   await page.getByRole('button', {name: 'Schließen', exact: true}).click();
   await page.getByRole('button', {name: 'Hilfe', exact: true}).click();
   await expect(page.getByRole('heading', {name: 'Schnelleinstieg', exact: true})).toBeVisible();
   await page.getByRole('button', {name: 'Schließen', exact: true}).click();
   await page.reload();
   await expect(page.getByRole('button', {name: 'Kompilieren', exact: true})).toBeVisible();
+  await page.getByRole('button', {name: 'Einstellungen', exact: true}).click();
+  await expect(page.getByLabel('Codepad-Aufrufen', {exact: true})).toBeChecked();
+  await page.getByRole('button', {name: 'Schließen', exact: true}).click();
+  for (const output of ['alt', 'neu']) {
+    await page.getByLabel('Codepad-Eingabe', {exact: true}).fill(`println("${output}")`);
+    await page.getByLabel('Codepad-Eingabe', {exact: true}).press('Enter');
+    await expect(page.locator('.terminal-output pre')).toHaveText(`${output}\n`);
+  }
   await page.getByRole('button', {name: 'Speichern / Exportieren', exact: true}).click();
   await expect(page.getByRole('button', {name: /Kurzlink kopieren/})).toHaveCount(0);
   verify();

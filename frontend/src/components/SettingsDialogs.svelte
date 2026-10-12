@@ -2,16 +2,30 @@
   import { languages, type Locale, useLanguage } from "../i18n/Language.svelte";
   const language = useLanguage();
   $: t = $language.t;
+  import TranslatedText from "./TranslatedText.svelte";
   import UserHelpDialog from "./UserHelpDialog.svelte";
   import { containClicks } from "../uiActions";
+  import type {
+    TerminalClearSettings,
+    TerminalClearTrigger,
+  } from "../workspace/WorkspaceUi.svelte";
 
   export let settingsNotice: boolean;
   export let shortcutsHelpOpen: boolean;
   export let darkMode: boolean;
+  export let setDarkMode: (enabled: boolean) => void;
   export let editorFontSize: number;
+  export let setEditorFontSize: (size: number) => void;
+  export let terminalFontSize: number;
+  export let setTerminalFontSize: (size: number) => void;
   export let vimMode: boolean;
   export let setVimMode: (enabled: boolean) => void;
   export let vimShortcutLabel: string;
+  export let terminalAutoClear: TerminalClearSettings;
+  export let setTerminalAutoClear: (
+    trigger: TerminalClearTrigger,
+    enabled: boolean,
+  ) => void;
   export let compileShortcutLabel: string;
   export let runShortcutLabel: string;
   export let saveShortcutLabel: string;
@@ -21,6 +35,11 @@
   export let editorNextShortcutLabel: string;
   export let editorPrevShortcutLabel: string;
   export let openFeedback: () => void;
+  const terminalTriggers: TerminalClearTrigger[] = [
+    "interactive",
+    "codepad",
+    "main",
+  ];
 </script>
 
 {#if settingsNotice}<div class="modal topmost-modal" role="presentation">
@@ -56,7 +75,8 @@
           <input
             type="checkbox"
             aria-label={t("ui.settings.darkMode")}
-            bind:checked={darkMode}
+            checked={darkMode}
+            on:change={(event) => setDarkMode(event.currentTarget.checked)}
           />
         </label>
       </section>
@@ -66,7 +86,9 @@
           <span>{t("ui.settings.fontSize")}</span>
           <select
             aria-label={t("ui.settings.fontSize")}
-            bind:value={editorFontSize}
+            value={editorFontSize}
+            on:change={(event) =>
+              setEditorFontSize(Number(event.currentTarget.value))}
           >
             {#each Array.from({ length: 21 }, (_, index) => index + 10) as size}
               <option value={size}>{size}px</option>
@@ -85,6 +107,52 @@
             on:change={(event) => setVimMode(event.currentTarget.checked)}
           />
         </label>
+      </section>
+      <section
+        class="settings-section"
+        aria-labelledby="settings-terminal-title"
+      >
+        <h4 id="settings-terminal-title">{t("ui.settings.terminal")}</h4>
+        <label class="settings-field">
+          <span>{t("ui.settings.terminalFontSize")}</span>
+          <select
+            aria-label={t("ui.settings.terminalFontSize")}
+            value={terminalFontSize}
+            on:change={(event) =>
+              setTerminalFontSize(Number(event.currentTarget.value))}
+          >
+            {#each Array.from({ length: 21 }, (_, index) => index + 10) as size}
+              <option value={size}>{size}px</option>
+            {/each}
+          </select>
+        </label>
+        <fieldset class="settings-option-group">
+          <legend>{t("ui.settings.clearTerminalBefore")}</legend>
+          <div class="settings-options-row">
+            {#each terminalTriggers as trigger}
+              <label class="settings-field settings-toggle">
+                <input
+                  type="checkbox"
+                  checked={terminalAutoClear[trigger]}
+                  on:change={(event) =>
+                    setTerminalAutoClear(trigger, event.currentTarget.checked)}
+                />
+                <span
+                  >{t(
+                    trigger === "interactive"
+                      ? "ui.settings.interactiveCalls"
+                      : trigger === "codepad"
+                        ? "ui.settings.codepadExecutions"
+                        : "ui.settings.mainStarts",
+                  )}</span
+                >
+              </label>
+            {/each}
+          </div>
+          <p class="settings-hint settings-terminal-tip">
+            <TranslatedText message="ui.settings.clearTerminalFromCode" />
+          </p>
+        </fieldset>
       </section>
       <div class="dialog-actions">
         <button on:click={() => (settingsNotice = false)}

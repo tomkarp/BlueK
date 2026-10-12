@@ -148,6 +148,8 @@
   );
   onMount(() => {
     language.restore();
+    ui.restoreUiSettings();
+    ui.restoreTerminalSettings();
     ui.initializeShortcuts();
     void project.initialize();
     const vimShortcut = (event: KeyboardEvent) => {
@@ -401,7 +403,7 @@
   lang={language.locale}
   class:dark={ui.darkMode}
   class="bluek svelte-preview"
-  style={`--editor-font-size:${ui.editorFontSize}px;--terminal-split-width:${terminal.terminalSplitWidth}px;--bluek-stage-height:${play.stageHeight}px;--bluek-stage-window-width:${play.stageWindowWidth}px;${play.stagePosition ? `--bluek-stage-left:${play.stagePosition.left}px;--bluek-stage-top:${play.stagePosition.top}px;` : ""}`}
+  style={`--editor-font-size:${ui.editorFontSize}px;--terminal-font-size:${ui.terminalFontSize}px;--terminal-split-width:${terminal.terminalSplitWidth}px;--bluek-stage-height:${play.stageHeight}px;--bluek-stage-window-width:${play.stageWindowWidth}px;${play.stagePosition ? `--bluek-stage-left:${play.stagePosition.left}px;--bluek-stage-top:${play.stagePosition.top}px;` : ""}`}
 >
   <BluePlayWindow
     stage={play.stage}
@@ -822,10 +824,16 @@
     }}
     bind:settingsNotice={ui.settingsNotice}
     bind:shortcutsHelpOpen={ui.shortcutsHelpOpen}
-    bind:darkMode={ui.darkMode}
-    bind:editorFontSize={ui.editorFontSize}
+    darkMode={ui.darkMode}
+    setDarkMode={ui.setDarkMode}
+    editorFontSize={ui.editorFontSize}
+    setEditorFontSize={ui.setEditorFontSize}
+    terminalFontSize={ui.terminalFontSize}
+    setTerminalFontSize={ui.setTerminalFontSize}
     vimMode={ui.vimMode}
     setVimMode={ui.setVimMode}
+    terminalAutoClear={ui.terminalAutoClear}
+    setTerminalAutoClear={ui.setTerminalAutoClear}
     vimShortcutLabel={ui.vimShortcutLabel}
     compileShortcutLabel={ui.compileShortcutLabel}
     runShortcutLabel={ui.runShortcutLabel}

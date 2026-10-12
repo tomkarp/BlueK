@@ -45,7 +45,7 @@ interface ObjectWorkspaceHost {
   session: () => Readonly<
     Pick<
       ExecutionWorkspace,
-      "classes" | "canExecute" | "runtime" | "history" | "reportCallError"
+      "classes" | "canExecute" | "runtime" | "history" | "reportCallError" | "executeUserCommand"
     >
   > & {
     readonly client: Pick<
@@ -185,13 +185,13 @@ export class ObjectWorkspace {
   ) => {
     const generation = this.host.session().client.getSnapshot().generationId;
     try {
-      const result = await this.host.session().client.execute({
+      const result = await this.host.session().executeUserCommand({
         op: "create",
         className,
         name,
         typeArguments,
         args,
-      });
+      }, "interactive");
       if (this.host.session().client.getSnapshot().generationId !== generation)
         return;
       if (result.kind === "error")
@@ -228,7 +228,7 @@ export class ObjectWorkspace {
       this.menu = null;
       this.host
         .session()
-        .client.execute({ op: "main", fileName: `${owner.name}.kt` })
+        .executeUserCommand({ op: "main", fileName: `${owner.name}.kt` }, "interactive")
         .then(this.showResult)
         .catch((reason) => (this.host.ui().error = String(reason)));
       return;
@@ -334,7 +334,7 @@ export class ObjectWorkspace {
             op: "eval",
             code: `${dialog.receiver || ""}${method.name}${suffix}(${args.join(", ")})`,
           };
-      const result = await this.host.session().client.execute(request);
+      const result = await this.host.session().executeUserCommand(request, "interactive");
       if (this.host.session().client.getSnapshot().generationId !== generation)
         return;
       if (result.kind === "error")
