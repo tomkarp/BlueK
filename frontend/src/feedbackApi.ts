@@ -48,12 +48,12 @@ function feedbackUrl(path: string) {
   const local = ["localhost", "127.0.0.1", "[::1]"].includes(
     window.location.hostname,
   );
-  const ownHost = ["bluek.de", "beta.bluek.de"].includes(
+  const ownHost = ["bluek.online", "beta.bluek.online"].includes(
     window.location.hostname,
   );
   return new URL(
     path,
-    (local || ownHost) && origin !== "null" ? origin : "https://bluek.de",
+    (local || ownHost) && origin !== "null" ? origin : "https://bluek.online",
   ).toString();
 }
 export async function feedbackAvailable(): Promise<boolean> {

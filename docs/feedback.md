@@ -34,9 +34,9 @@ optional email-contact explanation; the storage notice remains available from
 the header's information button.
 
 Main, beta and local Vite use their `/api` endpoint. Vite forwards feedback to
-the live `https://bluek.de` service by default, without copying its token to the
+the live `https://bluek.online` service by default, without copying its token to the
 development machine. `BLUEK_FEEDBACK_PROXY_TARGET` can select a local backend
-instead. Pages and offline BlueK use `https://bluek.de/api/feedback`; sending
+instead. Pages and offline BlueK use `https://bluek.online/api/feedback`; sending
 requires internet. No GitHub credential is bundled in any frontend build.
 
 ## Delivery and limits

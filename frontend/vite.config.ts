@@ -13,7 +13,7 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api/feedback': {
-        target: process.env.BLUEK_FEEDBACK_PROXY_TARGET || 'https://bluek.de',
+        target: process.env.BLUEK_FEEDBACK_PROXY_TARGET || 'https://bluek.online',
         changeOrigin: true,
       },
       '/api': 'http://127.0.0.1:8787',

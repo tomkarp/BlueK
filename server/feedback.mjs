@@ -68,7 +68,7 @@ export async function createFeedbackService(database) {
     : (process.env.BLUEK_FEEDBACK_TOKEN || '').trim();
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) throw new Error('Invalid feedback repository configuration.');
   const origins = new Set((process.env.BLUEK_FEEDBACK_ORIGINS ||
-    'https://bluek.de,https://beta.bluek.de,https://tomkarp.github.io,http://127.0.0.1:5173,http://localhost:5173,null').split(','));
+    'https://bluek.online,https://beta.bluek.online,https://bluek.de,https://beta.bluek.de,https://tomkarp.github.io,http://127.0.0.1:5173,http://localhost:5173,null').split(','));
   database.exec(`CREATE TABLE IF NOT EXISTS feedback_reports (
     id TEXT PRIMARY KEY, body_hash TEXT NOT NULL, payload TEXT,
     created_at INTEGER NOT NULL, issue_number INTEGER, attachment_url TEXT,

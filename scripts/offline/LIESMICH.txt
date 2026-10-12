@@ -16,7 +16,7 @@ import JSON or BlueJ projects, export JSON and export standalone HTML programs.
 BlueJ ZIP export is not implemented.
 
 Short links need the online share service and are hidden offline. Copy Full
-Project Link encodes the project and targets https://bluek.de/; opening that
+Project Link encodes the project and targets https://bluek.online/; opening that
 link requires internet.
 
 Save your projects

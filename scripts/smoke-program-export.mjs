@@ -20,10 +20,10 @@ const project = {
   ],
   resources: [{ path: 'images/rocket.png', data: 'data:image/png;base64,AAAA' }],
 };
-const program = createExportedProgram(project, 'App.kt', 'https://bluek.de/app/?x=1#y');
+const program = createExportedProgram(project, 'App.kt', 'https://bluek.online/app/?x=1#y');
 assert.equal(program.format, 'bluek-program');
 assert.equal(program.mainFile, 'App.kt');
-assert.equal(program.blueKUrl, 'https://bluek.de/app/', 'Query and hash never reach the link base');
+assert.equal(program.blueKUrl, 'https://bluek.online/app/', 'Query and hash never reach the link base');
 assert.equal(program.project.files[1].source, hostile);
 
 // JSON drops the undefined optional fields a parsed project keeps.
@@ -75,7 +75,7 @@ try {
     };
   }, { moduleUrl: linksModule, project });
   assert.equal(links.hosted, 'https://example.github.io/BlueK/');
-  assert.equal(links.offline, 'https://bluek.de/');
+  assert.equal(links.offline, 'https://bluek.online/');
   assert.equal(links.developer, 'https://example.github.io/BlueK/');
   assert.match(links.full, /^https:\/\/example\.github\.io\/BlueK\/#run=p1\./);
   assert.equal(links.short, 'https://example.github.io/BlueK/run/green-lamp-river');
@@ -98,7 +98,7 @@ assert.throws(() => createExportedProgram(project, 'App.kt', 'javascript:alert(1
 assert.throws(() => createExportedProgram(project, 'App.kt', 'not a url'), /invalid BlueK address/);
 assert.throws(() => createExportedProgram({ ...project, files: [{ fileName: 'x.txt', source: '' }] }, 'x.txt', PUBLIC_BLUEK_URL), /Invalid Kotlin file/);
 
-assert.equal(blueKUrlForExport('https://bluek.de', '/'), 'https://bluek.de/');
+assert.equal(blueKUrlForExport('https://bluek.online', '/'), 'https://bluek.online/');
 assert.equal(blueKUrlForExport('https://example.github.io', '/BlueK/'), 'https://example.github.io/BlueK/');
 assert.equal(blueKUrlForExport('http://localhost:5173', '/'), PUBLIC_BLUEK_URL, 'Development server');
 assert.equal(blueKUrlForExport('http://127.0.0.1:8765', '/'), PUBLIC_BLUEK_URL, 'Offline package');

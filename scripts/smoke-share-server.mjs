@@ -32,7 +32,7 @@ try {
   const missing = await fetch(`${base}/api/projects/aaaa-bbbb-cccc-dddd`);
   if (missing.status !== 404) throw new Error(`Missing project returned HTTP ${missing.status}`);
   const program = {
-    format: "bluek-program", version: 1, mainFile: "Game.kt", blueKUrl: "https://bluek.de/",
+    format: "bluek-program", version: 1, mainFile: "Game.kt", blueKUrl: "https://bluek.online/",
     project: { ...project, library: { id: "blueplay", version: 1 }, files: [{ fileName: "Game.kt", kind: "functions", source: "fun main() { World(160, 80, 1).show() }" }] },
     allowDownload: false, allowBlueK: true, showProjectName: false, autoRun: true, showControls: false, showSpeed: true,
   };

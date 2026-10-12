@@ -114,7 +114,7 @@ test('GUI-62 local formatter and HTML program export work from the single file',
   const player = await page.context().newPage();
   await player.goto(pathToFileURL(file).href);
   await expect(player.getByRole('region', { name: 'Terminal' }).locator('pre')).toHaveText('exportiert\n');
-  await expect(player.getByRole('link', { name: 'Open in BlueK' })).toHaveAttribute('href', /^https:\/\/bluek.de\/#bluek=/);
+  await expect(player.getByRole('link', { name: 'Open in BlueK' })).toHaveAttribute('href', /^https:\/\/bluek.online\/#bluek=/);
   verify();
 });
 

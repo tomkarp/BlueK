@@ -17,7 +17,7 @@ npm run dev     # http://localhost:5173
 The interpreter bundle is checked in, so development does not normally need
 Gradle. Vite forwards project-sharing `/api` requests to the optional service at
 `127.0.0.1:8787`; start it with `npm run share:server` for short links. Feedback
-requests use the configured service at `https://bluek.de`, so local development
+requests use the configured service at `https://bluek.online`, so local development
 does not need a copy of its GitHub token. Set `BLUEK_FEEDBACK_PROXY_TARGET` to a
 local service URL when developing the backend. Server-only credentials are
 described in [feedback](docs/feedback.md).
@@ -129,7 +129,7 @@ and translation checks.
 
 ## Deployment
 
-`main` deploys to bluek.de and GitHub Pages; `beta` to beta.bluek.de.
+`main` deploys to bluek.online and GitHub Pages; `beta` to beta.bluek.online.
 Pushes trigger full builds through `.github/workflows/`.
 See [deployment instructions](docs/deployment.md) for Caddy, secrets and the
 optional share service. Commit and push only when explicitly requested.

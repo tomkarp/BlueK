@@ -37,7 +37,7 @@ export const PROGRAM_PLACEHOLDER = `<script type="application/json" id="${PROGRA
 export const MAX_PROJECT_LINK_LENGTH = 1_000_000;
 
 /** Where exports made from a local or offline BlueK send "Open in BlueK". */
-export const PUBLIC_BLUEK_URL = "https://bluek.de/";
+export const PUBLIC_BLUEK_URL = "https://bluek.online/";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

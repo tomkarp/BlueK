@@ -1782,7 +1782,7 @@ test('GUI-63 the sidebar explains the offline version before downloading it', as
   await project(page);
   let downloads = 0;
   page.on('download', () => { downloads++; });
-  // The dev server proxies feedback to bluek.de; answer locally and send nothing.
+  // The dev server proxies feedback to bluek.online; answer locally and send nothing.
   const feedbackRequests: string[] = [];
   await page.route('**/api/feedback**', route => {
     const request = route.request();

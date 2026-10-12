@@ -4,7 +4,7 @@ BlueK is a browser-based Kotlin learning environment inspired by BlueJ.
 Create objects, call their methods and explore their state without writing
 an entire application first. Student code runs locally in your browser.
 
-**[Open BlueK](https://bluek.de)** · **[Try the beta](https://beta.bluek.de)**
+**[Open BlueK](https://bluek.online)** · **[Try the beta](https://beta.bluek.online)**
 
 ## What you can do
 
@@ -24,7 +24,7 @@ using unfamiliar language features in lessons.
 
 ## Getting started
 
-Open [bluek.de](https://bluek.de) and choose **New Project** to start with an
+Open [bluek.online](https://bluek.online) and choose **New Project** to start with an
 empty project or a template. Create a class, compile it and right-click its
 card to create an object. Right-click the object to call a method, or
 inspect it with a double-click.

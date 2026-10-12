@@ -226,7 +226,7 @@ test('EXP-15 BluePlay options force reachable Run, apply to links and HTML, and 
 for (const autoRun of [false, true]) for (const showControls of [true, false]) for (const showSpeed of [true, false]) {
   if (!autoRun && !showControls) continue;
   test(`EXP-15 BluePlay auto=${autoRun}, buttons=${showControls}, speed=${showSpeed}`, async ({ page }) => {
-    const program = createExportedProgram(game, 'App.kt', 'https://bluek.de/', { autoRun, showControls, showSpeed, allowDownload: false, allowBlueK: false });
+    const program = createExportedProgram(game, 'App.kt', 'https://bluek.online/', { autoRun, showControls, showSpeed, allowDownload: false, allowBlueK: false });
     await page.goto('/#run=p1.' + Buffer.from(JSON.stringify(program)).toString('base64url'));
     await expect(page.getByRole('status')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'BluePlay world', exact: true })).toBeVisible();

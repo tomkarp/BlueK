@@ -530,7 +530,7 @@
     "privacyLabel": "Welche Daten werden wo gespeichert?",
     "privacyData": "Beim Senden werden deine Angaben, eine optionale E-Mail-Adresse sowie BlueK-Version, Browser, Sprache, App-Adresse, Online-/Offline-Betriebsart und vorhandene Fehlermeldungen übertragen. Bei einer Meldung aus dem Codepad wird auch die zugehörige Eingabe mitgesendet.",
     "privacyProject": "Dein aktuelles Projekt mit Kotlin-Dateien, README, Bildern, Sounds und Projekteinstellungen wird nur mitgesendet, wenn du das auswählst. Die aufklappbare Datenvorschau zeigt die vollständige Meldung.",
-    "privacyStorage": "Die Meldung wird über den BlueK-Server auf bluek.de an GitHub übertragen und im privaten Repository tomkarp/BlueK-Feedback als Issue mit Datenanhang gespeichert. Sie ist für den Entwickler sichtbar und wird nicht veröffentlicht.",
+    "privacyStorage": "Die Meldung wird über den BlueK-Server auf bluek.online an GitHub übertragen und im privaten Repository tomkarp/BlueK-Feedback als Issue mit Datenanhang gespeichert. Sie ist für den Entwickler sichtbar und wird nicht veröffentlicht.",
     "privacyRetention": "Bis zur erfolgreichen Weiterleitung speichert der BlueK-Server die Meldung zwischen. Danach wird ihr Inhalt dort gelöscht; Versandnachweise bleiben bis zu 30 Tage ab Eingang erhalten. Die GitHub-Kopie wird nicht automatisch gelöscht.",
     "category": "Was möchtest du melden?",
     "bug": "Fehler",

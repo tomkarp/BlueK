@@ -111,7 +111,8 @@ API routing precedes the static handler; the SPA fallback serves `/bluek/<code>`
 `/run/<code>` and the transitional `/load/<code>` route.
 
 ```caddyfile
-bluek.de {
+bluek.online {
+    encode gzip zstd
     root * <BLUEK_DEPLOY_PATH>
     handle /api/* {
         reverse_proxy 127.0.0.1:8787
@@ -122,7 +123,8 @@ bluek.de {
     }
 }
 
-beta.bluek.de {
+beta.bluek.online {
+    encode gzip zstd
     root * <BLUEK_BETA_DEPLOY_PATH>
     handle /api/* {
         reverse_proxy 127.0.0.1:8787
@@ -132,6 +134,32 @@ beta.bluek.de {
         file_server
     }
 }
+
+www.bluek.online {
+    redir https://bluek.online{uri} 308
+}
+
+bluek.de {
+    handle /api/* {
+        reverse_proxy 127.0.0.1:8787
+    }
+    handle {
+        redir https://bluek.online{uri} 308
+    }
+}
+
+www.bluek.de {
+    redir https://bluek.online{uri} 308
+}
+
+beta.bluek.de {
+    handle /api/* {
+        reverse_proxy 127.0.0.1:8787
+    }
+    handle {
+        redir https://beta.bluek.online{uri} 308
+    }
+}
 ```
 
 Validate and reload:
@@ -139,7 +167,10 @@ Validate and reload:
 ```sh
 sudo caddy validate --config /etc/caddy/Caddyfile
 sudo systemctl reload caddy
-curl -fsS https://bluek.de/api/health
+curl -fsS https://bluek.online/api/health
+curl -fsS https://beta.bluek.online/api/health
 ```
 
-beta.bluek.de needs DNS to the same server; Caddy obtains TLS certificates.
+Both new domains need DNS to the server; Caddy obtains TLS certificates. The
+previous domains redirect to their matching new domain while keeping `/api/*`
+available for already-downloaded BlueK versions.
