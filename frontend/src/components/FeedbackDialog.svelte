@@ -80,7 +80,7 @@
               ? t("ui.feedback.sent", [feedback.receipt.issueNumber])
               : t("ui.feedback.queued", [feedback.receipt.reference])}
           </p>
-          <p class="feedback-hint">{t("ui.feedback.privateReceipt")}</p>
+          <p class="feedback-hint">{t("ui.feedback.contactReceipt")}</p>
         </div>
         <footer class="dialog-actions">
           <button onclick={feedback.close}>{t("ui.common.close")}</button>

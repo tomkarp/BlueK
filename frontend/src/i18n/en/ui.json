@@ -551,7 +551,7 @@
     "thanks": "Thank you for your report!",
     "sent": "Your report has been received. Report number: {0}",
     "queued": "Your report has been received and will be forwarded to the developer automatically. Reference: {0}",
-    "privateReceipt": "The report is private. If you provided an email address, the developer can contact you there.",
+    "contactReceipt": "If you provided an email address, the developer can contact you there.",
     "errors": {
       "unavailable": "The reporting service is unavailable. Please retry later.",
       "network": "The connection was interrupted. Your report may already have arrived; retrying the same report reuses its reference.",

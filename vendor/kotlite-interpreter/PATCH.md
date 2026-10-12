@@ -1091,3 +1091,23 @@ No general package declarations or import-alias semantics are added.
 The obsolete unsupported-qualified-math gap/hint expectations were removed.
 Interpreter build and manual browser observations are recorded in the
 regression checklist; no new automated tests are claimed.
+
+## 2026-10-12: delayed local val initialization (feedback #12, RT-110)
+
+The analyzer tracks unassigned, possibly assigned and definitely assigned states
+for local `val` declarations without an initializer, keyed by the existing
+transformed symbol. Alternative `if` and `when` branches start with the same
+incoming state and merge only paths that continue. Non-exhaustive branches keep
+the path with no assignment. The assignment target resolves without reading its
+value; its RHS is analyzed before committing initialization, so `x = x` stays an
+error. Existing member/global initialization and runtime value holders remain
+unchanged. Reads before definite initialization, possible second writes and
+initialization across a callable/loop boundary are rejected. Exactly-once inline
+lambda contracts and one-shot outer-loop initialization remain unsupported.
+The public variable-reference visitor signature remains binary compatible.
+
+Regression cases are in `smoke-curriculum-kotlin.mjs` and
+`tests/gui/feedback.spec.ts`; actual build/test evidence is recorded in the
+regression checklist. No attached original Main.kt was available: the report
+contained stale Tier.kt only. The reproduction uses the reported delayed-val
+pattern and diagnostic, verified against the installed Kotlin compiler.

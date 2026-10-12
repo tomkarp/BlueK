@@ -47,6 +47,7 @@ export class FeedbackWorkspace {
   constructor(private host: FeedbackHost) {}
 
   show = (context?: FeedbackContext) => {
+    if (this.sending) return;
     // Keep an unfinished draft when the dialog is closed and reopened.
     if (!this.requestId || this.receipt) {
       this.summary = "";
@@ -57,21 +58,24 @@ export class FeedbackWorkspace {
       this.category = "bug";
       this.error = "";
       this.receipt = null;
-      // Project fields may be Svelte proxies. JSON is also the wire format.
-      this.projectSnapshot = JSON.parse(JSON.stringify(this.host.project()));
-      this.context = this.captureContext(context || this.host.context());
-      this.environment = {
-        browser: navigator.userAgent,
-        language: this.host.language(),
-        mode: import.meta.env.VITE_BLUEK_OFFLINE === "1" ? "offline" : "web",
-        origin:
-          window.location.origin === "null"
-            ? "file://"
-            : window.location.origin,
-      };
       this.requestId = crypto.randomUUID();
       this.requestContent = "";
-    } else if (context) this.context = this.captureContext(context);
+    }
+    // Keep the user's text, but recapture the complete current project and
+    // matching diagnostics on every opening. A cancelled draft may belong to
+    // an earlier version of the project or a different project altogether.
+    // Project fields may be Svelte proxies. JSON is also the wire format.
+    this.projectSnapshot = JSON.parse(JSON.stringify(this.host.project()));
+    this.context = this.captureContext(context || this.host.context());
+    this.environment = {
+      browser: navigator.userAgent,
+      language: this.host.language(),
+      mode: import.meta.env.VITE_BLUEK_OFFLINE === "1" ? "offline" : "web",
+      origin:
+        window.location.origin === "null"
+          ? "file://"
+          : window.location.origin,
+    };
     this.open = true;
     void this.checkAvailability();
   };

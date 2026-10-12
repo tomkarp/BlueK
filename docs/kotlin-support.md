@@ -2,7 +2,7 @@
 
 BlueK interprets a subset of Kotlin, extended from Kotlite. This is not full
 Kotlin/JVM compatibility. This reference describes the checked-in interpreter
-as of **9 October 2026**. See also the [standard library](kotlin-surface.md),
+as of **12 October 2026**. See also the [standard library](kotlin-surface.md),
 [tests and saved state](testing.md) and [implementation notes](kotlite.md).
 
 ## Project files
@@ -37,6 +37,9 @@ package-qualified library expressions and package declarations are not supported
 - Custom getters/setters with `field`, `private set`, visibility modifiers,
   default/named arguments, `vararg`, and `lateinit var` in class, local and
   top-level declarations.
+- Delayed local `val` initialization, including alternative assignments in
+  `if`/`else` and exhaustive `when` branches. Reads require initialization on
+  every continuing branch; possible reassignment is rejected.
 - Nullability, safe calls, Elvis expressions, standard exceptions and smart
   casts after type/null checks, contracts, assignments and supported loops.
 - List/Map/Set, ranges, arrays, loop labels, `break`/`continue`, and statement
@@ -100,6 +103,9 @@ package-qualified library expressions and package declarations are not supported
   unlike Kotlin. Supertype extension properties on implicit receivers are found
   only if their types contain no type parameters.
 - Non-local `break`/`continue` across lambda boundaries are unsupported.
+- Delayed `val` initialization inside a captured lambda or function is rejected,
+  including inline lambdas with an exactly-once contract. Initializing a `val`
+  declared outside a loop is also rejected, even for loops that execute once.
   [Generic/inline implementation details](kotlite-generics.md).
 
 ### Types and initialization

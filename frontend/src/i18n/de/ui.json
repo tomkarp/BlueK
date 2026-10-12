@@ -551,7 +551,7 @@
     "thanks": "Danke für deine Meldung!",
     "sent": "Deine Meldung ist eingegangen. Meldungsnummer: {0}",
     "queued": "Deine Meldung ist eingegangen und wird automatisch an den Entwickler weitergeleitet. Referenz: {0}",
-    "privateReceipt": "Die Meldung ist privat. Wenn du eine E-Mail-Adresse angegeben hast, kann der Entwickler dich dort kontaktieren.",
+    "contactReceipt": "Wenn du eine E-Mail-Adresse angegeben hast, kann der Entwickler dich dort kontaktieren.",
     "errors": {
       "unavailable": "Der Meldedienst ist nicht erreichbar. Versuche es später erneut.",
       "network": "Die Verbindung wurde unterbrochen. Die Meldung könnte bereits eingegangen sein; ein erneuter Versand derselben Meldung verwendet dieselbe Referenz.",

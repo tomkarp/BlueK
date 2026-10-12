@@ -253,6 +253,12 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         this.transformedName = "${this.declaredName}/-${++functionDefIndex}"
     }
 
+    private enum class ValInitialization { Unassigned, MaybeAssigned, Assigned }
+
+    // Initialize before installing library declarations: installation visits ASTs.
+    private val localValInitialization = mutableMapOf<String, ValInitialization>()
+    private val localValScopes = mutableMapOf<String, SymbolTable>()
+
     init {
         val classes = mutableListOf<ClassDefinition>()
         executionEnvironment.getBuiltinClasses(builtinSymbolTable).forEach {
@@ -809,6 +815,22 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         }
     }
 
+    // Only delayed local vals need flow state. Symbol-table values remain the
+    // initialization mechanism for members, globals and ordinary declarations.
+    private fun restoreValInitialization(state: Map<String, ValInitialization>) {
+        localValInitialization.clear()
+        localValInitialization.putAll(state)
+    }
+
+    private fun mergeValInitialization(before: Map<String, ValInitialization>, paths: List<Map<String, ValInitialization>>) {
+        restoreValInitialization(before)
+        if (paths.isEmpty()) return
+        before.keys.forEach { key ->
+            val states = paths.map { it[key] ?: before.getValue(key) }
+            localValInitialization[key] = if (states.distinct().size == 1) states.first() else ValInitialization.MaybeAssigned
+        }
+    }
+
     fun checkPropertyWriteAccess(accessNode: ASTNode, name: String): Int {
         if (!currentScope.hasProperty(name)) {
             throw SemanticException(accessNode.position, "Property `$name` is not declared")
@@ -819,6 +841,22 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         }
 
         val propertyType = scope.getPropertyType(name).first
+        val key = scope.transformedSymbolsByDeclaredName[IdentifierClassifier.Property to name]
+        if (key in localValInitialization) {
+            if (localValInitialization[key] != ValInitialization.Unassigned) {
+                throw SemanticException(accessNode.position, "val `$name` cannot be reassigned")
+            }
+            // A captured val or a val declared outside a loop can be assigned
+            // more than once. Do not treat those bodies as one execution.
+            var inner: SymbolTable = currentScope
+            while (inner !== localValScopes[key]) {
+                if (inner.scopeType.isLoop() || inner.scopeType in setOf(ScopeType.Function, ScopeType.Closure, ScopeType.Class)) {
+                    throw SemanticException(accessNode.position, "Captured val `$name` cannot be initialized here; it may be assigned more than once")
+                }
+                inner = inner.parentScope ?: break
+            }
+            return scope.scopeLevel
+        }
         if (!propertyType.isMutable && scope.hasAssignedInThisScope(name)) {
             throw SemanticException(accessNode.position, "val `$name` cannot be reassigned")
         }
@@ -1246,6 +1284,11 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
      */
     fun AssignmentNode.visit(modifier: Modifier = Modifier()) {
         visitAssignment(modifier)
+        if (operator == "=" && subject is VariableReferenceNode) {
+            smartCastKey(subject)?.takeIf { it in localValInitialization }?.let {
+                localValInitialization[it] = ValInitialization.Assigned
+            }
+        }
         // an assignment voids what was known about the variable's type; the value was analysed before
         (subject as? VariableReferenceNode)?.let { smartCastKey(it) }?.let {
             assignmentVersions[it] = (assignmentVersions[it] ?: 0) + 1
@@ -1262,7 +1305,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             when (subject) {
                 is VariableReferenceNode -> {
                     if (isRead) {
-                        subject.visit(modifier = modifier)
+                        subject.visitVariableReference(modifier = modifier, isAssignmentTarget = operator == "=")
                     }
                     if (isWrite) {
                         val variableName = subject.variableName
@@ -1526,6 +1569,10 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 //        transformedRefName = "$name/${scopeLevel}"
         transformedRefName = "$name/${++variableDefIndex}"
         currentScope.registerTransformedSymbol(position, IdentifierClassifier.Property, transformedRefName!!, name)
+        if (!isMutable && initialValue == null && !isClassProperty && currentScope !== symbolTable) {
+            localValInitialization[transformedRefName!!] = ValInitialization.Unassigned
+            localValScopes[transformedRefName!!] = currentScope
+        }
         if (PropertyModifier.const in modifiers) constProperties += transformedRefName!!
 
         evaluateAndRegisterReturnType(this)
@@ -1576,7 +1623,9 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         }
     }
 
-    fun VariableReferenceNode.visit(modifier: Modifier = Modifier()) {
+    fun VariableReferenceNode.visit(modifier: Modifier = Modifier()) = visitVariableReference(modifier, isAssignmentTarget = false)
+
+    private fun VariableReferenceNode.visitVariableReference(modifier: Modifier, isAssignmentTarget: Boolean) {
         runBeforePropertyLookup(variableName)
         // A top-level property later in this unit, unless a local or member shadows it.
         if (variableName in pendingTopLevel && !isDeclaredBelowScript(variableName)) {
@@ -1608,6 +1657,9 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             }
         }
         val (l, transformedName) = checkPropertyReadAccessAndGetScopeLevelAndTransformedName(this, variableName)
+        if (!isAssignmentTarget && transformedName in localValInitialization && localValInitialization[transformedName] != ValInitialization.Assigned) {
+            throw SemanticException(position, "Variable `$variableName` must be initialized")
+        }
         noteSelfCallingAccessor(position, variableName, isWrite = false, scopeLevel = l)
         if (l == symbolTable.scopeLevel) {
             checkInitializedBeforeUse(this, variableName, transformedName)
@@ -3095,15 +3147,23 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
     fun IfNode.visit(modifier: Modifier = Modifier()) {
         condition.visit(modifier = modifier)
+        val before = localValInitialization.toMap()
         val whenTrue = smartCastsWhenTrue(condition)
         val whenFalse = smartCastsWhenFalse(condition)
         val trueEnd = withSmartCasts(whenTrue) { trueBlock?.visit(modifier = modifier); if (trueBlock != null) blockEndSmartCasts else null }
+        val trueInitialization = localValInitialization.toMap()
+        restoreValInitialization(before)
         val falseEnd = withSmartCasts(whenFalse) { falseBlock?.visit(modifier = modifier); if (falseBlock != null) blockEndSmartCasts else null }
+        val falseInitialization = localValInitialization.toMap()
 
         // After `if (value == null) return ...`, Kotlin smart-casts value
         // for the remainder of the surrounding block (see BlockNode.visit).
         val trueBlockNeverCompletes = blockNeverCompletes(trueBlock)
         val falseBlockNeverCompletes = blockNeverCompletes(falseBlock)
+        mergeValInitialization(before, listOfNotNull(
+            trueInitialization.takeUnless { trueBlockNeverCompletes },
+            falseInitialization.takeUnless { falseBlockNeverCompletes },
+        ))
         // The narrowings at the end of a branch, not of its condition: the branch may assign (RT-99).
         val trueFacts = trueEnd ?: whenTrue.associateBy { it.key }
         val falseFacts = falseEnd ?: whenFalse.associateBy { it.key }
@@ -4249,13 +4309,19 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         }
 
         var smartCastsFromEarlierEntries = emptyList<SmartCastFact>()
+        val before = localValInitialization.toMap()
+        val initializationPaths = mutableListOf<Map<String, ValInitialization>>()
         entries.forEach {
+            restoreValInitialization(before)
             smartCastsFromEarlierEntries += it.visit(modifier = modifier, subject = subject, smartCastsFromEarlierEntries = smartCastsFromEarlierEntries)
+            if (!blockNeverCompletes(it.body)) initializationPaths += localValInitialization.toMap()
         }
 
         // Like Kotlin, `else` is only needed when the value is used and the entries do not cover every
         // value (see requireWhenValue). Otherwise the `when` is a statement whose value is `Unit`.
         isExhaustive = numOfElse == 1 || coversAllSubjectValues()
+        if (!isExhaustive) initializationPaths += before
+        mergeValInitialization(before, initializationPaths)
         type = if (isExhaustive && entries.isNotEmpty()) {
             superTypeOf(*entries.map { it.bodyType }.toTypedArray())
         } else {

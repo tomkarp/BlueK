@@ -175,6 +175,53 @@ for (const declaration of ['var name', 'var name: String']) {
 }
 ok((await project({ 'Auto.kt': 'class Auto {\n    var marke: String\n    init {\n        marke = "BMW"\n    }\n}' })).result, 'property assigned in init');
 
+// RT-110 / feedback #12: delayed local val initialization follows the selected
+// branch, rather than treating analysis of another branch as a second write.
+{
+  const cases = [
+    ['straight assignment', 'x = "A"', ['A', 'A', 'A']],
+    ['if/else', 'if (n == 0) x = "A" else x = "B"', ['A', 'B', 'B']],
+    ['nested branches', 'if (n == 0) { x = "A" } else if (n == 1) { x = "B" } else { x = "C" }', ['A', 'B', 'C']],
+    ['when subject', 'when (n) { 0 -> x = "A"; 1 -> x = "B"; else -> x = "C" }', ['A', 'B', 'C']],
+    ['when conditions', 'when { n == 0 -> x = "A"; n == 1 -> x = "B"; else -> x = "C" }', ['A', 'B', 'C']],
+    ['exhaustive Boolean', 'when (n == 0) { true -> x = "A"; false -> x = "B" }', ['A', 'B', 'B']],
+    ['returning branch', 'if (n == 0) return "A" else x = "B"', ['A', 'B', 'B']],
+    ['return before assignment', 'if (n == 0) return "A"; x = "B"', ['A', 'B', 'B']],
+    ['when returning branch', 'when (n) { 0 -> return "A"; else -> x = "B" }', ['A', 'B', 'B']],
+    ['nested local scope', 'if (n == 0) { val x = "inner"; check(x == "inner") }; x = "A"', ['A', 'A', 'A']],
+    ['local val inside loop', 'for (i in 0..1) { val y: String; if (i == 0) y = "A" else y = "B"; check(y.length == 1) }; x = "A"', ['A', 'A', 'A']],
+  ];
+  for (const [label, body, expected] of cases) {
+    const p = await project({ 'Main.kt': `fun choose(n: Int): String { val x: String; ${body}; return x }` });
+    ok(p.result, `RT-110 ${label}`);
+    for (let n = 0; n < expected.length; n++) {
+      assert.equal(ok(p.evaluate(`choose(${n})`), `RT-110 ${label}(${n})`).display, expected[n]);
+    }
+  }
+  const invalid = [
+    ['second sequential assignment', 'x = "A"; x = "B"', /cannot be reassigned/],
+    ['second assignment in one branch', 'if (n == 0) { x = "A"; x = "B" } else x = "C"', /cannot be reassigned/],
+    ['assignment after exhaustive branches', 'if (n == 0) x = "A" else x = "B"; x = "C"', /cannot be reassigned/],
+    ['assignment after optional branch', 'if (n == 0) x = "A"; x = "B"', /cannot be reassigned/],
+    ['incomplete if', 'if (n == 0) x = "A"', /must be initialized/],
+    ['incomplete when', 'when (n) { 0 -> x = "A" }', /must be initialized/],
+    ['read before assignment', 'println(x); x = "A"', /must be initialized/],
+    ['self initialization', 'x = x', /must be initialized/],
+    ['compound initialization', 'x += "A"', /must be initialized/],
+    ['captured lambda assignment', 'val f = { x = "A" }; f()', /Captured val/],
+    ['local function assignment', 'fun set() { x = "A" }; set()', /Captured val/],
+    ['loop assignment', 'for (i in 0..1) { x = "A" }', /Captured val/],
+    ['while assignment', 'while (n > 0) { x = "A" }', /Captured val/],
+  ];
+  for (const [label, body, diagnostic] of invalid) {
+    fails((await project({ 'Main.kt': `fun choose(n: Int): String { val x: String; ${body}; return x }` })).result,
+      `RT-110 ${label}`, diagnostic);
+  }
+  // The normal member-initialization and initialized-val checks still apply.
+  fails((await project({ 'Main.kt': 'fun choose() { val x = "A"; if (true) x = "B" }' })).result,
+    'RT-110 initialized val', /cannot be reassigned/);
+}
+
 // Arguments of a member call are evaluated in the caller's scope (implicit this).
 {
   const p = await project({ 'Stapel.kt': 'class Stapel {\n    val karten = mutableListOf<String>()\n    fun fuellen() {\n        for (i in 1..3) karten.add(neueKarte(i))\n    }\n    fun neueKarte(nr: Int): String = "K$nr"\n}' });

@@ -79,6 +79,7 @@ Unless explicitly stated, visual user acceptance remains pending.
 | RT-107 | Expected type widens inferred type arguments (declaration, assignment, return, if/when, call parameters); wrong types stay errors | Curriculum RT-107 (values checked with kotlinc), generics, Kotlin surface, references, testing and runtime suites passed; conformance 832 (+12, none lost); full hosted GUI 194/194 and offline 6/6 passed (2026-10-09) |
 | RT-108 | `Number` supertype of Int/Long/Double/Byte with conversions; `listOf(1, 2.5)` is `List<Number>` | Curriculum RT-108 and Kotlin surface (269 supported) passed; same conformance and GUI runs as RT-107 (2026-10-09) |
 | RT-109 | Available `kotlin.math` top-level functions/constants support qualified expressions without imports, distinct from project names; package roots bound to local values/classes retain member semantics; constants reject writes | Interpreter build passed; manual local browser codepad displayed abs/sqrt/max/min/PI/E values and distinct own abs/PI values (2026-10-09); no automated tests added or run; root-shadowing/write rejection implemented but not exercised; user accepted the demonstrated math support (2026-10-10) |
+| RT-110 | Delayed local `val` initialization in alternative if/when branches; definite reads, reassignment and callable/loop boundaries | Feedback #12 pattern reproduced before the fix. Kotlin compiler accepted all 11 positive fixtures and rejected all 13 negative fixtures. Rebuilt interpreter, curriculum suite, generics (including 49 boundaries), runtime-state and references passed; Chromium when/branch execution passed (2026-10-12). Original Main.kt was absent from the stale report attachment, so the exact original project could not be rerun. |
 | RT-106 | Common supertype as in Kotlin for mixed arguments (`listOf(40, 40, false)`, mixed set/map/array, nested lists, if/else); invariant receiver keeps `add` type-safe; `containsKey` via Kotlite stdlib | Curriculum RT-106 (values checked with kotlinc), generics, Kotlin surface, references and testing suites passed; conformance 820 (+1 `lambda/lambda_kt80285.kt`, none lost); full hosted GUI 193/193 and offline 6/6 passed (2026-10-09) |
 | RT-105 | Exponential speed slider (1 s at 1, 30 ms at 50, 1 ms at 100, strictly faster per step); Run acts at once; raising the speed ends a long wait; `setSpeed()` in code paces Run like the slider (engine owns the speed; Reset keeps it) | smoke-runtime-state passed with the final 1 s curve and the code `setSpeed()` case; full hosted GUI 194/194, offline 6/6 and smoke suites passed (2026-10-09); feel not user-accepted |
 | RT-104 | playSound resolves given path or sounds/, emits a resource effect without a shown world, missing file raises “Sound file not found” | smoke-blueplay-browser passed (2026-10-08); audible output not verified |
@@ -296,10 +297,29 @@ Unless explicitly stated, visual user acceptance remains pending.
 | GUI-136 | Images dialog uses equal-sized project and standard tiles, with unobtrusive rename/remove icons beside the filename, leaving the preview uncovered; buttons have a background on hover/focus, long filenames truncate with their full name in the tooltip; only its content scrolls, keeping the title and Close button visible | Live local browser screenshots inspected at the top and bottom of the image list, including the caption-action follow-up (2026-10-09); typecheck passed with zero errors/warnings before the CSS follow-ups; no automated case added or run; user visually accepted the final layout (2026-10-09) |
 | GUI-130 | Supported browser-language default with English fallback, persisted German/English choice, unchanged source/live state/diagnostics, translated dialogs/manual/editor search and offline use | 188/188 full GUI cases and final affected 11/11 selection passed (2026-10-08); nine localization cases passed; offline language case passed; agent screenshots inspected, user acceptance pending |
 
-| GUI-137 | Private bug/Kotlin-support report dialog, diagnostic context, explicit project opt-in, JSON preview, durable private delivery and receipt; footer offers Cancel/Send without a report download | Local dialog/preview and initial published main/beta dialog visually inspected (2026-10-10); final wording/information notice approved for publication, final typecheck: zero errors/warnings. Hosted/offline builds completed. No automated tests added/run. Private repo/labels/watch and protected restricted token installed; main/beta/local feedback configuration available. Actual issue/attachment delivery remains unverified by the agent. |
+| GUI-137 | Private bug/Kotlin-support report dialog, diagnostic context, explicit project opt-in, JSON preview, durable private delivery and receipt; footer offers Cancel/Send without a report download | Local dialog/preview and initial published main/beta dialog visually inspected (2026-10-10); final wording/information notice approved for publication, final typecheck: zero errors/warnings. Hosted/offline builds completed. No automated tests added/run on that date. Private repo/labels/watch and protected restricted token installed; main/beta/local feedback configuration available. Original delivery evidence retained; refreshed snapshots, complete project attachments and receipt wording verified by controller/Chromium tests (2026-10-12), see the dated record below. |
+
 | GUI-138 | A failed IDE link (expired, blocked, undecodable or BluePlay example) keeps the tab draft, shows a dismissible translated notice and cleans the URL; same-page `#bluek`/`#run` links reload through one handler, also offline | Chromium GUI case and offline Chromium/WebKit agent check passed, 2026-10-11; German light/dark notice inspected; user acceptance pending |
 
 ## Recorded verification
+
+### Delayed val and refreshed feedback attachments — 2026-10-12
+
+2026-10-12, GUI-137 / feedback #12: cancelled report drafts now recapture the
+complete current project and matching diagnostics on every opening. Controller
+tests passed for functions/classes/tests/resources/README, retained text,
+explicit project opt-in, snapshot isolation and matching transmitted JSON.
+Chromium feedback tests passed in English/German (2/2), including a Main.kt added
+after cancelling and receipt text without the privacy sentence; service delivery
+was mocked. The initial browser runs failed because the new test used an invalid
+test attachment filename and assumed a main-function template; corrected
+fixtures passed. Initial Kotlin build failed during API generation because flow
+state was initialized after library AST installation; corrected build passed.
+Typecheck (zero errors/warnings), i18n, all six localization browser tests and
+all six offline Chromium/WebKit tests passed, including offline German language.
+New visual/user acceptance and actual sending to production were not performed.
+The downloaded existing issue attachment proves production receipt/attachment
+delivery, but it contained an older project snapshot and no original Main.kt.
 
 ### Private feedback — 2026-10-10
 

@@ -7,6 +7,10 @@ import ts from 'typescript';
 const entry = '\0workspace-test';
 const bundle = await rolldown({
   input: entry,
+  transform: { define: {
+    __BLUEK_BUILD_INFO__: JSON.stringify({ version: 'test', revision: 'test', channel: 'local', builtAt: '' }),
+    'import.meta.env.VITE_BLUEK_OFFLINE': JSON.stringify('0'),
+  } },
   resolve: { conditionNames: ['browser', 'import', 'default'] },
   plugins: [{
     name: 'workspace-runes',
@@ -16,6 +20,7 @@ const bundle = await rolldown({
         export { ObjectWorkspace } from '${new URL('../frontend/src/workspace/ObjectWorkspace.svelte.ts', import.meta.url).pathname}';
         export { WorkspaceUi } from '${new URL('../frontend/src/workspace/WorkspaceUi.svelte.ts', import.meta.url).pathname}';
         export { ProjectWorkspace } from '${new URL('../frontend/src/workspace/ProjectWorkspace.svelte.ts', import.meta.url).pathname}';
+        export { FeedbackWorkspace } from '${new URL('../frontend/src/workspace/FeedbackWorkspace.svelte.ts', import.meta.url).pathname}';
       `;
     },
     transform: {
@@ -33,7 +38,7 @@ const bundle = await rolldown({
 });
 const { output } = await bundle.generate({ format: 'esm' });
 await bundle.close();
-const { ObjectWorkspace, WorkspaceUi, ProjectWorkspace } = await import('data:text/javascript;base64,' + Buffer.from(output[0].code).toString('base64'));
+const { ObjectWorkspace, WorkspaceUi, ProjectWorkspace, FeedbackWorkspace } = await import('data:text/javascript;base64,' + Buffer.from(output[0].code).toString('base64'));
 
 const snapshot = { generationId: 'one', phase: 'ready', references: [], liveObjectIds: [], inspections: {} };
 let generation = 'one';
@@ -133,4 +138,56 @@ assert.equal(project.files.find(file => file.id === attached.id).testTarget, und
 project.deleteFile(project.files.find(file => file.id === attached.id));
 assert.equal(project.defaultTestClass, '', 'Deleting the default test clears the setting');
 assert.equal(project.canShareState, false, 'A deleted default class disables the link option');
+
+// GUI-137: reopening a cancelled report must capture the current complete
+// project, including functions/tests/resources and their matching diagnostics.
+const previousWindow = globalThis.window;
+const previousFetch = globalThis.fetch;
+globalThis.window = { location: { origin: 'http://127.0.0.1:5173', hostname: '127.0.0.1' } };
+const reports = [];
+globalThis.fetch = async (_url, options) => {
+  if (options?.method === 'POST') {
+    const report = JSON.parse(options.body);
+    reports.push(report);
+    return Response.json({ reference: report.id, queued: false, issueNumber: 12 });
+  }
+  return Response.json({ available: true });
+};
+try {
+  project.files = [{ id: 'tier', fileName: 'Tier.kt', kind: 'class', source: 'class Tier', revision: 1 }];
+  let context = { diagnostics: [{ fileName: 'Tier.kt', line: 1, column: 1, severity: 'error', message: 'old error' }] };
+  const feedback = new FeedbackWorkspace({ project: project.projectPayload, context: () => context, language: () => 'de' });
+  feedback.show();
+  feedback.summary = 'Delayed val';
+  feedback.description = 'Compile error';
+  assert.equal(feedback.report().project, undefined, 'Project attachment stays opt-in');
+  feedback.includeProject = true;
+  feedback.close();
+  project.files.push(
+    { id: 'main', fileName: 'Main.kt', kind: 'functions', source: 'fun main() { println("new") }', revision: 1 },
+    { id: 'test', fileName: 'TierTest.kt', kind: 'class', source: 'class TierTest', isTestClass: true, testTarget: 'Tier.kt', revision: 1 },
+  );
+  project.readme = 'Project instructions';
+  project.resources = [{ path: 'images/a.png', data: 'data:image/png;base64,AA==' }];
+  context = { diagnostics: [{ fileName: 'Main.kt', line: 44, column: 13, severity: 'error', message: 'new error' }] };
+  feedback.show();
+  assert.equal(feedback.summary, 'Delayed val', 'User text survives reopening');
+  assert.deepEqual(feedback.report().project, JSON.parse(JSON.stringify(project.projectPayload())));
+  assert.deepEqual(feedback.report().context, context, 'Diagnostics are recaptured with the project');
+  project.files[1].source = 'fun main() { println("later") }';
+  assert.equal(feedback.report().project.files[1].source, 'fun main() { println("new") }', 'Preview and transmission use an isolated snapshot');
+  await feedback.send();
+  assert.equal(reports.length, 1);
+  assert.deepEqual(reports[0].project, feedback.report().project, 'The complete previewed project is sent');
+  feedback.close();
+  project.files = [{ id: 'new', fileName: 'New.kt', kind: 'functions', source: 'fun main() {}', revision: 1 }];
+  feedback.show();
+  assert.equal(feedback.summary, '');
+  assert.equal(feedback.includeProject, false, 'Successful submission resets attachment opt-in');
+  assert.deepEqual(feedback.projectSnapshot.files.map(file => file.fileName), ['New.kt']);
+} finally {
+  globalThis.window = previousWindow;
+  globalThis.fetch = previousFetch;
+}
 console.log('Workspace controllers passed: real Svelte reactivity, cloneable arguments, independent instances, stale replies, cancelled inspections and test-card rename/duplicate/delete.');
+console.log('Feedback passed: refreshed complete project/diagnostics, retained draft text, opt-in, isolated preview and matching sent payload.');

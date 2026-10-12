@@ -23,9 +23,15 @@ and codepad input. **Included data** shows the complete transmitted JSON.
 Project inclusion is unchecked by default. Opting in adds the project snapshot
 captured when opening the report, using the normal project export format:
 Kotlin files, README, images/sounds, library version, card positions and project
-settings. No terminal output, other saved projects, browser storage, URL
+settings. All project files are included, including top-level functions and
+test classes. Reopening a cancelled report retains the entered text but captures
+the current complete project and diagnostics again, so an older draft cannot
+attach an earlier project version to a new error. No terminal output, other saved projects, browser storage, URL
 queries/hashes or screenshots are collected. Closing retains the draft in
 memory only; a successful submission starts a fresh draft next time.
+The submission receipt shows its issue number or queued reference and the
+optional email-contact explanation; the storage notice remains available from
+the header's information button.
 
 Main, beta and local Vite use their `/api` endpoint. Vite forwards feedback to
 the live `https://bluek.de` service by default, without copying its token to the
