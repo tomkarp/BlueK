@@ -705,6 +705,14 @@ open class SymbolTable(
     fun getPropertyHolder(name: String, isThisScopeOnly: Boolean = false): RuntimeValueAccessor =
         findPropertyHolder(name, isThisScopeOnly) ?: throw RuntimeException("The variable `$name` has not been declared")
 
+    /** Capturing a declared but not yet initialized local shares its empty cell. */
+    fun capturePropertyHolder(name: String): RuntimeValueAccessor {
+        findPropertyHolder(name)?.let { return it }
+        val (property, scope) = getPropertyTypeOrNull(name)
+            ?: throw RuntimeException("The variable `$name` has not been declared")
+        return scope.propertyValues.getOrPut(name) { RuntimeValueHolder(property.type, property.isMutable) }
+    }
+
     /** Like [getPropertyHolder], but null for an undeclared name instead of an exception. */
     fun findPropertyHolder(name: String, isThisScopeOnly: Boolean = false): RuntimeValueAccessor? {
         var scope: SymbolTable? = this

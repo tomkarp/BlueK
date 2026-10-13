@@ -37,6 +37,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.NavigationNode
 import com.sunnychung.lib.multiplatform.kotlite.model.DelegatedValue
 import com.sunnychung.lib.multiplatform.kotlite.stdlib.AllStdLibModules
 import com.sunnychung.lib.multiplatform.kotlite.model.GenericCollectionsModule
+import com.sunnychung.lib.multiplatform.kotlite.util.KotlinFileRules
 import kotlin.js.ExperimentalJsExport
 import kotlin.js.JsExport
 import kotlin.js.JSON
@@ -604,6 +605,9 @@ class KotliteSession {
                 val position = statementPosition(statement)
                 return projectError(filename, position.lineNum, position.col,
                     "Only declarations are allowed at the top level of a Kotlin project file. Move this statement into a function or run it in the Codepad.")
+            }
+            KotlinFileRules.initializationError(script)?.let { (position, message) ->
+                return projectError(filename, position.lineNum, position.col, message)
             }
         }
         // Like Kotlin, every file may declare its own main(). The files share one

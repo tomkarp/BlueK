@@ -44,6 +44,15 @@ There is no optimization by inlining, inline-property/reflection support or
 cross-module PublishedApi validation. Non-local break/continue across lambdas
 remain unsupported.
 
+Inline permission is separate from calls-in-place. Trusted binary Core scope
+functions restore an exactly-once parameter contract for local definite
+initialization; nullable safe calls retain a skipped-callback path. User-defined
+contracts remain unsupported. Escaping lambdas and function declarations cannot
+initialize their caller during analysis. Capturing an uninitialized declaration
+shares an empty runtime cell rather than reading its value; this also preserves
+identity when a permitted callback suspends around the first assignment.
+See [flow-state validation](kotlin-flow-state.md).
+
 ## Host function contract
 
 `FunctionCallNode.typeArguments` propagates explicit/inferred types to

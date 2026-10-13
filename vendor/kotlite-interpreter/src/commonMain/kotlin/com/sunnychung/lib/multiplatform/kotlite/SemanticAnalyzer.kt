@@ -151,6 +151,8 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         val node: CallableNode,
         val returnType: DataType?,
         val lambdaReturnTypes: MutableList<TypeNode> = mutableListOf(),
+        val returnInitialization: MutableList<Map<String, ValInitialization>> = mutableListOf(),
+        val closureScope: SymbolTable? = null,
     )
     private data class InlineParameter(val owner: CallableNode, val crossinline: Boolean)
     private val callableContexts = mutableListOf<CallableContext>()
@@ -264,6 +266,42 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     // Initialize before installing library declarations: installation visits ASTs.
     private val localValInitialization = mutableMapOf<String, ValInitialization>()
     private val localValScopes = mutableMapOf<String, SymbolTable>()
+    private val valWriteEvents = mutableListOf<Pair<String, SourcePosition>>()
+    private val remainingStatements = mutableListOf<List<ASTNode>>()
+    private val unstableCapturedKeys = mutableSetOf<String>()
+    private var reachable = true
+    private val analysisCallScopes = mutableSetOf<SymbolTable>()
+    private val classInitializationKeys = mutableSetOf<String>()
+    private val mutableInitializationKeys = mutableSetOf<String>()
+    private fun isInInitializer(key: String): Boolean {
+        var scope: SymbolTable? = currentScope
+        val owner = localValScopes[key] ?: return false
+        while (scope != null && scope !== owner) {
+            if (scope.scopeType == ScopeType.Function && scope !in analysisCallScopes ||
+                scope.scopeType == ScopeType.Closure) return false
+            scope = scope.parentScope
+        }
+        return scope === owner
+    }
+    private fun isExactlyOnceClosure(scope: SymbolTable): Boolean =
+        (callableContexts.firstOrNull { it.closureScope === scope }?.node as? LambdaLiteralNode)?.isExactlyOnce == true
+    private data class ConditionFacts(val yes: List<SmartCastFact>, val no: List<SmartCastFact>, val versions: Map<String, Int>)
+    private val conditionAliases = mutableMapOf<String, ConditionFacts>()
+
+    private fun activeFacts(): Map<String, SmartCastFact> = smartCasts.keys.mapNotNull { key ->
+        activeSmartCast(key)?.let { key to SmartCastFact(key, it.type, it.isMutable) }
+    }.toMap()
+
+    private fun restoreFacts(facts: Map<String, SmartCastFact>) { smartCasts.clear(); addSmartCasts(facts.values.toList()) }
+
+    private fun commonFacts(paths: List<Map<String, SmartCastFact>>): Map<String, SmartCastFact> =
+        paths.firstOrNull().orEmpty().filter { (key, fact) -> paths.all { it[key]?.type == fact.type } }
+
+    private fun invalidateLoopFacts(body: ASTNode?) {
+        val names = com.sunnychung.lib.multiplatform.kotlite.util.FlowWrites.names(listOfNotNull(body))
+        val keys = names.mapNotNull { name -> if (currentScope.hasProperty(name)) smartCastKey(VariableReferenceNode(SourcePosition.NONE, name)) else null }
+        smartCasts.keys.removeAll { key -> keys.any { key == it || key.startsWith("$it.") } }
+    }
 
     init {
         val classes = mutableListOf<ClassDefinition>()
@@ -427,11 +465,8 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     }
 
     /** Whether [node] (`return`, `throw`, `break`, `continue`, a call of type `Nothing`) never completes. */
-    private fun neverCompletes(node: ASTNode?): Boolean = when (node) {
-        is ReturnNode, is ThrowNode, is BreakNode, is ContinueNode -> true
-        is FunctionCallNode -> node.type().name == "Nothing"
-        else -> false
-    }
+    private fun neverCompletes(node: ASTNode?): Boolean = node != null &&
+        !com.sunnychung.lib.multiplatform.kotlite.util.ReturnFlow.canCompleteNormally(node)
 
     /**
      * Narrowings that hold after [statement] completed normally (RT-99): `x ?: return`, `x!!`,
@@ -472,11 +507,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
     /** Whether control never continues after the last statement, so facts of the other branch hold afterwards. */
     private fun blockNeverCompletes(block: BlockNode?): Boolean {
-        return when (val last = block?.statements?.lastOrNull()) {
-            is ReturnNode, is ThrowNode, is BreakNode, is ContinueNode -> true
-            is FunctionCallNode -> last.type().name == "Nothing"
-            else -> false
-        }
+        return neverCompletes(block)
     }
 
     private fun smartCastKey(variable: VariableReferenceNode): String? {
@@ -492,6 +523,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
     private fun activeSmartCast(key: String?): SmartCast? {
         if (key == null) return null
+        if (key.substringBefore('.') in unstableCapturedKeys) return null
         return smartCasts[key]?.takeIf { it.assignmentVersion == (assignmentVersions[key] ?: 0) }
     }
 
@@ -532,6 +564,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     private fun isStableForTypeTest(variable: VariableReferenceNode): Boolean {
         val (propertyType, ownerScope) = currentScope.getPropertyTypeOrNull(variable.variableName) ?: return false
         val owner = variable.ownerRef
+        if (smartCastKey(variable) in unstableCapturedKeys) return false
         if (owner != null) {
             if (owner.extensionPropertyRef != null || propertyType.isMutable) return false
             val clazz = currentScope.findClass(owner.ownerRefName.removePrefix("this/"))?.first ?: return false
@@ -565,7 +598,10 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         }
         if (node is NavigationNode) {
             val key = propertySmartCastKey(node) ?: return null
-            return SmartCastSubject(key, node.type(), isStableForTypeTest = true, isMutable = false)
+            var root: ASTNode = node.subject
+            while (root is NavigationNode) root = root.subject
+            val mutableRoot = (root as? VariableReferenceNode)?.let { currentScope.getPropertyTypeOrNull(it.variableName)?.first?.isMutable } == true
+            return SmartCastSubject(key, node.type(), isStableForTypeTest = true, isMutable = mutableRoot)
         }
         val variable = node as? VariableReferenceNode ?: return null
         val key = smartCastKey(variable) ?: return null
@@ -580,9 +616,14 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
      */
     private fun propertySmartCastKey(node: NavigationNode): String? {
         if (node.operator != ".") return null
-        val variable = node.subject as? VariableReferenceNode ?: return null
-        val rootKey = smartCastKey(variable) ?: return null
-        val subjectType = variable.type().takeIf { !it.isNullable && it !is FunctionTypeNode && it !is ClassTypeNode } ?: return null
+        val subject = node.subject
+        if (subject is VariableReferenceNode && subject.variableName != "this" && !isStableForTypeTest(subject)) return null
+        val rootKey = when (subject) {
+            is VariableReferenceNode -> smartCastKey(subject) ?: if (subject.variableName == "this") "this" else null
+            is NavigationNode -> propertySmartCastKey(subject)
+            else -> null
+        } ?: return null
+        val subjectType = subject.type().takeIf { !it.isNullable && it !is FunctionTypeNode && it !is ClassTypeNode } ?: return null
         val clazz = currentScope.findClass(subjectType.name)?.first ?: return null
         val property = clazz.findMemberPropertyWithoutAccessor(node.member.name) ?: return null
         if (property.isMutable || isOverridableOrComputedProperty(clazz, node.member.name)) return null
@@ -590,7 +631,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     }
 
     private fun nonNullFact(subject: SmartCastSubject?): SmartCastFact? {
-        if (subject == null || !subject.type.isNullable) return null
+        if (subject == null || !subject.isStableForTypeTest || !subject.type.isNullable) return null
         return SmartCastFact(subject.key, subject.type.copy(isNullable = false), subject.isMutable)
     }
 
@@ -613,12 +654,14 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     /** Narrowings that hold in the code that runs only if [node] evaluated to `true`. */
     private fun smartCastsWhenTrue(node: ASTNode): List<SmartCastFact> {
         return when {
+            node is VariableReferenceNode -> aliasFacts(node, true)
             node is BinaryOpNode && node.operator == "&&" -> {
                 val first = smartCastsWhenTrue(node.node1)
                 first + withSmartCasts(first) { smartCastsWhenTrue(node.node2) }
             }
-            node is BinaryOpNode && node.operator == "!=" ->
-                listOfNotNull(nonNullFact(smartCastSubject(nullCheckedVariable(node, "!="))))
+            node is BinaryOpNode && node.operator in setOf("!=", "!==") ->
+                listOfNotNull(nonNullFact(smartCastSubject(nullCheckedVariable(node, node.operator))))
+            node is BinaryOpNode && node.operator in setOf("==", "===") -> equalityNonNullFacts(node)
             node is InfixFunctionCallNode && node.functionName == "is" ->
                 listOfNotNull(typeTestFact(smartCastSubject(node.node1), node.node2))
             node is UnaryOpNode && node.operator == "!" -> smartCastsWhenFalse(node.node!!)
@@ -629,17 +672,38 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     /** Narrowings that hold in the code that runs only if [node] evaluated to `false`. */
     private fun smartCastsWhenFalse(node: ASTNode): List<SmartCastFact> {
         return when {
+            node is VariableReferenceNode -> aliasFacts(node, false)
             node is BinaryOpNode && node.operator == "||" -> {
                 val first = smartCastsWhenFalse(node.node1)
                 first + withSmartCasts(first) { smartCastsWhenFalse(node.node2) }
             }
-            node is BinaryOpNode && node.operator == "==" ->
-                listOfNotNull(nonNullFact(smartCastSubject(nullCheckedVariable(node, "=="))))
+            node is BinaryOpNode && node.operator in setOf("==", "===") ->
+                listOfNotNull(nonNullFact(smartCastSubject(nullCheckedVariable(node, node.operator))))
+            node is BinaryOpNode && node.operator in setOf("!=", "!==") -> equalityNonNullFacts(node)
             node is InfixFunctionCallNode && node.functionName == "!is" ->
                 listOfNotNull(typeTestFact(smartCastSubject(node.node1), node.node2))
             node is UnaryOpNode && node.operator == "!" -> smartCastsWhenTrue(node.node!!)
             else -> listOfNotNull(nonNullFact(smartCastSubject(nullOrEmptyCheckedVariable(node))))
         }
+    }
+
+    private fun aliasFacts(node: VariableReferenceNode, yes: Boolean): List<SmartCastFact> {
+        val facts = conditionAliases[smartCastKey(node)] ?: return emptyList()
+        if (facts.versions.any { (key, version) -> (assignmentVersions[key] ?: 0) != version || key in unstableCapturedKeys }) return emptyList()
+        return if (yes) facts.yes else facts.no
+    }
+
+    private fun equalityNonNullFacts(node: BinaryOpNode): List<SmartCastFact> {
+        fun facts(value: ASTNode, other: ASTNode): List<SmartCastFact> {
+            if (other.type().isNullable) return emptyList()
+            val safeReceiver = when (value) {
+                is NavigationNode -> value.takeIf { it.operator == "?." }?.subject
+                is FunctionCallNode -> (value.function as? NavigationNode)?.takeIf { it.operator == "?." }?.subject
+                else -> null
+            }
+            return listOfNotNull(nonNullFact(smartCastSubject(safeReceiver ?: value)))
+        }
+        return facts(node.node1, node.node2) + facts(node.node2, node.node1)
     }
 
     /**
@@ -848,15 +912,18 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
         val propertyType = scope.getPropertyType(name).first
         val key = scope.transformedSymbolsByDeclaredName[IdentifierClassifier.Property to name]
-        if (key in localValInitialization) {
-            if (localValInitialization[key] != ValInitialization.Unassigned) {
+        if (key != null && key in localValInitialization) {
+            if (key !in mutableInitializationKeys && (localValInitialization[key] != ValInitialization.Unassigned ||
+                key in classInitializationKeys && !isInInitializer(key))) {
                 throw SemanticException(accessNode.position, "val `$name` cannot be reassigned")
             }
+            if (key in mutableInitializationKeys) return scope.scopeLevel
             // A captured val or a val declared outside a loop can be assigned
             // more than once. Do not treat those bodies as one execution.
             var inner: SymbolTable = currentScope
             while (inner !== localValScopes[key]) {
-                if (inner.scopeType.isLoop() || inner.scopeType in setOf(ScopeType.Function, ScopeType.Closure, ScopeType.Class)) {
+                if (inner.scopeType == ScopeType.Class || inner.scopeType == ScopeType.Function && inner !in analysisCallScopes ||
+                    inner.scopeType == ScopeType.Closure && !isExactlyOnceClosure(inner)) {
                     throw SemanticException(accessNode.position, "Captured val `$name` cannot be initialized here; it may be assigned more than once")
                 }
                 inner = inner.parentScope ?: break
@@ -1292,11 +1359,32 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         visitAssignment(modifier)
         if (operator == "=" && subject is VariableReferenceNode) {
             smartCastKey(subject)?.takeIf { it in localValInitialization }?.let {
-                localValInitialization[it] = ValInitialization.Assigned
+                if (it !in classInitializationKeys || isInInitializer(it)) {
+                    localValInitialization[it] = ValInitialization.Assigned
+                    valWriteEvents += it to position
+                }
+            }
+        }
+        if (operator == "=" && subject is NavigationNode && (subject.subject as? VariableReferenceNode)?.variableName == "this") {
+            val clazz = subject.subject.type().toDataType() as? ObjectType
+            val key = clazz?.clazz?.declarations?.filterIsInstance<PropertyDeclarationNode>()?.firstOrNull { it.name == subject.member.name }?.transformedRefName
+            if (key in localValInitialization && key != null && isInInitializer(key)) {
+                localValInitialization[key] = ValInitialization.Assigned
+                valWriteEvents += key to position
             }
         }
         // an assignment voids what was known about the variable's type; the value was analysed before
         (subject as? VariableReferenceNode)?.let { smartCastKey(it) }?.let {
+            val owner = currentScope.getPropertyTypeOrNull(subject.variableName)?.second
+            var scope: SymbolTable? = currentScope
+            while (scope != null && scope !== owner) {
+                if (scope.scopeType == ScopeType.Closure && !isExactlyOnceClosure(scope) ||
+                    scope.scopeType == ScopeType.Function && scope !in analysisCallScopes) {
+                    unstableCapturedKeys += it
+                    break
+                }
+                scope = scope.parentScope
+            }
             assignmentVersions[it] = (assignmentVersions[it] ?: 0) + 1
             smartCasts.keys.removeAll { key -> key.startsWith("$it.") } // `name.property` (RT-99)
         }
@@ -1575,9 +1663,23 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 //        transformedRefName = "$name/${scopeLevel}"
         transformedRefName = "$name/${++variableDefIndex}"
         currentScope.registerTransformedSymbol(position, IdentifierClassifier.Property, transformedRefName!!, name)
-        if (!isMutable && initialValue == null && !isClassProperty && currentScope !== symbolTable) {
+        if (!isMutable && !isClassProperty && currentScope !== symbolTable && initialValue != null && type.name == "Boolean") {
+            val yes = smartCastsWhenTrue(initialValue)
+            val no = smartCastsWhenFalse(initialValue)
+            conditionAliases[transformedRefName!!] = ConditionFacts(yes, no,
+                (yes + no).associate { it.key.substringBefore('.') to (assignmentVersions[it.key.substringBefore('.')] ?: 0) })
+        }
+        if (initialValue == null && !isClassProperty && currentScope !== symbolTable && PropertyModifier.lateinit !in modifiers) {
             localValInitialization[transformedRefName!!] = ValInitialization.Unassigned
             localValScopes[transformedRefName!!] = currentScope
+            if (isMutable) mutableInitializationKeys += transformedRefName!!
+        }
+        if (isClassProperty && !isVisitInitialValue && initialValue == null && accessors?.getter == null &&
+            PropertyModifier.abstract !in modifiers && PropertyModifier.lateinit !in modifiers) {
+            localValInitialization[transformedRefName!!] = ValInitialization.Unassigned
+            localValScopes[transformedRefName!!] = currentScope
+            classInitializationKeys += transformedRefName!!
+            if (isMutable) mutableInitializationKeys += transformedRefName!!
         }
         if (PropertyModifier.const in modifiers) constProperties += transformedRefName!!
 
@@ -1663,7 +1765,8 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             }
         }
         val (l, transformedName) = checkPropertyReadAccessAndGetScopeLevelAndTransformedName(this, variableName)
-        if (!isAssignmentTarget && transformedName in localValInitialization && localValInitialization[transformedName] != ValInitialization.Assigned) {
+        if (!isAssignmentTarget && transformedName in localValInitialization &&
+            (transformedName !in classInitializationKeys || isInInitializer(transformedName)) && localValInitialization[transformedName] != ValInitialization.Assigned) {
             throw SemanticException(position, "Variable `$variableName` must be initialized")
         }
         noteSelfCallingAccessor(position, variableName, isWrite = false, scopeLevel = l)
@@ -1711,6 +1814,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     }
 
     fun popScope() {
+        analysisCallScopes.remove(currentScope)
         currentScope = currentScope.parentScope!! as SemanticAnalyzerSymbolTable
     }
 
@@ -1953,9 +2057,14 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 FunctionModifier.inline in modifiers && it.type is FunctionTypeNode && FunctionValueParameterModifier.noinline !in it.modifiers
             }
             addedInlineParameters.forEach { inlineParameters[it.transformedRefName!!] = InlineParameter(this, FunctionValueParameterModifier.crossinline in it.modifiers) }
+            val outerInitialization = localValInitialization.toMap()
+            val outerReachability = reachable
+            reachable = true
             try {
                 body.visit(modifier = modifier)
             } finally {
+                restoreValInitialization(outerInitialization)
+                reachable = outerReachability
                 addedInlineParameters.forEach { inlineParameters.remove(it.transformedRefName) }
                 callableContexts.removeLast()
                 activeReifiedTypeParameters.clear()
@@ -2250,6 +2359,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         }
 
         pushScope("func", ScopeType.Function)
+        analysisCallScopes += currentScope
 
         // visit argument must before evaluating type
         arguments.forEach {
@@ -2908,6 +3018,8 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 val parameter = functionArgumentAndReturnTypeDeclarations.valueParameters[callArgumentMappedIndexes[i]] as? FunctionValueParameterNode
                 callArgument.value.permitsNonLocalReturn = resolvedDeclaration?.modifiers?.contains(FunctionModifier.inline) == true &&
                     parameter != null && FunctionValueParameterModifier.noinline !in parameter.modifiers && FunctionValueParameterModifier.crossinline !in parameter.modifiers
+                callArgument.value.isExactlyOnce = parameter?.name in
+                    (resolvedDeclaration as? CustomFunctionDeclarationNode)?.definition?.exactlyOnceParameters.orEmpty()
                 callArgument.value.implicitLabel = when (val called = function) {
                     is VariableReferenceNode -> called.variableName
                     is NavigationNode -> (called.member as? ClassMemberReferenceNode)?.name
@@ -2927,6 +3039,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
         // revisit to resolve generic lambda type parameters
         // visit argument must before evaluating type
+        val beforeLambdaArguments = localValInitialization.toMap()
         arguments.forEachIndexed { i, argument ->
             val reference = argument.value as? VariableReferenceNode
             val symbol = reference?.let { if (currentScope.hasProperty(it.variableName)) checkPropertyReadAccessAndGetScopeLevelAndTransformedName(it, it.variableName).second else null }
@@ -2943,6 +3056,9 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             }
             try { argument.visit(modifier = modifier.copy(isSkipGenerics = false)) }
             finally { if (reference != null) permittedInlineReferences.remove(reference) }
+        }
+        if ((function as? NavigationNode)?.let { it.operator == "?." && it.subject.type().isNullable } == true) {
+            mergeValInitialization(beforeLambdaArguments, listOf(beforeLambdaArguments, localValInitialization.toMap()))
         }
 
         // use resolved type parameters in generic lambda arguments to resolve function type parameters
@@ -3097,6 +3213,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             scopeType = if (type == ScopeType.Function) ScopeType.FunctionBlock else type,
         )
 
+        val outerReachable = reachable
         scopedSmartCasts {
             statements.forEachIndexed { i, it ->
                 if (returnTypeUpperBound is FunctionTypeNode && i == statements.lastIndex && it is LambdaLiteralNode) {
@@ -3104,15 +3221,17 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     it.parameterTypesUpperBound = returnTypeUpperBound.parameterTypes
                     it.returnTypeUpperBound = returnTypeUpperBound.returnType
                 }
-                it.visit(modifier = modifier)
+                remainingStatements += statements.drop(i + 1)
+                try { it.visit(modifier = modifier) } finally { remainingStatements.removeLast() }
                 addSmartCasts(smartCastsAfter(it))
+                if (neverCompletes(it)) reachable = false
             }
             if (format == FunctionBodyFormat.Expression) requireWhenValue(statements.singleOrNull())
 
             returnType = type()
             blockEndSmartCasts = smartCasts.keys.mapNotNull { key -> activeSmartCast(key)?.let { key to SmartCastFact(key, it.type, it.isMutable) } }.toMap()
         }
-
+        reachable = outerReachable
         popScope()
     }
 
@@ -3151,10 +3270,36 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         // A jump across an inner lambda still returns a value to its actual
         // lambda target. It must not infer Nothing for that outer lambda/call.
         if (target.node is LambdaLiteralNode) target.lambdaReturnTypes += value?.type() ?: typeRegistry["Unit"]!!
+        if (target.node is LambdaLiteralNode && reachable) target.returnInitialization += localValInitialization.toMap()
     }
 
     /** Labels of the loops being analyzed, innermost last; null for a loop without label (RT-85). */
     private val loopLabels = mutableListOf<String?>()
+    private class LoopState(val label: String?, val before: Map<String, ValInitialization>, val writeStart: Int,
+        val beforeFacts: Map<String, SmartCastFact>) {
+        val breaks = mutableListOf<Map<String, ValInitialization>>()
+        val continues = mutableListOf<Map<String, ValInitialization>>()
+        val breakFacts = mutableListOf<Map<String, SmartCastFact>>()
+        val continueFacts = mutableListOf<Map<String, SmartCastFact>>()
+    }
+    private val loopStates = mutableListOf<LoopState>()
+
+    private fun finishLoop(state: LoopState, body: ASTNode?, maySkip: Boolean, mayExit: Boolean,
+        falseFacts: List<SmartCastFact> = emptyList(), repeats: Boolean = true) {
+        val bodyEnd = localValInitialization.toMap()
+        val backEdges = state.continues + listOfNotNull(bodyEnd.takeUnless { neverCompletes(body) })
+        val writes = valWriteEvents.drop(state.writeStart).filter { it.first in state.before }
+        writes.firstOrNull { (key, _) -> key !in mutableInitializationKeys && repeats && backEdges.any { it[key] != ValInitialization.Unassigned } }?.let { (key, position) ->
+            throw SemanticException(position, "val `${key.substringBefore('/')}` cannot be reassigned in a loop")
+        }
+        val exits = state.breaks + (if (maySkip) listOf(state.before) else emptyList()) + (if (mayExit) backEdges else emptyList())
+        mergeValInitialization(state.before, exits)
+        val conditionFacts = falseFacts.associateBy { it.key }
+        val factExits = state.breakFacts + (if (maySkip) listOf(state.beforeFacts + conditionFacts) else emptyList()) +
+            (if (mayExit) state.continueFacts.map { it + conditionFacts } + listOfNotNull(
+                (blockEndSmartCasts + conditionFacts).takeUnless { neverCompletes(body) }) else emptyList())
+        restoreFacts(commonFacts(factExits))
+    }
 
     private inline fun <T> inLoop(label: String?, visit: () -> T): T {
         loopLabels += label
@@ -3190,10 +3335,17 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         checkBreakOrContinueScope(this, returnToLabel)
         val target = if (returnToLabel.isEmpty()) loopBreaks.lastIndex else loopLabels.lastIndexOf(returnToLabel)
         if (target >= 0) loopBreaks[target] = true
+        if (target >= 0 && reachable) loopStates.getOrNull(target)?.let {
+            it.breaks += localValInitialization.toMap(); it.breakFacts += activeFacts()
+        }
     }
 
     fun ContinueNode.visit(modifier: Modifier = Modifier()) {
         checkBreakOrContinueScope(this, returnToLabel)
+        val target = if (returnToLabel.isEmpty()) loopStates.lastIndex else loopLabels.lastIndexOf(returnToLabel)
+        if (target >= 0 && reachable) loopStates[target].let {
+            it.continues += localValInitialization.toMap(); it.continueFacts += activeFacts()
+        }
     }
 
     fun IfNode.visit(modifier: Modifier = Modifier()) {
@@ -3205,11 +3357,13 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 "condition type mismatch: inferred type is '${conditionType.descriptiveName}' but 'Boolean' was expected.")
         }
         val before = localValInitialization.toMap()
+        val beforeFacts = activeFacts()
         val whenTrue = smartCastsWhenTrue(condition)
         val whenFalse = smartCastsWhenFalse(condition)
         val trueEnd = withSmartCasts(whenTrue) { trueBlock?.visit(modifier = modifier); if (trueBlock != null) blockEndSmartCasts else null }
         val trueInitialization = localValInitialization.toMap()
         restoreValInitialization(before)
+        restoreFacts(beforeFacts)
         val falseEnd = withSmartCasts(whenFalse) { falseBlock?.visit(modifier = modifier); if (falseBlock != null) blockEndSmartCasts else null }
         val falseInitialization = localValInitialization.toMap()
 
@@ -3221,32 +3375,38 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             trueInitialization.takeUnless { trueBlockNeverCompletes },
             falseInitialization.takeUnless { falseBlockNeverCompletes },
         ))
-        // The narrowings at the end of a branch, not of its condition: the branch may assign (RT-99).
-        val trueFacts = trueEnd ?: whenTrue.associateBy { it.key }
-        val falseFacts = falseEnd ?: whenFalse.associateBy { it.key }
-        if (trueBlockNeverCompletes && !falseBlockNeverCompletes) addSmartCasts(falseFacts.values.toList())
-        if (falseBlockNeverCompletes && !trueBlockNeverCompletes) addSmartCasts(trueFacts.values.toList())
-        // A narrowing that holds at the end of both branches holds afterwards, e.g. after
-        // `if (s == null) s = "neu"` (RT-99).
-        if (!trueBlockNeverCompletes && !falseBlockNeverCompletes) {
-            addSmartCasts(trueFacts.values.filter { fact ->
-                val other = falseFacts[fact.key]
-                other != null && !fact.type.isNullable && !other.type.isNullable && fact.type.descriptiveName() == other.type.descriptiveName()
-            })
-        }
+        // Keep only facts shared by all continuing paths. The last visited
+        // alternative must never restore a fact invalidated in another path.
+        val trueFacts = trueEnd ?: (beforeFacts + whenTrue.associateBy { it.key })
+        val falseFacts = falseEnd ?: (beforeFacts + whenFalse.associateBy { it.key })
+        restoreFacts(commonFacts(listOfNotNull(
+            trueFacts.takeUnless { trueBlockNeverCompletes },
+            falseFacts.takeUnless { falseBlockNeverCompletes },
+        )))
     }
 
     fun WhileNode.visit(modifier: Modifier = Modifier()) {
         condition.visit(modifier = modifier)
-        inLoop(label) { withSmartCasts(smartCastsWhenTrue(condition)) { body?.visit(modifier = modifier) } }
-        // Left without `break`, the condition was false: `while (zahl == null) { zahl = … }` (RT-99)
-        if (!lastLoopHadBreak) addSmartCasts(smartCastsWhenFalse(condition))
+        val beforeFacts = activeFacts()
+        invalidateLoopFacts(body)
+        val state = LoopState(label, localValInitialization.toMap(), valWriteEvents.size, beforeFacts)
+        loopStates += state
+        try { inLoop(label) { withSmartCasts(smartCastsWhenTrue(condition)) { body?.visit(modifier = modifier) } } }
+        finally { loopStates.removeLast() }
+        val infinite = condition is BooleanNode && condition.value
+        finishLoop(state, body, maySkip = !infinite, mayExit = !infinite, falseFacts = smartCastsWhenFalse(condition))
     }
 
     fun DoWhileNode.visit(modifier: Modifier = Modifier()) {
-        condition.visit(modifier = modifier)
-        inLoop(label) { body?.visit(modifier = modifier) }
-        if (!lastLoopHadBreak) addSmartCasts(smartCastsWhenFalse(condition))
+        val beforeFacts = activeFacts()
+        val repeats = !(condition is BooleanNode && !condition.value)
+        invalidateLoopFacts(body)
+        val state = LoopState(label, localValInitialization.toMap(), valWriteEvents.size, beforeFacts)
+        loopStates += state
+        try { inLoop(label) { body?.visit(modifier = modifier) }; condition.visit(modifier = modifier) }
+        finally { loopStates.removeLast() }
+        finishLoop(state, body, maySkip = false, mayExit = !(condition is BooleanNode && condition.value),
+            falseFacts = smartCastsWhenFalse(condition), repeats = repeats)
     }
 
     fun NavigationNode.visit(modifier: Modifier = Modifier(), lookupType: IdentifierClassifier = IdentifierClassifier.Property, isCheckWriteAccess: Boolean = false): DataType {
@@ -3304,14 +3464,21 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 .first
             if (lookupType == IdentifierClassifier.Property) {
                 clazz.findMemberPropertyWithoutAccessor(memberName)?.let { property ->
+                    val key = clazz.declarations.filterIsInstance<PropertyDeclarationNode>().firstOrNull { it.name == memberName }?.transformedRefName
+                    val initializesThis = (subject as? VariableReferenceNode)?.variableName == "this" &&
+                        key in classInitializationKeys && key != null && isInInitializer(key)
                     if (clazz.isPrivateMemberProperty(memberName) && !canAccessPrivateMembersOf(clazz.findMemberPropertyOwnerName(memberName))) {
                         throw SemanticException(position, "Private property `$memberName` cannot be accessed here")
                     }
                     if (clazz.isProtectedMemberProperty(memberName) && !canAccessProtectedMembersOf(clazz.findMemberPropertyOwnerName(memberName))) {
                         throw SemanticException(position, "Protected property `$memberName` cannot be accessed here")
                     }
-                    if (isCheckWriteAccess && !property.isMutable) {
+                    if (isCheckWriteAccess && !property.isMutable &&
+                        (!initializesThis || localValInitialization[key] != ValInitialization.Unassigned)) {
                         throw SemanticException(position, "val `$memberName` cannot be reassigned")
+                    }
+                    if (!isCheckWriteAccess && initializesThis && localValInitialization[key] != ValInitialization.Assigned) {
+                        throw SemanticException(position, "Property `$memberName` must be initialized")
                     }
                     memberType = NavigationNode.MemberType.Direct
                     return subjectType
@@ -3848,6 +4015,8 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     .firstOrNull { it.initialValue == null && it.accessors?.getter == null && PropertyModifier.abstract !in it.modifiers && PropertyModifier.lateinit !in it.modifiers }
                     ?.let { throw SemanticException(it.position, "Property `${it.name}` must be initialized") }
             }
+            val earlierClassKeys = classInitializationKeys.toSet()
+            var constructorContinues = true
             declarations.filter { it is ClassInstanceInitializerNode || it is PropertyDeclarationNode }
                 .forEach {
                     pushScope("init-property", ScopeType.ClassInitializer)
@@ -3872,7 +4041,20 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                         currentScope.declarePropertyOwner(it.transformedRefName!!, "this/$fullQualifiedClassName")
                         classDefinition.addProperty(currentScope, it)
                     }
+                    if (it is ClassInstanceInitializerNode && blockNeverCompletes(it.block) ||
+                        it is PropertyDeclarationNode && neverCompletes(it.initialValue)) constructorContinues = false
                 }
+
+            declarations.filterIsInstance<PropertyDeclarationNode>().filter { it.transformedRefName in classInitializationKeys && it.transformedRefName !in earlierClassKeys }.forEach { property ->
+                val key = property.transformedRefName!!
+                if (constructorContinues && localValInitialization[key] != ValInitialization.Assigned) {
+                    throw SemanticException(property.position, "Property `${property.name}` must be initialized on every continuing constructor path")
+                }
+                // Member bodies are analyzed independently of constructor execution.
+                currentScope.assign(property.name, SemanticDummyRuntimeValue(currentScope.getPropertyType(property.name).first.type))
+                localValInitialization.remove(key); localValScopes.remove(key)
+                classInitializationKeys.remove(key); mutableInitializationKeys.remove(key)
+            }
 
             // Like member functions, accessors may use every property and
             // function of the class, including those declared further below.
@@ -4008,11 +4190,16 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
     fun LambdaLiteralNode.visit(modifier: Modifier = Modifier()) {
         if (modifier.isSkipGenerics) return
-        // A lambda may run after a `var` was reassigned, so only stable variables stay narrowed inside it.
+        val before = localValInitialization.toMap()
+        val writtenNames = com.sunnychung.lib.multiplatform.kotlite.util.FlowWrites.names(
+            listOf(this) + remainingStatements.flatten())
+        val writtenKeys = writtenNames.mapNotNull { name -> if (currentScope.hasProperty(name)) smartCastKey(VariableReferenceNode(position, name)) else null }
         scopedSmartCasts {
-            smartCasts.values.removeAll { it.isMutable }
+            smartCasts.keys.removeAll { key -> smartCasts[key]?.isMutable == true &&
+                (key in unstableCapturedKeys || writtenKeys.any { key == it || key.startsWith("$it.") }) }
             visitLambda(modifier)
         }
+        if (!isExactlyOnce) restoreValInitialization(before)
     }
 
     /**
@@ -4098,9 +4285,15 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         if (resultCall != null && resultCall.expectedReturnType == null && expectedResult != null && isConcreteType(expectedResult)) {
             resultCall.expectedReturnType = expectedResult
         }
-        val context = CallableContext(this, returnTypeUpperBound?.toDataType() ?: AnyType(true))
+        val context = CallableContext(this, returnTypeUpperBound?.toDataType() ?: AnyType(true), closureScope = currentScope)
         callableContexts += context
         try { body.visit(modifier = modifier) } finally { callableContexts.removeLast() }
+        if (isExactlyOnce) {
+            val before = localValInitialization.toMap()
+            val paths = context.returnInitialization + listOfNotNull(before.takeUnless { blockNeverCompletes(body) })
+            // Return@label completes this invocation, unlike a return to its caller.
+            if (paths.isNotEmpty()) mergeValInitialization(before, paths)
+        }
         if (context.lambdaReturnTypes.isNotEmpty()) {
             body.returnType = superTypeOf(body.type(), *context.lambdaReturnTypes.toTypedArray())
         }
@@ -4273,9 +4466,67 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     }
 
     fun TryNode.visit(modifier: Modifier = Modifier()) {
+        val before = localValInitialization.toMap()
+        val beforeFacts = activeFacts()
+        val writeStart = valWriteEvents.size
+        val paths = mutableListOf<Map<String, ValInitialization>>()
+        val factPaths = mutableListOf<Map<String, SmartCastFact>>()
+        val pendingLoopJumps = loopStates.map { it to (it.breaks.size to it.continues.size) }
+        val pendingReturns = callableContexts.map { it to it.returnInitialization.size }
         mainBlock.visit(modifier = modifier)
-        catchBlocks.forEach { it.visit(modifier = modifier) }
-        finallyBlock?.visit(modifier = modifier)
+        if (!blockNeverCompletes(mainBlock)) { paths += localValInitialization.toMap(); factPaths += blockEndSmartCasts }
+        val tryWrites = valWriteEvents.drop(writeStart).map { it.first }.toSet()
+        val catchInput = before.mapValues { (key, state) -> if (key in tryWrites && state == ValInitialization.Unassigned) ValInitialization.MaybeAssigned else state }
+        val mutatedNames = com.sunnychung.lib.multiplatform.kotlite.util.FlowWrites.names(listOf(mainBlock))
+        val mutatedKeys = mutatedNames.mapNotNull { name -> if (currentScope.hasProperty(name)) smartCastKey(VariableReferenceNode(position,name)) else null }
+        val exceptionFacts = beforeFacts.filterKeys { key -> mutatedKeys.none { key == it || key.startsWith("$it.") } }
+        catchBlocks.forEach {
+            restoreValInitialization(catchInput)
+            restoreFacts(exceptionFacts)
+            it.visit(modifier = modifier)
+            if (!blockNeverCompletes(it.block)) { paths += localValInitialization.toMap(); factPaths += blockEndSmartCasts }
+        }
+        val joinedFacts = commonFacts(factPaths)
+        if (finallyBlock != null) {
+            val beforeCleanupJumps = loopStates.associateWith { it.breaks.size to it.continues.size }
+            val beforeCleanupReturns = callableContexts.map { it to it.returnInitialization.size }
+            val allWrites = valWriteEvents.drop(writeStart).map { it.first }.toSet()
+            val cleanupInput = before.mapValues { (key,state) -> if (key in allWrites && state == ValInitialization.Unassigned) ValInitialization.MaybeAssigned else state }
+            restoreValInitialization(cleanupInput)
+            restoreFacts(exceptionFacts)
+            finallyBlock.visit(modifier = modifier)
+            val cleanupEnd = localValInitialization.toMap()
+            val cleanupFacts = blockEndSmartCasts
+            val cleanupNames = com.sunnychung.lib.multiplatform.kotlite.util.FlowWrites.names(listOf(finallyBlock))
+            val cleanupKeys = cleanupNames.mapNotNull { name -> if (currentScope.hasProperty(name)) smartCastKey(VariableReferenceNode(position,name)) else null }
+            val cleanupChanges = before.keys.filter { cleanupEnd[it] != cleanupInput[it] }.associateWith { cleanupEnd[it] ?: before.getValue(it) }
+            // Finally runs on pending jumps too; its own jump replaces the old one.
+            pendingLoopJumps.forEach { (loop, counts) ->
+                val endCounts = beforeCleanupJumps.getValue(loop)
+                fun patch(states: MutableList<Map<String, ValInitialization>>, facts: MutableList<Map<String, SmartCastFact>>, start: Int, end: Int) {
+                    if (blockNeverCompletes(finallyBlock)) {
+                        repeat(end - start) { states.removeAt(start); facts.removeAt(start) }
+                    } else for (i in start until end) {
+                        states[i] = states[i] + cleanupChanges
+                        facts[i] = facts[i].filterKeys { key -> cleanupKeys.none { key == it || key.startsWith("$it.") } } + cleanupFacts
+                    }
+                }
+                patch(loop.breaks, loop.breakFacts, counts.first, endCounts.first)
+                patch(loop.continues, loop.continueFacts, counts.second, endCounts.second)
+            }
+            pendingReturns.forEach { (context, start) ->
+                val end = beforeCleanupReturns.first { it.first === context }.second
+                if (blockNeverCompletes(finallyBlock)) repeat(end - start) { context.returnInitialization.removeAt(start) }
+                else for (i in start until end) context.returnInitialization[i] = context.returnInitialization[i] + cleanupChanges
+            }
+            mergeValInitialization(before, paths)
+            before.keys.forEach { key -> if (cleanupEnd[key] != cleanupInput[key]) localValInitialization[key] = cleanupEnd[key] ?: before.getValue(key) }
+            restoreFacts(joinedFacts.filterKeys { key -> cleanupKeys.none { key == it || key.startsWith("$it.") } })
+            addSmartCasts(cleanupFacts.values.toList())
+        } else {
+            mergeValInitialization(before, paths)
+            restoreFacts(joinedFacts)
+        }
 
         type()
     }
@@ -4374,18 +4625,22 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
         var smartCastsFromEarlierEntries = emptyList<SmartCastFact>()
         val before = localValInitialization.toMap()
+        val beforeFacts = activeFacts()
+        val factPaths = mutableListOf<Map<String, SmartCastFact>>()
         val initializationPaths = mutableListOf<Map<String, ValInitialization>>()
         entries.forEach {
             restoreValInitialization(before)
+            restoreFacts(beforeFacts)
             smartCastsFromEarlierEntries += it.visit(modifier = modifier, subject = subject, smartCastsFromEarlierEntries = smartCastsFromEarlierEntries)
-            if (!blockNeverCompletes(it.body)) initializationPaths += localValInitialization.toMap()
+            if (!blockNeverCompletes(it.body)) { initializationPaths += localValInitialization.toMap(); factPaths += blockEndSmartCasts }
         }
 
         // Like Kotlin, `else` is only needed when the value is used and the entries do not cover every
         // value (see requireWhenValue). Otherwise the `when` is a statement whose value is `Unit`.
         isExhaustive = numOfElse == 1 || coversAllSubjectValues()
-        if (!isExhaustive) initializationPaths += before
+        if (!isExhaustive) { initializationPaths += before; factPaths += beforeFacts }
         mergeValInitialization(before, initializationPaths)
+        restoreFacts(commonFacts(factPaths))
         type = if (isExhaustive && entries.isNotEmpty()) {
             superTypeOf(*entries.map { it.bodyType }.toTypedArray())
         } else {
@@ -4515,7 +4770,12 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         val iteratingType = (returnType as ObjectType).arguments.first()
 
         variables.forEach { it.visit(modifier = modifier, iteratingType = iteratingType) } // TODO don't hardcode one iterating type
-        inLoop(label) { body.visit(modifier = modifier) }
+        val beforeFacts = activeFacts()
+        invalidateLoopFacts(body)
+        val state = LoopState(label, localValInitialization.toMap(), valWriteEvents.size, beforeFacts)
+        loopStates += state
+        try { inLoop(label) { body.visit(modifier = modifier) } } finally { loopStates.removeLast() }
+        finishLoop(state, body, maySkip = true, mayExit = true)
         popScope()
     }
 

@@ -2018,7 +2018,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         refs.properties.forEach {
             // an object instance is no variable to capture
             if (it.startsWith(OBJECT_REF_PREFIX)) return@forEach
-            runtimeRefs.putPropertyHolder(it, false /* TODO review */, currentSymbolTable.getPropertyHolder(it))
+            runtimeRefs.putPropertyHolder(it, false /* TODO review */, currentSymbolTable.capturePropertyHolder(it))
         }
         // Like Kotlin, `this` in a lambda without receiver is the `this` where it is written, also
         // for a nested lambda that uses it (`map { x -> listOf(1).map { this.f(x) } }`, RT-90).

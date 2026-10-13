@@ -86,6 +86,8 @@ Unless explicitly stated, visual user acceptance remains pending.
 | RT-114 | Start/Act without a shown world remains a recoverable request error; a nonfatal failure to begin a scheduled step leaves simulation paused and the session ready | Runtime-state integration passed for explicit Start/Act and student `start()` before `show()`, followed by successful main/reset (2026-10-12). The real exported worker passed in Chromium and WebKit; the initial sandboxed browser launch was blocked by macOS and the authorized rerun passed. |
 | RT-115 | Non-Unit block functions require return on every continuing path; throw/Nothing, exhaustive branches, loops and finally preserve completion; expression functions and lambdas retain implicit results | All original suspicions independently reproduced on d4c83c7 before editing. Final bundled session passed 71 shared semantic fixtures plus the format boundary; all 72 fixtures compared with Kotlin/JVM 2.2.21 across three compiler runs. Chromium passed 15 affected cases, including six new English/German diagnostic/correction/main cases (2026-10-13). See the dated record and [comparison](kotlin-control-flow.md). User visual acceptance pending. |
 | RT-116 | If-conditions require non-null Boolean, with actual/expected types and the condition's source position; abrupt return/throw conditions remain valid | Final bundle rejects Int, String, Boolean? and null conditions; Boolean variables, comparisons, smart casts and terminating conditions compile and execute. Shared official compiler comparison and the same 15 Chromium cases passed (2026-10-13). See RT-115 for suite limitations; user visual acceptance pending. |
+| RT-117 | Definite local val/var and init-block property initialization across continuing branches, exceptions and non-repeating loop paths; trusted scope-function contracts and shared empty capture cells | 120 split-project fixtures match Kotlin/JVM 2.2.21; legal cases execute with matching output, invalid cases fail analysis without effects. Includes first assignment around suspension and all five Core scope functions. Final bundled/session/browser verification passed (2026-10-13); see the dated follow-up and [comparison](kotlin-flow-state.md). |
+| RT-118 | Stable null/type guards, this/property paths, versioned Boolean aliases, unmodified captures, branch joins and invalidation by writes/captured writers/unstable roots | The same 120 fixtures passed; final 31 affected Chromium cases passed across English/German compilation, diagnostics and main execution (2026-10-13). Mutable/custom-getter/open properties and unstable roots remain rejected. User visual acceptance and Safari application run pending. |
 | RT-106 | Common supertype as in Kotlin for mixed arguments (`listOf(40, 40, false)`, mixed set/map/array, nested lists, if/else); invariant receiver keeps `add` type-safe; `containsKey` via Kotlite stdlib | Curriculum RT-106 (values checked with kotlinc), generics, Kotlin surface, references and testing suites passed; conformance 820 (+1 `lambda/lambda_kt80285.kt`, none lost); full hosted GUI 193/193 and offline 6/6 passed (2026-10-09) |
 | RT-105 | Exponential speed slider (1 s at 1, 30 ms at 50, 1 ms at 100, strictly faster per step); Run acts at once; raising the speed ends a long wait; `setSpeed()` in code paces Run like the slider (engine owns the speed; Reset keeps it) | smoke-runtime-state passed with the final 1 s curve and the code `setSpeed()` case; full hosted GUI 194/194, offline 6/6 and smoke suites passed (2026-10-09); feel not user-accepted |
 | RT-104 | playSound resolves given path or sounds/, emits a resource effect without a shown world, missing file raises “Sound file not found” | smoke-blueplay-browser passed (2026-10-08); audible output not verified |
@@ -791,6 +793,46 @@ deployment prefix.
   Initial sandbox restrictions on Gradle's cache and the local test port were
   resolved by approved retries.
 - User visual acceptance remains pending.
+
+### Definite assignment and nullability follow-up — 2026-10-13
+
+RT-117/118: frozen b98dbe4 was independently compared with Kotlin/JVM 2.2.21.
+Of 118 original examples, 56 differed in acceptance or runtime results. The
+final matrix adds suspension and complete Core contract checks (120 fixtures).
+The two historical RT-115 conformance failures, kt12908 and the Nothing getter,
+are addressed by the general completion/initialization rules. See
+[the focused comparison](kotlin-flow-state.md) for scope and rejected hypotheses.
+
+- Final checked bundle: all 120 split-project cases passed; accepted programs
+  execute with matching output and invalid programs fail analysis without
+  effects. Kotlin/JVM comparison passed all 120 across recorded runs of
+  96 + 11 + 3 + 4 + 1 + 1 + 4. Diagnostic wording is not required to be identical.
+- Final sessions/helpers: curriculum, runtime-state, references, testing
+  lifecycle/fixtures/recording, project-format and Codepad flow passed. Earlier
+  affected language checks on the same flow implementation passed all 71
+  control-flow fixtures plus format, generics (49 boundaries and suspended
+  inline), argument/reachability diagnostics and the expanded Kotlin surface
+  (274 supported, four known gaps, 19 messages).
+- Actual Chromium: all 31 affected cases passed after the final project-file
+  rule; 16 new cases cover practical accepted/rejected programs in English and
+  German, alongside the prior diagnostic cases. User acceptance in Safari
+  remains separate and pending.
+- Interpreter rebuild and hosted/player/offline builds passed. Typecheck found
+  zero errors/warnings; i18n matched 737 messages. The final benchmark passed
+  all thresholds, including 10,000 lambda creations and Space Invaders compile.
+- Intermediate conformance passed all 832 saved baseline entries (842 total
+  passes); a competing-load run later timed out on three baseline cases.
+  An isolated rerun passed all 832 (843 total, 11 beyond the saved baseline).
+  Final bundle confirmation also passed: 2,933 total tests, 2,453 in scope,
+  843 pass, 14 wrong results, 1,592 errors and four timeouts; every saved baseline
+  entry passes. The remaining corpus differences are not claimed repaired; the
+  baseline was not rewritten.
+- Initial GUI run passed 23/31: eight empty-terminal assertions queried a panel
+  that is absent before execution. Corrected selection passed 16/16 and final
+  full selections passed 31/31. An intermediate curriculum failure exposed a
+  stale fact after conditional assignment; joining only continuing alternatives
+  repaired it and added positive/negative regression cases. A development build
+  needed nullable-key/member-type corrections before the passing final build.
 
 ### Kotlin return paths and if-conditions — 2026-10-13
 

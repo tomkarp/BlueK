@@ -24,6 +24,37 @@ browser-session fixes without replacing Kotlite with a separate interpreter.
 
 ## Changes
 
+Definite assignment and stable smart casts (RT-117/118): use analyzed AST
+completion for continuing paths rather than a last-statement heuristic. Track
+uninitialized local val/var and backed properties across if/when, try/catch,
+finally and loop exits; exception entry may precede a write. Finally updates or
+replaces pending loop jumps and labeled lambda returns. Loop back edges reject
+repeated val initialization; a non-repeating path can initialize an outer val.
+Ordered init blocks must initialize backed properties on every continuing
+constructor path; member bodies are analyzed independently. KotlinFileRules
+requires ordinary project-file properties to have an initializer (or lateinit),
+without restricting the REPL's synthetic externally populated bindings. Synthetic argument
+resolution scopes are distinguished from callable capture boundaries.
+
+Restore trusted Core scope-function exactly-once metadata separately from inline
+return permission. Escaping lambdas and function declarations do not commit
+initialization to their caller. A captured, declared-but-uninitialized local
+shares an empty RuntimeValueHolder, allowing a legal exactly-once callback to
+initialize that same binding without a premature read. Existing interpreted
+call entry/leave and native suspension paths are unchanged.
+
+Join smart-cast facts from all continuing alternatives, reset exception-entry
+facts, and invalidate loop writes. Null checks require stable properties just
+like type tests; this/property chains require stable roots and val properties.
+Simple unmodified mutable captures retain narrowings, whereas later writes,
+escaping writers and mutable property roots invalidate them. FlowWrites scans
+AST nodes with lexical shadowing. Stable Boolean condition aliases retain
+versioned facts; identity null checks and safe-call equality to a non-null value
+can narrow stable subjects. Self-written split-project fixtures and independent
+Kotlin/JVM comparisons live in scripts/flow-state-cases.mjs and
+audit-flow-state.mjs; the curriculum's previously over-restrictive unmodified-var
+lambda expectation now has both a positive case and a real mutation rejection.
+
 Function-block completion and if-condition types (RT-115/116): replace the
 missing-return TODO and last-expression type check for declared block functions
 with `ReturnFlow`, a summary of normal completion and return/throw/loop exits

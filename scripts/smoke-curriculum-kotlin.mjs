@@ -245,8 +245,8 @@ ok((await project({ 'Auto.kt': 'class Auto {\n    var marke: String\n    init {\
     ['compound initialization', 'x += "A"', /must be initialized/],
     ['captured lambda assignment', 'val f = { x = "A" }; f()', /Captured val/],
     ['local function assignment', 'fun set() { x = "A" }; set()', /Captured val/],
-    ['loop assignment', 'for (i in 0..1) { x = "A" }', /Captured val/],
-    ['while assignment', 'while (n > 0) { x = "A" }', /Captured val/],
+    ['loop assignment', 'for (i in 0..1) { x = "A" }', /cannot be reassigned.*loop/],
+    ['while assignment', 'while (n > 0) { x = "A" }', /cannot be reassigned.*loop/],
   ];
   for (const [label, body, diagnostic] of invalid) {
     fails((await project({ 'Main.kt': `fun choose(n: Int): String { val x: String; ${body}; return x }` })).result,
@@ -545,7 +545,10 @@ fails((await project({ 'Anzeige.kt': 'class Anzeige {\n    fun zeige(text: Strin
   await rejected('no smart cast in the else branch of is', { 'F.kt': 'fun f(t: Tier): String = if (t is Hund) "Hund" else t.name' }, /`name` is unknown for Tier/);
   await rejected('no smart cast after an assignment', { 'F.kt': 'fun f(): String { var t: Tier = Hund("a"); if (t is Hund) { t = Katze(1); return t.name }; return "" }' }, /`name` is unknown for Tier/);
   await rejected('no smart cast after a conditional assignment', { 'F.kt': 'fun f(c: Boolean): String { var t: Tier = Hund("a"); if (t is Hund) { if (c) { t = Katze(1) }; return t.name }; return "" }' }, /`name` is unknown for Tier/);
-  await rejected('no smart cast of a var in a lambda', { 'F.kt': 'fun f(): String { var t: Tier = Hund("a"); if (t is Hund) { val g = { t.name }; return g() }; return "" }' }, /`name` is unknown for Tier/);
+  const captured = await project({ ...zoo, 'F.kt': 'fun f(): String { var t: Tier = Hund("a"); if (t is Hund) { val g = { t.name }; return g() }; return "" }' });
+  ok(captured.result, 'unmodified var smart cast in a simple lambda');
+  assert.equal(ok(captured.evaluate('f()'), 'captured smart cast result').display, 'a');
+  await rejected('later assignment prevents a captured smart cast', { 'F.kt': 'fun f(): String { var t: Tier = Hund("a"); if (t is Hund) { val g = { t.name }; t = Katze(1); return g() }; return "" }' }, /`name` is unknown for Tier/);
   await rejected('a shadowing declaration is not narrowed', { 'F.kt': 'fun f(t: Tier): String { if (t is Hund) { val t: Tier = Katze(1); return t.name }; return "" }' }, /`name` is unknown for Tier/);
   await rejected('no smart cast for several conditions of one when entry', { 'F.kt': 'fun f(t: Tier): String = when (t) { is Hund, is Katze -> t.name; else -> "" }' }, /`name` is unknown for Tier/);
   await rejected('no smart cast of a var property', { 'Halter.kt': 'class Halter(var tier: Tier) {\n    fun name(): String = if (tier is Hund) tier.name else "?"\n}' }, /`name` is unknown for Tier/);

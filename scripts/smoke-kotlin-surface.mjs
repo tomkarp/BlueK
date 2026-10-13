@@ -22,6 +22,12 @@ const evaluate = source => JSON.parse(session.evaluate('<surface>', source));
 
 // Expression -> expected `display`. Grouped as in docs/kotlin-surface.md.
 const supported = [
+  // Trusted Core scope-function contracts initialize a local once (RT-117).
+  ['fun coreRun117(): String { val x: String; run { x = "r" }; return x }; coreRun117()', 'r'],
+  ['fun coreLet117(): String { val x: String; "l".let { x = it }; return x }; coreLet117()', 'l'],
+  ['fun coreWith117(): String { val x: String; with("w") { x = this }; return x }; coreWith117()', 'w'],
+  ['fun coreAlso117(): String { val x: String; "a".also { x = it }; return x }; coreAlso117()', 'a'],
+  ['fun coreApply117(): String { val x: String; "p".apply { x = this }; return x }; coreApply117()', 'p'],
   // Portable kotlin.test scalar assertions, including boxed Double equality.
   ['assertEquals(2, 2); assertNotEquals(2, 3); assertTrue(true); assertFalse(false); assertNull(null); assertNotNull("x")', 'x'],
   ['assertEquals(Double.NaN, Double.NaN); assertNotEquals(0.0, -0.0)', 'Unit'],

@@ -692,6 +692,8 @@ data class LambdaLiteralNode(
     val referenceReceiver: String? = null,
     val referenceName: String? = null,
 ) : ASTNode, CallableNode {
+    /** Resolved trusted calls-in-place contract, independent of inline/non-local return. */
+    var isExactlyOnce: Boolean = false
     /** The parameters of a function reference, from the expected function type (RT-89). */
     @ModifyByAnalyzer var referenceParameters: List<FunctionValueParameterNode>? = null
     @ModifyByAnalyzer var permitsNonLocalReturn: Boolean = false

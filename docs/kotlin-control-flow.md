@@ -118,4 +118,6 @@ a Nothing property access). Both produce the same errors with the unchanged
 baseline bundle; neither is introduced by these changes. The baseline file was
 not rewritten to hide them. The final run added no further baseline losses.
 This comparison therefore establishes the tested behavior, not full Kotlin
-compatibility; these existing definite-assignment gaps remain.
+compatibility. These gaps were outside that change. The subsequent
+[definite-assignment and smart-cast work](kotlin-flow-state.md) addresses both;
+see its final validation results for the current state.

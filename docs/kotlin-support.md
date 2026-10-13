@@ -2,7 +2,7 @@
 
 BlueK interprets a subset of Kotlin, extended from Kotlite. This is not full
 Kotlin/JVM compatibility. This reference describes the checked-in interpreter
-as of **12 October 2026**. See also the [standard library](kotlin-surface.md),
+as of **13 October 2026**. See also the [standard library](kotlin-surface.md),
 [tests and saved state](testing.md) and [implementation notes](kotlite.md).
 
 ## Project files
@@ -10,7 +10,9 @@ as of **12 October 2026**. See also the [standard library](kotlin-surface.md),
 A file contains one class, interface or enum, or top-level functions and
 properties. Top-level statements are compile errors in project files but are
 allowed in the codepad. Imports must be from `kotlin.*`; `java.*` and `javax.*`
-are rejected with a file and line diagnostic. Available `kotlin.math` top-level
+are rejected with a file and line diagnostic. Top-level properties need an
+initializer, including nullable properties (`var text: String? = null`);
+`lateinit var` follows Kotlin's restrictions. Available `kotlin.math` top-level
 functions and constants can also be qualified directly, such as
 `kotlin.math.abs(-3)`, `kotlin.math.sqrt(16.0)` and `kotlin.math.PI`. Other
 package-qualified library expressions and package declarations are not supported.
@@ -46,9 +48,12 @@ package-qualified library expressions and package declarations are not supported
 - Custom getters/setters with `field`, `private set`, visibility modifiers,
   default/named arguments, `vararg`, and `lateinit var` in class, local and
   top-level declarations.
-- Delayed local `val` initialization, including alternative assignments in
-  `if`/`else` and exhaustive `when` branches. Reads require initialization on
-  every continuing branch; possible reassignment is rejected.
+- Delayed local `val` and `var` initialization, including alternative assignments
+  in `if`/`else`, exhaustive `when`, exceptions and non-repeating loop paths.
+  Reads require initialization on every continuing path; possible `val`
+  reassignment is rejected. Backed member properties without an initializer
+  must be initialized on every continuing path through ordered `init` blocks.
+  [Definite-assignment and nullability comparison](kotlin-flow-state.md).
 - Nullability, safe calls, Elvis expressions, standard exceptions and smart
   casts after type/null checks, contracts, assignments and supported loops.
 - List/Map/Set, ranges, arrays, loop labels, `break`/`continue`, and statement
@@ -111,18 +116,28 @@ a method on a different class does not turn a missing call into an argument erro
   intersection types are reduced to one type (Number before Comparable): Kotlin
   infers `Comparable<*> & Serializable` for `listOf(1, "two")`, BlueK only
   `Comparable<*>`.
-- Smart casts support simple names and one-level `name.property` paths for
-  eligible `val` properties. They do not support `this.property`, longer paths,
-  `this is Type` in extensions, `is T` for type parameters, safe-call conditions,
-  intersection types or changes from a later loop iteration. Use explicit casts
-  when needed. Mutable/custom-getter properties are not stable smart-cast targets.
+- Smart casts support local names, `this.property` and chains of stable `val`
+  properties. Null/type guards, stable Boolean aliases and safe-call equality
+  with non-null values can narrow receivers. Reassigning a root invalidates its
+  property paths. Mutable, open and custom-getter properties, and mutable global
+  roots, are not stable smart-cast targets. `this is Type` in extensions, `is T`
+  for type parameters, intersection types, other safe-call conditions and
+  inference from later loop iterations remain limited. Use explicit casts or a
+  local snapshot when needed.
 - A matching top-level function can win over an implicit receiver function,
   unlike Kotlin. Supertype extension properties on implicit receivers are found
   only if their types contain no type parameters.
 - Non-local `break`/`continue` across lambda boundaries are unsupported.
-- Delayed `val` initialization inside a captured lambda or function is rejected,
-  including inline lambdas with an exactly-once contract. Initializing a `val`
-  declared outside a loop is also rejected, even for loops that execute once.
+- The built-in scope functions (`run`, `with`, `let`, `also`, `apply`) carry their
+  trusted exactly-once contracts for local initialization. A nullable safe call
+  may skip its lambda. Merely declaring a function `inline` does not grant a
+  calls-in-place contract; user-defined contracts are unsupported. Escaping
+  callbacks do not initialize their caller's locals during analysis. Simple
+  lambdas may use a narrowed local `var` when its binding is not changed inside
+  the lambda or afterward; mutable captures and loop writes invalidate unsafe
+  narrowings. Assigning to a `val` outside a loop requires that no path can
+  revisit that assignment and that every continuing loop exit initializes it.
+  A `for` range does not establish that the loop must execute.
   [Generic/inline implementation details](kotlite-generics.md).
 
 ### Types and initialization

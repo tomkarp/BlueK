@@ -33,6 +33,8 @@ data class CustomFunctionDefinition(
      * Ignored when [suspendExecutable] is set.
      */
     var isReplayable: Boolean = false
+    /** Trusted stdlib contracts, restored when loading the binary module. */
+    var exactlyOnceParameters: Set<String> = emptySet()
 }
 
 class CustomFunctionParameter(val name: String, val type: String, val defaultValueExpression: String? = null, val modifiers: Set<String> = emptySet())

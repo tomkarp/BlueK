@@ -33,6 +33,12 @@ reverse, clear, isEmpty, length, indexing and toString. Random supports unbounde
 and bounded nextInt/nextDouble plus nextBoolean, with or without
 `import kotlin.random.Random`; **Random(seed) is unavailable**.
 
+The existing Core scope functions `run`, `with`, `let`, `also` and `apply`
+restore their trusted exactly-once contracts for local initialization (RT-117).
+Inline permission alone does not provide such a contract, and a nullable safe
+call can skip its callback. Five executable surface cases cover these
+contracts; suspension around first assignment has separate flow-state coverage.
+
 ## Qualified math names
 
 The available top-level functions and constants from `kotlin.math` support

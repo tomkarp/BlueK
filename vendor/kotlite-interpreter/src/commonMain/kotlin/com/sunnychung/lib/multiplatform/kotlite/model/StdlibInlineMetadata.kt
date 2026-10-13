@@ -22,6 +22,8 @@ internal object StdlibInlineMetadata {
             it.extraTypeParameters = definition.extraTypeParameters
             it.suspendExecutable = definition.suspendExecutable
             it.isReplayable = definition.isReplayable
+            it.exactlyOnceParameters = if (module == "Core") definition.parameterTypes
+                .filter { "->" in it.type }.map { it.name }.toSet() else emptySet()
         }
     }
 }
