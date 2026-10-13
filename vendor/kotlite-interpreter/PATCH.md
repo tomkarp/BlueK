@@ -24,6 +24,29 @@ browser-session fixes without replacing Kotlite with a separate interpreter.
 
 ## Changes
 
+Function-block completion and if-condition types (RT-115/116): replace the
+missing-return TODO and last-expression type check for declared block functions
+with `ReturnFlow`, a summary of normal completion and return/throw/loop exits
+over analyzed AST nodes. Sequence ignores unreachable trailing statements;
+if/when branches, resolved Nothing calls, labeled loops and try/catch/finally
+preserve their completion paths. Creating functions/lambdas does not execute
+their bodies, and inline declarations do not imply a calls-in-place contract.
+Expression functions and lambdas retain implicit results. Explicit labeled
+returns contribute their value type to the actual target lambda, even across
+an inner lambda, so a returning outer lambda/call is not inferred as Nothing;
+native CustomFunctionDeclarationNode placeholder blocks are not student bodies.
+The parser records block-closing and condition-start positions in fields outside
+AST constructors to preserve stdlib ABI. Diagnostics match Kotlin/JVM 2.2.21's
+`missing return statement.` and condition actual/Boolean mismatch wording.
+
+Non-null Nothing is assignable/convertible to every type, whereas Nothing? still
+requires a nullable target. TypeNode conversion preserves that distinction.
+The uninhabited Nothing pseudo-class has no runtime special-method table;
+installing one would incorrectly match every extension after fixing subtyping.
+Coverage: shared self-written fixtures in `scripts/control-flow-cases.mjs`,
+official compiler comparison, `test:control-flow`, existing language suites and
+English/German editor cases in `tests/gui/control-flow.spec.ts`.
+
 Call name reachability (RT-113): failed unqualified calls check the same lexical,
 constructor and implicit-receiver lookup independently of arguments. Missing
 calls raise `UnresolvedReferenceException` with Kotlin 2.2.21's

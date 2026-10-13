@@ -26,7 +26,9 @@ sealed interface DataType {
 //        val other = if (other is TypeParameterType) {
 //            other.upperBound
 //        } else other
-        if (other is NothingType && isNullable) return true
+        // Non-null Nothing has no values and is a subtype of every type;
+        // nullable Nothing is the null value and still requires a nullable target.
+        if (other is NothingType && (!other.isNullable || isNullable)) return true
         if (other::class == this::class) {
             if (other.isNullable && !this.isNullable) {
                 return false
@@ -180,7 +182,7 @@ open class ObjectType(val clazz: ClassDefinition, val arguments: List<DataType>,
     override fun copyOf(isNullable: Boolean) = if (this.isNullable == isNullable) this else counterpart { copy(isNullable = isNullable) }
 
     override fun isAssignableFrom(other: DataType): Boolean {
-        if (other is NothingType && isNullable) return true
+        if (other is NothingType && (!other.isNullable || isNullable)) return true
         if (other is RepeatedType) return other.actualType == null || this.isAssignableFrom(other.actualType!!)
         if (other is TypeParameterType) return this.isAssignableFrom(other.upperBound)
         if (other !is ObjectType) return false
@@ -236,7 +238,7 @@ open class ObjectType(val clazz: ClassDefinition, val arguments: List<DataType>,
     }
 
     private fun checkCastAndFindSuperType(other: DataType): Pair<Boolean, ObjectType?> {
-        if (other is NothingType && isNullable) return true to null
+        if (other is NothingType && (!other.isNullable || isNullable)) return true to null
         if (other is RepeatedType) return (other.actualType == null || this.isConvertibleFrom(other.actualType!!, isResolveTypeArguments = false)) to null // this is the key
         if (other is TypeParameterType) return this.isConvertibleFrom(other.upperBound) to null
         if (other !is ObjectType) return false to null
@@ -472,7 +474,7 @@ data class TypeParameterType(
     }
 
     override fun isAssignableFrom(other: DataType): Boolean {
-        if (other is NothingType && (isNullable || upperBound.isNullable)) return true
+        if (other is NothingType && (!other.isNullable || isNullable || upperBound.isNullable)) return true
         if (other is RepeatedType) {
             return other.realTypeDescriptiveName == "$name${if (isNullable) "?" else ""}"
         }
@@ -494,7 +496,7 @@ data class FunctionType(val arguments: List<DataType>, val returnType: DataType,
     override fun copyOf(isNullable: Boolean) = if (this.isNullable == isNullable) this else copy(isNullable = isNullable)
 
     override fun isAssignableFrom(other: DataType): Boolean {
-        if (other is NothingType && isNullable) return true
+        if (other is NothingType && (!other.isNullable || isNullable)) return true
         if (!super.isAssignableFrom(other) || other !is FunctionType) return false
 
         if (returnType is UnresolvedType || other.returnType is UnresolvedType) return true
@@ -512,7 +514,7 @@ data class FunctionType(val arguments: List<DataType>, val returnType: DataType,
     }
 
     override fun isConvertibleFrom(other: DataType, isResolveTypeArguments: Boolean): Boolean {
-        if (other is NothingType && isNullable) return true
+        if (other is NothingType && (!other.isNullable || isNullable)) return true
         if (other !is FunctionType) return false
         if (other.isNullable && !isNullable) return false
 

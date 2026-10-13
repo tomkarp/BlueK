@@ -627,6 +627,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
         repeatedNL()
         eat(TokenType.Operator, "(")
         repeatedNL()
+        val conditionPosition = currentToken.position
         val condition = expression()
         repeatedNL()
         eat(TokenType.Operator, ")")
@@ -660,6 +661,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
             if (!hasEatSemicolonAfterCondition) throw ExpectTokenMismatchException(";", lastToken().position)
         }
         return IfNode(position = t.position, condition = condition, trueBlock = trueBlock, falseBlock = falseBlock)
+            .also { it.conditionPosition = conditionPosition }
     }
 
     fun stringContentOrExpression(addNode: (ASTNode) -> Unit) {
@@ -1544,8 +1546,8 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
         repeatedNL()
         val statements = statements()
         repeatedNL()
-        eat(TokenType.Symbol, "}")
-        return BlockNode(statements, position, type, FunctionBodyFormat.Block)
+        val closingBrace = eat(TokenType.Symbol, "}")
+        return BlockNode(statements, position, type, FunctionBodyFormat.Block).also { it.endPosition = closingBrace.position }
     }
 
     /**

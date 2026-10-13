@@ -267,7 +267,8 @@ open class ClassDefinition(
 
     val isRealClass: Boolean
         get() = !isInterface
-                && fullQualifiedName !in setOf("Function", "Function?")
+                // Nothing has no runtime instances or special-method table.
+                && fullQualifiedName !in setOf("Nothing", "Function", "Function?")
                 && !fullQualifiedName.endsWith("?")
                 && !fullQualifiedName.endsWith(".Companion")
 

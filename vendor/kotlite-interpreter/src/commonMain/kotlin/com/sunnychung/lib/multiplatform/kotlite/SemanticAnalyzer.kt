@@ -147,7 +147,11 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     /** The narrowings active at the end of the block visited last, for joining the branches of an `if` (RT-99). */
     private var blockEndSmartCasts: Map<String, SmartCastFact> = emptyMap()
     private val activeReifiedTypeParameters = mutableMapOf<String, Boolean>()
-    private data class CallableContext(val node: CallableNode, val returnType: DataType?)
+    private data class CallableContext(
+        val node: CallableNode,
+        val returnType: DataType?,
+        val lambdaReturnTypes: MutableList<TypeNode> = mutableListOf(),
+    )
     private data class InlineParameter(val owner: CallableNode, val crossinline: Boolean)
     private val callableContexts = mutableListOf<CallableContext>()
     private val inlineParameters = mutableMapOf<String, InlineParameter>()
@@ -306,7 +310,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
     fun DataType.toTypeNode(): TypeNode =
         if (this is NothingType) {
-            typeRegistry["Null"]!!
+            typeRegistry[if (isNullable) "Null" else "Nothing"]!!
         } else if (this !is ObjectType && this !is FunctionType && this !is TypeParameterType) {
             typeRegistry["$name${if (isNullable) "?" else ""}"]!!
         } else if (this is FunctionType) {
@@ -1958,8 +1962,6 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 activeReifiedTypeParameters.putAll(previousReified)
             }
 
-            // TODO check for return statement
-
             val valueType = body.type().toDataType()
             if (declaredReturnType == null && body.format == FunctionBodyFormat.Expression) {
                 // An override got the overridden return type up front (ClassDefinition); like Kotlin,
@@ -1974,7 +1976,14 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 variantsOfThis.forEach { it.inferredReturnType = inferredReturnType }
             } else {
                 val subjectType = returnType.resolveGenericParameterType(typeParameters).toDataType()
-                if (subjectType !is UnitType && valueType !is NothingType && !subjectType.isAssignableFrom(valueType)) {
+                if (body.format == FunctionBodyFormat.Block && this !is CustomFunctionDeclarationNode) {
+                    // ReturnNode.visit checks each returned value. A block has
+                    // no implicit result: every normal path must leave via return.
+                    if ((subjectType !is UnitType || subjectType.isNullable) &&
+                        com.sunnychung.lib.multiplatform.kotlite.util.ReturnFlow.canCompleteNormally(body)) {
+                        throw SemanticException(body.endPosition, "missing return statement.")
+                    }
+                } else if (subjectType !is UnitType && valueType !is NothingType && !subjectType.isAssignableFrom(valueType)) {
                     throw TypeMismatchException(position, subjectType.descriptiveName, valueType.descriptiveName)
                 }
             }
@@ -3139,6 +3148,9 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         if (declaredReturnType != null && valueType !is NothingType && !declaredReturnType.isAssignableFrom(valueType)) {
             throw TypeMismatchException(position, declaredReturnType.descriptiveName, valueType.descriptiveName)
         }
+        // A jump across an inner lambda still returns a value to its actual
+        // lambda target. It must not infer Nothing for that outer lambda/call.
+        if (target.node is LambdaLiteralNode) target.lambdaReturnTypes += value?.type() ?: typeRegistry["Unit"]!!
     }
 
     /** Labels of the loops being analyzed, innermost last; null for a loop without label (RT-85). */
@@ -3186,6 +3198,12 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
     fun IfNode.visit(modifier: Modifier = Modifier()) {
         condition.visit(modifier = modifier)
+        val conditionType = condition.type().toDataType()
+        if (!typeRegistry["Boolean"]!!.toDataType().isAssignableFrom(conditionType) &&
+            com.sunnychung.lib.multiplatform.kotlite.util.ReturnFlow.canCompleteNormally(condition)) {
+            throw SemanticException(conditionPosition,
+                "condition type mismatch: inferred type is '${conditionType.descriptiveName}' but 'Boolean' was expected.")
+        }
         val before = localValInitialization.toMap()
         val whenTrue = smartCastsWhenTrue(condition)
         val whenFalse = smartCastsWhenFalse(condition)
@@ -4080,8 +4098,12 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         if (resultCall != null && resultCall.expectedReturnType == null && expectedResult != null && isConcreteType(expectedResult)) {
             resultCall.expectedReturnType = expectedResult
         }
-        callableContexts += CallableContext(this, returnTypeUpperBound?.toDataType() ?: AnyType(true))
+        val context = CallableContext(this, returnTypeUpperBound?.toDataType() ?: AnyType(true))
+        callableContexts += context
         try { body.visit(modifier = modifier) } finally { callableContexts.removeLast() }
+        if (context.lambdaReturnTypes.isNotEmpty()) {
+            body.returnType = superTypeOf(body.type(), *context.lambdaReturnTypes.toTypedArray())
+        }
 
         if (returnTypeUpperBound?.name != "Unit" && body.type().name != "Nothing" && returnTypeUpperBound?.toDataType()?.isConvertibleFrom(body.type().toDataType()) == false) {
             throw SemanticException(position, "Lambda return type ${body.type().descriptiveName()} cannot be converted to ${returnTypeUpperBound!!.descriptiveName()}")

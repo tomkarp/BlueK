@@ -91,6 +91,8 @@ a helper passing does not prove a visible browser interaction.
 | `npm run test:generics` | Generics, reified types, inline control flow and analysis boundaries |
 | `npm run test:kotlin-surface` | Promised stdlib operations and explicit known gaps |
 | `npm run test:argument-diagnostics` | Kotlin call diagnostics and positions: scope/receiver reachability, argument types and overload/rejection boundaries |
+| `npm run test:control-flow` | Block-function completion, returns/throws/loops/finally, lambda/expression-body boundaries and Boolean if-conditions using the checked-in bundle |
+| `npm run test:control-flow:kotlin` | Compile the same fixtures with installed `kotlinc` and execute accepted programs with Java; prints the compiler version and checks diagnostics/positions/output |
 | `npm run test:blueplay-api` | Independent pinned BlueJ API, help manifest and original student examples |
 | `npm run test:blueplay-demos` | Space Invaders template in the interpreter |
 | `npm run test:inspector`, `test:codepad-flow`, `test:project-format`, `test:program-export`, `test:blueplay-stage`, `test:player-worker`, `test:ui` | Focused TypeScript/helper behavior |

@@ -84,6 +84,8 @@ Unless explicitly stated, visual user acceptance remains pending.
 | RT-112 | Incompatible call arguments use Kotlin's actual/expected type wording at the argument expression; `showText(schritte, ...)` marks schritte, and `toString()` fixes the call | Kotlin/JVM 2.2.21 confirmed the exact message. Interpreter build, curriculum, eleven call forms plus rejection/overload boundaries, runtime-state, generics (49 boundaries), Kotlin surface (269 supported), typecheck and final ten affected Chromium cases passed (2026-10-12). Initial build needed a local name to preserve Kotlin smart casting; initial diagnostic test exposed the separate final generic check, now aligned. A generic implicit-receiver case retains its existing fallback; its overly broad test expectation was corrected. User visual acceptance pending. |
 | RT-113 | Missing call names are distinguished from wrong arguments using lexical/receiver lookup; World-only methods on Actor report Kotlin's unresolved reference at the method | Kotlin/JVM 2.2.21 verified the target wording. Eleven argument cases, eight unresolved calls, scope/receiver/arity boundaries, corrected world removal, runtime-state, Kotlin surface (269 supported), generics (49 boundaries), curriculum and eight Chromium cases (English/German, RT-112/113, GUI-64, RT-50) passed (2026-10-12); final diagnostic/browser reruns passed. Existing byte-identical untracked duplicate files were preserved outside source/test trees under local .cache for build/test validation. User visual acceptance pending. |
 | RT-114 | Start/Act without a shown world remains a recoverable request error; a nonfatal failure to begin a scheduled step leaves simulation paused and the session ready | Runtime-state integration passed for explicit Start/Act and student `start()` before `show()`, followed by successful main/reset (2026-10-12). The real exported worker passed in Chromium and WebKit; the initial sandboxed browser launch was blocked by macOS and the authorized rerun passed. |
+| RT-115 | Non-Unit block functions require return on every continuing path; throw/Nothing, exhaustive branches, loops and finally preserve completion; expression functions and lambdas retain implicit results | All original suspicions independently reproduced on d4c83c7 before editing. Final bundled session passed 71 shared semantic fixtures plus the format boundary; all 72 fixtures compared with Kotlin/JVM 2.2.21 across three compiler runs. Chromium passed 15 affected cases, including six new English/German diagnostic/correction/main cases (2026-10-13). See the dated record and [comparison](kotlin-control-flow.md). User visual acceptance pending. |
+| RT-116 | If-conditions require non-null Boolean, with actual/expected types and the condition's source position; abrupt return/throw conditions remain valid | Final bundle rejects Int, String, Boolean? and null conditions; Boolean variables, comparisons, smart casts and terminating conditions compile and execute. Shared official compiler comparison and the same 15 Chromium cases passed (2026-10-13). See RT-115 for suite limitations; user visual acceptance pending. |
 | RT-106 | Common supertype as in Kotlin for mixed arguments (`listOf(40, 40, false)`, mixed set/map/array, nested lists, if/else); invariant receiver keeps `add` type-safe; `containsKey` via Kotlite stdlib | Curriculum RT-106 (values checked with kotlinc), generics, Kotlin surface, references and testing suites passed; conformance 820 (+1 `lambda/lambda_kt80285.kt`, none lost); full hosted GUI 193/193 and offline 6/6 passed (2026-10-09) |
 | RT-105 | Exponential speed slider (1 s at 1, 30 ms at 50, 1 ms at 100, strictly faster per step); Run acts at once; raising the speed ends a long wait; `setSpeed()` in code paces Run like the slider (engine owns the speed; Reset keeps it) | smoke-runtime-state passed with the final 1 s curve and the code `setSpeed()` case; full hosted GUI 194/194, offline 6/6 and smoke suites passed (2026-10-09); feel not user-accepted |
 | RT-104 | playSound resolves given path or sounds/, emits a resource effect without a shown world, missing file raises “Sound file not found” | smoke-blueplay-browser passed (2026-10-08); audible output not verified |
@@ -789,6 +791,45 @@ deployment prefix.
   Initial sandbox restrictions on Gradle's cache and the local test port were
   resolved by approved retries.
 - User visual acceptance remains pending.
+
+### Kotlin return paths and if-conditions — 2026-10-13
+
+RT-115/116: all three suspicions were reproduced independently before source
+edits on clean d4c83c7. Kotlin/JVM 2.2.21 rejected them during compilation;
+BlueK accepted them, then failed at runtime in cases 1/3 and returned false in
+case 2. See [the versioned comparison](kotlin-control-flow.md) for messages,
+positions, execution results and the distinct class/main file-format boundary.
+
+- Final bundled session: 71 semantic fixtures and the format boundary passed.
+  Official compiler: the same 72 fixtures passed across runs of 68 + 2 + 2,
+  including all requested valid alternatives, throw/Nothing, try/finally,
+  reachable/unreachable loop exits, nested labeled lambda returns and invalid
+  Int/String/Boolean? conditions. Accepted programs executed in both runtimes;
+  deliberately infinite methods were compiled but not called.
+- Existing helpers/runtime: curriculum, generics (49 boundaries plus suspended inline),
+  argument/reachability diagnostics, Kotlin surface (269 supported, four known
+  gaps, 19 messages), runtime state, reference lifetime, typecheck (zero errors
+  and warnings) and i18n (737 messages) passed.
+- Actual Chromium: all 15 affected cases passed, including the six new cases
+  for rejection before main and successful correction/execution in English and
+  German, plus GUI-64 and RT-111/112/113. User visual acceptance and a separate
+  Safari application run remain pending.
+- Interpreter rebuild and separate hosted/player/offline production builds
+  passed with existing bundle-size/import-meta/externalization warnings.
+  A redundant combined build attempt was blocked by sandbox access to the
+  Gradle cache; the earlier authorized interpreter build and the separate
+  frontend/package builds completed.
+- The final broad conformance command failed: 2,933 tests, 2,453 in scope,
+  837 pass, 14 wrong results, 1,598 errors and four timeouts. Its two baseline
+  losses, `controlStructures/kt12908.kt` and
+  `controlStructures/returnsNothing/propertyGetter.kt`, reproduce identically
+  with the unchanged baseline bundle. These are pre-existing definite-val
+  initialization gaps; no additional baseline losses were introduced and the
+  baseline was not rewritten.
+- Initial development builds exposed native placeholder-body validation and
+  Nothing special-method ambiguity; both were corrected. A test's ambiguous
+  `println(error(...))` call also failed in Kotlin and was replaced with a
+  unique Boolean parameter. Final language/browser runs passed afterward.
 
 ### 2026-10-12 — Terminal auto-clear preferences (feedback #13)
 

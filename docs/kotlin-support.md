@@ -32,6 +32,12 @@ package-qualified library expressions and package declarations are not supported
   declaration, subject to initialization order below.
 - Generic classes and functions, `inline`, `reified`, `noinline`, `crossinline`,
   extension functions, operator overloads, lambdas and scope functions.
+- Non-Unit functions with block bodies require an explicit return on every
+  continuing path. Throwing exceptions, non-null `Nothing` expressions and
+  loops without a reachable exit can prevent normal completion. Expression
+  bodies and lambdas retain their implicit result. If-conditions must be
+  non-null Boolean expressions; abrupt return/throw expressions remain valid.
+  [Control-flow comparison and regression evidence](kotlin-control-flow.md).
 - Data classes with `toString`, `equals`, `hashCode`, `copy` and `componentN`.
 - Objects, companion objects and `const val`; enums with constructors, members,
   `name`, `ordinal`, `values`, `valueOf`, `entries` and ordering comparisons.

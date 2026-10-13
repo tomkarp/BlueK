@@ -272,6 +272,8 @@ data class BlockNode(
     @ModifyByAnalyzer var returnType: TypeNode? = null,
     @ModifyByAnalyzer var returnTypeUpperBound: TypeNode? = null,
 ) : ASTNode {
+    /** Closing brace for diagnostics; kept outside the constructor for stdlib ABI compatibility. */
+    var endPosition: SourcePosition = position
     /**
      * Whether the statements declare names in this block's own scope. A block
      * that declares nothing runs in the enclosing scope: blocks run for every
@@ -472,6 +474,8 @@ data class BreakNode(override val position: SourcePosition, val returnToLabel: S
 }
 
 data class IfNode(override val position: SourcePosition, val condition: ASTNode, val trueBlock: BlockNode?, val falseBlock: BlockNode?, @ModifyByAnalyzer var type: TypeNode? = null,) : ASTNode {
+    /** Start of the source condition, including positionless literals such as NullNode. */
+    var conditionPosition: SourcePosition = condition.position
     override fun toMermaid(): String {
         val self = "${generateId()}[\"If Node\"]"
         return "$self-- condition -->${condition.toMermaid()}\n" +
