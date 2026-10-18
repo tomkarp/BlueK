@@ -106,10 +106,10 @@ options. The content scrolls on smaller screens; Cancel stays available.
 Choose the view recipients will open:
 
 - **BlueK project**: full project link, 30-day short link and reusable project
-  JSON. These open the editable developer workspace. BlueJ ZIP export is not
-  implemented yet.
+  JSON. These open the editable developer workspace. **Export BlueJ Project
+  (.zip)** downloads a project folder for BlueJ 6 with Kotlin (see below).
 - **Runnable program**: full program link, 30-day short program link and
-  **Export as HTML (Beta)**. These start the chosen `main()` in a console or
+  **Export as HTML**. These start the chosen `main()` in a console or
   BluePlay player, without classes, an object bench or editors. If several
   files have a supported main, choose one for each export. `main()` and
   `main(args: Array<String>)` are supported; args is an empty array.
@@ -119,6 +119,18 @@ options in the URL, with no server storage or expiry. Very large programs
 need a short link or HTML export. Short links store the same payload for 30
 days on the optional share service. Anyone with the link can open it.
 HTML exports embed the runtime and run without a server or network.
+
+The BlueJ ZIP contains one folder with the Kotlin files, `README.TXT` and
+`package.bluej`, which keeps the cards where the class diagram shows them.
+Test classes are left out because BlueJ has no `kotlin.test`. BluePlay projects
+also get the BlueJ version of the BluePlay library and all standard images and
+sounds in `images/` and `sounds/`, even unused ones, so they remain available
+in BlueJ; your own images and sounds replace standard files with the same
+name. In BlueJ, BluePlay plays WAV sounds only, not MP3. Only if the project
+has test classes or MP3 sounds does a notice after the export name them; it
+stays until you close it.
+Importing such a ZIP into BlueK again keeps unchanged standard images and
+sounds as standard resources.
 
 Project links use `#bluek=…` or `/bluek/three-word-code`; runnable exports use
 `#run=…` or `/run/three-word-code`. Both forms preserve the BlueK base address

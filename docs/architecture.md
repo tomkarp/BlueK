@@ -83,7 +83,13 @@ Supporting modules:
   rename rules for the Images/Audio dialogs; owns no project state.
 - `blueJImport.ts`: chooses the shallowest `package.bluej` in a ZIP/folder,
   imports Kotlin/resources/positions and substitutes the built-in library for
-  historical BluePlay library source files.
+  historical BluePlay library source files. In BluePlay projects, images and
+  sounds identical to the bundled standard ones stay standard resources.
+- `blueJExport.ts`: writes a saved project as a BlueJ folder in a ZIP (Kotlin
+  files without test classes, README.TXT, package.bluej with the displayed card
+  positions). BluePlay projects get the JVM library from the generated
+  `blueJBluePlay.generated.ts` and every standard image and sound; project
+  resources with the same path replace them. Pure data in, bytes out.
 - `kotlinFormatterClient.ts`: bundled ktfmt WASM, independent of runtime state.
   Offline builds provide embedded gzip bytes; no CDN dependency.
 - `terminalText.ts`: interprets raw output control sequences for IDE and player;

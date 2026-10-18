@@ -39,8 +39,15 @@ Student Kotlin is interpreted, not compiled. `npm run build` builds these tools:
 4. **vite build**: builds the hosted IDE into `frontend/dist/`.
 
 `npm run build:svelte` builds the frontend without rebuilding Kotlin.
-`npm run build:standard-images` regenerates the committed image/alpha-mask and
-sound modules after changing `assets/standard-images/` or `assets/standard-sounds/`.
+`npm run build:standard-images` regenerates the committed image/alpha-mask,
+sound and BlueJ library modules after changing `assets/standard-images/`,
+`assets/standard-sounds/` or `assets/bluej-blueplay/`. The latter holds the
+JVM version of BluePlay that BlueJ exports contain; it starts as a copy of the
+final BlueJ version and is maintained here. `npm run test:bluej-export` checks
+the export; `node scripts/check-bluej-export-kotlinc.mjs` additionally compiles
+every exported example with `kotlinc` (optional, needs the Kotlin compiler).
+`assets/standard-images-originals/` keeps the high-resolution source graphics
+of 14 standard images under the same names; no build step reads them.
 
 `predev` builds the player template if missing or older than the interpreter,
 and the offline ZIP only if missing. An existing offline ZIP may therefore

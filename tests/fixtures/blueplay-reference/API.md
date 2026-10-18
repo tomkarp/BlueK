@@ -19,8 +19,7 @@ Perhaps "framework" sounds a little too much or too big. A BluePlay project is a
 
 ## Download & getting started
 
-1. Download this repository as a ZIP (green **Code → Download ZIP** button, or
-   [direct download link](https://github.com/tomkarp/BluePlay/archive/refs/heads/main.zip)) and unpack it.
+1. Download the BluePlay project as a ZIP and unpack it.
 2. Open the unpacked folder in BlueJ.
 3. Right-click **`Main`** → `main()` – the world appears. Then click **Start**
    at the bottom of the window.

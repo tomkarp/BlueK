@@ -1,4 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
+import { readFile, writeFile } from 'node:fs/promises';
+import { unzipSync } from 'fflate';
 import { STANDARD_IMAGES } from '../../frontend/src/standardImages.generated';
 import { STANDARD_SOUNDS } from '../../frontend/src/standardSounds.generated';
 
@@ -921,4 +923,74 @@ test('GUI-135 the world window can only be closed while paused and reopens when 
   await expect(close).toBeEnabled();
   await page.keyboard.press('Escape');
   await expect(stage).toHaveCount(0);
+});
+
+test('GUI-145 BlueJ export downloads a BlueJ project with the BlueJ library and all standard media; importing it restores the project', async ({ page }, info) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New Project', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Create New Project' });
+  await dialog.getByRole('button', { name: /^BluePlay Example/ }).click();
+  await expect(page.locator('.classcard[aria-label="World"]')).toBeVisible();
+  await page.getByLabel('Project name').fill('Game');
+  await page.getByLabel('Project name').press('Enter');
+  await page.getByRole('button', { name: 'Save / Export', exact: true }).click();
+  const [download] = await Promise.all([
+    page.waitForEvent('download'), page.getByRole('button', { name: /^Export BlueJ Project/ }).click(),
+  ]);
+  expect(download.suggestedFilename()).toBe('Game.zip');
+  const file = info.outputPath('Game.zip');
+  await download.saveAs(file);
+  const entries = unzipSync(new Uint8Array(await readFile(file)));
+  const text = (name: string) => new TextDecoder().decode(entries[`Game/${name}`]);
+  expect(text('package.bluej')).toContain('target1.name=BluePlayFunctions');
+  expect(text('BluePlayFunctions.kt')).toContain('import javax.swing');
+  expect(text('World.kt')).toContain('open class World');
+  expect(text('Figure.kt')).toContain('class Figure');
+  expect(Object.keys(entries).filter(name => name.startsWith('Game/images/'))).toHaveLength(STANDARD_IMAGES.length);
+  expect(Object.keys(entries).filter(name => name.startsWith('Game/sounds/'))).toHaveLength(STANDARD_SOUNDS.length);
+  // Without test classes or MP3 sounds there is nothing to point out.
+  await expect(page.locator('.bluej-export-notice')).toHaveCount(0);
+
+  page.on('dialog', confirmation => confirmation.accept());
+  await page.getByRole('button', { name: 'New Project', exact: true }).click();
+  await dialog.getByRole('button', { name: /^Empty Project/ }).click();
+  await expect(page.locator('.classcard[aria-label="World"]')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Open / Import', exact: true }).click();
+  await page.getByLabel('Choose project file').setInputFiles(file);
+  await expect(page.locator('.classcard[aria-label="World"]')).toBeVisible();
+  await expect(page.locator('.classcard[aria-label="Figure"]')).toBeVisible();
+});
+
+test('GUI-146 BlueJ export names left-out test classes and MP3 sounds only when the project has them, until the notice is closed', async ({ page }, info) => {
+  const example = JSON.parse(await readFile('frontend/public/examples/blueplay.bluek.json', 'utf8'));
+  const project = {
+    ...example,
+    projectName: 'Sounds',
+    files: [...example.files, { fileName: 'FigureTest.kt', kind: 'class', source: 'import kotlin.test.*\n\nclass FigureTest\n', testTarget: 'Figure.kt', isTestClass: true }],
+    resources: [...(example.resources ?? []), { path: 'sounds/music.mp3', data: 'data:audio/mpeg;base64,SUQzAwAAAAAAAA==' }],
+  };
+  const source = info.outputPath('Sounds.bluek.json');
+  await writeFile(source, JSON.stringify(project));
+  await page.clock.install();
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open / Import', exact: true }).click();
+  await page.getByLabel('Choose project file').setInputFiles(source);
+  await expect(page.locator('.classcard[aria-label="FigureTest"]')).toBeVisible();
+  await page.getByRole('button', { name: 'Save / Export', exact: true }).click();
+  const [download] = await Promise.all([
+    page.waitForEvent('download'), page.getByRole('button', { name: /^Export BlueJ Project/ }).click(),
+  ]);
+  const notice = page.locator('.bluej-export-notice');
+  await expect(notice).toContainText('Test classes are not exported because BlueJ has no kotlin.test: FigureTest.');
+  await expect(notice).toContainText('does not play MP3 files: music.mp3');
+  // The notice stays until it is closed.
+  await page.clock.fastForward(120_000);
+  await expect(notice).toBeVisible();
+  await page.getByRole('button', { name: 'Close BlueJ export notice' }).click();
+  await expect(notice).toHaveCount(0);
+  const file = info.outputPath('Sounds.zip');
+  await download.saveAs(file);
+  const entries = unzipSync(new Uint8Array(await readFile(file)));
+  expect(Object.keys(entries)).toContain('Sounds/sounds/music.mp3');
+  expect(Object.keys(entries)).not.toContain('Sounds/FigureTest.kt');
 });

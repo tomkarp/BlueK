@@ -5,10 +5,9 @@ Current API: [blueplay.md](blueplay.md).
 
 ## Independent reference
 
-Use the original [tomkarp/BluePlay BlueJ project at c8ace580](https://github.com/tomkarp/BluePlay/tree/c8ace580f0506571fc34f287280a3e04eba7c876),
-including World.kt, Actor.kt, Image.kt, BluePlayFunctions.kt, student files and
-API documentation. The downloaded reference is in
-`tests/fixtures/blueplay-reference/`; do not regenerate it from BlueK's code.
+Use the final BlueJ version of BluePlay, including World.kt, Actor.kt,
+Image.kt, BluePlayFunctions.kt, student files and API documentation. It is kept
+in `tests/fixtures/blueplay-reference/`; do not regenerate it from BlueK's code.
 Actor.image is nullable in the reference source despite its documentation table.
 Engine internals and JVM/AWT fields are not student API.
 

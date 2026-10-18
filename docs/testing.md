@@ -4,6 +4,8 @@ BlueK supports a reduced JetBrains **`kotlin.test`** API. Testing is currently
 in **alpha**. Test classes and generated setup code are ordinary Kotlin and
 can run outside BlueK with `kotlin-test-junit5` and JUnit Jupiter, including
 in IntelliJ. BlueK itself runs them in its browser interpreter, without a JVM.
+A BlueJ export leaves test classes out, because BlueJ has no `kotlin.test`,
+and names them in a notice.
 
 ## Example
 

@@ -116,7 +116,7 @@ evaluate('w.addObject(b, -1, 99)'); assert.equal(evaluate('b.x == 0 && b.y == 29
 const otherWorld = 'val otherWorld = World(50,50,1); otherWorld.addObject(b, 5, 5)'; evaluate(otherWorld);
 assert.equal(evaluate('w.numberOfObjects == 0 && b.world === otherWorld').display, 'true');
 
-// Original student files are immutable fixtures from GitHub, not BlueK examples.
+// Original student files are immutable fixtures from the BlueJ version, not BlueK examples.
 const files = ['Figure.kt', 'MyWorld.kt', 'Main.kt'];
 const original = await create(files, await Promise.all(files.map(file => readFile(new URL(`../tests/fixtures/blueplay-reference/${file}`, import.meta.url), 'utf8'))));
 ok(await complete((input, done) => original.startBluePlayMain(null, input, done)), 'original main');
@@ -147,4 +147,4 @@ evaluate('point.x = 2; copy.setTransparency(0)');
 assert.equal(evaluate('b.intersects(point)').display, 'false', 'Outer transparency applies to copied pixels');
 evaluate('copy.setTransparency(255)');
 assert.equal(evaluate('b.intersects(point)').display, 'true', 'Restoring opacity restores copied pixels');
-console.log('BluePlay API conformance passed: reference signatures including non-nullable world, UI metadata, 14 valid / 28 invalid calls, direct world access, original GitHub example, object lifecycle and image copies.');
+console.log('BluePlay API conformance passed: reference signatures including non-nullable world, UI metadata, 14 valid / 28 invalid calls, direct world access, original BlueJ example, object lifecycle and image copies.');

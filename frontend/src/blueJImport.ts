@@ -1,5 +1,7 @@
 import { unzipSync } from "fflate";
 import type { SavedProject, SavedProjectFile, ProjectResource, ProjectCardPosition } from "./projectFormat";
+import { STANDARD_IMAGES } from "./standardImages.generated";
+import { STANDARD_SOUNDS } from "./standardSounds.generated";
 
 /** One file of a BlueJ project, e.g. from a ZIP archive or a chosen directory. */
 export type ImportEntry = { path: string; bytes: Uint8Array };
@@ -73,9 +75,14 @@ export function blueJProjectFromEntries(entries: ImportEntry[]): SavedProject {
     })
     .sort((a, b) => a.fileName.localeCompare(b.fileName));
   if (!files.length && !blueplay) throw new Error("The BlueJ project contains no Kotlin files.");
+  // BlueJ exports of BluePlay projects carry every standard image and sound;
+  // unchanged copies stay standard resources instead of becoming project files.
+  const standard = new Map([...STANDARD_IMAGES, ...STANDARD_SOUNDS].map(({ path, data }) => [path, data.slice(data.indexOf(",") + 1)]));
   const resources: ProjectResource[] = inRoot.flatMap((entry) => {
     const type = /^(?:images|sounds)\/[^/]+$/.test(entry.path) ? MEDIA_TYPES[entry.path.split(".").pop()!.toLowerCase()] : undefined;
-    return type ? [{ path: entry.path, data: `data:${type};base64,${base64(entry.bytes)}` }] : [];
+    if (!type) return [];
+    const encoded = base64(entry.bytes);
+    return blueplay && standard.get(entry.path) === encoded ? [] : [{ path: entry.path, data: `data:${type};base64,${encoded}` }];
   });
   const packageFile = inRoot.find((entry) => entry.path === "package.bluej");
   // BlueJ keeps the project description in README.TXT; BlueK reads it as the

@@ -11,7 +11,7 @@ an entire application first. Student code runs locally in your browser.
 - Work with class diagrams, a Kotlin editor, an object bench and inspectors.
 - Evaluate expressions in the codepad and run programs with terminal input/output.
 - Build games with the included BluePlay library and project templates.
-- Save projects as JSON, import BlueJ projects and share project links.
+- Save projects as JSON, import and export BlueJ projects and share project links.
 - Export a program as a standalone HTML page or use BlueK offline.
 - Save and reload an interactive object state, record tests and run a reduced
   `kotlin.test` API. **Testing is currently in alpha.**

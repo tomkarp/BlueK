@@ -1363,16 +1363,16 @@ test('GUI-22 top actions are grouped, ordered and switch to icon-only mode toget
   await expect(actions.nth(2)).toHaveText(/Save \/ Export/);
   await actions.nth(1).click();
   const openDialog = page.getByRole('dialog', { name: 'Open / Import' });
-  await expect(openDialog.locator('.project-dropzone')).toContainText('JSON');
-  await expect(openDialog.locator('.project-dropzone')).toContainText('Accepted: .json');
-  await expect(openDialog.getByLabel('Choose project file')).toHaveAttribute('accept', '.json,.bluek.json,application/json');
+  await expect(openDialog.locator('.project-dropzone')).toContainText('BlueK JSON or BlueJ project');
+  await expect(openDialog.locator('.project-dropzone')).toContainText('Accepted: .json, BlueJ projects as .zip or as a folder (folders by drag and drop)');
+  await expect(openDialog.getByLabel('Choose project file')).toHaveAttribute('accept', '.json,.bluek.json,application/json,.zip,application/zip');
   await expect(openDialog.getByLabel('Choose project directory')).toHaveCount(0);
   await openDialog.getByRole('button', { name: 'Cancel' }).click();
   await actions.nth(2).click();
   const saveDialog = page.getByRole('dialog', { name: 'Save / Export' });
   await expect(saveDialog.getByRole('button', { name: /Project JSON/ })).toBeEnabled();
   await expect(saveDialog.getByRole('button', { name: /Full Project Link/ })).toBeEnabled();
-  await expect(saveDialog.getByRole('button', { name: /BlueJ/ })).toBeDisabled();
+  await expect(saveDialog.getByRole('button', { name: /BlueJ/ })).toBeEnabled();
   await expect(saveDialog.getByRole('button', { name: /Short Link/ })).toBeEnabled();
   await saveDialog.getByRole('button', { name: 'Cancel' }).click();
   await page.setViewportSize({ width: 800, height: 1000 });
@@ -1517,6 +1517,20 @@ test('GUI-01 new project offers all templates and can be cancelled', async ({ pa
   await expect(dialog.locator('.project-choice-note')).toContainText('removed in the long run');
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
+});
+
+test('GUI-144 BluePlay information links to the BluePlay documentation in BlueK', async ({ page }) => {
+  await project(page);
+  await page.getByRole('button', { name: 'New Project', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Create New Project' });
+  for (const index of [0, 1]) {
+    await dialog.getByRole('button', { name: 'What is BluePlay?' }).nth(index).click();
+    const link = dialog.getByRole('link', { name: 'Read the BluePlay documentation' });
+    await expect(link).toHaveAttribute('href', 'https://github.com/tomkarp/BlueK/blob/main/docs/blueplay.md');
+    await expect(link).toHaveAttribute('target', '_blank');
+    await dialog.getByRole('button', { name: 'Close BluePlay information' }).click();
+    await expect(link).toBeHidden();
+  }
 });
 
 test('GUI-17 Escape cancels constructor and method parameter dialogs', async ({ page }) => {

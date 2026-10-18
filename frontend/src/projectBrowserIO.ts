@@ -9,7 +9,7 @@ import type { SavedProject as ProjectSource } from "./projectFormat";
 import type { ShareLinkDialog } from "./uiTypes";
 import { applicationUrl, shortShareUrl } from "./shareLinks";
 
-export function downloadFile(content: string, type: string, fileName: string) {
+export function downloadFile(content: string | Uint8Array<ArrayBuffer>, type: string, fileName: string) {
   const link = document.createElement("a");
   link.href = URL.createObjectURL(new Blob([content], { type }));
   link.download = fileName;

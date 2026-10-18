@@ -557,7 +557,7 @@
     >
       {language.message(project.shareNotice)}
     </div>{/if}
-  {#if project.linkProblem || project.savedProjectsNotice || storageWarning}
+  {#if project.linkProblem || project.blueJExportNotice || project.savedProjectsNotice || storageWarning}
     <div class="workspace-notices">
       {#if project.linkProblem}
         <div class="link-problem-notice" role="alert">
@@ -571,6 +571,16 @@
             aria-label={t("ui.workspace.dismissLinkProblem")}
             title={t("ui.workspace.dismiss")}
             onclick={() => (project.linkProblem = null)}>×</button
+          >
+        </div>
+      {/if}
+      {#if project.blueJExportNotice}
+        <div class="project-recovery-notice bluej-export-notice" role="status" aria-live="polite">
+          <span>{project.blueJExportNotice}</span>
+          <button
+            aria-label={t("ui.workspace.dismissBlueJExportNotice")}
+            title={t("ui.workspace.dismiss")}
+            onclick={() => (project.blueJExportNotice = "")}>×</button
           >
         </div>
       {/if}
@@ -802,6 +812,7 @@
     shareProject={project.shareProject}
     saveShortProject={project.saveShortProject}
     exportProject={project.exportProject}
+    exportBlueJProject={project.exportBlueJProject}
     exportHtml={project.exportHtml}
     copySharedLink={project.copySharedLink}
   />

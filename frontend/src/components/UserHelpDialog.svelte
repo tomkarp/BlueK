@@ -144,12 +144,12 @@ counter.value`}</code
             </dd>
             <dt>{t("ui.transfer.runnableProgram")}</dt>
             <dd>{t("help.projects.programLinks")}</dd>
-            <dt>{t("ui.common.exportAsHTMLBeta")}</dt>
+            <dt>{t("ui.common.exportAsHTML")}</dt>
             <dd>
               {t("help.projects.htmlExport")}
             </dd>
             <dt>{t("help.projects.exportBlueJProject")}</dt>
-            <dd>{t("help.projects.notImplementedYet")}</dd>
+            <dd>{t("help.projects.blueJExport")}</dd>
           </dl>
           <p><TranslatedText message="help.projects.linkOptions" /></p>
           <p>{t("help.projects.programOptions")}</p>

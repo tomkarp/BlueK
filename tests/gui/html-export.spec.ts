@@ -36,7 +36,8 @@ test('EXP-08 Export as HTML compiles on demand, asks for a name and downloads a 
   await page.getByRole('button', { name: 'Save / Export' }).click();
   await page.getByRole('button', { name: 'Runnable program', exact: true }).click();
   const button = exportButton(page);
-  await expect(button).toContainText('Export as HTML (Beta)');
+  await expect(button).toContainText('Export as HTML');
+  await expect(button).not.toContainText('Beta');
   await expect(button).toContainText('A single web page that runs the program, without BlueK.');
   page.once('dialog', dialog => dialog.accept('Grüße an alle'));
   const [download] = await Promise.all([page.waitForEvent('download'), button.click()]);

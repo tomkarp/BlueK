@@ -40,7 +40,7 @@ Unless explicitly stated, visual user acceptance remains pending.
 | GUI-19 | Compact codepad history spacing | Recorded browser pass |
 | GUI-20 | Single-line result truncation with full-value tooltip | Recorded browser pass |
 | GUI-21 | Shared object aliases and inspector reference names | Recorded browser pass |
-| GUI-22 | Grouped project actions and JSON upload/drop UI | Coverage: browser; no specific passing run asserted here |
+| GUI-22 | Grouped project actions; upload/drop UI names JSON and BlueJ ZIP/folder and the file chooser accepts .json and .zip; BlueJ export enabled | Chromium pass (2026-10-18) after updating its stale “BlueJ export disabled” expectation |
 | GUI-23 | Save/Export disabled for an empty project | Recorded browser pass |
 | RT-01 | Identity, setters/getters, main/reset/input and stale replies | Existing runtime-state integration coverage; no new run claimed |
 | GUI-24 | Invalid project statements prevent initializer/codepad effects | Recorded browser pass |
@@ -88,6 +88,7 @@ Unless explicitly stated, visual user acceptance remains pending.
 | RT-116 | If-conditions require non-null Boolean, with actual/expected types and the condition's source position; abrupt return/throw conditions remain valid | Final bundle rejects Int, String, Boolean? and null conditions; Boolean variables, comparisons, smart casts and terminating conditions compile and execute. Shared official compiler comparison and the same 15 Chromium cases passed (2026-10-13). See RT-115 for suite limitations; user visual acceptance pending. |
 | RT-117 | Definite local val/var and init-block property initialization across continuing branches, exceptions and non-repeating loop paths; trusted scope-function contracts and shared empty capture cells | 120 split-project fixtures match Kotlin/JVM 2.2.21; legal cases execute with matching output, invalid cases fail analysis without effects. Includes first assignment around suspension and all five Core scope functions. Final bundled/session/browser verification passed (2026-10-13); see the dated follow-up and [comparison](kotlin-flow-state.md). |
 | RT-118 | Stable null/type guards, this/property paths, versioned Boolean aliases, unmodified captures, branch joins and invalidation by writes/captured writers/unstable roots | The same 120 fixtures passed; final 31 affected Chromium cases passed across English/German compilation, diagnostics and main execution (2026-10-13). Mutable/custom-getter/open properties and unstable roots remain rejected. User visual acceptance and Safari application run pending. |
+| RT-119 | Collision cases of the BlueJ version's CollisionTest: transparent and nearly transparent pixels (alpha 16 vs. 17), setTransparency(0), rotation, even cell sizes, disjoint visible pixels in overlapping rectangles, real cat/dog images | All 11 cases passed in `smoke-blueplay-browser.mjs` (2026-10-18); a deliberately wrong expectation failed as intended. |
 | RT-106 | Common supertype as in Kotlin for mixed arguments (`listOf(40, 40, false)`, mixed set/map/array, nested lists, if/else); invariant receiver keeps `add` type-safe; `containsKey` via Kotlite stdlib | Curriculum RT-106 (values checked with kotlinc), generics, Kotlin surface, references and testing suites passed; conformance 820 (+1 `lambda/lambda_kt80285.kt`, none lost); full hosted GUI 193/193 and offline 6/6 passed (2026-10-09) |
 | RT-105 | Exponential speed slider (1 s at 1, 30 ms at 50, 1 ms at 100, strictly faster per step); Run acts at once; raising the speed ends a long wait; `setSpeed()` in code paces Run like the slider (engine owns the speed; Reset keeps it) | smoke-runtime-state passed with the final 1 s curve and the code `setSpeed()` case; full hosted GUI 194/194, offline 6/6 and smoke suites passed (2026-10-09); feel not user-accepted |
 | RT-104 | playSound resolves given path or sounds/, emits a resource effect without a shown world, missing file raises “Sound file not found” | smoke-blueplay-browser passed (2026-10-08); audible output not verified |
@@ -193,6 +194,7 @@ Unless explicitly stated, visual user acceptance remains pending.
 | EXP-18 | bluek/run fragments and short paths, player/IDE navigation, deployment prefixes and transitional /load | Chromium/WebKit and prefixed production routing passed, 2026-10-11; user acceptance pending |
 | EXP-19 | Unavailable program links: translated player explanation for expired/unknown codes (30-day note, BlueK link), malformed codes and undecodable `#run`; a project code under /run/ offers its project; capitalized codes play | Chromium GUI, real-service routing (Chromium/WebKit) and agent end-to-end passed, 2026-10-11; German player screen inspected; user acceptance pending |
 | EXP-20 | A short program code opens its project under /bluek/ and in code import with one request; disabled “Open in BlueK” refuses both (403) | Share-server smoke, real-service routing (Chromium/WebKit), GUI-138 and agent end-to-end passed, 2026-10-11; production deployment pending |
+| EXP-21 | BlueJ ZIP export: one folder with Kotlin files (test classes omitted), README.TXT and package.bluej with the displayed card positions; BluePlay adds the JVM library from assets/bluej-blueplay and every standard image/sound, project files win; re-import keeps unchanged standard media as standard resources | `test:bluej-export` passed (2026-10-18); all four bundled examples compiled with kotlinc 2.2.21 after export (`check-bluej-export-kotlinc.mjs`). Not yet opened or run in BlueJ itself. |
 | RT-37 | Suspendable binary-stdlib lambda replay and canSuspend boundary | Recorded Node/bundle pass; dedicated browser check not performed in original record |
 | RT-38 | Typed native exceptions and non-catchable interpreter faults | Node/bundle pass; linked browser regression coverage |
 | RT-39 | Kotlin substring bound validation | Recorded runtime pass; `smoke-curriculum-kotlin.mjs` |
@@ -313,6 +315,9 @@ Unless explicitly stated, visual user acceptance remains pending.
 | GUI-141 | Confirm source-file deletion with filename in English/German; Cancel preserves files, test attachments/default, editor and runtime; accept deletes class, test or main file | Six Chromium deletion cases, ten GUI-130 cases, workspace controller tests, i18n, typecheck (zero errors/warnings), hosted build and six offline Chromium/WebKit cases passed (2026-10-12). Initial browser tests used an incorrect editor label; the next run blocked on the still-open context menu after Cancel and was stopped, then the corrected six-case rerun passed. User visual acceptance pending. |
 | GUI-142 | Codepad Get suggests the directly read variable name; aliases use the actual name read, repeated Get reuses the binding, and method/new-object results keep the class suggestion | References, runtime-state, controller tests, typecheck (zero errors/warnings), Kotlin/hosted builds and final ten affected Chromium cases passed (2026-10-12). English/German browser cases cover direct reads, comments, aliases, idempotent Get and methods returning the same named object. User visual acceptance pending. |
 | GUI-143 | Compile closes the previous BluePlay world without starting main; explicit Start main reconstructs the updated world, including anonymous worlds and image backgrounds | Baseline Chromium test failed as expected because the old world stayed visible. All 34 affected Chromium BluePlay/main-selection cases passed, including four new cases for paused/running worlds, repeated Compile, Codepad compilation on demand, failed compilation, explicit main and image pixels (2026-10-12). Typecheck, workspace/runtime integration, architecture checks and frontend build passed. User selected close-on-compile and explicit main; visual acceptance of the deployed change pending. |
+| GUI-144 | BluePlay information in New Project links to the BluePlay documentation in BlueK | Chromium test passed with GUI-01 (2026-10-18); German panel inspected by the agent at 800×600. User visual acceptance pending. |
+| GUI-145 | Save / Export → Export BlueJ Project downloads `<name>.zip` with the BlueJ library and all standard media; importing it restores the BluePlay project | Chromium pass (2026-10-18); German dialog inspected by the agent at 800×600. User acceptance in BlueJ pending. |
+| GUI-146 | After a BlueJ export, a notice names left-out test classes and MP3 sounds (BluePlay in BlueJ plays WAV only), but only if the project has them; it stays until closed; no MP3 conversion | Chromium pass with GUI-145 and EXP-17 (2026-10-18), including two simulated minutes without hiding and closing with ×; German test-class notice inspected by the agent in the dev server. |
 
 ## Recorded verification
 
@@ -391,7 +396,7 @@ the “not implemented” notice. Accepted formats: WAV and MP3, at most 1 MB.
   player beyond the shared StageAudio code path.
 
 Follow-up the same day: the 13 standard sounds of BluePlay's `sounds/` folder
-(tomkarp/BluePlay `c8ace58`, MIT, about 217 KB WAV) are bundled from
+(BlueJ version, MIT, about 217 KB WAV) are bundled from
 `assets/standard-sounds/` like the standard images; the player template grew to
 1113 KB. Typecheck, i18n (611 messages), BluePlay browser/stage and player-worker
 smokes passed; affected BluePlay, player, localization and regression GUI
@@ -895,3 +900,75 @@ the dialog scrolls within small viewports.
   Corrected fixtures passed; no remaining functional failure or blocker.
 - Agent visual inspection: German settings at 800×600 and 390×520. User visual
   acceptance and a separate run in the Safari application remain open.
+
+### BluePlay integration — 2026-10-18
+
+BlueK became the only maintained version of BluePlay and keeps everything it
+needs from the BlueJ version itself; no file refers to an external BluePlay
+source any more. docs/blueplay.md took over the original
+documentation (minimal example, project structure, per-class explanations,
+examples and API tables) adapted to BlueK, with its four diagrams in
+docs/img/ (Actor.image shown as `Image?`, opaque overview background). The
+original collision test was added unmodified to the BlueJ reference fixture and
+its cases were ported to the built-in library (RT-119); the high-resolution
+source graphics are in assets/standard-images-originals/, which the
+standard-image build does not read. The New Project information link now opens
+the BlueK documentation (GUI-144). In the reference fixture only the first
+download step of API.md changed: it no longer contains a download link.
+
+- Helpers/checks: `smoke-blueplay-browser.mjs` passed including RT-119, and a
+  temporary mutation of one expectation failed as intended. `test:blueplay-api`,
+  `test:i18n` (737 messages) and typecheck (0 errors/warnings) passed.
+  `build:standard-images` left the generated modules unchanged.
+- Actual browsers: GUI-01 and GUI-144 passed in Chromium; all six GUI-130
+  localization cases passed.
+- Agent visual inspection: the German information panel with its link at
+  800×600 in the dev server.
+- Not performed: the full GUI suite, WebKit, rendering of the new docs on
+  GitHub and user visual acceptance.
+
+### BlueJ export — 2026-10-18
+
+Save / Export → Export BlueJ Project (.zip), previously a disabled
+placeholder, now downloads a BlueJ 6 project folder (EXP-21, GUI-145). BluePlay
+projects receive the JVM library, maintained in assets/bluej-blueplay/ and
+generated into the bundle by `build:standard-images`, plus all 29 standard
+images and 13 standard sounds. Test classes are omitted because BlueJ 6 ships
+no kotlin-test; own MP3 sounds are exported unchanged although BluePlay in
+BlueJ plays WAV only. Only a project with test classes or MP3 sounds gets a
+notice naming them, which stays until closed (GUI-146); the dialog text no
+longer mentions either. BlueJ
+import now leaves unchanged standard media of BluePlay projects as standard
+resources, so an export/import round trip adds no files.
+
+- Helpers/checks: `test:bluej-export`, `test:project-format`, `test:workspace`,
+  `test:i18n` (737 messages), Svelte architecture and typecheck (0 errors/
+  warnings) passed. Exports of all four bundled examples compiled with kotlinc
+  2.2.21, including Space Invaders against the BlueJ BluePlay library.
+- Actual browsers: 83/83 Chromium cases passed in the BluePlay, HTML export,
+  program link, offline, project draft, testing and localization specs,
+  including GUI-145 and EXP-17. After the conditional notices were added,
+  GUI-145, GUI-146 and all seven EXP-17 cases passed again (9/9). After the
+  notice became closable instead of timed, GUI-145/146 passed again, and the
+  13 project-draft and link-notice cases (including GUI-44 and GUI-138) passed. The first GUI-145 runs failed on test mistakes
+  (a library assertion on the wrong file, an unaccepted replace confirmation);
+  corrected test passed.
+- Open / Import now names BlueK JSON and BlueJ projects as ZIP or folder
+  (folders by drag and drop), and its file chooser also accepts .zip; the user
+  had imported an exported project both ways. GUI-22 first failed because it
+  still expected the old disabled BlueJ export button; after updating that
+  expectation it passed. The full GUI suite then passed in Chromium (275/275).
+- Agent visual inspection: German Save / Export dialog, the German test-class
+  notice and the German Open / Import drop zone at 800×600 (downloads
+  suppressed in the dev server).
+- Not performed: opening or running an exported project in BlueJ, MP3
+  behavior in BlueJ and WebKit.
+
+### HTML export label — 2026-10-18
+
+“Export as HTML” / “Als HTML exportieren” no longer carries “(Beta)” in the
+export dialog, the help and the user guide. EXP-08 now also checks that the
+button contains no “Beta”. Typecheck and i18n passed; the HTML export,
+localization, offline and program-link specs passed in Chromium (37/37). The
+remaining stage notes (testing in alpha, offline version little tested) are
+unchanged.

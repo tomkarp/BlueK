@@ -100,9 +100,9 @@
               : t("ui.projects.theExampleDemonstratesASmallWorldAndActor")}
           </p>
           <a
-            href="https://github.com/tomkarp/BluePlay"
+            href="https://github.com/tomkarp/BlueK/blob/main/docs/blueplay.md"
             target="_blank"
-            rel="noreferrer">{t("ui.projects.viewBluePlayOnGitHub")}</a
+            rel="noreferrer">{t("ui.projects.readTheBluePlayDocumentation")}</a
           >
         </div>{/if}
     </div>

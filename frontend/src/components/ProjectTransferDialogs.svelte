@@ -43,6 +43,7 @@
   export let shareProject: () => Promise<void>;
   export let saveShortProject: () => Promise<void>;
   export let exportProject: () => void;
+  export let exportBlueJProject: () => void;
   export let exportHtml: () => Promise<void>;
   export let copySharedLink: () => Promise<void>;
 </script>
@@ -127,12 +128,12 @@
           on:dragover|preventDefault
           on:drop={openProjectDrop}
         >
-          <strong>JSON</strong>
-          <span>{t("ui.transfer.acceptedJson")}</span>
+          <strong>{t("ui.transfer.projectFileFormats")}</strong>
+          <span>{t("ui.transfer.acceptedProjectFormats")}</span>
           <input
             type="file"
             aria-label={t("ui.transfer.chooseProjectFile")}
-            accept=".json,.bluek.json,application/json"
+            accept=".json,.bluek.json,application/json,.zip,application/zip"
             on:change={(event) => {
               importProject(event);
               toolbarDialog = null;
@@ -282,9 +283,15 @@
                 >{t("ui.transfer.exportTheCompleteBlueKProjectAsJSON")}</span
               ></button
             >
-            <button class="file-export-choice" disabled
+            <button
+              class="file-export-choice"
+              on:click={() => {
+                exportBlueJProject();
+                toolbarDialog = null;
+              }}
+              disabled={!files.length}
               ><strong>{t("ui.transfer.exportBlueJProjectZip")}</strong><span
-                >{t("ui.transfer.exportForBlueJNotImplementedYet")}</span
+                >{t("ui.transfer.exportAZIPForBlueJ")}</span
               ></button
             >
           </div>
@@ -318,7 +325,7 @@
                   void exportHtml();
                 }}
                 disabled={!files.length || htmlExportBlocked || htmlExporting}
-                ><strong>{t("ui.common.exportAsHTMLBeta")}</strong><span
+                ><strong>{t("ui.common.exportAsHTML")}</strong><span
                   >{htmlExportBlocked
                     ? t("ui.transfer.needsAFileWithAParameterlessMain")
                     : t("ui.transfer.aSingleWebPageThatRunsTheProgram")}</span

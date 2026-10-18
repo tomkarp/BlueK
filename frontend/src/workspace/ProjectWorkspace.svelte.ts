@@ -44,6 +44,7 @@ import {
 } from "../projectBrowserIO";
 import { htmlExport } from "../htmlExport";
 import { blueJProjectFromEntries, type ImportEntry } from "../blueJImport";
+import { blueJExportLimits, blueJProjectZip } from "../blueJExport";
 
 import { withStandardResources } from "../standardImages";
 import {
@@ -156,6 +157,8 @@ export class ProjectWorkspace {
   savedProjectsNotice = $state(false);
   /** Why the opened link could not be loaded; cleared when a project loads. */
   linkProblem: { message: string; expired: boolean } | null = $state(null);
+  /** What the last BlueJ export could not carry over; stays until closed or the next BlueJ export. */
+  blueJExportNotice = $state("");
   /** Why the browser draft is not stored; `session` means it cannot be restored after a reload. */
   autosaveWarning: DraftSaveFailure | { reason: "session" } | null =
     $state(null);
@@ -690,6 +693,23 @@ export class ProjectWorkspace {
       exportFileName(this.projectName, ".bluek.json"),
     );
     this.host.ui().status = "Project exported";
+  };
+  /** A ZIP for BlueJ, with the cards where the class diagram shows them. */
+  exportBlueJProject = () => {
+    if (!this.ensureProjectName()) return;
+    const cardPositions = Object.fromEntries(
+      this.displayFiles.map((file, index) => [file.fileName, this.displayCardPositions[index]]),
+    );
+    const folderName = exportFileName(this.projectName, "");
+    const payload = { ...this.projectPayload(), cardPositions };
+    downloadFile(blueJProjectZip(payload, folderName), "application/zip", `${folderName}.zip`);
+    this.host.ui().status = "Project exported";
+    // Only projects that have something BlueJ cannot take over get a note.
+    const { testClasses, mp3Sounds } = blueJExportLimits(payload);
+    this.blueJExportNotice = [
+      ...(testClasses.length ? [this.text("ui.transfer.blueJExportLeavesOutTestClasses", [testClasses.join(", ")])] : []),
+      ...(mp3Sounds.length ? [this.text("ui.transfer.blueJDoesNotPlayMp3", [mp3Sounds.join(", ")])] : []),
+    ].join(" ");
   };
   exportHtml = () => this.exportProgram("export");
   shareFullProgram = () => this.exportProgram("shareFullProgram");

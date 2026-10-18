@@ -138,6 +138,63 @@ if (collisionEvaluate('pixelA.intersects(pixelB)', 'rotated transparent overlap'
 collisionEvaluate('pixelB.rotation = 0', 'visible overlap setup');
 if (collisionEvaluate('pixelA.intersects(pixelB)', 'opaque overlap').display !== 'true') throw new Error('Visible source pixels did not trigger isTouching.');
 
+// The cases of the BlueJ version's collision test
+// (tests/fixtures/blueplay-reference/tests/CollisionTest.kt). Its image centres
+// x * cellSize + cellSize / 2 become actor cells: 10.5 is cell 10 at cell size 1,
+// 20.0 is cell 2 at cell size 8, (25.0, 35.0) is cell (2, 3) at cell size 10.
+{
+  const masks = await readFile(new URL('../frontend/src/standardImages.generated.ts', import.meta.url), 'utf8');
+  const mask = name => {
+    const entry = masks.match(new RegExp(`path: "images/${name}",[^}]*?imageWidth: (\\d+),\\s*imageHeight: (\\d+),\\s*alphaHex: "([0-9a-f]+)"`));
+    if (!entry) throw new Error(`The standard image ${name} has no alpha mask.`);
+    return `images/${name}\0${entry[1]}\0${entry[2]}\0${entry[3]}`;
+  };
+  const referenceSession = api.bluekCreateKotliteSession();
+  referenceSession.configureBluePlay(true, 'native-blueplay-collision-reference');
+  referenceSession.setBluePlayResources([mask('cat.png'), mask('dog.png')].join('\n'));
+  expectOk(await awaitCompletion((onInput, onComplete) => referenceSession.startLoadProject(['Probe.kt', 'Main.kt'], [
+    'class Probe : Actor()',
+    `fun pixels(width: Int, height: Int, points: List<Int>): Image {
+    val image = Image(width, height)
+    image.setColor(255, 255, 255)
+    var index = 0
+    while (index < points.size) { image.fillRect(points[index], points[index + 1], 1, 1); index += 2 }
+    return image
+}
+fun overlap(cellSize: Int, first: Image, firstX: Int, firstY: Int, firstRotation: Int, second: Image, secondX: Int, secondY: Int, secondRotation: Int, firstTransparency: Int): Boolean {
+    val world = World(200, 200, cellSize)
+    val a = Probe(); val b = Probe()
+    a.image = first; a.rotation = firstRotation; b.image = second; b.rotation = secondRotation
+    world.addObject(a, firstX, firstY); world.addObject(b, secondX, secondY)
+    first.setTransparency(firstTransparency)
+    val result = a.intersects(b)
+    first.setTransparency(255)
+    return result
+}
+fun main() {}`,
+  ], 'blueplay', 1, onInput, onComplete)), 'collision reference project load');
+  expectOk(await awaitCompletion((onInput, onComplete) => referenceSession.startBluePlayMain(null, onInput, onComplete)), 'collision reference main');
+  const opaque = 'pixels(1, 1, listOf(0, 0))';
+  const horizontal = 'pixels(3, 1, listOf(2, 0))';
+  const cases = [
+    [true, `overlap(1, ${opaque}, 10, 10, 0, ${opaque}, 10, 10, 0, 255)`, 'opaque pixels at the same position overlap'],
+    [false, `overlap(1, Image(1, 1), 10, 10, 0, ${opaque}, 10, 10, 0, 255)`, 'transparent pixels do not collide'],
+    [false, 'overlap(8, pixels(8, 8, listOf(0, 0)), 2, 2, 0, pixels(8, 8, listOf(7, 7)), 2, 2, 0, 255)', 'overlapping image rectangles without overlapping visible pixels do not collide'],
+    [true, `overlap(1, ${horizontal}, 10, 10, 90, ${opaque}, 10, 11, 0, 255)`, 'rotation is included in collision detection'],
+    [false, `overlap(1, ${horizontal}, 10, 10, 90, ${opaque}, 11, 10, 0, 255)`, 'the unrotated pixel position is not used after rotation'],
+    [false, `overlap(1, ${opaque}, 10, 10, 0, ${opaque}, 10, 10, 0, 16)`, 'nearly transparent pixels are ignored'],
+    [true, `overlap(1, ${opaque}, 10, 10, 0, ${opaque}, 10, 10, 0, 17)`, 'pixels above the alpha threshold collide'],
+    [false, `overlap(1, ${opaque}, 10, 10, 0, ${opaque}, 10, 10, 0, 0)`, 'an invisible image does not collide'],
+    [true, `overlap(10, ${opaque}, 2, 3, 0, ${opaque}, 2, 3, 0, 255)`, 'integer world centres are handled like pixel positions'],
+    [true, 'overlap(1, Image("cat.png"), 100, 100, 0, Image("dog.png"), 100, 100, 0, 255)', 'the real cat and dog images collide at the same position'],
+    [false, 'overlap(1, Image("cat.png"), 100, 100, 0, Image("dog.png"), 150, 100, 0, 255)', 'transparent padding in the real cat and dog images does not collide'],
+  ];
+  for (const [expected, source, description] of cases) {
+    const actual = expectOk(JSON.parse(referenceSession.evaluate('<collision reference>', source)), description).display;
+    if (actual !== String(expected)) throw new Error(`BlueJ collision reference: ${description}: expected ${expected}, got ${actual}`);
+  }
+}
+
 // Pixel-exact collisions of unrotated actors use a visibility map per image.
 // Compare them with the per-pixel rule for odd and even image sizes: pixel
 // centres inside both images' bounds, where both images are opaque.

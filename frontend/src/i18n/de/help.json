@@ -49,7 +49,7 @@
     "browserDrafts": "Browser-Entwürfe",
     "importAndExportReference": "Import und Export",
     "exportBlueJProject": "BlueJ-Projekt exportieren",
-    "notImplementedYet": "Noch nicht implementiert.",
+    "blueJExport": "Lädt das Projekt als ZIP-Datei mit einem Ordner für BlueJ 6 mit Kotlin herunter: Kotlin-Dateien, README.TXT und das Klassendiagramm. BluePlay-Projekte erhalten die BlueJ-Version der Bibliothek und alle Standardbilder und -sounds in images/ und sounds/, damit sie später auch in BlueJ verfügbar sind. Enthält das Projekt Testklassen oder MP3-Sounds, weist BlueK nach dem Export darauf hin, dass Testklassen weggelassen werden, weil BlueJ kein kotlin.test kennt, und dass BluePlay in BlueJ nur WAV abspielt.",
     "offlineVersion": "Offline-Version",
     "recentWork": "<strong>Öffnen / Importieren → Zuletzt bearbeitet</strong> öffnet gespeicherte Entwürfe. Die Mülleimersymbole und <strong>Alle löschen</strong> entfernen Browserkopien nach Bestätigung. Offene Projekte bleiben offen; spätere Änderungen können sie wieder speichern.",
     "linkOptions": "Für beide Linkarten gelten die Optionen <strong>README öffnen</strong> und <strong>Zustand laden</strong>. Zum Laden des Zustands ist eine Standard-Testklasse nötig. JSON-Importe laden den Zustand nicht automatisch.",
