@@ -88,6 +88,8 @@
           <h5>{t("help.start.runningACompleteProgram")}</h5>
           <p><TranslatedText message="help.start.main" /></p>
           <p><TranslatedText message="help.start.freshSession" /></p>
+          <h5>{t("help.start.debuggingTitle")}</h5>
+          <p><TranslatedText message="help.start.debugging" /></p>
         {:else if selected === "objects"}
           <h4>{t("help.navigation.objectsCodepad")}</h4>
           <h5>{t("help.objects.creatingAndUsingObjects")}</h5>

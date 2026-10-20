@@ -21,6 +21,8 @@ import com.sunnychung.lib.multiplatform.kotlite.model.CustomFunctionParameter
 import com.sunnychung.lib.multiplatform.kotlite.model.ExecutionEnvironment
 import com.sunnychung.lib.multiplatform.kotlite.model.FunctionDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.model.IntValue
+import com.sunnychung.lib.multiplatform.kotlite.model.LongValue
+import com.sunnychung.lib.multiplatform.kotlite.model.DoubleValue
 import com.sunnychung.lib.multiplatform.kotlite.model.LambdaValue
 import com.sunnychung.lib.multiplatform.kotlite.model.NullValue
 import com.sunnychung.lib.multiplatform.kotlite.model.PropertyDeclarationNode
@@ -35,6 +37,7 @@ import com.sunnychung.lib.multiplatform.kotlite.model.TypeNode
 import com.sunnychung.lib.multiplatform.kotlite.model.VariableReferenceNode
 import com.sunnychung.lib.multiplatform.kotlite.model.NavigationNode
 import com.sunnychung.lib.multiplatform.kotlite.model.DelegatedValue
+import com.sunnychung.lib.multiplatform.kotlite.model.*
 import com.sunnychung.lib.multiplatform.kotlite.stdlib.AllStdLibModules
 import com.sunnychung.lib.multiplatform.kotlite.model.GenericCollectionsModule
 import com.sunnychung.lib.multiplatform.kotlite.util.KotlinFileRules
@@ -42,6 +45,7 @@ import kotlin.js.ExperimentalJsExport
 import kotlin.js.JsExport
 import kotlin.js.JSON
 import kotlin.coroutines.Continuation
+import kotlin.coroutines.resume
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 import kotlin.coroutines.startCoroutine
@@ -53,6 +57,16 @@ import kotlin.coroutines.startCoroutine
  * once when the session is loaded.
  */
 private data class BlueKReference(val symbol: String, val interactive: Boolean, var onBench: Boolean)
+private data class DebugAstIndex(
+    val executableLines: Set<Pair<String, Int>>,
+    val statements: List<ASTNode>,
+    val nodes: List<ASTNode>,
+)
+private data class DebugInspectionRequest(
+    val objectId: String,
+    val propertyName: String,
+    val onComplete: (String) -> Unit,
+)
 
 @OptIn(ExperimentalJsExport::class)
 @JsExport
@@ -72,6 +86,7 @@ class KotliteSession {
     private val bindingNames = linkedMapOf<String, String>()
     private val references = linkedMapOf<String, BlueKReference>()
     private val managedHandles = linkedSetOf<String>()
+    private val debugPinnedHandles = linkedSetOf<String>()
     // Immutable history plus semantic lifetime boundaries, never source deletion.
     private val retiredProperties = linkedMapOf<Int, MutableList<String>>()
     private val propertyNames = linkedMapOf<String, MutableList<String>>()
@@ -88,6 +103,10 @@ class KotliteSession {
     // visible before their position only within their own source.
     private val sourceUnitStarts = mutableListOf<Int>()
     private var analyzedScript: ScriptNode? = null
+        set(value) {
+            field = value
+            debugAstIndexCache = null
+        }
     /** JSON objects of the `RuntimeEffect`s since the last [takeEffects]. */
     private val pendingEffects = mutableListOf<String>()
     private val inputLines = mutableListOf<String>()
@@ -106,6 +125,14 @@ class KotliteSession {
         pendingEffects += "{\"type\":\"sound\",\"name\":\"resource\",\"path\":\"${escape(path)}\"}"
     }
     private val projectFunctionRanges = mutableListOf<Triple<String, Int, Int>>()
+    private var debugAstIndexCache: DebugAstIndex? = null
+    private var debugMode: String? = null
+    private var debugPauseCallback: ((String) -> Unit)? = null
+    private var debugContinuation: Continuation<Unit>? = null
+    private var debugInspectionRequest: DebugInspectionRequest? = null
+    private var debugTargetDepth = 0
+    private var debugPausedDepth = 0
+    private val debugBreakpoints = linkedSetOf<String>()
     private val mainFunctionNames = linkedMapOf<String, String>()
     // Files whose main takes `args: Array<String>`; BlueK passes an empty array (RT-96).
     private val mainArgumentFiles = mutableSetOf<String>()
@@ -382,6 +409,366 @@ class KotliteSession {
         interpreter.stackFrameFormatter = ::stackFrame
         interpreter.checkpointHook = Interpreter.CheckpointHook(::runtimeCheckpointDue) { awaitRuntimeCheckpoint() }
         interpreter.stackResetHook = { awaitRuntimeStackReset() }
+        interpreter.debugStatementHook = { position, depth -> debugAtStatement(position, depth) }
+    }
+
+    private suspend fun debugAtStatement(position: SourcePosition, depth: Int) {
+        val mode = debugMode ?: return
+        if (position.filename != "<BlueK project>") return
+        val source = projectFunctionRanges.firstOrNull { position.lineNum in it.second..it.third } ?: return
+        val key = "${source.first}:${position.lineNum - source.second + 1}"
+        val atBreakpoint = mode != "inspecting" && key in debugBreakpoints
+        val shouldPause = atBreakpoint || when (mode) {
+            "start", "stepIn", "pauseRequested" -> true
+            "step" -> depth <= debugTargetDepth
+            else -> false
+        }
+        if (!shouldPause) return
+        debugMode = "paused"
+        debugPausedDepth = depth
+        val line = position.lineNum - source.second + 1
+        var notifyPause = true
+        while (true) {
+            val visible = linkedMapOf<String, com.sunnychung.lib.multiplatform.kotlite.model.DebugStoredProperty>()
+            val debugFrames = interpreter.debugCallFrames()
+            val currentScopes = debugFrames.lastOrNull()?.scopes.orEmpty()
+            currentScopes.forEach { scope ->
+                scope.debugStoredProperties().forEach { visible[it.name] = it }
+            }
+            // A synthetic `init` function is the current debug frame, but its
+            // receiver lives in the enclosing constructor frame. Search outward
+            // through frames so constructor pauses still expose object properties.
+            val receiver = debugFrames.asReversed().asSequence()
+                .flatMap { it.scopes.asReversed().asSequence() }
+                .flatMap { it.debugStoredProperties().asSequence() }
+                .firstOrNull { it.name == "this" }
+                ?.value as? ClassInstance
+            val variables = visible.values.filterNot { it.name == "this" }.joinToString(",", "[", "]") { item ->
+                val value = item.value
+                val display = debugValueDisplay(value)
+                val objectId = value?.let(::debugObjectHandle)
+                "{\"name\":${JSON.stringify(item.name)},\"type\":${JSON.stringify(item.type)},\"display\":${display?.let { JSON.stringify(it) } ?: "null"},\"initialized\":${value != null}${objectId?.let { ",\"objectId\":${JSON.stringify(it)}" } ?: ""}}"
+            }
+            val attributes = receiver?.debugStoredProperties().orEmpty().joinToString(",", "[", "]") { item ->
+                val display = debugValueDisplay(item.value)
+                val computed = if (item.computed) ",\"computed\":true" else ""
+                val objectId = item.value?.let(::debugObjectHandle)
+                "{\"name\":${JSON.stringify(item.name)},\"type\":${JSON.stringify(item.type)},\"display\":${display?.let { JSON.stringify(it) } ?: "null"},\"initialized\":${item.value != null}$computed${objectId?.let { ",\"objectId\":${JSON.stringify(it)}" } ?: ""}}"
+            }
+            val stepInAvailable = debugStepInAvailable(position)
+            val payload = "{\"fileName\":${JSON.stringify(source.first)},\"line\":$line,\"column\":${position.col},\"depth\":$depth,\"stepInAvailable\":$stepInAvailable,\"variables\":$variables,\"attributes\":$attributes}"
+            suspendCoroutine<Unit> { continuation ->
+                debugContinuation = continuation
+                if (notifyPause) debugPauseCallback?.invoke(payload)
+            }
+            debugContinuation = null
+            val inspection = debugInspectionRequest ?: return
+            debugInspectionRequest = null
+            debugMode = "inspecting"
+            val inspectSource = inspectionSource(inspection.objectId, inspection.propertyName)
+            val inspected = if (inspectSource == null) {
+                errorMessage("Property is no longer available.")
+            } else {
+                inspectionFailure = null
+                inspectedPropertyValue = null
+                finishInspection(
+                    inspection.objectId,
+                    inspection.propertyName,
+                    evaluateSuspended("<BlueK inspection>", inspectSource, inspection = true),
+                )
+            }
+            debugMode = "paused"
+            inspection.onComplete(inspected)
+            // Getter inspection resumes the suspended student coroutine only
+            // long enough to evaluate the getter. Re-suspend at this same
+            // statement without publishing another pause; otherwise the UI
+            // sees a fresh pause, refreshes the inspector, and evaluates the
+            // getter forever.
+            notifyPause = false
+        }
+    }
+
+    fun setDebugPauseCallback(callback: ((String) -> Unit)?) { debugPauseCallback = callback }
+
+    /** Ask the active interactive execution to pause at its next safe project statement. */
+    fun requestDebugPause(): String {
+        if (executionCompleted == null) return errorMessage("There is no active execution to pause.", "request")
+        if (debugMode == "paused" || debugMode == "pauseRequested") return errorMessage("A debugger pause is already active or requested.", "request")
+        debugMode = "pauseRequested"
+        return result("unit", UnitValue)
+    }
+
+    fun setDebugBreakpoint(fileName: String, line: Int, enabled: Boolean): String {
+        if (line < 1 || projectFunctionRanges.none { it.first == fileName }) return errorMessage("Breakpoint file or line is not in the current project.", "request")
+        if (enabled && (fileName to line) !in debugExecutableLines()) {
+            return errorMessage("A breakpoint can only be set on an executable statement.", "request")
+        }
+        val key = "$fileName:$line"
+        if (enabled) debugBreakpoints += key else debugBreakpoints -= key
+        return result("unit", UnitValue)
+    }
+
+    /** Lines and AST statements where Kotlite's statement hook can stop. */
+    private fun debugAstIndex(): DebugAstIndex {
+        debugAstIndexCache?.let { return it }
+        val positions = linkedSetOf<SourcePosition>()
+        val statements = mutableListOf<ASTNode>()
+        val nodes = mutableListOf<ASTNode>()
+        fun visit(node: ASTNode?) {
+            if (node == null) return
+            nodes += node
+            when (node) {
+                is ScriptNode -> node.nodes.forEach(::visit)
+                is BlockNode -> node.statements.forEach { statement ->
+                    positions += statement.position
+                    statements += statement
+                    visit(statement)
+                }
+                is ClassSecondaryConstructorNode -> {
+                    node.delegationArguments.orEmpty().forEach(::visit)
+                    visit(node.body)
+                }
+                is FunctionDeclarationNode -> {
+                    node.valueParameters.forEach(::visit)
+                    visit(node.body)
+                }
+                is ClassDeclarationNode -> {
+                    node.primaryConstructor?.let(::visit)
+                    node.superInvocations.orEmpty().forEach(::visit)
+                    node.declarations.forEach { declaration ->
+                        if (declaration is PropertyDeclarationNode && declaration.initialValue != null) {
+                            positions += declaration.position
+                        }
+                        visit(declaration)
+                    }
+                    node.enumEntries.forEach(::visit)
+                    visit(node.companionObject)
+                    node.nestedClasses.forEach(::visit)
+                }
+                is ClassPrimaryConstructorNode -> node.parameters.forEach { parameter ->
+                    if (parameter.isProperty) {
+                        positions += parameter.position
+                        statements += parameter
+                    }
+                    visit(parameter)
+                }
+                is ClassParameterNode -> visit(node.parameter)
+                is ClassInstanceInitializerNode -> visit(node.block)
+                is PropertyDeclarationNode -> {
+                    if (node.initialValue != null) {
+                        positions += node.position
+                        statements += node
+                    }
+                    visit(node.initialValue)
+                    visit(node.accessors)
+                }
+                is PropertyAccessorsNode -> {
+                    visit(node.getter)
+                    visit(node.setter)
+                }
+                is IfNode -> { visit(node.condition); visit(node.trueBlock); visit(node.falseBlock) }
+                is WhileNode -> { statements += node; visit(node.condition); visit(node.body) }
+                is DoWhileNode -> { statements += node; visit(node.body); visit(node.condition) }
+                is ForNode -> { statements += node; visit(node.subject); visit(node.body) }
+                is TryNode -> {
+                    visit(node.mainBlock)
+                    node.catchBlocks.forEach(::visit)
+                    visit(node.finallyBlock)
+                }
+                is CatchNode -> visit(node.block)
+                is WhenNode -> { visit(node.subject); node.entries.forEach(::visit) }
+                is WhenEntryNode -> { node.conditions.forEach(::visit); visit(node.body) }
+                is WhenConditionNode -> visit(node.expression)
+                is WhenSubjectNode -> visit(node.value)
+                is LambdaLiteralNode -> visit(node.body)
+                is FunctionCallNode -> {
+                    visit(node.function)
+                    node.arguments.forEach(::visit)
+                    visit(node.resolvedInvoke)
+                }
+                is FunctionCallArgumentNode -> visit(node.value)
+                is AssignmentNode -> { visit(node.subject); visit(node.value) }
+                is BinaryOpNode -> { visit(node.node1); visit(node.node2) }
+                is UnaryOpNode -> visit(node.node)
+                is NavigationNode -> visit(node.subject)
+                is IndexOpNode -> { visit(node.subject); node.arguments.forEach(::visit) }
+                is ReturnNode -> visit(node.value)
+                is ThrowNode -> visit(node.value)
+                is AsOpNode -> visit(node.expression)
+                is InfixFunctionCallNode -> { visit(node.node1); visit(node.node2) }
+                is ElvisOpNode -> { visit(node.primaryNode); visit(node.fallbackNode) }
+                is StringNode -> node.nodes.forEach(::visit)
+                is EnumEntryNode -> node.arguments.forEach(::visit)
+                is DestructuringDeclarationNode -> node.statements.forEach(::visit)
+                is FunctionValueParameterNode -> visit(node.defaultValue)
+                is ValueParameterDeclarationNode, is TypeNode, is TypeParameterNode,
+                is VariableReferenceNode, is ClassMemberReferenceNode, is IntegerNode,
+                is LongNode, is DoubleNode, is BooleanNode, is NullNode, is ValueNode,
+                is StringLiteralNode, is CharNode, is LabelNode, is BreakNode, is ContinueNode -> Unit
+            }
+        }
+        visit(analyzedScript)
+        val executableLines = positions.mapNotNull { position ->
+            projectFunctionRanges.firstOrNull { position.lineNum in it.second..it.third }
+                ?.let { it.first to (position.lineNum - it.second + 1) }
+        }.toSet()
+        return DebugAstIndex(executableLines, statements, nodes).also { debugAstIndexCache = it }
+    }
+
+    /** Lines where Kotlite's statement hook can stop, derived directly from its analyzed AST. */
+    private fun debugExecutableLines(): Set<Pair<String, Int>> = debugAstIndex().executableLines
+
+    /** Make a paused object value available to the passive object inspector. */
+    private fun debugObjectHandle(value: RuntimeValue): String? {
+        if (value !is ClassInstance) return null
+        // A debugger-local object is already available through its suspended
+        // call frame. Do not create a synthetic REPL binding for it: that
+        // binding would belong to the local frame, but normal handle cleanup
+        // runs after the frame has been popped and would try to retire it from
+        // the global symbol table.
+        val id = handles.entries.firstOrNull { it.value === value }?.key ?: "object-${nextHandle++}".also {
+            handles[it] = value
+        }
+        managedHandles += id
+        debugPinnedHandles += id
+        return id
+    }
+
+    /** Step in only helps when this statement can enter code defined by the project. */
+    private fun debugStepInAvailable(position: SourcePosition): Boolean {
+        val index = debugAstIndex()
+        val fileName = projectFunctionRanges.firstOrNull { position.lineNum in it.second..it.third }?.first
+            ?: return false
+        val projectPosition: (SourcePosition) -> Boolean = { candidate ->
+            projectFunctionRanges.any { candidate.lineNum in it.second..it.third }
+        }
+        val projectFunctions = index.nodes.filterIsInstance<FunctionDeclarationNode>()
+            .filter { projectPosition(it.position) }
+            .mapNotNull { it.transformedRefName }
+            .toSet()
+        val projectClasses = index.nodes.filterIsInstance<ClassDeclarationNode>()
+            .filter { projectPosition(it.position) }
+            .map { it.fullQualifiedName }
+            .toSet()
+        val projectProperties = index.nodes.filterIsInstance<PropertyDeclarationNode>()
+            .filter { projectPosition(it.position) }
+            .mapNotNull { it.transformedRefName }
+            .toSet()
+        val projectGetters = index.nodes.filterIsInstance<PropertyDeclarationNode>()
+            .filter { projectPosition(it.position) && it.accessors?.getter != null }
+            .map { it.name }
+            .toSet()
+
+        fun projectCall(call: FunctionCallNode): Boolean = when (call.callableType) {
+            CallableType.Function, CallableType.ClassMemberFunction, CallableType.ExtensionFunction ->
+                call.functionRefName in projectFunctions
+            CallableType.Constructor -> call.functionRefName in projectClasses
+            CallableType.Property -> call.functionRefName in projectProperties
+            null -> false
+        }
+
+        fun containsProjectCall(node: ASTNode?, inCallback: Boolean = false): Boolean {
+            if (node == null) return false
+            return when (node) {
+                is FunctionCallNode -> projectCall(node) ||
+                    containsProjectCall(node.function, inCallback) ||
+                    node.arguments.any { containsProjectCall(it.value, true) } ||
+                    containsProjectCall(node.resolvedInvoke, inCallback)
+                is FunctionCallArgumentNode -> containsProjectCall(node.value, inCallback)
+                is LambdaLiteralNode -> inCallback && node.body.statements.any { containsProjectCall(it, true) }
+                is PropertyDeclarationNode -> containsProjectCall(node.initialValue, inCallback)
+                is AssignmentNode -> containsProjectCall(node.wholeFunctionCall, inCallback) ||
+                    containsProjectCall(node.preAssignFunctionCall, inCallback) ||
+                    containsProjectCall(node.assignFunctionCall, inCallback) ||
+                    containsProjectCall(node.subject, inCallback) || containsProjectCall(node.value, inCallback)
+                is BinaryOpNode -> containsProjectCall(node.call, inCallback) ||
+                    containsProjectCall(node.node1, inCallback) || containsProjectCall(node.node2, inCallback)
+                is UnaryOpNode -> containsProjectCall(node.assignFunctionCall, inCallback) ||
+                    containsProjectCall(node.node, inCallback)
+                is NavigationNode -> node.member.name in projectGetters || containsProjectCall(node.subject, inCallback)
+                is IndexOpNode -> containsProjectCall(node.call, inCallback) ||
+                    containsProjectCall(node.subject, inCallback) || node.arguments.any { containsProjectCall(it, inCallback) }
+                is InfixFunctionCallNode -> containsProjectCall(node.call, inCallback) ||
+                    containsProjectCall(node.node1, inCallback) || containsProjectCall(node.node2, inCallback)
+                is ReturnNode -> containsProjectCall(node.value, inCallback)
+                is ThrowNode -> containsProjectCall(node.value, inCallback)
+                is AsOpNode -> containsProjectCall(node.expression, inCallback)
+                is IfNode -> containsProjectCall(node.condition, inCallback)
+                is WhileNode -> containsProjectCall(node.condition, inCallback)
+                is ForNode -> containsProjectCall(node.subject, inCallback)
+                is DoWhileNode -> false // The body reaches its next statement boundary before the condition.
+                is WhenNode -> containsProjectCall(node.subject, inCallback) || node.entries.any { entry ->
+                    entry.conditions.any { containsProjectCall(it, inCallback) }
+                }
+                is WhenSubjectNode -> containsProjectCall(node.value, inCallback)
+                is WhenEntryNode -> node.conditions.any { containsProjectCall(it, inCallback) }
+                is WhenConditionNode -> containsProjectCall(node.call, inCallback) || containsProjectCall(node.expression, inCallback)
+                is ElvisOpNode -> containsProjectCall(node.primaryNode, inCallback) || containsProjectCall(node.fallbackNode, inCallback)
+                is StringNode -> node.nodes.any { containsProjectCall(it, inCallback) }
+                else -> false
+            }
+        }
+
+        val statement = index.statements.firstOrNull { it.position == position } ?: return false
+        return fileName.isNotEmpty() && containsProjectCall(statement)
+    }
+
+    /** Format only primitive payloads and runtime type metadata; never call student code. */
+    private fun debugValueDisplay(value: RuntimeValue?): String? = when (value) {
+        null -> null
+        NullValue -> "null"
+        UnitValue -> "Unit"
+        is IntValue -> value.value.toString()
+        is LongValue -> value.value.toString()
+        is DoubleValue -> value.value.toString()
+        is BooleanValue -> value.value.toString()
+        is StringValue -> {
+            val truncated = value.value.length > 160
+            val content = if (truncated) value.value.take(160) + "…" else value.value
+            buildString {
+                append('"')
+                content.forEach { character ->
+                    append(when (character) {
+                        '\\' -> "\\\\"
+                        '"' -> "\\\""
+                        '\n' -> "\\n"
+                        '\r' -> "\\r"
+                        '\t' -> "\\t"
+                        else -> character.toString()
+                    })
+                }
+                append('"')
+            }
+        }
+        is com.sunnychung.lib.multiplatform.kotlite.model.CharValue -> value.value.toString()
+        else -> "(${value.type().descriptiveName})"
+    }
+
+    /** Resume the exact suspended student coroutine at its current debug pause. */
+    fun resumeDebug(action: String): String {
+        val continuation = debugContinuation ?: return errorMessage("There is no active debugger pause.", "request")
+        if (debugMode != "paused") return errorMessage("The debugger pause is no longer active.", "request")
+        debugMode = when (action) {
+            "step" -> "step".also { debugTargetDepth = debugPausedDepth }
+            "stepIn" -> "stepIn"
+            "continue" -> "continue"
+            else -> return errorMessage("Unknown debugger action.", "request")
+        }
+        debugContinuation = null
+        continuation.resume(Unit)
+        return result("unit", UnitValue)
+    }
+
+    /** Evaluate one explicitly requested getter inside the paused interpreter coroutine. */
+    fun startDebugInspectGet(objectId: String, propertyName: String, onComplete: (String) -> Unit): String {
+        if (debugMode != "paused") return errorMessage("The debugger is not paused.", "request")
+        val continuation = debugContinuation ?: return errorMessage("There is no active debugger pause.", "request")
+        if (debugInspectionRequest != null) return errorMessage("A getter is already being evaluated.", "request")
+        if (inspectionSource(objectId, propertyName) == null) return errorMessage("Property is no longer available.", "request")
+        debugInspectionRequest = DebugInspectionRequest(objectId, propertyName, onComplete)
+        debugContinuation = null
+        continuation.resume(Unit)
+        return result("started", UnitValue)
     }
 
     /** Read scheduler state from its owner; no duplicate simulation state lives here. */
@@ -868,17 +1255,18 @@ class KotliteSession {
 
     /** Starts one execution and returns before input waits or Thread.sleep. */
     fun startEvaluate(filename: String, source: String, onInput: (Int) -> Unit, onComplete: (String) -> Unit): String {
-        return startEvaluateInternal(filename, source, onInput, onComplete, emptySet())
+        return startEvaluateInternal(filename, source, onInput, onComplete, emptySet(), debugEligible = true)
     }
 
     /** Runs the main() of [filename]; an uncaught exception also goes to the terminal (RT-82). */
     fun startMain(filename: String, onInput: (Int) -> Unit, onComplete: (String) -> Unit): String {
         val arguments = if (filename in mainArgumentFiles) "emptyArray<String>()" else ""
-        return startEvaluateInternal(filename, "${mainFunctionName(filename)}($arguments)", onInput, onComplete, emptySet(), program = true)
+        return startEvaluateInternal(filename, "${mainFunctionName(filename)}($arguments)", onInput, onComplete, emptySet(), program = true, debugEligible = true)
     }
 
-    private fun startEvaluateInternal(filename: String, source: String, onInput: (Int) -> Unit, onComplete: (String) -> Unit, interactiveNames: Set<String>, unitOffsets: List<Int> = emptyList(), inspection: Boolean = false, program: Boolean = false): String {
+    private fun startEvaluateInternal(filename: String, source: String, onInput: (Int) -> Unit, onComplete: (String) -> Unit, interactiveNames: Set<String>, unitOffsets: List<Int> = emptyList(), inspection: Boolean = false, program: Boolean = false, debugEligible: Boolean = false): String {
         if (executionCompleted != null) return errorMessage("Another runtime command is running.")
+        if (debugEligible && debugMode == null) debugMode = "continue"
         inputRequested = onInput
         executionCompleted = onComplete
         restartRuntimeSlice()
@@ -887,8 +1275,15 @@ class KotliteSession {
             override fun resumeWith(result: Result<String>) {
                 inputContinuation = null
                 inputRequested = null
+                debugContinuation = null
+                if (debugEligible) {
+                    debugPinnedHandles.clear()
+                    reconcileReferences()
+                }
                 executionCompleted?.invoke(result.getOrElse { error(it, "runtime", true) })
                 executionCompleted = null
+                debugMode = null
+                debugPauseCallback = null
             }
         })
         return result("started", UnitValue)
@@ -936,6 +1331,7 @@ class KotliteSession {
         val reachable = reachableRuntimeValues(roots, bluePlay::retainedBy)
         handles.toList().forEach { (id, value) ->
             if (value in reachable) managedHandles += id
+            else if (id in debugPinnedHandles) Unit
             else if (id in managedHandles) {
                 bindingNames.remove(id)?.let(::retire)
                 handles.remove(id)
@@ -1014,7 +1410,7 @@ class KotliteSession {
         return startEvaluateInternal("<BlueK constructor>", expression, onInput, { evaluated ->
             if (evaluated.startsWith("{\"kind\":\"error\"")) { onComplete(evaluated); return@startEvaluateInternal }
             onComplete(createdReference(requestedName))
-        }, setOf(requestedName))
+        }, setOf(requestedName), debugEligible = true)
     }
 
     /** Bind an existing handle; the object itself is never copied or recreated. */
@@ -1097,7 +1493,12 @@ class KotliteSession {
     }
 
     /** Follow a stored object reference without running its getter or toString(). */
-    fun inspectField(objectId: String, propertyName: String): String {
+    fun inspectField(objectId: String, propertyName: String): String = inspectField(objectId, propertyName, reconcile = true)
+
+    /** Follow an object value captured from a paused local without reconciling live locals as global roots. */
+    fun inspectDebugField(objectId: String, propertyName: String): String = inspectField(objectId, propertyName, reconcile = false)
+
+    private fun inspectField(objectId: String, propertyName: String, reconcile: Boolean): String {
         val owner = handles[objectId] as? ClassInstance
             ?: return errorMessage("Object handle is no longer available.")
         if (!propertyName.matches(Regex("[A-Za-z_]\\w*")) || propertyName !in propertyNames[owner.type().name].orEmpty() ||
@@ -1106,8 +1507,9 @@ class KotliteSession {
         val value = owner.readBackingPropertyByDeclaredName(propertyName)
         if (value !is ClassInstance || value is DelegatedValue<*>)
             return errorMessage("Object reference is not available.")
-        val referenceId = registerExpressionValue(value)
-        reconcileReferences()
+        val referenceId = if (reconcile) registerExpressionValue(value) else debugObjectHandle(value)
+            ?: return errorMessage("Object reference is not available.")
+        if (reconcile) reconcileReferences()
         return inspect(referenceId)
     }
 
@@ -1194,6 +1596,11 @@ class KotliteSession {
         inputContinuation = null
         executionCompleted = null
         inputRequested = null
+        debugContinuation = null
+        debugInspectionRequest = null
+        debugMode = null
+        debugPauseCallback = null
+        debugPinnedHandles.clear()
         handles.clear()
         bindingNames.clear()
         references.clear()

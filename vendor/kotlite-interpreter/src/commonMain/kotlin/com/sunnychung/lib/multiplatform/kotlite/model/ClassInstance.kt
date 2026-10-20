@@ -215,6 +215,26 @@ open class ClassInstance(
         }
     }
 
+    /** Read only stored member values; computed getters are listed without execution. */
+    fun debugStoredProperties(): List<DebugStoredProperty> = clazz?.getAllMemberProperties()
+        ?.map { (name, property) ->
+            val computed = hasCustomGetter(name)
+            val accessor = getPropertyHolder(name)
+            val value = if (computed) null else when (accessor) {
+                is RuntimeValueHolder -> accessor.value
+                is RuntimeValueDelegate -> (accessor.backing as? RuntimeValueHolder)?.value
+                else -> null
+            }
+            DebugStoredProperty(name, value, value?.type()?.descriptiveName ?: property.type.descriptiveName, computed)
+        }
+        ?: emptyList()
+
+    private fun hasCustomGetter(declaredName: String): Boolean {
+        val accessors = clazz?.getDeclaredPropertyAccessorsInThisClass()?.get(declaredName)
+        if (accessors != null) return accessors.getter != null
+        return parentInstance?.hasCustomGetter(declaredName) ?: false
+    }
+
     /**
      * The member properties of all parts of this object. An overridden property is in both parts
      * (`open val laut` and `override val laut`), so this is a list, not a map by name: merging

@@ -32,6 +32,9 @@
   export let shortcutsHelpOpen: boolean;
   export let settingsNotice: boolean;
   export let runMain: () => Promise<void>;
+  export let requestDebugPause: () => Promise<void>;
+  export let stopDebug: () => Promise<void>;
+  export let debugPauseRequested: boolean;
   export let openFeedback: () => void;
 </script>
 
@@ -80,6 +83,12 @@
     disabled={!canExecute || !mainEntries.length}
     >{t("ui.sidebar.startMain")}</button
   >
+  {#if phase === "running"}
+    <button on:click={() => void requestDebugPause()} disabled={debugPauseRequested}>
+      {debugPauseRequested ? t("ui.debug.pauseRequested") : t("ui.debug.pause")}
+    </button>
+    <button on:click={() => void stopDebug()}>{t("ui.debug.stop")}</button>
+  {/if}
   <details class="sidebar-testing">
     <summary
       class="sidebar-testing-toggle"

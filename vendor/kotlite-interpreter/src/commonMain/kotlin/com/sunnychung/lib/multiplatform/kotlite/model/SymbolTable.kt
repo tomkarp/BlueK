@@ -56,8 +56,35 @@ open class SymbolTable(
     internal val propertyValues: MutableMap<String, RuntimeValueAccessor> get() = propertyValuesStore ?: SymbolMap<RuntimeValueAccessor>().also { propertyValuesStore = it }
     private var transformedSymbolsStore: MutableMap<Pair<IdentifierClassifier, String>, String>? = null
     private var transformedSymbolsByDeclaredNameStore: MutableMap<Pair<IdentifierClassifier, String>, String>? = null
+    private val debugDeclaredNames = mutableMapOf<String, String>()
     internal val transformedSymbols: MutableMap<Pair<IdentifierClassifier, String>, String> get() = transformedSymbolsStore ?: mutableMapOf<Pair<IdentifierClassifier, String>, String>().also { transformedSymbolsStore = it } // only use in SemanticAnalyzer. transformed name -> original name
     internal val transformedSymbolsByDeclaredName: MutableMap<Pair<IdentifierClassifier, String>, String> get() = transformedSymbolsByDeclaredNameStore ?: mutableMapOf<Pair<IdentifierClassifier, String>, String>().also { transformedSymbolsByDeclaredNameStore = it } // only use in SemanticAnalyzer. original name -> transformed name
+
+    /** Read already-stored local values; delegated properties are unavailable without invoking getters. */
+    fun debugStoredProperties(): List<DebugStoredProperty> {
+        val result = propertyDeclarationsStore.orEmpty().mapNotNull { (transformed, property) ->
+            val name = debugDeclaredNames[transformed] ?: return@mapNotNull null
+            val holder = propertyValuesStore?.get(transformed) as? RuntimeValueHolder
+            DebugStoredProperty(name, holder?.value, property.type.descriptiveName)
+        }.toMutableList()
+        // Constructors bind `this` as a declared symbol before property
+        // initializers and init blocks run. It is not registered through the
+        // receiverNames path used by member functions, so expose that binding
+        // to debugger snapshots as well.
+        val declaredThis = propertyDeclarationsStore?.get("this")
+        val declaredThisValue = (propertyValuesStore?.get("this") as? RuntimeValueHolder)?.value
+        if (declaredThis != null && result.none { it.name == "this" }) {
+            result += DebugStoredProperty("this", declaredThisValue, declaredThis.type.descriptiveName)
+        }
+        if (receiverNames?.contains("this") == true && result.none { it.name == "this" }) {
+            result += DebugStoredProperty("this", receiverValue, receiverPropertyType?.type?.descriptiveName ?: "Any")
+        }
+        return result
+    }
+
+    fun registerDebugName(transformedName: String, declaredName: String) {
+        debugDeclaredNames[transformedName] = declaredName
+    }
 
     // Most runtime call/block scopes never declare classes, functions or types.
     // Allocate their metadata tables only if actually used, not on every act call.
@@ -1193,3 +1220,5 @@ open class SymbolTable(
     }
 
 }
+
+data class DebugStoredProperty(val name: String, val value: RuntimeValue?, val type: String, val computed: Boolean = false)

@@ -24,6 +24,7 @@
   import ObjectNameDialog from "./components/ObjectNameDialog.svelte";
   import AppToolbar from "./components/AppToolbar.svelte";
   import AppSidebar from "./components/AppSidebar.svelte";
+  import DebuggerWindow from "./components/DebuggerWindow.svelte";
   import FeedbackDialog from "./components/FeedbackDialog.svelte";
   import { FeedbackWorkspace } from "./workspace/FeedbackWorkspace.svelte";
   import ClassDiagram from "./components/ClassDiagram.svelte";
@@ -52,6 +53,7 @@
     ui: () => ui,
     objects: () => objects,
     terminal: () => terminal,
+    session: () => session,
   });
   const session: ExecutionWorkspace = new ExecutionWorkspace({
     play: () => play,
@@ -463,6 +465,9 @@
       openTests={() => (tests.open = true)}
       runTests={() => tests.run()}
       runMain={session.runMain}
+      requestDebugPause={session.requestDebugPause}
+      stopDebug={session.stopDebug}
+      debugPauseRequested={session.runtime.debugPauseRequested || false}
       bind:settingsNotice={ui.settingsNotice}
       {offlineBuild}
       bind:offlineDownloadOpen={ui.offlineDownloadOpen}
@@ -642,6 +647,12 @@
     commentShortcutLabel={ui.commentShortcutLabel}
     formatShortcutLabel={ui.formatShortcutLabel}
     codeMirror={editor.codeMirror}
+    breakpointLines={editor.linesFor}
+    toggleBreakpointAt={editor.toggleBreakpointAt}
+    updateBreakpoints={editor.updateBreakpoints}
+    toggleBreakpoint={editor.toggleBreakpoint}
+    debug={session.runtime.debug}
+    editable={!session.programActive}
     closeEditor={editor.closeEditor}
     closeAllEditors={editor.closeAllEditors}
     selectEditorTab={editor.selectEditorTab}
@@ -687,6 +698,18 @@
     saveField={objects.saveField}
     inspectFieldReference={objects.inspectFieldReference}
     beginFieldEdit={objects.beginFieldEdit}
+  />
+  <DebuggerWindow
+    phase={session.runtime.phase}
+    activeExecutionId={session.runtime.activeExecutionId}
+    debugPauseRequested={session.runtime.debugPauseRequested || false}
+    debugSessionActive={session.runtime.debugSessionActive || false}
+    debugInspectionActive={session.runtime.debugInspectionActive || false}
+    debug={session.runtime.debug}
+    debugAction={session.debugAction}
+    requestDebugPause={session.requestDebugPause}
+    stopDebug={session.stopDebug}
+    inspectObject={objects.inspectObject}
   />
   <TestPanel
     {tests}

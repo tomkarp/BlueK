@@ -17,6 +17,9 @@ Keep those IDs stable and cite the description. Missing numbers are not new IDs
 available for reuse. “Recorded” refers to the prior evidence, not this docs edit.
 Unless explicitly stated, visual user acceptance remains pending.
 
+Before publishing the debugger, compare BluePlay project performance with the
+pre-debugger baseline. This check is intentionally pending (requested 2026-10-21).
+
 | ID | Behavior | Recorded evidence / remaining acceptance |
 | --- | --- | --- |
 | GUI-01 | Project templates, demo grouping and order | Recorded browser pass; `test:blueplay-demos` |
@@ -318,8 +321,115 @@ Unless explicitly stated, visual user acceptance remains pending.
 | GUI-144 | BluePlay information in New Project links to the BluePlay documentation in BlueK | Chromium test passed with GUI-01 (2026-10-18); German panel inspected by the agent at 800×600. User visual acceptance pending. |
 | GUI-145 | Save / Export → Export BlueJ Project downloads `<name>.zip` with the BlueJ library and all standard media; importing it restores the BluePlay project | Chromium pass (2026-10-18); German dialog inspected by the agent at 800×600. User acceptance in BlueJ pending. |
 | GUI-146 | After a BlueJ export, a notice names left-out test classes and MP3 sounds (BluePlay in BlueJ plays WAV only), but only if the project has them; it stays until closed; no MP3 conversion | Chromium pass with GUI-145 and EXP-17 (2026-10-18), including two simulated minutes without hiding and closing with ×; German test-class notice inspected by the agent in the dev server. |
+| DBG-01 | A breakpoint starts debugging main; Step in is enabled only when the current instruction can enter project code; Step and Continue work and locals are inspectable | Chromium GUI pass (2026-10-20): medium-gray filled chevron sits behind the red breakpoint dot; the lighter gray improves dot visibility while keeping the arrow visible. Arrow and highlight share one source position without adding gutter width. Editor actions and breakpoint changes are locked while paused. Runtime smoke verifies Step in reaches a constructor property initializer. New assertions for the Step in enabled state are written but not run. Visual user acceptance remains open. |
+| DBG-02 | Multiple gutter breakpoints stop an ordinary main run before each marked statement; Step in is disabled for standard-library-only instructions | Chromium GUI pass (2026-10-20): closing-brace line is rejected; an executable-line breakpoint survives recompilation and execution prints expected output. Latest built-in-browser check confirmed two breakpoints both survive compilation and stop on lines 2 and 3. New Step in assertion is written but not run. |
+| DBG-03 | Gutter breakpoint stops an explicit object-method call without `main`, showing parameters, `for` loop locals and receiver attributes in a separate window | Chromium verifies `n = 4`, `i = 1`, stored `name = "Wuffi"` rendered with string delimiters, and lists computed `label` as not evaluated. Runtime smoke verifies the getter counter stays zero. Continue re-hits the loop breakpoint, then finishes with output 5, 6 and 7 (2026-10-20). |
+| DBG-04 | Request Pause during a running loop, suspend at the next safe project step and stop | Chromium pass (2026-10-20): debugger window is absent during a normal run and Pause remains available in the sidebar; it opens on the requested pause. Stop from the paused state works. Stop during terminal input remains open. |
+| DBG-05 | When stepping into another file at the same line number, highlight and arrow follow the reported file and line; breakpoint markers persist across tab switches | Added browser regression for Main.kt line 2 → Tier.kt line 2, then back to Main.kt line 3; built-in-browser run confirmed the highlight follows line 2 and both Main breakpoints remain visible and active. Automated run is blocked by worktree write permissions (EPERM). |
+| DBG-06 | Breakpoint dots keep the same position and size on inactive rows and inside the current-line chevron, including two-digit line numbers; both have the same flat style | Built-in-browser check with breakpoints on lines 2 and 10: horizontal centers and dimensions match exactly; both dot centers and the arrow center align with their gutter row centers to within 0.01 CSS px. Both dots use the same solid red fill and round shape with no shadow. Automated GUI assertion updated; light and dark rendering inspected. |
+| DBG-07 | Step over a constructor call and pause in the caller; Step in may enter the constructor | Added a browser regression for `val t = Tier()`; constructor activation records now count as interpreted frames for debugger depth. |
+| DBG-08 | Step pauses on statements inside `init` blocks; debugger locals and attributes show simple values directly and open the shared object inspector for object values | Implementation and regression checklist updated (2026-10-20). Kotlin build passed. Built-in-browser inspection of `exception.bluek.json` exposed an NPE after stepping through `Tier.bellen()`; fixed below and verified a full step-through completes without an exception. The constructor `init` browser case now also confirms attributes show the partially built object and do not evaluate computed getters. Object-valued attributes now use the same inspectable object reference as locals; this follow-up has not been browser-verified. |
+| DBG-09 | Step through a `for` loop returns to its header between body iterations, without duplicating the initial header pause; the previous loop value remains visible at the header | Built-in-browser pass (2026-10-20): the initial `Tier.kt:10` pause has no `i`; Step enters line 11 with `i = 1`; Step returns to line 10 with `i = 1`; Step there advances to line 11 with `i = 2`. |
+| DBG-10 | While paused, breakpoint markers can be added and removed from the gutter or editor action; comment and format actions appear disabled | Built-in-browser pass (2026-10-20): removed the breakpoint at the paused line, added one on another line, then removed it; comment and format actions were disabled in the accessibility tree and visibly gray. |
+| DBG-11 | While stepping through construction, the debugger shows the object taking shape: all attributes appear immediately, assigned properties gain values, remaining properties are uninitialized, and computed properties remain unevaluated | Built-in-browser pass (2026-10-20): before `name` initialization, showed `name` and `alter` as uninitialized and `rest` as computed without running its getter; after one Step, showed `name = "Wuffi"`, with `alter` still uninitialized and `rest` unevaluated. The `init` block pause showed `name = "Wuffi"`, `alter = 0` and `rest` still unevaluated. |
+| DBG-12 | Step in to a constructor with a primary-constructor property pauses on its class-header line before assigning that attribute; all stored attributes are already listed, and a constructor without property parameters proceeds to its first initializer | Runtime smoke and Chromium GUI case passed (2026-10-20): `NamedBox.kt:1` showed both `name` and later `value` as uninitialized; Step advanced to line 2 with `name = "Bello"`. The existing parameterless-constructor smoke still pauses first at its property initializer (`Box.kt:2`). Initial GUI attempts used a stale accessible label and a non-visible gutter spacer; corrected test passed. |
+| DBG-13 | Debugger attributes label computed properties without evaluating them; object inspectors evaluate computed properties automatically while debugging and refresh them after each step | Browser regression initially reproduced a loop: getter inspection re-emitted the same source statement as a fresh pause, which retriggered inspection and kept Step disabled. Fixed by re-suspending at the original pause without a new pause event; breakpoints are ignored during this inspector-only evaluation. Kotlin bundle build, typecheck, and focused Chromium GUI test passed (2026-10-21); Step was enabled after inspection and advanced to the next line with the refreshed value. |
 
 ## Recorded verification
+
+### Interactive debugger — 2026-10-20
+
+The checked-in Kotlin bundle pauses and resumes the same coroutine at
+breakpoints. Runtime smoke verified an explicit object method with no `main`,
+stored attributes, computed getters staying uncalled, rejection of a closing
+brace as a breakpoint, and Step in reaching a constructor property initializer.
+Chromium passed DBG-01 through DBG-04, including the movable debugger window,
+lockout of editing controls while paused, no debugger flash on normal runs and
+a breakpoint surviving recompilation. Typecheck (zero errors/warnings), i18n
+(766 messages), runtime smoke, Chromium GUI and `build:kotlite` passed. The
+first runtime smoke exposed that a pause did not set the resumable state; the
+first method-attribute run exposed that the receiver-binding scope was missing
+from debugger frames. Both were fixed and the final runs passed. An initial
+DBG-03 selector also matched both values lists; the test now scopes to locals.
+The first gutter browser run exposed missing empty gutter rows; the gutter now
+renders rows and refreshes markers when breakpoint state changes. The corrected
+test targets the executable second line, since the function declaration is not
+a step. No visual/user acceptance was performed.
+
+Follow-up: removed the standalone stepwise-start action and runtime entry point;
+debugging starts from a breakpoint during normal main or method execution. The
+filled, medium-gray execution arrow sits behind the red breakpoint marker inside
+the existing gutter and shares the same CodeMirror source-position field as the
+highlighted row, preventing arrow/highlight drift without adding gutter width.
+Chromium checks its style and marker order, plus alignment after a step, and
+that both clear after Continue. A tab switch could replace the document after
+setting the debug position, mapping the position to the document end; document
+replacement now happens first, followed by breakpoint/debug position updates.
+The follow-up now also resets debug and breakpoint positions when the active
+file changes, and suppresses editor change callbacks for programmatic tab
+switches so they cannot erase saved breakpoints. Chromium asserts the highlight
+is on the reported source line in main and an object method. The original four
+debugger cases passed (2026-10-20). Latest built-in-browser run confirmed that
+two breakpoints survive compilation and tab switches, and that stepping from
+Main.kt line 2 to Tier.kt line 2 highlights the right row. The plain and
+breakpoint arrows now share one SVG marker and measure 18×18 px at 16 px editor
+text size; the filled chevron sits behind a red dot with matching size and
+position on active and inactive rows. The medium-gray arrow tone is lighter
+than the previous gutter-matching gray to improve dot visibility. A built-in-browser check with two-digit
+line numbers confirmed matching horizontal centers and point dimensions in
+light and dark mode. The browser initially showed the arrow and dots about
+0.8–1 CSS px below the row center. Their CSS now positions all three at the
+gutter row center; browser measurements were within 0.01 CSS px, and DBG-01
+and DBG-06 assert alignment to within 0.15 CSS px. The updated automated cases could not run: Playwright hit
+EPERM unlinking `test-results/.last-run.json`; using `/tmp` for output then hit
+EPERM writing Vite's temporary config under `node_modules/.vite-temp`. User
+visual acceptance remains open.
+
+Follow-up: the supplied `exception.bluek.json` reproduced a `NullPointerException`
+after Step had traversed all five iterations in `Tier.bellen()`. Debugger
+snapshots had created a synthetic REPL binding for the local `t` object; after
+`main()` returned, cleanup tried to retire that frame-local binding from the
+global symbol table. Debugger-only object handles now refer directly to the
+paused runtime value, without adding a synthetic binding. The built-in browser
+reproduction stepped through all five iterations and completed with the
+expected output and no exception (2026-10-20). The same project without
+debugging also completed normally. Kotlin bundle build and `git diff --check`
+passed; no automated test was run for this follow-up.
+
+Follow-up: `for` loop control now invokes the debugger hook at the loop header
+between body iterations. The first header pause remains the one supplied by the
+enclosing block; a final exhausted-loop check does not add an extra pause. The
+previous iteration's `i` remains in scope during the header pause, then is
+removed before the next value is assigned. The built-in-browser check confirmed
+the sequence `Tier.kt:10 (no i)` → `Tier.kt:11 (i=1)` → `Tier.kt:10 (i=1)` →
+`Tier.kt:11 (i=2)`. `while` already exposes its condition between iterations
+through the same statement hook. Kotlin bundle build passed; no automated test
+was run for this follow-up.
+
+Follow-up: while paused, the built-in browser confirmed the editor breakpoint
+action removes a breakpoint from the current line and adds one to another line;
+the test marker was then removed. Comment and format actions were disabled in
+the accessibility tree and visibly gray. No automated test was run for this
+follow-up.
+
+Follow-up: debugger snapshots now expose the declared constructor `this`
+binding, which is distinct from the receiver binding used in ordinary member
+functions. This lets an `init` or property-initializer frame locate the object
+in the enclosing constructor frame. Built-in-browser inspection showed
+`name`, `alter` and computed `rest` before the first initializer; after one
+Step, `name` displayed as `"Wuffi"`, `alter` remained uninitialized, and
+`rest` stayed unevaluated. A further Step paused inside the `init` block with
+`name = "Wuffi"`, `alter = 0` and `rest` still unevaluated. The debugger heading
+now reads “Attribute” in German and “Attributes” in English. Kotlin bundle
+build and typecheck passed; no automated tests were run for this follow-up.
+
+Still open from the requested acceptance: call-stack selection and per-frame
+locals; bounded, expandable object/collection values;
+same-frame value-change marks; unbound-breakpoint status and safe remapping on
+edits; input/EOF and stale/double command race tests; multiple-main, German,
+keyboard, small-viewport and stop-during-run
+browser cases. The GUI panel currently shows the current frame's primitive or
+type summary only. These are not claimed as completed.
 
 ### Delayed val and refreshed feedback attachments — 2026-10-12
 

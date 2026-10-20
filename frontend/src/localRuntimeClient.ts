@@ -138,18 +138,23 @@ export class LocalRuntimeClient {
     const inputCommand = command.op === 'input';
     const simulationCommand = command.op === 'simulation';
     const deviceInput = command.op === 'key' || command.op === 'click';
-    const passiveDuringSimulation = command.op === 'key' || command.op === 'click' || command.op === 'inspect' || command.op === 'simulation' || inputCommand;
+    const debugControl = command.op === 'debugControl';
+    const debugBreakpoint = command.op === 'debugBreakpoint';
+    const passiveInspection = command.op === 'inspect' || command.op === 'inspectField';
+    const debugGetterInspection = command.op === 'inspectGet';
+    const debugPauseRequest = command.op === 'debugPauseRequest';
+    const passiveDuringSimulation = command.op === 'key' || command.op === 'click' || passiveInspection || command.op === 'simulation' || inputCommand;
     if (!passiveDuringSimulation && this.snapshot.simulation !== 'inactive' && this.snapshot.simulation !== 'paused') {
       throw new Error('BluePlay simulation is running. Stop it before executing code.');
     }
     const simulationPhaseAllowed = (simulationCommand || deviceInput) && (this.snapshot.phase === 'ready' || this.snapshot.phase === 'running' || this.snapshot.phase === 'waitingForInput');
-    if (this.snapshot.phase !== 'ready' && !simulationPhaseAllowed && !(inputCommand && this.snapshot.phase === 'waitingForInput') && !(this.snapshot.phase === 'faulted' && command.op === 'inspect' && this.worker)) {
+    if (this.snapshot.phase !== 'ready' && !simulationPhaseAllowed && !(inputCommand && this.snapshot.phase === 'waitingForInput') && !((debugControl || debugBreakpoint || passiveInspection || debugGetterInspection) && this.snapshot.phase === 'debugPaused') && ( !debugPauseRequest || this.snapshot.phase !== 'running' || !this.snapshot.activeExecutionId || command.executionId !== this.snapshot.activeExecutionId) && !(this.snapshot.phase === 'faulted' && command.op === 'inspect' && this.worker)) {
       throw new Error(this.snapshot.phase === 'running' ? 'Another runtime command is running.' : 'Reset or compile the project before running code.');
     }
     if (command.generationId && command.generationId !== this.snapshot.generationId) throw new Error('Stale runtime command.');
     const epoch = this.epoch;
     const previous = this.snapshot;
-    if (!inputCommand && !simulationCommand && !deviceInput && command.op !== 'inspect' && command.op !== 'inspectField' && command.op !== 'inspectGet')
+    if (!inputCommand && !simulationCommand && !deviceInput && !debugPauseRequest && command.op !== 'inspect' && command.op !== 'inspectField' && command.op !== 'inspectGet')
       this.update({ ...previous, phase: 'running' });
     try {
       const reply = await this.request({ ...command, generationId: previous.generationId, ...(inputCommand ? { inputRequestId: this.inputRequestId } : {}) });

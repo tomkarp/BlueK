@@ -92,6 +92,7 @@ a helper passing does not prove a visible browser interaction.
 | `npm run test:regression` | Combined checks, runtime/helpers, offline package and GUI suite |
 | `npm run browser-smoke` | Architecture rules, bundle, BluePlay API/runtime, curriculum Kotlin and runtime state |
 | `npm run test:runtime-state` | Real client/host/bundle with worker substitute: identity, snapshots, input, concurrency and stale replies |
+| `npm run test:debugger` / `npm run test:debugger:gui` | Real Kotlin-session pause/resume and getter-safety smoke; focused Chromium step and breakpoint interactions |
 | `npm run test:references` | Session namespace and reachability |
 | `npm run test:testing` | Test lifecycle, saved state, recording, failure and cancellation |
 | `npm run test:testing:portable` | Generated Kotlin unchanged under kotlin.test/JUnit Jupiter; requires Java, Gradle and Maven Central |

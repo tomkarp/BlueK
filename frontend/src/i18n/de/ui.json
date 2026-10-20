@@ -16,6 +16,26 @@
     "downloadBlueKForOfflineUse": "BlueK zur Offline-Nutzung herunterladen",
     "help": "Hilfe"
   },
+  "debug": {
+    "title": "Debugger",
+    "nextAt": "Als Nächstes: {0}, Zeile {1}",
+    "firstPauseHelp": "Die markierte Anweisung läuft als Nächstes. Mit Schritt führst du sie aus.",
+    "step": "Schritt",
+    "stepHelp": "Diese Anweisung ausführen. Aufgerufene Funktionen laufen ganz, sofern kein Haltepunkt greift.",
+    "stepIn": "Hinein",
+    "stepInHelp": "Folge dem nächsten Aufruf in deinen Projektcode. Deaktiviert, wenn die Anweisung keinen Projektaufruf enthält.",
+    "continue": "Weiter",
+    "stop": "Stopp",
+    "running": "Wird ausgeführt",
+    "pause": "Pause",
+    "pauseRequested": "Pause angefordert",
+    "variables": "Lokale Variablen",
+    "noVariables": "Hier sind noch keine lokalen Variablen vorhanden.",
+    "attributes": "Attribute",
+    "attributesHelp": "Berechnete Properties werden angezeigt, ohne ihren Getter auszuführen.",
+    "computedProperty": "Abgeleitetes Attribut",
+    "notInitialized": "nicht initialisiert"
+  },
   "common": {
     "compile": "Kompilieren",
     "settings": "Einstellungen",
@@ -178,6 +198,7 @@
     "closeCompilerWarnings": "Compilerwarnungen schließen",
     "closeCompilerErrors": "Kompilierfehler schließen",
     "resizeEditor0": "Größe des Editors {0} ändern",
+    "toggleBreakpoint": "Haltepunkt in aktueller Zeile umschalten",
     "collectEditorWindowsIntoTabs": "Editorfenster als Tabs zusammenfassen",
     "closeEditor": "Editor schließen"
   },

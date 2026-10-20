@@ -1,4 +1,5 @@
 import type { EditorWindowState } from "../uiTypes";
+import { tick } from "svelte";
 
 import { beginWindowDrag, beginWindowResize } from "../windowInteraction";
 import { createEditorActions } from "../editorActions";
@@ -9,6 +10,7 @@ import type { ProjectWorkspace } from "./ProjectWorkspace.svelte";
 import type { WorkspaceUi } from "./WorkspaceUi.svelte";
 import type { ObjectWorkspace } from "./ObjectWorkspace.svelte";
 import type { TerminalWorkspace } from "./TerminalWorkspace.svelte";
+import type { ExecutionWorkspace } from "./ExecutionWorkspace.svelte";
 interface EditorWorkspaceHost {
   project: () => Readonly<
     Pick<ProjectWorkspace, "currentFile" | "files" | "selectFile">
@@ -16,6 +18,7 @@ interface EditorWorkspaceHost {
   ui: () => Pick<WorkspaceUi, "activeWindow" | "dialogError">;
   objects: () => Pick<ObjectWorkspace, "dismissMenu">;
   terminal: () => Readonly<Pick<TerminalWorkspace, "terminalOpen">>;
+  session: () => Pick<ExecutionWorkspace, "setBreakpoint" | "runtime">;
 }
 
 export class EditorWorkspace {
@@ -26,6 +29,9 @@ export class EditorWorkspace {
   editorGroup: EditorWindowState | null = $state(null);
   editorFormatters = new Map<string, () => boolean>();
   editorCommenters = new Map<string, () => boolean>();
+  breakpointTogglers = new Map<string, () => void>();
+  debugNavigators = new Map<string, (line: number, column: number) => void>();
+  breakpoints = $state.raw<{ fileId: string; line: number }[]>([]);
   diagnosticsRun = $state(0);
   compilerDiagnostics: Diagnostic[] = $state.raw([]);
   diagnosticsByFile = $derived.by(() => {
@@ -43,7 +49,62 @@ export class EditorWorkspace {
   toggleEditorComments = (id: string) => {
     this.editorCommenters.get(id)?.();
   };
-  openEditor = (file = this.host.project().currentFile) => {
+  revealPosition = async (
+    fileName: string,
+    line: number,
+    column: number,
+    preserveInspectorFocus = false,
+  ) => {
+    const file = this.host.project().files.find((item) => item.fileName === fileName);
+    if (!file) return;
+    this.openEditor(file, !preserveInspectorFocus);
+    await tick();
+    const editor = this.editorWindows.find((item) => item.fileId === file.id);
+    if (editor) this.debugNavigators.get(editor.id)?.(line, column);
+  };
+  toggleBreakpoint = (id: string) => { this.breakpointTogglers.get(id)?.(); };
+  toggleBreakpointAt = async (fileId: string, line: number) => {
+    const file = this.host.project().files.find((item) => item.id === fileId);
+    if (!file) return;
+    const phase = this.host.session().runtime.phase;
+    if (phase !== "uncompiled" && phase !== "ready" && phase !== "debugPaused") return;
+    const existing = this.breakpoints.some((item) => item.fileId === fileId && item.line === line);
+    this.breakpoints = existing
+      ? this.breakpoints.filter((item) => item.fileId !== fileId || item.line !== line)
+      : [...this.breakpoints, { fileId, line }];
+    if (phase === "ready" || phase === "debugPaused") {
+      const enabled = !existing;
+      const accepted = await this.host.session().setBreakpoint(file.fileName, line, enabled);
+      if (accepted) return;
+      // The marker is optimistic while the worker validates it against Kotlite's
+      // analyzed AST. Revert only if the user has not toggled this line again.
+      const stillEnabled = this.breakpoints.some((item) => item.fileId === fileId && item.line === line);
+      if (stillEnabled !== enabled) return;
+      this.breakpoints = existing
+        ? [...this.breakpoints, { fileId, line }]
+        : this.breakpoints.filter((item) => item.fileId !== fileId || item.line !== line);
+    }
+  };
+  updateBreakpoints = (fileId: string, lines: number[]) => {
+    const file = this.host.project().files.find((item) => item.id === fileId);
+    if (!file) return;
+    const before = this.breakpoints.filter((item) => item.fileId === fileId).map((item) => item.line);
+    const after = [...new Set(lines)].filter((line) => line > 0).sort((a, b) => a - b);
+    if (before.join(",") === after.join(",")) return;
+    this.breakpoints = [...this.breakpoints.filter((item) => item.fileId !== fileId), ...after.map((line) => ({ fileId, line }))];
+  };
+  linesFor = (fileId: string) => this.breakpoints.filter((item) => item.fileId === fileId).map((item) => item.line);
+  syncBreakpoints = async () => {
+    const retained: { fileId: string; line: number }[] = [];
+    // Runtime commands share one worker channel. Register in order so each
+    // acknowledgement returns the runtime to `ready` before the next command.
+    for (const item of this.breakpoints) {
+      const file = this.host.project().files.find((candidate) => candidate.id === item.fileId);
+      if (file && await this.host.session().setBreakpoint(file.fileName, item.line, true)) retained.push(item);
+    }
+    this.breakpoints = retained;
+  };
+  openEditor = (file = this.host.project().currentFile, activate = true) => {
     if (!file) return;
     this.host.project().selectFile(file.id);
     const existing = this.editorWindows.find((item) => item.fileId === file.id);
@@ -87,7 +148,7 @@ export class EditorWorkspace {
     } else {
       this.activeEditorId = existing.id;
     }
-    this.host.ui().activeWindow = "editor";
+    if (activate) this.host.ui().activeWindow = "editor";
     this.host.objects().dismissMenu();
   };
   collectEditors = () => {
@@ -228,18 +289,22 @@ export class EditorWorkspace {
   readonly codeMirror = createEditorActions({
     formatters: this.editorFormatters,
     commenters: this.editorCommenters,
+    breakpointTogglers: this.breakpointTogglers,
+    debugNavigators: this.debugNavigators,
     setFormatError: (message) => {
       this.host.ui().dialogError = message;
     },
   }).codeMirror;
   hasWindows = $derived(this.editorWindows.length > 0);
   resetWindows = () => {
+    this.breakpoints = [];
     this.editorWindows = [];
     this.activeEditorId = "";
     this.editorGroup = null;
     this.editorTabbed = false;
   };
   removeFile = (fileId: string) => {
+    this.breakpoints = this.breakpoints.filter((item) => item.fileId !== fileId);
     this.editorWindows = this.editorWindows.filter(
       (item) => item.fileId !== fileId,
     );

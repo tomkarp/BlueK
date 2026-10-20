@@ -137,6 +137,21 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
     /** Used by interactive runtimes; see [CheckpointHook]. */
     var checkpointHook: CheckpointHook? = null
 
+    /** A debugger hook at statement boundaries. It is separate from loop yielding. */
+    var debugStatementHook: (suspend (SourcePosition, Int) -> Unit)? = null
+
+    /** Synthetic init-function calls do not add a user-visible Step depth. */
+    private var debugDepthTransparentCalls = 0
+
+    internal suspend fun <T> withTransparentDebugCall(block: suspend () -> T): T {
+        debugDepthTransparentCalls++
+        try {
+            return block()
+        } finally {
+            debugDepthTransparentCalls--
+        }
+    }
+
     /** Synchronous callbacks ([runImmediately]) currently on the stack. */
     private var synchronousCallbacks = 0
 
@@ -153,6 +168,15 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
      */
     val canSuspend: Boolean
         get() = nonResumableCallbacks == 0
+
+    /** Debug pauses are safe only outside synchronous native callbacks, including replayable ones. */
+    internal val canDebugPause: Boolean
+        get() = synchronousCallbacks == 0
+
+    internal suspend fun debugStatement(position: SourcePosition) {
+        if (!canDebugPause) return
+        debugStatementHook?.invoke(position, (callStack.functionCallDepth - debugDepthTransparentCalls).coerceAtLeast(0))
+    }
 
     /**
      * A loop inside a synchronous callback never yields. Yielding there would
@@ -268,6 +292,9 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
     }
 
     fun symbolTable() = callStack.currentSymbolTable()
+
+    /** Passive interpreter-owned view of active project call scopes for debugging. */
+    fun debugCallFrames() = callStack.debugFrames()
 
     suspend fun ASTNode.eval(): Any {
         return when (this) {
@@ -544,6 +571,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
     suspend fun PropertyDeclarationNode.eval() {
         val symbolTable = callStack.currentSymbolTable()
         val name = transformedRefName!!
+        symbolTable.registerDebugName(name, this.name)
         if (PropertyModifier.lateinit in modifiers) lateinitRefNames += name
         if (initialValue != null) {
             var value = initialValue.eval()
@@ -1155,6 +1183,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 if (!isVararg && !(functionNode is LambdaLiteralNode && it.name == "_")) {
                     val argumentType = valueParametersWithGenericsResolved[index].type
                     symbolTable.declareProperty(callPosition, it.transformedRefName!!, argumentType, false)
+                    symbolTable.registerDebugName(it.transformedRefName!!, it.name)
                     symbolTable.assign(
                         name = it.transformedRefName!!,
                         value = replaceArguments[index] ?: arguments[index] ?: (evaluateNode(it.defaultValue!!) as RuntimeValue)
@@ -1163,6 +1192,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 } else if (isVararg) {
                     val argumentType = varargListValueArgument!!.type()
                     symbolTable.declareProperty(callPosition, it.transformedRefName!!, argumentType, false)
+                    symbolTable.registerDebugName(it.transformedRefName!!, it.name)
                     symbolTable.assign(
                         name = it.transformedRefName!!,
                         value = varargListValueArgument,
@@ -1305,7 +1335,13 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
 
     suspend fun FunctionCallNode.evalCreateClassInstance(clazz: ClassDefinition, typeArguments: List<TypeNode>, replaceArguments: Map<Int, RuntimeValue> = emptyMap()): ClassInstance {
         enterCall(position)
-        callStack.push(functionFullQualifiedName = "class", scopeType = ScopeType.ClassInitializer, callPosition = this.position, frameName = "${clazz.name}.<init>")
+        callStack.push(
+            functionFullQualifiedName = "class",
+            scopeType = ScopeType.ClassInitializer,
+            callPosition = this.position,
+            isFunctionCall = true,
+            frameName = "${clazz.name}.<init>"
+        )
         try {
             // TODO generalize duplicated code
             val secondary = secondaryConstructorIndex?.let { clazz.secondaryConstructors[it] }
@@ -1397,12 +1433,31 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         val instance = ClassInstance(symbolTable, clazz.fullQualifiedName, clazz, typeArguments.toList(), parentInstance = parentInstance)
         if (clazz.isObjectDeclaration) clazz.objectInstance = instance
         if (clazz.isInner) instance.outerInstance = callArguments[0] as ClassInstance
+
+        // Bind the receiver before constructor-property assignment so debugger
+        // pauses on a primary-property parameter can inspect the partially built
+        // instance. No student code runs between this binding and the assignments.
+        val instanceType = TypeNode(callPosition, instance.clazz!!.fullQualifiedName, typeArguments.map { it.toTypeNode() }.emptyToNull(), false)
+        symbolTable.declareProperty(callPosition, "this", instanceType, false)
+        symbolTable.assign("this", instance)
+        var receiverClass: ClassDefinition? = instance.clazz
+        while (receiverClass != null) {
+            val receiverName = "this/${receiverClass.fullQualifiedName}"
+            symbolTable.declareProperty(callPosition, receiverName, instanceType, false)
+            symbolTable.assign(receiverName, instance)
+            receiverClass = receiverClass.superClass
+        }
+        symbolTable.bindOuterReceivers(callPosition, instance)
+
         val properties = clazz.primaryConstructor?.parameters?.filter { it.isProperty }?.map { it.parameter.transformedRefName!! }?.toMutableSet() ?: mutableSetOf()
 
         val nonPropertyArguments = mutableMapOf<String, Pair<ClassParameterNode, RuntimeValue>>()
         clazz.primaryConstructor?.parameters?.forEachIndexed { index, it ->
             val value = callArguments[index]
             if (it.isProperty) {
+                // A primary-constructor property is assigned on the class
+                // header line. Expose that assignment as a debugger step.
+                debugStatement(it.position)
                 instance.assign(name = it.parameter.transformedRefName!!, value = value)
 //                    instance.memberPropertyValues[it.parameter.transformedRefName!!] = value
             } else {
@@ -1417,22 +1472,6 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
 //            clazz.primaryConstructor?.parameters?.forEach {
 //                symbolTable.undeclareProperty(it.parameter.transformedRefName!!)
 //            }
-
-        // variable "this" is available after primary constructor. Register
-        // the receiver for every class in the hierarchy as well: inherited
-        // properties are transformed to names such as "this/Person" while a
-        // subclass instance is being initialized.
-        val instanceType = TypeNode(callPosition, instance.clazz!!.fullQualifiedName, typeArguments.map { it.toTypeNode() }.emptyToNull(), false)
-        symbolTable.declareProperty(callPosition, "this", instanceType, false)
-        symbolTable.assign("this", instance)
-        var receiverClass: ClassDefinition? = instance.clazz
-        while (receiverClass != null) {
-            val receiverName = "this/${receiverClass.fullQualifiedName}"
-            symbolTable.declareProperty(callPosition, receiverName, instanceType, false)
-            symbolTable.assign(receiverName, instance)
-            receiverClass = receiverClass.superClass
-        }
-        symbolTable.bindOuterReceivers(callPosition, instance)
 
 //            instance.memberPropertyValues.forEach {
 //                symbolTable.putPropertyHolder(instance.clazz!!.memberPropertyNameToTransformedName[it.key]!!, it.value)
@@ -1476,6 +1515,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 when (it) {
                     is PropertyDeclarationNode -> {
                         properties += it.transformedRefName!!
+                        if (it.initialValue != null) debugStatement(it.position)
                         val value = it.initialValue?.eval() as RuntimeValue?
                         value?.let { value ->
                             if (it.accessors != null) instance.assignBacking(it.name, this@Interpreter, value)
@@ -1491,17 +1531,19 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                             valueParameters = emptyList(),
                             body = it.block
                         )
-                        evalFunctionCall(
-                            callNode = FunctionCallNode(
-                                function = init, /* not used */
-                                arguments = emptyList(),
-                                declaredTypeArguments = emptyList(),
-                                position = callPosition,
-                            ),
-                            functionNode = init,
-                            extraScopeParameters = emptyMap(),
-                            extraTypeResolutions = typeParametersAndArguments /* type arguments */,
-                        )
+                        withTransparentDebugCall {
+                            evalFunctionCall(
+                                callNode = FunctionCallNode(
+                                    function = init, /* not used */
+                                    arguments = emptyList(),
+                                    declaredTypeArguments = emptyList(),
+                                    position = callPosition,
+                                ),
+                                functionNode = init,
+                                extraScopeParameters = emptyMap(),
+                                extraTypeResolutions = typeParametersAndArguments /* type arguments */,
+                            )
+                        }
                     }
 
                     else -> Unit
@@ -1635,6 +1677,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         if (!declaresNames) {
             var value: RuntimeValue = UnitValue
             for (statement in statements) {
+                debugStatement(statement.position)
                 statementPosition = statement.position
                 value = statement.eval() as? RuntimeValue ?: UnitValue
             }
@@ -1646,6 +1689,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
         val result = try {
             var value: RuntimeValue = UnitValue
             for (statement in statements) {
+                debugStatement(statement.position)
                 statementPosition = statement.position
                 value = statement.eval() as? RuntimeValue ?: UnitValue
             }
@@ -1691,7 +1735,12 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
 //        }
         // TODO detect infinite loop
         try {
-            while ((condition.eval() as BooleanValue).value) {
+            var firstCondition = true
+            while (run {
+                if (!firstCondition) debugStatement(position)
+                firstCondition = false
+                (condition.eval() as BooleanValue).value
+            }) {
                 checkpoint()
                 try {
                     body?.eval()
@@ -1713,7 +1762,10 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                 } catch (e: NormalContinueException) {
                     if (!isOwnJump(e.label, label)) throw e
                 }
-            } while ((condition.eval() as BooleanValue).value)
+            } while (run {
+                debugStatement(position)
+                (condition.eval() as BooleanValue).value
+            })
         } catch (e: NormalBreakException) {
             if (!isOwnJump(e.label, label)) throw e
         }
@@ -2338,11 +2390,18 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
 
             // `break` and `continue` end the loop or this iteration, as in `while` (RT-55).
             try {
+                var firstCondition = true
                 while ((hasNextCall.eval() as BooleanValue).value) {
+                    if (!firstCondition) {
+                        debugStatement(position)
+                        variables.forEach { symbolTable().undeclareProperty(it.transformedRefName!!) }
+                    }
+                    firstCondition = false
                     checkpoint()
                     val nextValue = nextCall.eval()
 
                     variables.forEachIndexed { index, it ->
+                        symbolTable().registerDebugName(it.transformedRefName!!, it.name)
                         symbolTable().declareProperty(
                             position = position,
                             name = it.transformedRefName!!,
@@ -2358,9 +2417,6 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                         if (!isOwnJump(e.label, label)) throw e
                     }
 
-                    variables.forEach {
-                        symbolTable().undeclareProperty(it.transformedRefName!!)
-                    }
                 }
             } catch (e: NormalBreakException) {
                 if (!isOwnJump(e.label, label)) throw e

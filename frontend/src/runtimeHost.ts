@@ -20,6 +20,11 @@ export interface KotliteSessionBridge {
   startEvaluate(filename: string, source: string, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
   startLoadProject(filenames: string[], sources: string[], libraryId: string | null, libraryVersion: number, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
   startMain(filename: string, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
+  resumeDebug(action: string): string;
+  startDebugInspectGet(objectId: string, propertyName: string, onComplete: (result: string) => void): string;
+  requestDebugPause(): string;
+  setDebugPauseCallback(callback: ((pause: string) => void) | null): void;
+  setDebugBreakpoint(fileName: string, line: number, enabled: boolean): string;
   startCreate(className: string, argumentsSource: string, requestedName: string, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
   startInvoke(objectId: string, methodName: string, argumentsSource: string, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
   startSet(objectId: string, propertyName: string, valueSource: string, onInput: (requestId: number) => void, onComplete: (result: string) => void): string;
@@ -34,6 +39,7 @@ export interface KotliteSessionBridge {
   remove(objectId: string, name: string): string;
   inspect(objectId: string): string;
   inspectField(objectId: string, property: string): string;
+  inspectDebugField(objectId: string, property: string): string;
   enqueueInput(text: string): string;
   enqueueEof(): string;
   setKey(key: string, pressed: boolean): string;
@@ -67,9 +73,10 @@ export class RuntimeHost {
   private session: KotliteSessionBridge | null = null;
   private snapshot: RuntimeSnapshot = initialSnapshot();
   private sequence = 0;
+  private debugPauseSequence = 0;
   private lastOutputPublishAt = -Infinity;
   private outputTimer: ReturnType<typeof setTimeout> | null = null;
-  private active: { executionId: number; inputRequestId?: number; automaticSimulation?: boolean } | null = null;
+  private active: { executionId: number; inputRequestId?: number; automaticSimulation?: boolean; debugEligible?: boolean } | null = null;
   private lastStage: BluePlayStage | undefined;
   private lastFrameAt = -Infinity;
   /** `cancelStep` cancels the scheduled next step. */
@@ -82,7 +89,14 @@ export class RuntimeHost {
     const inspections: Record<string, RuntimeValue> = {};
     const references = this.session ? JSON.parse(this.session.referenceSnapshot()) : { references: [], liveObjectIds: [] };
     if (includeInspections) {
-      for (const handle of references.liveObjectIds) {
+      // Locals inspected from a paused stack are not project roots, so they
+      // disappear from referenceSnapshot(). Keep their windows populated for
+      // every pause snapshot in the same debug session.
+      const handles = new Set<string>(references.liveObjectIds);
+      if (this.snapshot.phase === 'debugPaused') {
+        Object.keys(this.snapshot.inspections).forEach(handle => handles.add(handle));
+      }
+      for (const handle of handles) {
         try { inspections[handle] = JSON.parse(this.session!.inspect(handle)); }
         catch { inspections[handle] = { kind: 'error', objectId: handle, display: 'Inspection unavailable.' }; }
       }
@@ -110,6 +124,22 @@ export class RuntimeHost {
     this.snapshot = { ...this.snapshot, stage: this.lastStage, simulation: this.simulation.state, error: reportError && response.kind === 'error' ? response.display || 'Runtime error' : null };
     if (response.fatal) this.snapshot.phase = 'faulted';
     return { id, generationId: this.snapshot.generationId, response, snapshot: this.snapshot };
+  }
+
+  /** Keep debugger-only object handles visible when refreshing the runtime snapshot. */
+  private publishDebugInspection(id: number, response: RuntimeValue, objectIds: string[]): WorkerReply {
+    const reply = this.publish(id, response, false);
+    const inspections = { ...reply.snapshot.inspections };
+    for (const objectId of objectIds) {
+      if (!objectId) continue;
+      try {
+        inspections[objectId] = JSON.parse(this.session!.inspect(objectId)) as RuntimeValue;
+      } catch {
+        // Keep the last available view if a debugger-only object has expired.
+      }
+    }
+    this.snapshot = { ...reply.snapshot, inspections };
+    return { ...reply, snapshot: this.snapshot };
   }
 
   private publishInputState(id: number, response: RuntimeValue): WorkerReply {
@@ -232,12 +262,63 @@ export class RuntimeHost {
         return;
       }
       if (!this.session || command.generationId !== this.snapshot.generationId) throw new RequestError('Stale or missing runtime generation.');
+      if (command.op === 'debugControl') {
+        const pause = this.snapshot.debug;
+        if (!this.active || this.snapshot.phase !== 'debugPaused' || !pause || pause.executionId !== command.executionId || pause.pauseId !== command.pauseId || this.active.executionId !== command.executionId) {
+          throw new RequestError('Stale or duplicate debugger command.');
+        }
+        this.snapshot = { ...this.snapshot, phase: 'running', debug: undefined };
+        const response = JSON.parse(this.session.resumeDebug(command.action)) as RuntimeValue;
+        emit(this.publishInputState(id, response));
+        return;
+      }
+      if (command.op === 'debugPauseRequest') {
+        if (!this.active || !this.active.debugEligible || this.active.executionId !== command.executionId || this.snapshot.phase !== 'running' || this.snapshot.debugPauseRequested) {
+          throw new RequestError('There is no matching running execution to pause.');
+        }
+        const response = JSON.parse(this.session.requestDebugPause()) as RuntimeValue;
+        if (response.kind === 'error') throw new RequestError(response.display || 'The debugger could not request a pause.');
+        this.snapshot = { ...this.snapshot, debugPauseRequested: true };
+        emit(this.publishInputState(id, response));
+        return;
+      }
+      if (command.op === 'debugBreakpoint') {
+        if (this.active && this.snapshot.phase !== 'debugPaused') throw new RequestError('Breakpoints can be changed while paused or when the runtime is ready.');
+        const response = JSON.parse(this.session.setDebugBreakpoint(command.fileName, command.line, command.enabled)) as RuntimeValue;
+        emit(this.active ? this.publishInputState(id, response) : this.publish(id, response, false));
+        return;
+      }
       if (command.op === 'simulation') {
         if (command.action === 'step' || command.action === 'start' || command.action === 'reset') this.session.noteInteraction?.('main', '', '', '', '{"kind":"unit"}');
         this.dispatchSimulation(id, command, emit); return;
       }
       if (command.op === 'key') { emit(this.publishInputState(id, JSON.parse(this.session.setKey(command.key, !!command.pressed)))); return; }
       if (command.op === 'click') { emit(this.publishInputState(id, JSON.parse(this.session.setClick(command.x, command.y, command.actorId || '')))); return; }
+      if (this.snapshot.phase === 'debugPaused' && command.op === 'inspect') {
+        const response = JSON.parse(this.session.inspect(command.objectId)) as RuntimeValue;
+        emit(this.publishDebugInspection(id, response, [command.objectId]));
+        return;
+      }
+      if (this.snapshot.phase === 'debugPaused' && command.op === 'inspectField') {
+        const response = JSON.parse(this.session.inspectDebugField(command.objectId, command.property)) as RuntimeValue;
+        emit(this.publishDebugInspection(id, response, [command.objectId, response.objectId || '']));
+        return;
+      }
+      if (this.snapshot.phase === 'debugPaused' && command.op === 'inspectGet') {
+        const executionId = this.snapshot.activeExecutionId;
+        if (!executionId || !this.active || this.active.executionId !== executionId) throw new RequestError('There is no active debugger execution.');
+        this.snapshot = { ...this.snapshot, debugInspectionActive: true };
+        this.emitEvent(executionId, 'snapshot', emit);
+        const started = JSON.parse(this.session.startDebugInspectGet(command.objectId, command.property, result => {
+          this.snapshot = { ...this.snapshot, debugInspectionActive: false };
+          emit(this.publishDebugInspection(id, JSON.parse(result) as RuntimeValue, [command.objectId]));
+        })) as RuntimeValue;
+        if (started.kind === 'error') {
+          this.snapshot = { ...this.snapshot, debugInspectionActive: false };
+          emit(this.publish(id, started));
+        }
+        return;
+      }
       if (command.op === 'input') {
         if (!this.active || this.snapshot.phase !== 'waitingForInput' || command.inputRequestId !== this.active.inputRequestId) throw new RequestError('Stale or duplicate input response.');
         this.active.inputRequestId = undefined; this.snapshot.phase = 'running';
@@ -268,7 +349,8 @@ export class RuntimeHost {
         catch (error) { throw new RequestError((error as Error).message); }
       }
       const executionId = id;
-      this.active = { executionId }; this.snapshot.phase = 'running';
+      const debugEligible = ['eval', 'main', 'create', 'invoke', 'set', 'get'].includes(command.op);
+      this.active = { executionId, debugEligible }; this.snapshot = { ...this.snapshot, phase: 'running', activeExecutionId: executionId, debugPauseRequested: false, debugSessionActive: false, debug: undefined };
       this.lastOutputPublishAt = -Infinity;
       this.session.setOutputCallback(() => this.emitStreamingOutput(executionId, emit));
       this.session.setTestCallback?.(() => this.emitEvent(executionId, 'snapshot', emit));
@@ -280,6 +362,14 @@ export class RuntimeHost {
         this.active.inputRequestId = inputRequestId; this.snapshot.phase = 'waitingForInput';
         this.emitEvent(executionId, 'inputRequested', emit, { inputRequestId });
       };
+      const onDebugPause = (pauseJson: string) => {
+        if (!this.active || this.active.executionId !== executionId) return;
+        const position = JSON.parse(pauseJson) as { fileName: string; line: number; column: number; depth: number; stepInAvailable: boolean; variables: NonNullable<RuntimeSnapshot['debug']>['variables']; attributes: NonNullable<RuntimeSnapshot['debug']>['attributes'] };
+        const pauseId = ++this.debugPauseSequence;
+        this.snapshot = { ...this.snapshot, phase: 'debugPaused', activeExecutionId: executionId, debugPauseRequested: false, debugSessionActive: true, debug: { ...position, executionId, pauseId } };
+        this.emitEvent(executionId, 'snapshot', emit);
+      };
+      this.session.setDebugPauseCallback(onDebugPause);
       const onComplete = (result: string) => {
         if (!this.active || this.active.executionId !== executionId) return;
         this.session!.setOutputCallback(null); this.session!.setTestCallback?.(null); this.active = null;
@@ -289,7 +379,7 @@ export class RuntimeHost {
           : command.op === 'set' ? `\`${command.property}\` = ${command.value}` : source;
         this.session!.noteInteraction?.(command.op, 'objectId' in command ? command.objectId : '', 'name' in command ? command.name : 'property' in command ? command.property : '', interactionSource, result);
         const response = JSON.parse(result) as RuntimeValue;
-        this.snapshot.phase = response.fatal ? 'faulted' : 'ready';
+        this.snapshot = { ...this.snapshot, phase: response.fatal ? 'faulted' : 'ready', activeExecutionId: undefined, debugPauseRequested: false, debugSessionActive: false, debug: undefined };
         const intent = this.session!.takeBluePlayIntent();
         if (intent === 'start') { this.simulation.state = 'running'; this.simulation.emit = emit; this.scheduleSimulationStep(); }
         if (intent === 'stop') this.simulation.state = 'paused';

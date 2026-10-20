@@ -6,6 +6,7 @@
   import type {
     Diagnostic,
     ProjectFile,
+    DebugPause,
   } from "../../../runtime-contract/src/index";
 
   import type { EditorWindowState, ActiveWindow } from "../uiTypes";
@@ -26,6 +27,12 @@
   export let commentShortcutLabel: string;
   export let formatShortcutLabel: string;
   export let codeMirror: Action<HTMLElement, EditorOptions>;
+  export let breakpointLines: (fileId: string) => number[];
+  export let toggleBreakpointAt: (fileId: string, line: number) => void;
+  export let updateBreakpoints: (fileId: string, lines: number[]) => void;
+  export let toggleBreakpoint: (editorId: string) => void;
+  export let debug: DebugPause | undefined = undefined;
+  export let editable = true;
   export let closeEditor: (id?: string) => void;
   export let closeAllEditors: () => void;
   export let selectEditorTab: (id: string) => void;
@@ -171,6 +178,7 @@
             use:codeMirror={{
               phrases: $language.editorPhrases,
               id: activeEditorId,
+              fileId: editorFile.id,
               value: editorFile.source,
               fontSize: editorFontSize,
               onChange: (value: string) => updateSource(editorFile.id, value),
@@ -178,6 +186,12 @@
               diagnosticsRun,
               vim: vimMode,
               dark: darkMode,
+              editable,
+              breakpointEditable: editable || Boolean(debug),
+              breakpointLines: breakpointLines(editorFile.id),
+              onBreakpointToggle: toggleBreakpointAt,
+              onBreakpointsChange: updateBreakpoints,
+              debugLine: debug?.fileName === editorFile.fileName ? debug.line : null,
             }}
           >
             <div
@@ -186,6 +200,13 @@
               aria-label={t("ui.common.editorActions")}
             >
               <button
+                disabled={!editable && !debug}
+                class="editor-action editor-breakpoint"
+                on:click={() => toggleBreakpoint(activeEditorId)}
+                aria-label={t("ui.editor.toggleBreakpoint")}
+                title={t("ui.editor.toggleBreakpoint")}>●</button
+              ><button
+                disabled={!editable}
                 class="editor-action editor-comment"
                 on:click={() => toggleEditorComments(activeEditorId)}
                 aria-label={t("ui.common.toggleLineComments")}
@@ -193,6 +214,7 @@
                   commentShortcutLabel,
                 ])}>//</button
               ><button
+                disabled={!editable}
                 class="editor-action editor-format"
                 on:click={() => formatEditor(activeEditorId)}
                 aria-label={t("ui.common.formatKotlinFile")}
@@ -356,6 +378,7 @@
               use:codeMirror={{
                 phrases: $language.editorPhrases,
                 id: editorWindow.id,
+                fileId: editorFile.id,
                 value: editorFile.source,
                 fontSize: editorFontSize,
                 onChange: (value: string) => updateSource(editorFile.id, value),
@@ -363,6 +386,12 @@
                 diagnosticsRun,
                 vim: vimMode,
                 dark: darkMode,
+                editable,
+              breakpointEditable: editable || Boolean(debug),
+                breakpointLines: breakpointLines(editorFile.id),
+                onBreakpointToggle: toggleBreakpointAt,
+                onBreakpointsChange: updateBreakpoints,
+                debugLine: debug?.fileName === editorFile.fileName ? debug.line : null,
               }}
             >
               <div
@@ -371,6 +400,13 @@
                 aria-label={t("ui.common.editorActions")}
               >
                 <button
+                  disabled={!editable && !debug}
+                  class="editor-action editor-breakpoint"
+                  on:click={() => toggleBreakpoint(editorWindow.id)}
+                  aria-label={t("ui.editor.toggleBreakpoint")}
+                  title={t("ui.editor.toggleBreakpoint")}>●</button
+                ><button
+                  disabled={!editable}
                   class="editor-action editor-comment"
                   on:click={() => toggleEditorComments(editorWindow.id)}
                   aria-label={t("ui.common.toggleLineComments")}
@@ -378,6 +414,7 @@
                     commentShortcutLabel,
                   ])}>//</button
                 ><button
+                  disabled={!editable}
                   class="editor-action editor-format"
                   on:click={() => formatEditor(editorWindow.id)}
                   aria-label={t("ui.common.formatKotlinFile")}

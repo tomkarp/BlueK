@@ -16,6 +16,26 @@
     "downloadBlueKForOfflineUse": "Download BlueK for offline use",
     "help": "Help"
   },
+  "debug": {
+    "title": "Debugger",
+    "nextAt": "Next: {0}, line {1}",
+    "firstPauseHelp": "The marked instruction runs next. Choose Step to run it.",
+    "step": "Step",
+    "stepHelp": "Run this instruction. Calls finish unless a breakpoint stops them.",
+    "stepIn": "Step in",
+    "stepInHelp": "Follow the next call into your project code. Disabled when the instruction has no project call.",
+    "continue": "Continue",
+    "stop": "Stop",
+    "running": "Running",
+    "pause": "Pause",
+    "pauseRequested": "Pause requested",
+    "variables": "Local variables",
+    "noVariables": "There are no local variables here yet.",
+    "attributes": "Attributes",
+    "attributesHelp": "Calculated properties are listed without running their getters.",
+    "computedProperty": "computed property",
+    "notInitialized": "not initialized"
+  },
   "common": {
     "compile": "Compile",
     "settings": "Settings",
@@ -178,6 +198,7 @@
     "closeCompilerWarnings": "Close compiler warnings",
     "closeCompilerErrors": "Close compiler errors",
     "resizeEditor0": "Resize editor {0}",
+    "toggleBreakpoint": "Toggle breakpoint on current line",
     "collectEditorWindowsIntoTabs": "Collect editor windows into tabs",
     "closeEditor": "Close editor"
   },

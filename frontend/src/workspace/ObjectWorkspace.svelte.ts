@@ -74,6 +74,7 @@ export class ObjectWorkspace {
   private readonly inspectorModel: InspectorModel;
   inspectorRevision = $state(0);
   inspectorError: { property: string; message: string } | null = $state(null);
+  private lastDebugPause = "";
 
   menu: ObjectMenu | null = $state(null);
   createDialog: CreateDialog | null = $state(null);
@@ -397,11 +398,13 @@ export class ObjectWorkspace {
       this.objectNameError =
         result.display || "The reference could not be added.";
   };
-  waitForInspectorReady = (allowFaulted = false) => {
+  waitForInspectorReady = (allowFaulted = false, allowDebugPaused = false) => {
     const generation = this.host.session().client.getSnapshot().generationId;
     if (this.host.session().client.getSnapshot().phase !== "running")
       return Promise.resolve(
         this.host.session().client.getSnapshot().phase === "ready" ||
+          (allowDebugPaused &&
+            this.host.session().client.getSnapshot().phase === "debugPaused") ||
           (allowFaulted &&
             this.host.session().client.getSnapshot().phase === "faulted"),
       );
@@ -416,6 +419,7 @@ export class ObjectWorkspace {
           resolve(
             snapshot.generationId === generation &&
               (snapshot.phase === "ready" ||
+                (allowDebugPaused && snapshot.phase === "debugPaused") ||
                 (allowFaulted && snapshot.phase === "faulted")),
           );
         }
@@ -423,17 +427,19 @@ export class ObjectWorkspace {
     });
   };
   executeInspectorCommand = async (
-    command: Extract<RuntimeCommand, { op: "inspect" | "inspectField" }>,
+    command: Extract<RuntimeCommand, { op: "inspect" | "inspectField" | "inspectGet" }>,
     allowFaulted = false,
   ) => {
     const generation = this.host.session().client.getSnapshot().generationId;
+    const allowDebugPaused = command.op === "inspect" || command.op === "inspectField" || command.op === "inspectGet";
     while (
       this.host.session().client.getSnapshot().generationId === generation
     ) {
-      if (!(await this.waitForInspectorReady(allowFaulted))) return null;
+      if (!(await this.waitForInspectorReady(allowFaulted, allowDebugPaused))) return null;
       const phase = this.host.session().client.getSnapshot().phase;
       if (
         phase !== "ready" &&
+        !(allowDebugPaused && phase === "debugPaused") &&
         !(allowFaulted && phase === "faulted" && command.op === "inspect")
       )
         continue;
@@ -608,7 +614,11 @@ export class ObjectWorkspace {
   };
   refreshComputedInspectors = async () => {
     for (const inspector of this.inspectorWindows) {
-      await this.inspectorModel.refresh(inspector.id);
+      try {
+        await this.inspectorModel.refresh(inspector.id);
+      } catch {
+        // A reset or a newer runtime action can invalidate an inspector refresh.
+      }
     }
   };
   canEditField = (field: InspectorField, data = this.inspected) => {
@@ -700,6 +710,13 @@ export class ObjectWorkspace {
   });
 
   synchronize = (runtime: RuntimeSnapshot) => {
+    if (runtime.phase === "debugPaused" && runtime.debug) {
+      const pauseKey = `${runtime.generationId}:${runtime.debug.executionId}:${runtime.debug.pauseId}`;
+      if (pauseKey !== this.lastDebugPause) {
+        this.lastDebugPause = pauseKey;
+        void this.refreshComputedInspectors();
+      }
+    }
     if (runtime.phase === "ready")
       this.inspectorWindows
         .filter((item) => !runtime.liveObjectIds.includes(item.id))

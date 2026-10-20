@@ -114,9 +114,30 @@ class CallStack {
 
     fun currentSymbolTable() = activationRecords.last().symbolTable
 
+    /** Project call frames with only their own function and lexical block scopes. */
+    fun debugFrames(): List<DebugCallFrame> {
+        val records = activationRecords.drop(2)
+        val starts = records.indices.filter { records[it].isFunctionCall }
+        return starts.mapIndexed { index, start ->
+            val end = starts.getOrNull(index + 1) ?: records.size
+            val frame = records[start]
+            // An interpreted member call binds `this` in a ClassMemberFunction scope
+            // immediately before the actual function frame. Keep that scope with its
+            // callee so the debugger can inspect the receiver as well as locals.
+            val scopeStart = if (start > 0 && records[start - 1].scopeType == ScopeType.ClassMemberFunction) start - 1 else start
+            DebugCallFrame(frame.frameName ?: "<lambda>", frame.callPosition, records.subList(scopeStart, end).map { it.symbolTable })
+        }
+    }
+
+    /** Interpreted function/constructor frames, excluding lexical block scopes. */
+    internal val functionCallDepth: Int
+        get() = activationRecords.count { it.isFunctionCall }
+
     /** Whether evaluation currently runs inside student class code. */
     internal fun isInsideClassCode(): Boolean = classCodeScopes > 0
 
     private fun ScopeType.isClassCode() =
         this == ScopeType.Class || this == ScopeType.ClassInitializer || this == ScopeType.ClassMemberFunction
 }
+
+data class DebugCallFrame(val name: String, val callPosition: SourcePosition, val scopes: List<SymbolTable>)

@@ -3,10 +3,13 @@ import { applyDiagnostics, editorDiagnostics } from "./editorDiagnostics";
 import { vim } from "@replit/codemirror-vim";
 import { minimalSetup } from "codemirror";
 import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
-import { Compartment, EditorState, StateEffect } from "@codemirror/state";
+import { Compartment, EditorState, StateEffect, StateField } from "@codemirror/state";
 import {
   EditorView,
   drawSelection,
+  Decoration,
+  GutterMarker,
+  gutter,
   highlightActiveLine,
   keymap,
   lineNumbers,
@@ -36,6 +39,8 @@ import type { Diagnostic } from "../../runtime-contract/src/index";
 export interface EditorActionHost {
   formatters: Map<string, () => boolean>;
   commenters: Map<string, () => boolean>;
+  breakpointTogglers: Map<string, () => void>;
+  debugNavigators: Map<string, (line: number, column: number) => void>;
   setFormatError: (message: string) => void;
 }
 // defaultHighlightStyle picks colors for a light background; a dark
@@ -113,6 +118,7 @@ const darkEditorTheme = EditorView.theme(
 export type EditorOptions = {
   phrases?: Record<string, string>;
   id: string;
+  fileId?: string;
   value: string;
   fontSize: number;
   onChange: (value: string) => void;
@@ -123,7 +129,65 @@ export type EditorOptions = {
   vim: boolean;
   dark: boolean;
   editable?: boolean;
+  breakpointEditable?: boolean;
+  breakpointLines?: number[];
+  onBreakpointToggle?: (fileId: string, line: number) => void;
+  onBreakpointsChange?: (fileId: string, lines: number[]) => void;
+  debugLine?: number | null;
 };
+
+class BreakpointMarker extends GutterMarker {
+  toDOM() {
+    const marker = document.createElement("span");
+    marker.className = "cm-breakpoint-marker";
+    marker.setAttribute("aria-hidden", "true");
+    return marker;
+  }
+  eq(other: GutterMarker) { return other instanceof BreakpointMarker; }
+}
+function createDebugMarker(withBreakpoint: boolean) {
+  const marker = document.createElement("span");
+  marker.className = `cm-debug-marker${withBreakpoint ? " cm-combined-debug-marker" : ""}`;
+  const arrowMarker = document.createElement("span");
+  arrowMarker.className = "cm-debug-arrow-marker";
+  const arrow = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  arrow.setAttribute("viewBox", "0 0 24 24");
+  arrow.setAttribute("aria-hidden", "true");
+  const outline = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  outline.setAttribute("d", "M1 1h14l8 11-8 11H1z");
+  outline.setAttribute("fill", "currentColor");
+  arrow.append(outline);
+  arrowMarker.append(arrow);
+  marker.append(arrowMarker);
+  if (withBreakpoint) {
+    const breakpoint = document.createElement("span");
+    breakpoint.className = "cm-breakpoint-marker";
+    marker.append(breakpoint);
+  }
+  marker.setAttribute("aria-hidden", "true");
+  return marker;
+}
+class DebugArrowMarker extends GutterMarker {
+  toDOM() { return createDebugMarker(false); }
+  eq(other: GutterMarker) { return other instanceof DebugArrowMarker; }
+}
+class CombinedDebugMarker extends GutterMarker {
+  toDOM() { return createDebugMarker(true); }
+  eq(other: GutterMarker) { return other instanceof CombinedDebugMarker; }
+}
+class BreakpointSpacer extends GutterMarker {
+  toDOM() {
+    const spacer = document.createElement("span");
+    spacer.className = "cm-breakpoint-spacer";
+    spacer.setAttribute("aria-hidden", "true");
+    return spacer;
+  }
+  eq(other: GutterMarker) { return other instanceof BreakpointSpacer; }
+}
+const breakpointMarker = new BreakpointMarker();
+const debugArrowMarker = new DebugArrowMarker();
+const combinedDebugMarker = new CombinedDebugMarker();
+const breakpointSpacer = new BreakpointSpacer();
 
 export function createEditorActions(host: EditorActionHost) {
   function codeMirror(node: HTMLElement, options: EditorOptions) {
@@ -131,8 +195,11 @@ export function createEditorActions(host: EditorActionHost) {
     let shownRun = -1;
     const formatter = new KotlinFormatterClient();
     let view: EditorView;
+    let applyingExternalDocument = false;
     let formatRequest = 0;
+    const canToggleBreakpoint = () => current.breakpointEditable ?? current.editable !== false;
     const formatDocument = () => {
+      if (current.editable === false) return false;
       host.setFormatError("");
       const request = ++formatRequest;
       const source = view.state.doc.toString();
@@ -175,7 +242,10 @@ export function createEditorActions(host: EditorActionHost) {
       return true;
     };
     host.formatters.set(current.id, formatDocument);
-    const toggleComments = () => toggleEditorComment(view);
+    const toggleComments = () => {
+      if (current.editable === false) return false;
+      return toggleEditorComment(view);
+    };
     host.commenters.set(current.id, toggleComments);
     // Vim rebinds nearly every key, so it has to sit in front of the other
     // keymaps — a compartment keeps that place while it is switched on and off.
@@ -184,6 +254,91 @@ export function createEditorActions(host: EditorActionHost) {
     const editorHighlight = new Compartment();
     const editorEditable = new Compartment();
     const editorLanguage = new Compartment();
+    const setBreakpointLines = StateEffect.define<number[]>();
+    const setDebugLine = StateEffect.define<number | null>();
+    const breakpointField = StateField.define<Set<number>>({
+      create: (state) => new Set((current.breakpointLines || []).filter((line) => line > 0 && line <= state.doc.lines).map((line) => state.doc.line(line).from)),
+      update: (value, transaction) => {
+        let next = value;
+        if (transaction.docChanged) {
+          const mapped = new Set<number>();
+          for (const position of value) {
+            const oldLine = transaction.startState.doc.lineAt(position);
+            let removed = false;
+            transaction.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
+              if (fromA === 0 && toA === transaction.startState.doc.length) removed = true;
+              else if (toA > fromA && fromA <= oldLine.from && toA >= oldLine.to && inserted.length === 0) removed = true;
+            });
+            if (!removed) mapped.add(transaction.changes.mapPos(position, 1));
+          }
+          next = mapped;
+        }
+        for (const effect of transaction.effects) {
+          if (effect.is(setBreakpointLines))
+            next = new Set(effect.value.filter((line) => line > 0 && line <= transaction.state.doc.lines).map((line) => transaction.state.doc.line(line).from));
+        }
+        return next;
+      },
+    });
+    const debugLineField = StateField.define<number | null>({
+      create: (state) => current.debugLine && current.debugLine > 0 && current.debugLine <= state.doc.lines
+        ? state.doc.line(current.debugLine).from
+        : null,
+      update: (position, transaction) => {
+        let next = position === null ? null : transaction.docChanged ? transaction.changes.mapPos(position, 1) : position;
+        for (const effect of transaction.effects) {
+          if (effect.is(setDebugLine)) {
+            const line = effect.value;
+            next = line && line > 0 && line <= transaction.state.doc.lines
+              ? transaction.state.doc.line(line).from
+              : null;
+          }
+        }
+        return next;
+      },
+      provide: (field) => EditorView.decorations.compute([field], (state) => {
+        const position = state.field(field);
+        return position === null
+          ? Decoration.none
+          : Decoration.set([Decoration.line({ class: "cm-debug-current-line" }).range(state.doc.lineAt(position).from)]);
+      }),
+    });
+    const breakpointGutter = gutter({
+      class: "cm-breakpoint-gutter",
+      renderEmptyElements: true,
+      initialSpacer: () => breakpointSpacer,
+      lineMarker: (editorView, line) => {
+        const hasBreakpoint = editorView.state.field(breakpointField).has(line.from);
+        const hasDebugArrow = editorView.state.field(debugLineField) === line.from;
+        if (hasBreakpoint && hasDebugArrow) return combinedDebugMarker;
+        if (hasBreakpoint) return breakpointMarker;
+        if (hasDebugArrow) return debugArrowMarker;
+        return null;
+      },
+      lineMarkerChange: (update) => update.startState.field(breakpointField) !== update.state.field(breakpointField) || update.startState.field(debugLineField) !== update.state.field(debugLineField),
+      domEventHandlers: {
+        mousedown: (_editorView, line, event) => {
+          if ((event as MouseEvent).button !== 0) return false;
+          if (!canToggleBreakpoint()) return false;
+          if (!_editorView.state.doc.lineAt(line.from).text.trim()) return true;
+          event.preventDefault();
+          current.onBreakpointToggle?.(current.fileId || current.id, _editorView.state.doc.lineAt(line.from).number);
+          return true;
+        },
+      },
+    });
+    const toggleBreakpointAtCursor = () => {
+      if (!canToggleBreakpoint()) return;
+      const line = view.state.doc.lineAt(view.state.selection.main.head);
+      if (!line.text.trim()) return;
+      current.onBreakpointToggle?.(current.fileId || current.id, line.number);
+    };
+    host.breakpointTogglers.set(current.id, toggleBreakpointAtCursor);
+    const revealPosition = (line: number, column: number) => {
+      if (line > 0 && line <= view.state.doc.lines)
+        view.dispatch({ effects: EditorView.scrollIntoView(view.state.doc.line(line).from + Math.max(0, column - 1), { y: "center" }) });
+    };
+    host.debugNavigators.set(current.id, revealPosition);
     view = new EditorView({
       state: EditorState.create({
         doc: current.value,
@@ -200,6 +355,9 @@ export function createEditorActions(host: EditorActionHost) {
           editorLanguage.of(EditorState.phrases.of(current.phrases ?? {})),
           minimalSetup,
           lineNumbers(),
+          breakpointField,
+          debugLineField,
+          breakpointGutter,
           indentUnit.of("    "),
           historyExtension(),
           closeBrackets(),
@@ -224,6 +382,8 @@ export function createEditorActions(host: EditorActionHost) {
             ".cm-content, .cm-line, .cm-gutters, .cm-gutterElement": {
               fontSize: "var(--editor-font-size, 16px)",
             },
+            ".cm-breakpoint-gutter .cm-gutterElement": { cursor: "pointer", width: "1.2em" },
+            ".cm-breakpoint-marker": { color: "#d83b3b", fontSize: "0.8em", lineHeight: "1.7em" },
             ".cm-scroller": {
               overflow: "auto",
               fontFamily: "Menlo, Monaco, Consolas, monospace",
@@ -234,7 +394,11 @@ export function createEditorActions(host: EditorActionHost) {
       parent: node,
     });
     const listener = EditorView.updateListener.of((update) => {
-      if (update.docChanged) current.onChange(update.state.doc.toString());
+      if (update.docChanged && !applyingExternalDocument) {
+        current.onChange(update.state.doc.toString());
+        const lines = [...update.state.field(breakpointField)].map((position) => update.state.doc.lineAt(position).number).sort((a, b) => a - b);
+        current.onBreakpointsChange?.(current.fileId || current.id, lines);
+      }
     });
     view.dispatch({ effects: StateEffect.appendConfig.of(listener) });
     shownRun = current.diagnosticsRun;
@@ -270,6 +434,9 @@ export function createEditorActions(host: EditorActionHost) {
     return {
       update(next: EditorOptions) {
         const previousId = current.id;
+        const fileChanged = next.fileId !== current.fileId;
+        const breakpointLinesChanged = fileChanged || (next.breakpointLines || []).join(",") !== (current.breakpointLines || []).join(",");
+        const debugLineChanged = next.debugLine !== current.debugLine || next.fileId !== current.fileId;
         if (next.phrases !== current.phrases)
           view.dispatch({
             effects: editorLanguage.reconfigure(
@@ -309,11 +476,23 @@ export function createEditorActions(host: EditorActionHost) {
           host.formatters.set(next.id, formatDocument);
           host.commenters.delete(previousId);
           host.commenters.set(next.id, toggleComments);
+          host.breakpointTogglers.delete(previousId);
+          host.breakpointTogglers.set(next.id, toggleBreakpointAtCursor);
+          host.debugNavigators.delete(previousId);
+          host.debugNavigators.set(next.id, revealPosition);
         }
-        if (next.value !== view.state.doc.toString())
-          view.dispatch({
-            changes: { from: 0, to: view.state.doc.length, insert: next.value },
-          });
+        if (next.value !== view.state.doc.toString()) {
+          applyingExternalDocument = true;
+          try {
+            view.dispatch({
+              changes: { from: 0, to: view.state.doc.length, insert: next.value },
+            });
+          } finally {
+            applyingExternalDocument = false;
+          }
+        }
+        if (breakpointLinesChanged) view.dispatch({ effects: setBreakpointLines.of(next.breakpointLines || []) });
+        if (debugLineChanged) view.dispatch({ effects: setDebugLine.of(next.debugLine ?? null) });
         // After the document, so a doc change does not wipe the fresh marks.
         if (next.diagnosticsRun !== shownRun) {
           shownRun = next.diagnosticsRun;
@@ -358,6 +537,8 @@ export function createEditorActions(host: EditorActionHost) {
         ++formatRequest;
         host.formatters.delete(current.id);
         host.commenters.delete(current.id);
+        host.breakpointTogglers.delete(current.id);
+        host.debugNavigators.delete(current.id);
         window.removeEventListener("keydown", formatShortcut, true);
         window.removeEventListener("keydown", germanCommentShortcut, true);
         formatter.dispose();

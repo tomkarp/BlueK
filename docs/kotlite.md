@@ -114,6 +114,31 @@ before frames unwind (`hostExceptionTrace`, `statementPosition`).
 or Codepad/BluePlay/Kotlin library labels. Ordinary uncaught exceptions end the
 current call without rollback and preserve usable state (RT-82).
 
+## Interactive debugger hooks
+
+Interactive debugging uses a statement hook before each AST statement in a
+block, separate from cooperative loop yielding. The hook is skipped inside all
+synchronous native callbacks, including replayable callbacks. The host suspends
+and resumes the same coroutine; it does not replay student code. Loop bodies
+provide a new visit on each iteration, while `while` condition transitions
+remain interruptible after the first visit.
+Interactive runs can also request a pause, which takes effect at the next safe
+project statement while leaving the worker available for controls.
+
+The debugger opens in a separate movable window. Local snapshots read simple
+values from existing storage. Object-valued locals can open the shared object
+inspector while execution is paused; passive field reads do not run getters.
+Computed properties remain listed and are marked as not evaluated, so
+inspecting a pause does not execute student code. Values do not call student
+`toString`, `equals`, or collection iterators. The current implementation
+shows values for the innermost project call frame. The synthetic call used to
+give an `init` block its own lexical scope does not add debugger Step depth,
+so Step pauses at each statement in the block. In an object inspector opened
+from a paused debugger, a small button can explicitly run one computed
+property's getter; the debugger stays paused and refreshes the displayed value.
+The debugger's own Attributes list only labels these as computed properties.
+See the dated debugger entry in the [regression checklist](regression-checklist.md).
+
 ## Remaining technical debt
 
 - Full history is reanalyzed on each interactive action; no incremental symbol

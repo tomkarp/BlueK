@@ -16,6 +16,8 @@
     "workspaceReference": "Workspace reference",
     "editing": "Use the editor’s <strong>//</strong> button to comment or uncomment selected lines and <strong>≡</strong> to format the file. Open files can be arranged in tabs or separate windows.",
     "runningACompleteProgram": "Running a complete program",
+    "debuggingTitle": "Debugging with breakpoints",
+    "debugging": "Click beside a code line to set a breakpoint, then start main or call an object method from its menu. Execution pauses before the marked instruction. While a supported program is running, choose <strong>Pause</strong> to stop at the next safe instruction. At a pause, use <strong>Step</strong>, <strong>Step in</strong>, <strong>Continue</strong> or <strong>Stop</strong>. The panel shows stored local values. Debug pauses do not run during compilation, tests, automatic inspection or simulation. Synchronous native callbacks are skipped.",
     "introduction": "BlueK runs Kotlin in your browser. You can run a program through <code>main</code> or create objects and call their methods directly.",
     "createProject": "Choose <strong>New Project</strong> for an empty project, a template or a demo. Use <strong>Open / Import</strong> for an existing project.",
     "createFile": "Choose <strong>New File</strong>, enter a name and select its type. Double-click a card to edit its code.",

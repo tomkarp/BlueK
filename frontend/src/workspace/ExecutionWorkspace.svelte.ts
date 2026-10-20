@@ -35,8 +35,8 @@ interface ExecutionWorkspaceHost {
     | "refreshComputedInspectors"
     | "synchronize"
   >;
-  ui: () => Pick<WorkspaceUi, "status" | "error" | "terminalAutoClear">;
-  editor: () => Pick<EditorWorkspace, "markDiagnostics" | "clearDiagnostics">;
+  ui: () => Pick<WorkspaceUi, "status" | "error" | "terminalAutoClear" | "activeWindow">;
+  editor: () => Pick<EditorWorkspace, "markDiagnostics" | "clearDiagnostics" | "syncBreakpoints" | "revealPosition">;
   project: () => Readonly<
     Pick<
       ProjectWorkspace,
@@ -89,6 +89,7 @@ export class ExecutionWorkspace {
   programActive = $derived.by(() => {
     return (
       this.runtime.phase === "running" ||
+      this.runtime.phase === "debugPaused" ||
       this.runtime.phase === "compiling" ||
       this.inputReady
     );
@@ -147,11 +148,47 @@ export class ExecutionWorkspace {
     // A warning (an accessor calling itself) opens its editor like an error would.
     this.host.editor().markDiagnostics(result.diagnostics, true);
     this.host.ui().status = "Compiled";
+    await this.host.editor().syncBreakpoints();
     return true;
+  };
+  setBreakpoint = async (fileName: string, line: number, enabled: boolean): Promise<boolean> => {
+    const phase = this.client.getSnapshot().phase;
+    if (phase !== "ready" && phase !== "debugPaused") return false;
+    try {
+      const result = await this.client.execute({ op: "debugBreakpoint", generationId: this.runtime.generationId, fileName, line, enabled });
+      return result.kind !== "error";
+    } catch {
+      return false;
+    }
   };
   runMain = async () => {
     await this.requestMain("start");
   };
+  debugAction = async (action: "step" | "stepIn" | "continue") => {
+    const pause = this.runtime.debug;
+    if (!pause || this.runtime.phase !== "debugPaused") return;
+    try {
+      await this.client.execute({
+        op: "debugControl",
+        generationId: this.runtime.generationId,
+        executionId: pause.executionId,
+        pauseId: pause.pauseId,
+        action,
+      });
+    } catch (reason) {
+      this.host.ui().error = reason instanceof Error ? reason.message : String(reason);
+    }
+  };
+  requestDebugPause = async () => {
+    const executionId = this.runtime.activeExecutionId;
+    if (!executionId || this.runtime.phase !== "running" || this.runtime.debugPauseRequested) return;
+    try {
+      await this.client.execute({ op: "debugPauseRequest", generationId: this.runtime.generationId, executionId });
+    } catch (reason) {
+      this.host.ui().error = reason instanceof Error ? reason.message : String(reason);
+    }
+  };
+  stopDebug = async () => { await this.client.stop(); };
   /** Only explicit IDE actions clear output; runtime callbacks and inspections do not. */
   executeUserCommand = (
     command: RuntimeCommand,
@@ -189,7 +226,7 @@ export class ExecutionWorkspace {
       await this.host.project().writeHtmlExport(fileName, request.generationId);
     else if (request?.action === "shareFullProgram" || request?.action === "shareShortProgram")
       await this.host.project().writeProgramLink(fileName, request.generationId, request.action === "shareShortProgram");
-    else if (request)
+      else if (request)
       await this.executeMain(fileName, request.action, request.generationId);
   };
   executeMain = async (
@@ -210,6 +247,7 @@ export class ExecutionWorkspace {
     this.host.play().allowWorld();
     this.host.ui().status = "Running…";
     try {
+      await this.host.editor().syncBreakpoints();
       const result = await this.executeUserCommand(
         {
           op: "main",
@@ -362,6 +400,7 @@ export class ExecutionWorkspace {
       } else {
         this.host.editor().markDiagnostics(diagnostics);
         this.host.ui().status = "Compiled";
+        await this.host.editor().syncBreakpoints();
       }
     } catch (reason) {
       this.host.ui().status = "Reset failed";
@@ -370,6 +409,7 @@ export class ExecutionWorkspace {
     }
   };
   connect = () => {
+    let lastDebugPause = "";
     $effect(() => {
       if (
         this.mainDialog &&
@@ -380,6 +420,19 @@ export class ExecutionWorkspace {
     });
     const unsubscribe = this.client.subscribe(() => {
       this.runtime = this.client.getSnapshot();
+      const pause = this.runtime.debug;
+      if (this.runtime.phase === "debugPaused" && pause) {
+        const key = `${this.runtime.generationId}:${pause.executionId}:${pause.pauseId}`;
+        if (key !== lastDebugPause) {
+          lastDebugPause = key;
+          void this.host.editor().revealPosition(
+            pause.fileName,
+            pause.line,
+            pause.column,
+            this.host.ui().activeWindow === "inspector",
+          );
+        }
+      }
       // Every compile replaces the worker and its world, including compilation
       // on demand from the Codepad. Do not leave a canvas from the old session.
       if (this.runtime.phase === "compiling") this.host.play().clearWorld();

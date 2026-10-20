@@ -76,7 +76,9 @@ export interface BluePlayStage {
 export type SimulationState = 'inactive' | 'paused' | 'running' | 'stopping' | 'waiting' | 'faulted';
 
 /** A session has exactly one phase, shared by every UI surface. */
-export type Phase = 'uncompiled' | 'compiling' | 'ready' | 'running' | 'waitingForInput' | 'faulted';
+export type Phase = 'uncompiled' | 'compiling' | 'ready' | 'running' | 'waitingForInput' | 'debugPaused' | 'faulted';
+export interface DebugVariable { name: string; type: string; display: string | null; initialized: boolean; computed?: boolean; objectId?: string }
+export interface DebugPause { executionId: number; pauseId: number; fileName: string; line: number; column: number; depth: number; stepInAvailable: boolean; variables: DebugVariable[]; attributes: DebugVariable[] }
 /** `reference`: the value is an object; `summary`: the value text describes a collection or pair and is no Kotlin expression. */
 export interface InspectedField { name: string; value: string; type?: TypeRef | null; setterPrivate?: boolean; reference?: boolean; summary?: boolean; computed?: boolean; objectId?: string; error?: string }
 export interface RuntimeValue {
@@ -112,11 +114,19 @@ export interface RuntimeSnapshot {
   liveObjectIds: string[];
   error: string | null;
   simulation: SimulationState;
+  activeExecutionId?: number;
+  debugPauseRequested?: boolean;
+  debugSessionActive?: boolean;
+  debugInspectionActive?: boolean;
   stage?: BluePlayStage;
+  debug?: DebugPause;
 }
 export type RuntimeCommand = { generationId?: string } & (
   | { op: 'eval'; code: string; filename?: string }
   | { op: 'main'; fileName: string }
+  | { op: 'debugControl'; executionId: number; pauseId: number; action: 'step'|'stepIn'|'continue' }
+  | { op: 'debugPauseRequest'; executionId: number }
+  | { op: 'debugBreakpoint'; fileName: string; line: number; enabled: boolean }
   | { op: 'tests'; className?: string; method?: string }
   | { op: 'fixture'; className: string }
   | { op: 'testing'; action: 'begin'|'cancel'|'assert'|'recordSource'|'fixtureSource'; className?: string; value?: string; kind?: 'equals'|'null'|'notNull' }

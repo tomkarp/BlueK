@@ -51,11 +51,12 @@ export class InspectorModel {
     };
   }
 
-  /** Called after a user operation, never as a side effect of rendering/snapshot delivery. */
+  /** Refresh values when the inspector opens, the program changes, or a debug step pauses. */
   async refresh(objectId: string): Promise<void> {
     const generation = this.synchronize();
     const snapshot = this.runtime.getSnapshot();
-    if (snapshot.phase !== 'ready') return;
+    const debugPaused = snapshot.phase === 'debugPaused';
+    if (snapshot.phase !== 'ready' && !debugPaused) return;
     const pending = this.requests.get(objectId);
     if (pending) {
       // A user operation during inspection must not leave earlier getter
@@ -69,17 +70,20 @@ export class InspectorModel {
     try {
       do {
         token.repeat = false;
-        const fields = this.runtime.getSnapshot().inspections[objectId]?.fields || [];
+        const fields = (this.runtime.getSnapshot().inspections[objectId]?.fields || [])
+          .filter(field => !debugPaused || field.computed === true);
         for (const field of fields) {
-          if (!current() || this.runtime.getSnapshot().phase !== 'ready') return;
+          const phase = this.runtime.getSnapshot().phase;
+          if (!current() || (phase !== 'ready' && !(debugPaused && phase === 'debugPaused'))) return;
           await this.runtime.execute({ op: 'inspectGet', objectId, property: field.name });
           if (!current()) return;
           this.changed();
         }
-      } while (current() && token.repeat && this.runtime.getSnapshot().phase === 'ready');
+      } while (current() && token.repeat && (this.runtime.getSnapshot().phase === 'ready' || (debugPaused && this.runtime.getSnapshot().phase === 'debugPaused')));
     } catch (error) {
       // Reset/compile cancels pending requests. Other transport failures belong to runtime.error.
-      if (current() && this.runtime.getSnapshot().phase === 'ready') throw error;
+      const phase = this.runtime.getSnapshot().phase;
+      if (current() && (phase === 'ready' || (debugPaused && phase === 'debugPaused'))) throw error;
     } finally {
       if (current()) this.requests.delete(objectId);
     }

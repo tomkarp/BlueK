@@ -24,6 +24,12 @@ browser-session fixes without replacing Kotlite with a separate interpreter.
 
 ## Changes
 
+Primary-constructor `val`/`var` assignments invoke the debugger statement hook
+at their parameter position. This lets Step in pause on the class header while
+the attribute is about to be assigned. The receiver is bound before these
+assignments so the debugger can inspect the partially built instance.
+Constructors without property parameters do not add a pause there.
+
 Interface bounds, inherited defaults and explicit super calls (RT-120/121/122):
 retain independent class/interface bounds from stable type guards in an internal
 IntersectionType/IntersectionTypeNode. Its analysis-only member view keeps every
@@ -1219,3 +1225,89 @@ Regression cases are in `smoke-curriculum-kotlin.mjs` and
 regression checklist. No attached original Main.kt was available: the report
 contained stale Tier.kt only. The reproduction uses the reported delayed-val
 pattern and diagnostic, verified against the installed Kotlin compiler.
+
+## 2026-10-20: interactive debugger statement hooks (DBG-01)
+
+`Interpreter.debugStatementHook` runs before statements in `BlockNode.eval`,
+separately from the cooperative loop checkpoint. It receives the current
+interpreted-call depth; hooks are skipped while any synchronous native callback
+is active, including replayable callbacks. Loop bodies naturally re-enter the
+statement hook, and `while` condition transitions after the first iteration
+also expose a safe source boundary. `CallStack.debugFrames` reports each
+function call with its lexical scopes and, for member calls, the preceding
+receiver-binding scope. The passive scope view reads only
+`RuntimeValueHolder.value`; it never invokes a delegated property getter.
+Runtime declarations and parameters register their source names beside their
+transformed symbols.
+
+The browser binding can suspend the active coroutine at one of these points,
+retain it until a host resume, and expose primitive or type-only summaries of
+the current frame. Source-file positions are mapped by `KotliteSession` from
+the existing project ranges. Coverage: `npm run test:debugger`; full behavior
+and remaining debugger limitations are recorded in the regression checklist.
+The `for` loop variable is declared dynamically in its loop scope, so its
+original source name is registered there too; a pause in the loop body can
+show its stored value without source-text reconstruction.
+
+Debugger receiver attributes use `ClassInstance.debugStoredProperties()` to
+read existing backing values without invoking accessors. The snapshot lists
+custom-getter properties as computed and unevaluated, preserving program state
+while keeping those properties visible in the debugger.
+
+Constructor stepping: while `constructClassInstance()` evaluates an explicit
+property initializer, it invokes the same statement hook used by block
+statements immediately before evaluating the initializer. This gives Step in
+a source location inside construction while preserving normal execution when
+debugging is inactive. `KotliteSession` derives these valid breakpoint lines
+from the analyzed AST and includes initialized class properties. Browser
+runtime smoke coverage lives in `scripts/smoke-debugger.mjs`.
+
+Constructor calls now register their class-initializer activation record as an
+interpreted call frame, including the constructor's source name. Debugger step
+depth therefore treats constructor initialization as a nested call: Step runs
+the constructor to completion and pauses at the next statement in the caller;
+Step in still pauses at the first project statement in the constructor. This
+also exposes constructor locals through the existing frame snapshot.
+
+## 2026-10-20: debugger Step through init blocks (DBG-08)
+
+The interpreter invokes an `init` block through a synthetic function call so
+that it gets its own lexical scope. That implementation frame is transparent
+to debugger Step depth: while the init block runs, its statements remain at
+the constructor's debug depth. Step can therefore pause at each init-block
+statement, while calls made by the block still have a deeper depth and are
+stepped over normally. The runtime call-depth limit and real call stack are
+unchanged.
+
+BlueK can inspect a local object handle while the coroutine is paused. Its
+passive nested-reference path keeps debug-local handles alive until execution
+resumes, without reconciling suspended locals as if they were global roots.
+
+## 2026-10-20: debugger Step through `for` loop control
+
+After a `for` body completes, the interpreter invokes the statement hook at the
+loop header before retrieving the next element. The previous iteration's loop
+variable stays in scope during this pause and is undeclared before the next
+value is assigned. The initial condition check is not exposed again, so entering
+a loop does not pause twice on its first header. `break` exits without an extra
+header pause; `continue` reaches the next header as usual. This makes Step show
+the loop advancing between body iterations.
+
+## 2026-10-20: debugger receiver during construction
+
+Expose the constructor's declared `this` binding through the debugger-only
+symbol snapshot. Synthetic `init` frames can then find the enclosing instance
+and display stored properties plus computed-property placeholders while
+stepping through property initializers and `init` blocks. The host searches
+outward through the active debug frames for that receiver, while keeping local
+variables scoped to the current frame.
+
+## 2026-10-21: keep debugger pause stable during getter inspection (DBG-13)
+
+When a computed property is explicitly evaluated from the object inspector
+while the program is paused, resume the suspended student coroutine only to
+evaluate the getter, then suspend again at the same statement without emitting
+a new debugger pause. This preserves the existing pause identity and prevents
+each inspector refresh from appearing as a fresh pause and recursively
+restarting the getter. Breakpoints are ignored during this inspector-only
+evaluation so a getter cannot take over the paused program's debugger flow.
