@@ -81,10 +81,12 @@ Supporting modules:
   `projectTemplates.ts`: HTTP templates online, fresh embedded copies offline.
   `projectMedia.ts`: accepted image/sound formats, limits, decoding checks and
   rename rules for the Images/Audio dialogs; owns no project state.
-- `blueJImport.ts`: chooses the shallowest `package.bluej` in a ZIP/folder,
-  imports Kotlin/resources/positions and substitutes the built-in library for
+- `blueJImport.ts`: discovers independent project roots in a ZIP/folder and
+  imports one explicitly selected project with its Kotlin/resources/positions and substitutes the built-in library for
   historical BluePlay library source files. In BluePlay projects, images and
   sounds identical to the bundled standard ones stay standard resources.
+  Collections use a project choice owned by `ProjectWorkspace`; canceling does
+  not replace files or reset the runtime. Single projects still open directly.
 - `blueJExport.ts`: writes a saved project as a BlueJ folder in a ZIP (Kotlin
   files without test classes, README.TXT, package.bluej with the displayed card
   positions). BluePlay projects get the JVM library from the generated

@@ -23,7 +23,9 @@ fun TypeNode.resolveGenericParameterTypeToUpperBound(typeParameters: List<TypePa
         if (isResolveRootOnly && type !== this) {
             return type
         }
-        return if (type is FunctionTypeNode) {
+        return if (type is com.sunnychung.lib.multiplatform.kotlite.model.IntersectionTypeNode) {
+            com.sunnychung.lib.multiplatform.kotlite.model.IntersectionTypeNode(type.bounds.map { resolve(it) }, type.isNullable)
+        } else if (type is FunctionTypeNode) {
             FunctionTypeNode(
                 type.position,
                 type.receiverType?.let { resolve(it) },
@@ -44,7 +46,7 @@ fun TypeNode.resolveGenericParameterTypeToUpperBound(typeParameters: List<TypePa
                     } else {
                         TypeNode(SourcePosition.NONE, "Any", null, isNullable = true)
                     }
-                TypeNode(
+                if (genericResolvedType is com.sunnychung.lib.multiplatform.kotlite.model.IntersectionTypeNode) genericResolvedType.copy(genericResolvedType.isNullable || type.isNullable) else TypeNode(
                     genericResolvedType.position,
                     genericResolvedType.name,
                     genericResolvedType.arguments/*?.map { resolve(it) }*/, // resolving generic type's argument may cause infinite loop, but it is not needed as there is no case 3

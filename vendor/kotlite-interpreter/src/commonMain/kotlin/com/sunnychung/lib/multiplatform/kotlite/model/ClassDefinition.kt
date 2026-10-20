@@ -317,6 +317,7 @@ open class ClassDefinition(
 
         val classMemberResolver = ClassMemberResolver.create(sa.currentScope, copyAsEmptyClass(), null)
         memberFunctionsForSA = memberFunctions.onEach { thisFunc ->
+            thisFunc.declaringClassName = fullQualifiedName.removeSuffix("?")
             with (sa) {
                 // TODO these are duplicating with ClassSemanticAnalyzer and SemanticAnalyzer. Refactor these
                 val superClassFunctions = classMemberResolver?.findMemberFunctionsAndExactTypesByDeclaredName(thisFunc.name) ?: emptyMap()
@@ -622,7 +623,8 @@ open class ClassDefinition(
     fun findMemberPropertyWithoutAccessorWithIndex(declaredName: String, inThisClassOnly: Boolean = false): Pair<PropertyType, Int>? {
         ensureMembers()
         return memberProperties[declaredName]?.let { it to index } ?:
-            Unit.takeIf { !inThisClassOnly }?.let { superClass?.findMemberPropertyWithoutAccessorWithIndex(declaredName, inThisClassOnly) }
+            Unit.takeIf { !inThisClassOnly }?.let { superClass?.findMemberPropertyWithoutAccessorWithIndex(declaredName, inThisClassOnly)
+                ?: superInterfaces.firstNotNullOfOrNull { it.findMemberPropertyWithoutAccessorWithIndex(declaredName) } }
     }
 
     fun findMemberPropertyWithoutAccessor(declaredName: String, inThisClassOnly: Boolean = false) =
@@ -631,7 +633,8 @@ open class ClassDefinition(
     fun findMemberPropertyCustomAccessorWithIndex(declaredName: String, inThisClassOnly: Boolean = false): Pair<PropertyAccessorsNode, Int>? {
         ensureMembers()
         return memberPropertyCustomAccessors[declaredName]?.let { it to index } ?:
-            Unit.takeIf { !inThisClassOnly }?.let { superClass?.findMemberPropertyCustomAccessorWithIndex(declaredName, inThisClassOnly) }
+            Unit.takeIf { !inThisClassOnly }?.let { superClass?.findMemberPropertyCustomAccessorWithIndex(declaredName, inThisClassOnly)
+                ?: superInterfaces.firstNotNullOfOrNull { it.findMemberPropertyCustomAccessorWithIndex(declaredName) } }
     }
 
     fun findMemberPropertyCustomAccessor(declaredName: String, inThisClassOnly: Boolean = false): PropertyAccessorsNode? =
@@ -642,6 +645,7 @@ open class ClassDefinition(
         return when {
             memberPropertyTypes.containsKey(declaredName) -> fullQualifiedName
             else -> superClass?.findMemberPropertyOwnerName(declaredName)
+                ?: superInterfaces.firstNotNullOfOrNull { it.findMemberPropertyOwnerName(declaredName) }
         }
     }
 
@@ -683,16 +687,12 @@ open class ClassDefinition(
      * Key: Function signature
      */
     fun getAllMemberFunctions(): Map<String, FunctionDeclarationNode> {
-        return memberFunctionsMap.let { functionsInThisClass ->
-            var result = functionsInThisClass
-            if (superClass != null) {
-                result = result mergeIfNotExists superClass!!.getAllMemberFunctions()
+        val inherited = (listOfNotNull(superClass) + superInterfaces).flatMap { parent ->
+            parent.getAllMemberFunctions().filterValues { FunctionModifier.private !in it.modifiers }.map { (signature, function) ->
+                signature to (function to (function.declaringClassName ?: parent.fullQualifiedName))
             }
-            superInterfaces.forEach {
-                result = result mergeIfNotExists it.getAllMemberFunctions()
-            }
-            result
-        }
+        }.groupBy({ it.first }, { it.second }).mapValues { mostSpecificMember(it.value)!!.first }
+        return memberFunctionsMap mergeIfNotExists inherited
     }
 
     /**
@@ -707,19 +707,42 @@ open class ClassDefinition(
         memberFunctionsMap.filter { it.value.name == declaredName }.mapValues { it.value to index } mergeIfNotExists
             (Unit.takeIf { !inThisClassOnly }?.let { superClass?.findMemberFunctionsWithIndexByDeclaredName(declaredName, inThisClassOnly) } ?: emptyMap() )
 
-    fun findMemberFunctionsWithEnclosingTypeNameByDeclaredName(declaredName: String, inThisClassOnly: Boolean = false): Map<String, Pair<FunctionDeclarationNode, String>> =
-        memberFunctionsMap.filter { it.value.name == declaredName }.mapValues { it.value to fullQualifiedName } mergeIfNotExists
-            (Unit.takeIf { !inThisClassOnly }?.let {
-                val result = mutableMapOf<String, Pair<FunctionDeclarationNode, String>>()
-                superClass?.findMemberFunctionsWithEnclosingTypeNameByDeclaredName(declaredName, inThisClassOnly)
-                    ?.also { result += it }
-                superInterfaces.forEach { def ->
-                    def.findMemberFunctionsWithEnclosingTypeNameByDeclaredName(declaredName, inThisClassOnly)?.also {
-                        result += it
-                    }
-                }
-                result
-            } ?: emptyMap() )
+    /** Class/interface ancestry is shared by member selection and conflict validation. */
+    internal fun inheritsFrom(other: ClassDefinition): Boolean {
+        val seen = mutableSetOf<String>()
+        fun visit(clazz: ClassDefinition): Boolean {
+            if (!seen.add(clazz.fullQualifiedName)) return false
+            return clazz.fullQualifiedName == other.fullQualifiedName ||
+                listOfNotNull(clazz.superClass).plus(clazz.superInterfaces).any { visit(it) }
+        }
+        return visit(this)
+    }
+
+    private fun mostSpecificMember(candidates: List<Pair<FunctionDeclarationNode, String>>): Pair<FunctionDeclarationNode, String>? {
+        if (candidates.size <= 1) return candidates.firstOrNull()
+        fun owner(name: String): ClassDefinition? {
+            if (fullQualifiedName == name) return this
+            return (listOfNotNull(superClass) + superInterfaces).firstNotNullOfOrNull { it.findTypeInHierarchy(name) }
+        }
+        val distinct = candidates.distinctBy { it.second to it.first.transformedRefName }
+        if (distinct.size == 1) return distinct.single()
+        val specific = distinct.filter { a -> distinct.none { b -> a.second != b.second && owner(b.second)?.inheritsFrom(owner(a.second) ?: return@none false) == true } }
+        return specific.firstOrNull { owner(it.second)?.isInterface == false && FunctionModifier.abstract !in it.first.modifiers }
+            ?: specific.firstOrNull()
+    }
+
+    internal fun findTypeInHierarchy(name: String): ClassDefinition? =
+        if (fullQualifiedName == name) this else (listOfNotNull(superClass) + superInterfaces).firstNotNullOfOrNull { it.findTypeInHierarchy(name) }
+
+    fun findMemberFunctionsWithEnclosingTypeNameByDeclaredName(declaredName: String, inThisClassOnly: Boolean = false): Map<String, Pair<FunctionDeclarationNode, String>> {
+        val own = memberFunctionsMap.filter { it.value.name == declaredName }.mapValues { it.value to fullQualifiedName }
+        if (inThisClassOnly) return own
+        val inherited = (listOfNotNull(superClass) + superInterfaces).flatMap {
+            it.findMemberFunctionsWithEnclosingTypeNameByDeclaredName(declaredName).entries
+                .filter { FunctionModifier.private !in it.value.first.modifiers }.map { it.key to it.value }
+        }.groupBy({ it.first }, { it.second }).mapValues { mostSpecificMember(it.value)!! }
+        return own mergeIfNotExists inherited
+    }
 
     fun findMemberFunctionsByDeclaredName(declaredName: String, inThisClassOnly: Boolean = false): Map<String, FunctionDeclarationNode> =
         findMemberFunctionsWithEnclosingTypeNameByDeclaredName(declaredName, inThisClassOnly).mapValues { it.value.first }
@@ -738,20 +761,16 @@ open class ClassDefinition(
 
     fun findMemberFunctionWithEnclosingTypeNameByTransformedName(transformedName: String, inThisClassOnly: Boolean = false): Pair<FunctionDeclarationNode, String>? =
         memberFunctionsMap[transformedName]?.let { it to fullQualifiedName } ?:
-            Unit.takeIf { !inThisClassOnly }?.let {
-                superClass?.findMemberFunctionWithEnclosingTypeNameByTransformedName(transformedName, inThisClassOnly)
-                    ?: superInterfaces.firstNotNullOfOrNull { it.findMemberFunctionWithEnclosingTypeNameByTransformedName(transformedName, inThisClassOnly) }
-            }
+            if (inThisClassOnly) null else mostSpecificMember((listOfNotNull(superClass) + superInterfaces).mapNotNull {
+                it.findMemberFunctionWithEnclosingTypeNameByTransformedName(transformedName)?.takeIf { FunctionModifier.private !in it.first.modifiers }
+            })
 
-    /**
-     * For semantic analyzer use only. In SA, `memberFunctionsMap` is not indexed by transformedRefName.
-     */
+    /** In analysis the map uses signatures, so inspect transformed names explicitly. */
     fun findMemberFunctionWithEnclosingTypeNameByTransformedNameLinearSearch(transformedName: String, inThisClassOnly: Boolean = false): Pair<FunctionDeclarationNode, String>? =
-        memberFunctionsMap.filter { it.value.transformedRefName == transformedName }.values.firstOrNull()?.let { it to fullQualifiedName } ?:
-            Unit.takeIf { !inThisClassOnly }?.let {
-                superClass?.findMemberFunctionWithEnclosingTypeNameByTransformedNameLinearSearch(transformedName, inThisClassOnly)
-                    ?: superInterfaces.firstNotNullOfOrNull { it.findMemberFunctionWithEnclosingTypeNameByTransformedNameLinearSearch(transformedName, inThisClassOnly) }
-            }
+        memberFunctionsMap.values.firstOrNull { it.transformedRefName == transformedName }?.let { it to fullQualifiedName } ?:
+            if (inThisClassOnly) null else mostSpecificMember((listOfNotNull(superClass) + superInterfaces).mapNotNull {
+                it.findMemberFunctionWithEnclosingTypeNameByTransformedNameLinearSearch(transformedName)?.takeIf { FunctionModifier.private !in it.first.modifiers }
+            })
 
     fun findMemberFunctionByTransformedName(transformedName: String, inThisClassOnly: Boolean = false): FunctionDeclarationNode? =
         findMemberFunctionWithEnclosingTypeNameByTransformedName(transformedName, inThisClassOnly)?.first

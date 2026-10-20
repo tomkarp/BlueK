@@ -1,4 +1,6 @@
 package com.sunnychung.lib.multiplatform.kotlite
+import com.sunnychung.lib.multiplatform.kotlite.model.SuperReferenceNode
+
 
 import com.sunnychung.lib.multiplatform.kotlite.error.ExpectTokenMismatchException
 import com.sunnychung.lib.multiplatform.kotlite.error.ParseException
@@ -1239,6 +1241,13 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
                 }
 
                 val t = eat(TokenType.Identifier)
+                if (t.value == "super" && isCurrentToken(TokenType.Operator, "<")) {
+                    eat(TokenType.Operator, "<")
+                    val qualifier = type()
+                    eat(TokenType.Operator, ">")
+                    if (!isCurrentTokenExcludingNL(TokenType.Operator, ".")) throw SemanticException(t.position, "'super' is not an expression. It can only be used on the left-hand side of a dot ('.').")
+                    return SuperReferenceNode(t.position, qualifier)
+                }
                 if (isFunctionReferenceAhead(t)) return functionReference(t)
                 // `currentToken` is shadowed here by the token this expression started with.
                 val next = this@Parser.currentToken

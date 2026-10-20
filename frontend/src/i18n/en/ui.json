@@ -375,7 +375,11 @@
     "programExpired": "Program not found or expired.",
     "shortLinkExpired": "Short links are kept for 30 days. Ask the person who shared the link for a new one.",
     "showProjectName": "Show project name",
-    "sharedProgramOptions": "For links and HTML:"
+    "sharedProgramOptions": "For links and HTML:",
+    "chooseBlueJProject": "Choose BlueJ Project",
+    "severalBlueJProjects": "“{0}” contains several projects. Choose the project you want to open.",
+    "blueJProject": "Project",
+    "openSelectedBlueJProject": "Open project"
   },
   "readme": {
     "markdownHelp": "Markdown help",

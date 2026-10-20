@@ -1,4 +1,6 @@
 package com.sunnychung.lib.multiplatform.kotlite
+import com.sunnychung.lib.multiplatform.kotlite.model.SuperReferenceNode
+
 
 import com.sunnychung.lib.multiplatform.kotlite.error.EvaluateNullPointerException
 import com.sunnychung.lib.multiplatform.kotlite.error.EvaluateRuntimeException
@@ -597,6 +599,7 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
 
     fun NavigationNode.resolveSuperKeyword(subjectValue: RuntimeValue): RuntimeValue {
         // a hack to resolve the "super" keyword. See documentation
+        if (subject is SuperReferenceNode) return subjectValue
         return if (subject is VariableReferenceNode && subject.variableName == "super" && (subjectValue as ClassInstance).parentInstance != null) {
             var instance: ClassInstance? = subjectValue as ClassInstance
             val typeOfSuper = subject.type!!
@@ -794,7 +797,10 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                             memberType = NavigationNode.MemberType.Extension,
                             transformedRefName = this.function.ownerRef!!.extensionPropertyRef,
                         )
-                    ).also { ownerCall = it }
+                    ).also {
+                        it.privateDispatchTypeName = privateDispatchTypeName
+                        ownerCall = it
+                    }
                     return ownerCall.eval(replaceArguments)
                 }
 
@@ -808,7 +814,8 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                     CallableType.ClassMemberFunction -> {
                         val instance = callStack.currentSymbolTable().read("this") as? ClassInstance
                             ?: throw RuntimeException("Implicit receiver `this` is not available")
-                        val functionNode = instance.clazz!!.findMemberFunctionByTransformedName(functionRefName!!)
+                        val dispatchClass = privateDispatchTypeName?.let { symbolTable().findClass(it)?.first } ?: instance.clazz!!
+                        val functionNode = dispatchClass.findMemberFunctionByTransformedName(functionRefName!!)
                             ?: throw RuntimeException("Function `$directName` not found on implicit receiver")
                         return evalClassMemberAnyFunctionCall(instance, functionNode, replaceArguments = replaceArguments)
                     }
@@ -856,7 +863,11 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
                         (subject as? ClassInstance)
                             ?.let { function.resolveSuperKeyword(it) as? ClassInstance }
                             ?.let { instance ->
-                                val function = instance.clazz!!.findMemberFunctionByTransformedName(functionRefName!!)
+                                val dispatchClass = privateDispatchTypeName?.let { symbolTable().findClass(it)?.first }
+                                    ?: (function.subject as? SuperReferenceNode)?.let { reference ->
+                                    symbolTable().findClass(reference.type!!.name)?.first
+                                } ?: instance.clazz!!
+                                val function = dispatchClass.findMemberFunctionByTransformedName(functionRefName!!)
                                 if (function != null) {
                                     val subject = if (isSpecialFunction == true) {
                                         instance

@@ -1,4 +1,9 @@
 package com.sunnychung.lib.multiplatform.kotlite
+import com.sunnychung.lib.multiplatform.kotlite.model.SuperReferenceNode
+
+import com.sunnychung.lib.multiplatform.kotlite.model.IntersectionType
+import com.sunnychung.lib.multiplatform.kotlite.model.intersectTypes
+
 
 import com.sunnychung.lib.multiplatform.kotlite.error.CannotInferTypeException
 import com.sunnychung.lib.multiplatform.kotlite.error.ArgumentTypeMismatchException
@@ -347,7 +352,9 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     }
 
     fun DataType.toTypeNode(): TypeNode =
-        if (this is NothingType) {
+        if (this is IntersectionType) {
+            this.toTypeNode(isResolveTypeArguments = true)
+        } else if (this is NothingType) {
             typeRegistry[if (isNullable) "Null" else "Nothing"]!!
         } else if (this !is ObjectType && this !is FunctionType && this !is TypeParameterType) {
             typeRegistry["$name${if (isNullable) "?" else ""}"]!!
@@ -635,18 +642,20 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         return SmartCastFact(subject.key, subject.type.copy(isNullable = false), subject.isMutable)
     }
 
-    /**
-     * `x is T` narrows `x` to `T` if that is a subtype of `x`'s type. A type parameter, a type alias or an
-     * unrelated type (Kotlin would intersect them) leave the type unchanged.
-     */
+    /** Retain all stable bounds established by type guards, including independent interfaces. */
     private fun typeTestFact(subject: SmartCastSubject?, tested: ASTNode?): SmartCastFact? {
         if (subject == null || !subject.isStableForTypeTest || tested !is TypeNode || tested is FunctionTypeNode) return null
         if (subject.type is FunctionTypeNode || subject.type is ClassTypeNode) return null
         if (currentScope.findTypeAlias(tested.name) != null) return null
         val currentType = subject.type.toDataType()
         val testedType = tested.toDataType()
-        if (currentType is TypeParameterType || !currentType.copyOf(true).isAssignableFrom(testedType.copyOf(false))) return null
-        val narrowed = testedType.copyOf(currentType.isNullable && testedType.isNullable)
+        if (currentType is TypeParameterType) return null
+        val narrowed = if (currentType.copyOf(true).isAssignableFrom(testedType.copyOf(false))) {
+            testedType.copyOf(currentType.isNullable && testedType.isNullable)
+        } else if (currentType is ObjectType && testedType is ObjectType &&
+            (currentType.clazz.isInterface || testedType.clazz.isInterface || currentType is IntersectionType)) {
+            intersectTypes(currentType.copyOf(false), testedType.copyOf(false))
+        } else return null
         if (narrowed == currentType) return null
         return SmartCastFact(subject.key, narrowed.toTypeNode(), subject.isMutable)
     }
@@ -655,6 +664,12 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     private fun smartCastsWhenTrue(node: ASTNode): List<SmartCastFact> {
         return when {
             node is VariableReferenceNode -> aliasFacts(node, true)
+            node is BinaryOpNode && node.operator == "||" -> {
+                val left = smartCastsWhenTrue(node.node1)
+                val fallback = smartCastsWhenFalse(node.node1)
+                val right = fallback + withSmartCasts(fallback) { smartCastsWhenTrue(node.node2) }
+                commonFacts(listOf(left.associateBy { it.key }, right.associateBy { it.key })).values.toList()
+            }
             node is BinaryOpNode && node.operator == "&&" -> {
                 val first = smartCastsWhenTrue(node.node1)
                 first + withSmartCasts(first) { smartCastsWhenTrue(node.node2) }
@@ -673,6 +688,12 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     private fun smartCastsWhenFalse(node: ASTNode): List<SmartCastFact> {
         return when {
             node is VariableReferenceNode -> aliasFacts(node, false)
+            node is BinaryOpNode && node.operator == "&&" -> {
+                val left = smartCastsWhenFalse(node.node1)
+                val fallback = smartCastsWhenTrue(node.node1)
+                val right = fallback + withSmartCasts(fallback) { smartCastsWhenFalse(node.node2) }
+                commonFacts(listOf(left.associateBy { it.key }, right.associateBy { it.key })).values.toList()
+            }
             node is BinaryOpNode && node.operator == "||" -> {
                 val first = smartCastsWhenFalse(node.node1)
                 first + withSmartCasts(first) { smartCastsWhenFalse(node.node2) }
@@ -1734,6 +1755,24 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     fun VariableReferenceNode.visit(modifier: Modifier = Modifier()) = visitVariableReference(modifier, isAssignmentTarget = false)
 
     private fun VariableReferenceNode.visitVariableReference(modifier: Modifier, isAssignmentTarget: Boolean) {
+        if (this is SuperReferenceNode) {
+            var scope: SymbolTable? = currentScope
+            while (scope != null && scope.scopeType != ScopeType.Class) scope = scope.parentScope
+            val owner = scope?.let { currentScope.findClass(it.scopeName)?.first }
+                ?: throw SemanticException(position, "'super' is not available here.")
+            if (qualifier.isNullable) throw SemanticException(qualifier.position, "A supertype qualifier cannot be nullable.")
+            val direct = owner.superInterfaceTypes + listOfNotNull(owner.superClassInvocation?.function as? TypeNode)
+            val target = direct.firstOrNull { it.name == qualifier.name }
+                ?: throw SemanticException(qualifier.position, "Not an immediate supertype.")
+            if (!qualifier.arguments.isNullOrEmpty() && qualifier.toDataType() != target.toDataType()) {
+                throw SemanticException(qualifier.position, "Not an immediate supertype.")
+            }
+            type = target
+            transformedRefName = "super"
+            symbolRecorders.lastOrNull()?.properties?.add("super")
+            return
+        }
+
         runBeforePropertyLookup(variableName)
         // A top-level property later in this unit, unless a local or member shadows it.
         if (variableName in pendingTopLevel && !isDeclaredBelowScript(variableName)) {
@@ -2456,6 +2495,9 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     function.ownerRef = (resolution.owner ?: implicitOwner)?.let { PropertyOwnerInfo(it) }
                     if (implicitOwner != null && symbolRecorders.isNotEmpty()) symbolRecorders.last().properties += implicitOwner
                 }
+                privateDispatchTypeName = (resolution.definition as? FunctionDeclarationNode)
+                    ?.takeIf { resolution.type == CallableType.ClassMemberFunction && FunctionModifier.private in it.modifiers }
+                    ?.declaringClassName
                 functionRefName = resolution.transformedName
                 callableType = resolution.type
                 secondaryConstructorIndex = resolution.secondaryConstructorIndex
@@ -2593,6 +2635,9 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     }
                 }
 
+                privateDispatchTypeName = (resolution.definition as? FunctionDeclarationNode)
+                    ?.takeIf { resolution.type == CallableType.ClassMemberFunction && FunctionModifier.private in it.modifiers }
+                    ?.declaringClassName
                 functionRefName = resolution.transformedName
                 callableType = resolution.type
                 secondaryConstructorIndex = resolution.secondaryConstructorIndex
@@ -3456,12 +3501,10 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         val memberName = member.name
 
         for (subjectType in subjectTypesToSearch) {
-            val clazz = subjectType.resolveTypeParameterAsUpperBound().nameWithNullable
-                .let {
-                    currentScope.findClass(it)
-                        ?: throw RuntimeException("Cannot find class `$it`")
-                }
-                .first
+            val resolvedSubject = subjectType.resolveTypeParameterAsUpperBound()
+            val clazz = (resolvedSubject as? IntersectionType)?.clazz
+                ?: currentScope.findClass(resolvedSubject.nameWithNullable)?.first
+                ?: throw SemanticException(position, "Cannot find class `${resolvedSubject.nameWithNullable}`")
             if (lookupType == IdentifierClassifier.Property) {
                 clazz.findMemberPropertyWithoutAccessor(memberName)?.let { property ->
                     val key = clazz.declarations.filterIsInstance<PropertyDeclarationNode>().firstOrNull { it.name == memberName }?.transformedRefName
@@ -5014,19 +5057,16 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             else -> type
         } ?: return typeRegistry["Any"]!!
         var isNullCastNeeded: Boolean = false
-        val clazz = currentScope.findClass(
-            subjectType.toDataType().resolveTypeParameterAsUpperBound()
-                .let {
-                    if (operator == "?." && subjectType.isNullable) {
-                        isNullCastNeeded = true
-                        it.copyOf(isNullable = false)
-                    } else {
-                        it
-                    }
-                }
-                .nameWithNullable
-        )?.first
+        val resolvedSubject = subjectType.toDataType().resolveTypeParameterAsUpperBound().let {
+            if (operator == "?." && subjectType.isNullable) {
+                isNullCastNeeded = true
+                it.copyOf(isNullable = false)
+            } else it
+        }
+        val clazz = (resolvedSubject as? IntersectionType)?.clazz
+            ?: currentScope.findClass(resolvedSubject.nameWithNullable)?.first
             ?: throw SemanticException(position, "Unknown type `${subjectType.name}`")
+
         val memberName = member.name
 
         fun resolve(): TypeNode {

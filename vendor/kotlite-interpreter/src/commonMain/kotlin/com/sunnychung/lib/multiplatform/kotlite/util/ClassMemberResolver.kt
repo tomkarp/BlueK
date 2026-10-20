@@ -22,7 +22,7 @@ class ClassMemberResolver private constructor(symbolTable: SymbolTable, private 
          * If `createOnlyIfClassExists` == false, always returns a resolver.
          */
         fun create(symbolTable: SymbolTable, clazz: ClassDefinition, typeArguments: List<TypeNode>?, createOnlyIfClassExists: Boolean = false): ClassMemberResolver? {
-            if (createOnlyIfClassExists && symbolTable.findClass(clazz.fullQualifiedName) == null) {
+            if (createOnlyIfClassExists && clazz !is com.sunnychung.lib.multiplatform.kotlite.model.IntersectionClassDefinition && symbolTable.findClass(clazz.fullQualifiedName) == null) {
                 return null
             }
             return ClassMemberResolver(symbolTable, clazz, typeArguments)
@@ -176,19 +176,15 @@ class ClassMemberResolver private constructor(symbolTable: SymbolTable, private 
     }
 
     fun findMemberPropertyCustomAccessorWithType(memberName: String): Pair<PropertyAccessorsNode, TypeNode>? {
-        val (accessor, index) = clazz.findMemberPropertyCustomAccessorWithIndex(memberName) ?: return null
-        val type = accessor.type.let { type ->
-            type.resolveGenericParameterTypeArguments(genericResolutions[index].second)
-        }
-        return accessor to type
+        val owner = clazz.findMemberPropertyOwnerName(memberName) ?: return null
+        val accessor = typeDefinitions[owner]?.findMemberPropertyCustomAccessor(memberName, inThisClassOnly = true) ?: return null
+        return accessor to accessor.type.resolveGenericParameterTypeArguments(genericResolutionsByTypeName[owner]!!)
     }
 
     fun findMemberPropertyWithoutAccessorWithType(memberName: String): Pair<PropertyType, TypeNode>? {
-        val (property, index) = clazz.findMemberPropertyWithoutAccessorWithIndex(memberName) ?: return null
-        val type = property.type.let { type ->
-            type.toTypeNode().resolveGenericParameterTypeArguments(genericResolutions[index].second)
-        }
-        return property to type
+        val owner = clazz.findMemberPropertyOwnerName(memberName) ?: return null
+        val property = typeDefinitions[owner]?.findMemberPropertyWithoutAccessor(memberName, inThisClassOnly = true) ?: return null
+        return property to property.type.toTypeNode().resolveGenericParameterTypeArguments(genericResolutionsByTypeName[owner]!!)
     }
 
 //    private fun Pair<FunctionDeclarationNode, Int>?.resolveTypes(): FunctionAndTypes? {

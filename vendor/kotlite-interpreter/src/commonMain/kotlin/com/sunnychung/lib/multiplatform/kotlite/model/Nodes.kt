@@ -222,6 +222,9 @@ data class AssignmentNode(val subject: ASTNode, val operator: String, val value:
     }
 }
 
+/** An explicit immediate-supertype receiver; its call dispatch is static, its `this` is unchanged. */
+class SuperReferenceNode(position: SourcePosition, val qualifier: TypeNode) : VariableReferenceNode(position, "super")
+
 open class VariableReferenceNode(override val position: SourcePosition, val variableName: String, @ModifyByAnalyzer var transformedRefName: String? = null, @ModifyByAnalyzer var ownerRef: PropertyOwnerInfo? = null, @ModifyByAnalyzer var type: TypeNode? = null) : ASTNode {
     // A top-level property is initialized in source order and may not be yet when this runs.
     @ModifyByAnalyzer var isTopLevelProperty: Boolean = false
@@ -320,6 +323,7 @@ open class FunctionDeclarationNode(
     @ModifyByAnalyzer var isVararg: Boolean = false,
     @ModifyByAnalyzer val inferredModifiers: MutableSet<FunctionModifier> = mutableSetOf(),
 ) : ASTNode, CallableNode {
+    @ModifyByAnalyzer var declaringClassName: String? = null
     /** Parsed kotlin.test annotations; execution belongs to the host runner. */
     var annotations: Set<String> = emptySet()
     var sourceStart: Int = position.index
@@ -428,6 +432,9 @@ data class FunctionCallNode(
     @ModifyByAnalyzer var resolvedInvoke: FunctionCallNode? = null,
     @ModifyByAnalyzer var secondaryConstructorIndex: Int? = null,
 ) : ASTNode {
+    /** Private member calls bind to their declaring class, independently of virtual overrides. */
+    @ModifyByAnalyzer var privateDispatchTypeName: String? = null
+
     /** Declared type of the receiving property, e.g. `val k: MutableList<Karte> = mutableListOf()`. */
     @ModifyByAnalyzer var expectedReturnType: TypeNode? = null
 

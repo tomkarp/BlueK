@@ -99,7 +99,8 @@ you need to retain.
 **Open / Import** accepts `.bluek.json` files and BlueJ projects as ZIPs or
 folders. Historical BluePlay library source files are replaced by the built-in
 library when applicable; Kotlin files, card positions, images and sounds are
-imported. Java source is not interpreted.
+imported. If a ZIP or folder contains several projects, choose one from the
+project list. Cancel leaves the current project open. Java source is not interpreted.
 
 **Save / Export** keeps the same window size when switching views or changing
 options. The content scrolls on smaller screens; Cancel stays available.

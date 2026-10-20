@@ -337,7 +337,7 @@ class SemanticAnalyzerSymbolTable(
     fun hasCallableNamed(currentSymbolTable: SymbolTable, originalName: String, modifierFilter: SearchFunctionModifier, receiverType: DataType? = null): Boolean {
         val receiverClass = receiverType
             ?.let { if (it is TypeParameterType) it.upperBound else it }
-            ?.let { findClass(it.nameWithNullable)?.first }
+            ?.let { (it as? IntersectionType)?.clazz ?: findClass(it.nameWithNullable)?.first }
         return findAllMatchingCallables(currentSymbolTable, originalName, receiverClass, receiverType, emptyList(), modifierFilter,
             checkArgumentTypes = false, checkArgumentShape = false).isNotEmpty()
     }
@@ -347,7 +347,7 @@ class SemanticAnalyzerSymbolTable(
     fun findCallablesForArgumentDiagnostic(currentSymbolTable: SymbolTable, originalName: String, receiverType: DataType?, arguments: List<FunctionCallArgumentInfo>, modifierFilter: SearchFunctionModifier): List<FindCallableResult> {
         val receiverClass = receiverType
             ?.let { if (it is TypeParameterType) it.upperBound else it }
-            ?.let { findClass(it.nameWithNullable)?.first }
+            ?.let { (it as? IntersectionType)?.clazz ?: findClass(it.nameWithNullable)?.first }
         return findAllMatchingCallables(currentSymbolTable, originalName, receiverClass, receiverType, arguments, modifierFilter, checkArgumentTypes = false)
             .distinctBy { it.definition to it.secondaryConstructorIndex }
     }
@@ -387,7 +387,7 @@ class SemanticAnalyzerSymbolTable(
 
         val receiverClass = receiverType
             ?.let { if (it is TypeParameterType) it.upperBound else it }
-            ?.let { (findClass(it.nameWithNullable) ?: throw RuntimeException("Class ${it.nameWithNullable} not found")).first }
+            ?.let { (it as? IntersectionType)?.clazz ?: (findClass(it.nameWithNullable) ?: throw RuntimeException("Class ${it.nameWithNullable} not found")).first }
         return findAllMatchingCallables(currentSymbolTable, originalName, receiverClass, receiverType, arguments, modifierFilter)
             .distinctBy { it.definition to it.secondaryConstructorIndex }
             .let { result -> // prioritize extension function first if they are special functions (toString/hashCode/equals)

@@ -79,3 +79,42 @@ test('GUI-61 a BlueJ BluePlay project uses the built-in library and its images',
   await expect(stage).toBeVisible();
   await expect(page.locator('.codepad-error')).toHaveCount(0);
 });
+
+for (const locale of ['en', 'de']) {
+  test(`GUI-147 choose one BlueJ project from a collection and cancel without replacing the workspace (${locale})`, async ({ page }) => {
+    await page.addInitScript(language => localStorage.setItem('bluek-language', language), locale);
+    const zip = zipSync({
+      'units/unit1/demo/package.bluej': strToU8('#BlueJ package file\n'),
+      'units/unit1/demo/Cat.kt': strToU8('class Cat { fun sound()="meow" }'),
+      'units/unit2/demo/package.bluej': strToU8('#BlueJ package file\n'),
+      'units/unit2/demo/Dog.kt': strToU8('class Dog { fun sound()="woof" }'),
+    });
+    await page.goto('/');
+    const open = () => page.getByRole('button', { name: locale === 'de' ? 'Öffnen / Importieren' : 'Open / Import', exact: true }).click();
+    const upload = async () => {
+      await open();
+      await page.getByLabel(locale === 'de' ? 'Projektdatei auswählen' : 'Choose project file').setInputFiles({ name: 'Units.zip', mimeType: 'application/zip', buffer: Buffer.from(zip) });
+    };
+    await upload();
+    let dialog = page.getByRole('dialog', { name: locale === 'de' ? 'BlueJ-Projekt auswählen' : 'Choose BlueJ Project', exact: true });
+    await expect(dialog.locator('option')).toHaveText(['units/unit1/demo', 'units/unit2/demo']);
+    await dialog.getByLabel(locale === 'de' ? 'Projekt' : 'Project', { exact: true }).selectOption('units/unit2/demo/');
+    await dialog.getByRole('button', { name: locale === 'de' ? 'Projekt öffnen' : 'Open project', exact: true }).click();
+    await expect(page.locator('.classcard')).toHaveCount(1);
+    await expect(page.locator('.classcard[aria-label="Dog"]')).toBeVisible();
+    await page.getByLabel(locale === 'de' ? 'Codepad-Eingabe' : 'Codepad input').fill('Dog().sound()');
+    await page.getByLabel(locale === 'de' ? 'Codepad-Eingabe' : 'Codepad input').press('Enter');
+    await expect(page.locator('.codepad-entry').last()).toContainText('woof');
+    await upload();
+    dialog = page.getByRole('dialog', { name: locale === 'de' ? 'BlueJ-Projekt auswählen' : 'Choose BlueJ Project', exact: true });
+    await dialog.getByRole('button', { name: locale === 'de' ? 'Abbrechen' : 'Cancel', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.locator('.classcard[aria-label="Dog"]')).toBeVisible();
+    await expect(page.locator('.codepad-entry').last()).toContainText('woof');
+    await upload();
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(page.locator('.classcard[aria-label="Dog"]')).toBeVisible();
+  });
+}

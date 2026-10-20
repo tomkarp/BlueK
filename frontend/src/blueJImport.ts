@@ -45,22 +45,40 @@ function cardPositions(packageText: string | undefined, files: SavedProjectFile[
   return positions;
 }
 
-/**
- * Convert a BlueJ project (Kotlin sources, images/, sounds/, package.bluej) into
- * the BlueK project format. The project root is the directory of the shallowest
- * package.bluej, so ZIP archives with an enclosing folder work as well.
- */
-export function blueJProjectFromEntries(entries: ImportEntry[]): SavedProject {
-  const usable = entries
+/** Normalize archive and dropped-folder paths before discovering independent projects. */
+function usableEntries(entries: ImportEntry[]) {
+  return entries
     .map((entry) => ({ ...entry, path: entry.path.replace(/\\/g, "/").replace(/^\/+/, "") }))
     .filter((entry) => !entry.path.split("/").some((part) => part === "__MACOSX" || part.startsWith(".")));
-  const depth = (path: string) => path.split("/").length;
-  const byDepth = (a: ImportEntry, b: ImportEntry) => depth(a.path) - depth(b.path);
-  const marker = usable.filter((entry) => /(^|\/)package\.bluej$/.test(entry.path)).sort(byDepth)[0]
-    ?? usable.filter((entry) => entry.path.endsWith(".kt")).sort(byDepth)[0];
-  if (!marker) throw new Error("No BlueJ project found: the ZIP file or directory contains no package.bluej and no Kotlin files.");
-  const root = marker.path.slice(0, marker.path.lastIndexOf("/") + 1);
-  const inRoot = usable
+}
+
+export type BlueJProjectChoice = { root: string; label: string; fileCount: number };
+
+/** One choice per project, not per package nested inside a project. */
+export function blueJProjects(entries: ImportEntry[]): BlueJProjectChoice[] {
+  const usable = usableEntries(entries);
+  const directory = (path: string) => path.slice(0, path.lastIndexOf("/") + 1);
+  const markers = usable.filter((entry) => /(^|\/)package\.bluej$/.test(entry.path)).map((entry) => directory(entry.path));
+  const roots = markers.length ? markers : usable.filter((entry) => entry.path.endsWith(".kt")).map((entry) => directory(entry.path));
+  return [...new Set(roots)]
+    .map((root) => ({
+      root,
+      label: root.replace(/\/$/, "") || ".",
+      fileCount: usable.filter((entry) => entry.path.startsWith(root) && /^[A-Za-z0-9_.-]+\.kt$/.test(entry.path.slice(root.length))).length,
+    }))
+    .filter((project) => project.fileCount > 0)
+    .filter((project, _, all) => !all.some((parent) => parent.root !== project.root && project.root.startsWith(parent.root)))
+    .sort((a, b) => a.label.localeCompare(b.label, "en"));
+}
+
+/** Convert exactly one selected project; collections require an explicit choice. */
+export function blueJProjectFromEntries(entries: ImportEntry[], selectedRoot?: string): SavedProject {
+  const projects = blueJProjects(entries);
+  if (!projects.length) throw new Error("No BlueJ project found: the ZIP file or directory contains no package.bluej and no Kotlin files.");
+  if (selectedRoot === undefined && projects.length > 1) throw new Error("This archive contains several BlueJ projects. Choose a project to open.");
+  const root = selectedRoot ?? projects[0].root;
+  if (!projects.some((project) => project.root === root)) throw new Error("The selected BlueJ project was not found.");
+  const inRoot = usableEntries(entries)
     .filter((entry) => entry.path.startsWith(root))
     .map((entry) => ({ ...entry, path: entry.path.slice(root.length) }));
   const decoder = new TextDecoder();

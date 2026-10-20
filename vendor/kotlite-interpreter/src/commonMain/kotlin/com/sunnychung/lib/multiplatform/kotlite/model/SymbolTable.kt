@@ -290,6 +290,7 @@ open class SymbolTable(
     }
 
     fun assertToDataType(type: TypeNode, visitCache: SymbolTableTypeVisitCache? = null): DataType {
+        if (type is IntersectionTypeNode) return IntersectionType(type.bounds.map { assertToDataType(it) as ObjectType }, type.isNullable)
         if (visitCache == null) resolveSimpleTypeNode(type)?.let { return it }
         val visitCache = visitCache ?: SymbolTableTypeVisitCache()
         val isCacheCreator = visitCache.isEmpty
@@ -304,6 +305,7 @@ open class SymbolTable(
     }
 
     fun typeNodeToDataType(type: TypeNode, visitCache: SymbolTableTypeVisitCache? = null): DataType? {
+        if (type is IntersectionTypeNode) return assertToDataType(type, visitCache)
         if (visitCache == null) resolveSimpleTypeNode(type)?.let { return it }
         val isTopLevel = visitCache == null || visitCache.isEmpty
         val visitCache = visitCache ?: SymbolTableTypeVisitCache()

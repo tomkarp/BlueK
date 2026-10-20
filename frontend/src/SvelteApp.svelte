@@ -188,6 +188,7 @@
     };
   });
   function escapeWindowAction(): (() => void) | null {
+    if (project.blueJImportChoice) return () => { project.blueJImportChoice = null; };
     if (feedback.open) return feedback.close;
     if (objects.inspectorError)
       return () => {
@@ -807,6 +808,8 @@
     shareFullProgram={project.shareFullProgram}
     shareShortProgram={project.shareShortProgram}
     openProjectDrop={project.openProjectDrop}
+    bind:blueJImportChoice={project.blueJImportChoice}
+    chooseBlueJProject={project.chooseBlueJProject}
     importProject={project.importProject}
     loadSharedProjectFromCode={project.loadSharedProjectFromCode}
     shareProject={project.shareProject}

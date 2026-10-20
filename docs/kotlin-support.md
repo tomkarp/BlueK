@@ -2,7 +2,7 @@
 
 BlueK interprets a subset of Kotlin, extended from Kotlite. This is not full
 Kotlin/JVM compatibility. This reference describes the checked-in interpreter
-as of **13 October 2026**. See also the [standard library](kotlin-surface.md),
+as of **18 October 2026**. See also the [standard library](kotlin-surface.md),
 [tests and saved state](testing.md) and [implementation notes](kotlite.md).
 
 ## Project files
@@ -22,7 +22,11 @@ package-qualified library expressions and package declarations are not supported
 - Primary constructors **with `init` blocks in the same class**; secondary
   constructors, including `constructor(...) : this(...)` delegation.
 - Inheritance with `open`, `abstract`, `override` and `super`; interfaces with
-  default methods and abstract properties; sealed classes/interfaces and
+  default methods and abstract properties. Conflicting inherited methods require
+  an override; a shared diamond or a more specific override is selected without
+  depending on interface order. `super<Interface>.method()` calls the selected
+  immediate supertype implementation while keeping the actual object as `this`.
+  See [interface comparison](kotlin-interfaces.md). Sealed classes/interfaces and
   exhaustive `when` over their subclasses.
   Missing `override` on a method uses the Kotlin 2.2.21 compiler's diagnostic
   wording, naming the method and its declaring supertype. Other diagnostics
@@ -74,8 +78,6 @@ package-qualified library expressions and package declarations are not supported
 - During constructor default-argument analysis, a class's companion can see
   constructor properties only. During initializers it also sees methods and
   properties already analyzed.
-- In an interface diamond, an ancestor default method can win over a more
-  specific subinterface override (`class X : A, K` with `K : A`).
 - Extension properties with getters and interface properties with a getter or
   initializer are unsupported. Abstract interface properties work.
 - Inner-class instances can be created inside the enclosing class, but not
@@ -120,8 +122,10 @@ a method on a different class does not turn a missing call into an argument erro
   properties. Null/type guards, stable Boolean aliases and safe-call equality
   with non-null values can narrow receivers. Reassigning a root invalidates its
   property paths. Mutable, open and custom-getter properties, and mutable global
-  roots, are not stable smart-cast targets. `this is Type` in extensions, `is T`
-  for type parameters, intersection types, other safe-call conditions and
+  roots, are not stable smart-cast targets. Guards can retain several independent
+  interface/class bounds, including their generic members and inferred local
+  copies. `this is Type` in extensions, `is T` for type parameters, general
+  intersection-type inference, other safe-call conditions and
   inference from later loop iterations remain limited. Use explicit casts or a
   local snapshot when needed.
 - A matching top-level function can win over an implicit receiver function,

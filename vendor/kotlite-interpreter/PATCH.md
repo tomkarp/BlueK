@@ -24,6 +24,30 @@ browser-session fixes without replacing Kotlite with a separate interpreter.
 
 ## Changes
 
+Interface bounds, inherited defaults and explicit super calls (RT-120/121/122):
+retain independent class/interface bounds from stable type guards in an internal
+IntersectionType/IntersectionTypeNode. Its analysis-only member view keeps every
+bound and resolved generic signature; assignments and runtime holders require
+all bounds. Generic substitution and inferred locals preserve the conjunction.
+Properties resolve through their declaring class/interface rather than an index
+in the superclass-only chain. No synthetic student class is instantiated.
+
+Resolve inherited methods by declaration ancestry, independent of interface
+order. Private superclass methods do not participate in inherited candidates;
+private calls dispatch to their declaring class even when the actual receiver
+also has a public method of that name. Validate effective signatures after generic substitution: conflicting
+defaults (including default/abstract interface combinations) need an override;
+shared diamonds, more-specific overrides and concrete class implementations of
+abstract interface methods remain valid. Abstract re-overrides remain abstract.
+
+Parse qualified `super<Type>.member()` as a dedicated receiver node, validate an
+immediate supertype and optional redundant matching type arguments, and dispatch
+to that supertype's implementation while retaining the actual receiver. Calls
+use the existing interpreted call/suspension path; lambdas capture the receiver.
+See `scripts/interface-cases.mjs`, `scripts/audit-interfaces.mjs` and the
+[comparison](../../docs/kotlin-interfaces.md).
+
+
 Definite assignment and stable smart casts (RT-117/118): use analyzed AST
 completion for continuing paths rather than a last-statement heuristic. Track
 uninitialized local val/var and backed properties across if/when, try/catch,

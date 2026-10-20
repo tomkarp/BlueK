@@ -121,6 +121,12 @@ GUI reports: `playwright-report/`; screenshots/traces: `test-results/`.
 Coverage IDs, actual results and remaining acceptance gaps:
 [regression checklist](docs/regression-checklist.md).
 
+`npm run test:interfaces` checks split-project interface guards, inherited
+methods and qualified super calls against the bundled interpreter;
+`npm run test:interfaces:kotlin` runs the same cases with installed Kotlin/JVM.
+`npm run test:bluej-selection` covers discovery and isolated import of projects
+inside a collection ZIP or folder.
+
 Conformance takes roughly five minutes. `-- --report` lists failures;
 `-- --update` replaces the baseline in `scripts/conformance-baseline.txt`.
 Do not silently update it to hide a regression.

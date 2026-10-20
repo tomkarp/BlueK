@@ -43,7 +43,7 @@ import {
   readProjectFile,
 } from "../projectBrowserIO";
 import { htmlExport } from "../htmlExport";
-import { blueJProjectFromEntries, type ImportEntry } from "../blueJImport";
+import { blueJProjectFromEntries, blueJProjects, entriesFromZip, type BlueJProjectChoice, type ImportEntry } from "../blueJImport";
 import { blueJExportLimits, blueJProjectZip } from "../blueJExport";
 
 import { withStandardResources } from "../standardImages";
@@ -159,6 +159,7 @@ export class ProjectWorkspace {
   linkProblem: { message: string; expired: boolean } | null = $state(null);
   /** What the last BlueJ export could not carry over; stays until closed or the next BlueJ export. */
   blueJExportNotice = $state("");
+  blueJImportChoice = $state.raw<{ entries: ImportEntry[]; projects: BlueJProjectChoice[]; name: string } | null>(null);
   /** Why the browser draft is not stored; `session` means it cannot be restored after a reload. */
   autosaveWarning: DraftSaveFailure | { reason: "session" } | null =
     $state(null);
@@ -912,6 +913,10 @@ export class ProjectWorkspace {
           "Choose a BlueK .json file, a BlueJ .zip file or a project directory.";
         return;
       }
+      if (/\.zip$/i.test(file.name)) {
+        await this.openProjectEntries(entriesFromZip(new Uint8Array(await file.arrayBuffer())), file.name);
+        return;
+      }
       await this.loadProject(
         await readProjectFile(file),
         `Loaded ${file.name}`,
@@ -924,6 +929,11 @@ export class ProjectWorkspace {
   };
   openProjectEntries = async (entries: ImportEntry[], name: string) => {
     try {
+      const projects = blueJProjects(entries);
+      if (projects.length > 1) {
+        this.blueJImportChoice = { entries, projects, name };
+        return;
+      }
       await this.loadProject(
         blueJProjectFromEntries(entries),
         `Loaded ${name}`,
@@ -932,6 +942,17 @@ export class ProjectWorkspace {
       this.host.ui().status = "Project error";
       this.host.ui().error =
         reason instanceof Error ? reason.message : String(reason);
+    }
+  };
+  chooseBlueJProject = async (root: string) => {
+    const choice = this.blueJImportChoice;
+    if (!choice) return;
+    this.blueJImportChoice = null;
+    try {
+      await this.loadProject(blueJProjectFromEntries(choice.entries, root), `Loaded ${choice.name}: ${root}`);
+    } catch (reason) {
+      this.host.ui().status = "Project error";
+      this.host.ui().error = reason instanceof Error ? reason.message : String(reason);
     }
   };
   openProjectDrop = async (event: DragEvent) => {

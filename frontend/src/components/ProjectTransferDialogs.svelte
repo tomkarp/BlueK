@@ -2,8 +2,9 @@
   import { useLanguage } from "../i18n/Language.svelte";
   const language = useLanguage();
   $: t = $language.t;
-  import { containClicks } from "../uiActions";
+  import { containClicks, focusOnMount } from "../uiActions";
 
+  import type { BlueJProjectChoice } from "../blueJImport";
   import type { ProjectFile } from "../../../runtime-contract/src/index";
 
   import type { ShareLinkDialog } from "../uiTypes";
@@ -38,6 +39,10 @@
   export let shareShortProgram: () => Promise<void>;
   let exportMode: "project" | "program" = "project";
   export let openProjectDrop: (event: DragEvent) => Promise<void>;
+  export let blueJImportChoice: { projects: BlueJProjectChoice[]; name: string } | null;
+  export let chooseBlueJProject: (root: string) => Promise<void>;
+  let selectedBlueJRoot = "";
+  $: if (blueJImportChoice) selectedBlueJRoot = blueJImportChoice.projects[0].root;
   export let importProject: (event: Event) => Promise<void>;
   export let loadSharedProjectFromCode: () => Promise<void>;
   export let shareProject: () => Promise<void>;
@@ -454,3 +459,23 @@
       </div>
     </div>
   </div>{/if}
+
+{#if blueJImportChoice}
+  <div class="modal topmost-modal" role="presentation">
+    <div class="dialog" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="bluej-project-choice-title" use:containClicks>
+      <h3 id="bluej-project-choice-title">{t("ui.transfer.chooseBlueJProject")}</h3>
+      <p>{t("ui.transfer.severalBlueJProjects", [blueJImportChoice.name])}</p>
+      <label>{t("ui.transfer.blueJProject")}
+        <select use:focusOnMount aria-label={t("ui.transfer.blueJProject")} bind:value={selectedBlueJRoot} style="max-width:100%">
+          {#each blueJImportChoice.projects as project}
+            <option value={project.root}>{project.label}</option>
+          {/each}
+        </select>
+      </label>
+      <div class="dialog-actions">
+        <button on:click={() => (blueJImportChoice = null)}>{t("ui.common.cancel")}</button>
+        <button on:click={() => chooseBlueJProject(selectedBlueJRoot)}>{t("ui.transfer.openSelectedBlueJProject")}</button>
+      </div>
+    </div>
+  </div>
+{/if}
