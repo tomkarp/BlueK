@@ -241,4 +241,54 @@ for (const [setup, access, release] of [
   evaluate(s, 'pond.removeObject(pond.allObjects()[0])');
   assert.ok(!snapshot(s).liveObjectIds.includes(duck.objectId), 'a removed actor is no longer retained by its world');
 }
+// GUI-148: the inspector follows every non-null value, with active toString text
+// and passive snapshots/navigation. Computed values are captured, not read twice.
+{
+  const s = api.bluekCreateKotliteSession();
+  ok(s.load('Inspection.kt', `
+    class Label {
+      var textReads = 0
+      override fun toString(): String { textReads += 1; return "shown label" }
+    }
+    class Broken { val safe = 7; override fun toString(): String = error("bad text") }
+    class Inspection {
+      var number = 42
+      val text = "hello"
+      val flag = true
+      val numbers = listOf(1, 2)
+      val label = Label()
+      val broken = Broken()
+      val absent: String? = null
+      var reads = 0
+      val calculated: Int get() { reads += 1; return reads * 10 }
+      val failed: Int get() = error("bad getter")
+    }
+  `));
+  const owner = ok(s.create('Inspection', '', 'example'));
+  const field = name => ok(s.inspect(owner.objectId)).fields.find(field => field.name === name);
+  for (const [name, text] of [['number', '42'], ['text', 'hello'], ['flag', 'true'], ['numbers', '[1, 2]'], ['label', 'shown label'], ['calculated', '10']]) {
+    assert.equal(ok(s.inspectGet(owner.objectId, name)).display, text);
+    assert.equal(field(name).value, text);
+    assert.equal(field(name).inspectable, true);
+    const opened = ok(s.inspectField(owner.objectId, name));
+    assert(opened.objectId, `${name} has an inspection handle`);
+    if (['number', 'text', 'flag', 'calculated'].includes(name)) assert.equal(opened.display, text);
+  }
+  assert.equal(evaluate(s, 'example.reads').display, '1');
+  assert.equal(evaluate(s, 'example.label.textReads').display, '1', 'Navigation and snapshots do not repeat toString');
+  assert.equal(fail(s.inspectGet(owner.objectId, 'broken')).display, 'IllegalStateException: bad text');
+  assert.equal(field('broken').inspectable, true);
+  assert.equal(field('broken').reference, true);
+  assert.equal(ok(s.inspectField(owner.objectId, 'broken')).className, 'Broken');
+  assert.equal(fail(s.inspectGet(owner.objectId, 'failed')).display, 'IllegalStateException: bad getter');
+  assert.equal(field('failed').inspectable, false);
+  ok(s.inspectGet(owner.objectId, 'absent'));
+  assert.equal(field('absent').inspectable, false);
+  fail(s.inspectField(owner.objectId, 'absent'));
+  const oldNumber = ok(s.inspectField(owner.objectId, 'number'));
+  evaluate(s, 'example.number = 43');
+  assert.equal(field('number').value, '43', 'A changed backing value invalidates its old text');
+  assert.equal(ok(s.inspectField(owner.objectId, 'number')).display, '43');
+  fail(s.inspect(oldNumber.objectId));
+}
 console.log('Reference lifetime regressions passed.');

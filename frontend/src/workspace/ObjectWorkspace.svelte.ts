@@ -505,23 +505,12 @@ export class ObjectWorkspace {
       await this.showInspection(object, preserveReferenceName);
   };
   inspectFieldReference = async (ownerId: string, field: InspectorField) => {
-    if (field.computed && field.objectId) {
-      await this.inspectObject(
-        {
-          objectId: field.objectId,
-          className: field.type?.displayName || "Object",
-          name: field.name,
-        },
-        true,
-      );
-      return;
-    }
     const result = await this.executeInspectorCommand({
       op: "inspectField",
       objectId: ownerId,
       property: field.name,
     });
-    if (result?.kind === "inspect" && result.objectId)
+    if (result && result.kind !== "error" && result.objectId)
       await this.showInspection(
         {
           objectId: result.objectId,
@@ -679,7 +668,8 @@ export class ObjectWorkspace {
       if (result.kind === "error")
         this.fieldError = result.display || "Could not set property.";
       else {
-        await this.inspectorModel.refresh(objectId);
+        // Other open inspectors may show this object through toString or a getter.
+        await this.refreshComputedInspectors();
         this.editingField = "";
         this.fieldError = "";
       }

@@ -295,11 +295,25 @@ including inherited fields, with `readBackingPropertyByDeclaredName`; they do
 not call getters or student `toString`. Collection previews are bounded.
 
 Opening/refreshing an inspector invokes properties through `inspectGet` in the
-normal interpreter path, catching ordinary exceptions per property. Evaluation
+normal interpreter path and formats their values through Kotlin `toString`,
+catching ordinary getter or formatting exceptions per property. Evaluation
 continues after such errors; interpreter faults remain fatal. Private getters
 use typed runtime access. Coalesce concurrent refreshes, invalidate requests
 on compile/close and rerun if refreshed while another pass was pending.
 Automatic inspection calls do not enter the test-state journal.
+
+Every field shows its text and a compact inspection arrow at the right edge,
+with the edit pencil immediately to its left where applicable, including scalar
+and collection values. Strings retain their delimiters. Null, uninitialized
+values and failing getters have disabled arrows. A failing `toString` still
+leaves the captured value inspectable. Runtime inspection caches contain both
+the formatted field and its already-read value: arrow navigation never repeats
+a getter or `toString`. Stored-field text is reused only while the backing
+value has the same identity. Opening scalar values shows their value and type
+without inventing fields. Handles are allocated on navigation, not for every
+property refresh; passive snapshots still never execute student formatting.
+Editing a field refreshes every open inspector so a parent object's formatted
+value also reflects changes made through a child's inspector.
 
 The debugger embeds the same `InspectorFields` presentation as floating object
 inspectors. A pause exposes its receiver through a pinned object handle;

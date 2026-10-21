@@ -95,6 +95,8 @@ class KotliteSession {
     private val computedPropertyNames = linkedMapOf<String, MutableSet<String>>()
     // Inspector results belong to the runtime. Snapshots never execute getters.
     private val inspectionResults = linkedMapOf<String, MutableMap<String, String>>()
+    // Values already read for a visible field. Following its arrow must not run the getter again.
+    private val inspectionValues = linkedMapOf<String, MutableMap<String, RuntimeValue>>()
     private var inspectionDepth = 0
     private var inspectionFailure: String? = null
     private var inspectedPropertyValue: RuntimeValue? = null
@@ -639,6 +641,10 @@ class KotliteSession {
     /** Make a paused object value available to the passive object inspector. */
     private fun debugObjectHandle(value: RuntimeValue): String? {
         if (value !is ClassInstance) return null
+        return pinDebugInspectionValue(value)
+    }
+
+    private fun pinDebugInspectionValue(value: RuntimeValue): String {
         // A debugger-local object is already available through its suspended
         // call frame. Do not create a synthetic REPL binding for it: that
         // binding would belong to the local frame, but normal handle cleanup
@@ -1264,7 +1270,7 @@ class KotliteSession {
             // Kotlin values are objects from BlueK's point of view. Keep every
             // non-Unit expression addressable by the Codepad object control,
             // including values such as Int and String.
-            var objectId = if (value !== UnitValue && (!inspection || value is ClassInstance && value !is DelegatedValue<*>)) registerExpressionValue(value) else null
+            var objectId = if (value !== UnitValue && !inspection) registerExpressionValue(value) else null
             reconcileReferences()
             // A fresh expression may return the value it just detached (e.g.
             // list.removeAt). Its old history handles stay invalid, but this
@@ -1276,7 +1282,7 @@ class KotliteSession {
             val resultName = reference?.variableName?.takeIf {
                 objectId != null && !inspection && references[it]?.symbol == reference.transformedRefName
             }
-            result("value", value, objectId, name = resultName, inspection = inspection)
+            result("value", value, objectId, name = resultName)
         } catch (error: Throwable) {
             faulted = error.isFatal
             if (program) reportUncaught(error)
@@ -1370,6 +1376,7 @@ class KotliteSession {
                 handles.remove(id)
                 managedHandles.remove(id)
                 inspectionResults.remove(id)
+                inspectionValues.remove(id)
             }
         }
     }
@@ -1504,7 +1511,7 @@ class KotliteSession {
 
     fun inspect(objectId: String): String {
         val value = handles[objectId] ?: return errorMessage("Object handle is no longer available.")
-        if (value !is ClassInstance) return result("value", value)
+        if (value !is ClassInstance) return result("value", value, objectId, inspection = true)
         // Kotlite deliberately keeps its complete member map internal, so the
         // names are collected from the source declarations while loading the
         // project. Snapshot publication stays passive; explicit inspection
@@ -1516,16 +1523,18 @@ class KotliteSession {
                 cached ?: "{\"name\":\"${escape(name)}\",\"value\":\"<computed>\",\"computed\":true,\"setterPrivate\":$setterPrivate}"
             } else {
                 val member = value.readBackingPropertyByDeclaredName(name)
+                if (cached != null && inspectionValues[objectId]?.get(name) === member) return@joinToString cached
                 val display = member?.let(::inspectorDisplay) ?: "<uninitialized>"
                 val reference = member is ClassInstance && member !is DelegatedValue<*>
                 val summary = isInspectorSummary(member)
-                "{\"name\":\"${escape(name)}\",\"value\":\"${escape(display)}\",\"type\":${member?.let { jsonType(it.type().toTypeNode()) } ?: "null"},\"setterPrivate\":$setterPrivate,\"reference\":$reference,\"summary\":$summary}"
+                val inspectable = member != null && member !== NullValue
+                "{\"name\":\"${escape(name)}\",\"value\":\"${escape(display)}\",\"type\":${member?.let { jsonType(it.type().toTypeNode()) } ?: "null"},\"setterPrivate\":$setterPrivate,\"reference\":$reference,\"summary\":$summary,\"inspectable\":$inspectable}"
             }
         }
         return "{\"kind\":\"inspect\",\"objectId\":\"${escape(objectId)}\",\"className\":\"${escape(value.type().toTypeNode().descriptiveName())}\",\"fields\":$fields}"
     }
 
-    /** Follow a stored object reference without running its getter or toString(). */
+    /** Follow the shown value, including scalars, without running its getter or toString(). */
     fun inspectField(objectId: String, propertyName: String): String = inspectField(objectId, propertyName, reconcile = true)
 
     /** Follow an object value captured from a paused local without reconciling live locals as global roots. */
@@ -1534,14 +1543,13 @@ class KotliteSession {
     private fun inspectField(objectId: String, propertyName: String, reconcile: Boolean): String {
         val owner = handles[objectId] as? ClassInstance
             ?: return errorMessage("Object handle is no longer available.")
-        if (!propertyName.matches(Regex("[A-Za-z_]\\w*")) || propertyName !in propertyNames[owner.type().name].orEmpty() ||
-            propertyName in computedPropertyNames[owner.type().name].orEmpty())
+        if (!propertyName.matches(Regex("[A-Za-z_]\\w*")) || propertyName !in propertyNames[owner.type().name].orEmpty())
             return errorMessage("Object reference is not available.")
-        val value = owner.readBackingPropertyByDeclaredName(propertyName)
-        if (value !is ClassInstance || value is DelegatedValue<*>)
+        val value = if (propertyName in computedPropertyNames[owner.type().name].orEmpty())
+            inspectionValues[objectId]?.get(propertyName) else owner.readBackingPropertyByDeclaredName(propertyName)
+        if (value == null || value === NullValue)
             return errorMessage("Object reference is not available.")
-        val referenceId = if (reconcile) registerExpressionValue(value) else debugObjectHandle(value)
-            ?: return errorMessage("Object reference is not available.")
+        val referenceId = if (reconcile) registerExpressionValue(value) else pinDebugInspectionValue(value)
         if (reconcile) reconcileReferences()
         return inspect(referenceId)
     }
@@ -1600,10 +1608,12 @@ class KotliteSession {
         val setterPrivate = propertyName in privateSetterNames[owner.type().name].orEmpty()
         val value = inspectedPropertyValue
         inspectedPropertyValue = null
+        if (value != null) inspectionValues.getOrPut(objectId) { linkedMapOf() }[propertyName] = value
+        else inspectionValues[objectId]?.remove(propertyName)
         val summary = isInspectorSummary(value)
-        val reference = value is ClassInstance && value !is DelegatedValue<*> && parsed.kind != "error"
-        val field = "{\"name\":\"${escape(propertyName)}\",\"value\":\"${escape(parsed.display as? String ?: "<uninitialized>")}\",\"type\":${JSON.stringify(parsed.type ?: null)},\"computed\":$computed,\"setterPrivate\":$setterPrivate,\"reference\":$reference,\"summary\":$summary" +
-            (if (reference) ",\"objectId\":\"${escape(parsed.objectId as String)}\"" else "") +
+        val reference = value is ClassInstance && value !is DelegatedValue<*>
+        val inspectable = value != null && value !== NullValue
+        val field = "{\"name\":\"${escape(propertyName)}\",\"value\":\"${escape(parsed.display as? String ?: "<uninitialized>")}\",\"type\":${value?.let { jsonType(it.type().toTypeNode()) } ?: "null"},\"computed\":$computed,\"setterPrivate\":$setterPrivate,\"reference\":$reference,\"summary\":$summary,\"inspectable\":$inspectable" +
             (if (parsed.kind == "error") ",\"error\":\"${escape(parsed.display as String)}\"" else "") + "}"
         inspectionResults.getOrPut(objectId) { linkedMapOf() }[propertyName] = field
         return response
@@ -1645,6 +1655,7 @@ class KotliteSession {
         propertyNames.clear()
         computedPropertyNames.clear()
         inspectionResults.clear()
+        inspectionValues.clear()
         inspectionFailure = null
         inspectedPropertyValue = null
         privateSetterNames.clear()
@@ -1712,6 +1723,7 @@ class KotliteSession {
     }
 
     private fun result(kind: String, value: RuntimeValue, objectId: String? = null, name: String? = null, inspection: Boolean = false): String {
+        // Active property evaluation uses toString; passive inspection remains side-effect free.
         val display = if (value === UnitValue) "Unit" else if (value === NullValue) "null" else if (inspection) inspectorDisplay(value) else value.convertToString()
         val actualKind = if (value === UnitValue) "unit" else if (value === NullValue) "null" else if (value is ClassInstance) "object" else "scalar"
         return "{\"kind\":\"$actualKind\",\"display\":\"${escape(display)}\",\"type\":${jsonType(value.type().toTypeNode())}" +

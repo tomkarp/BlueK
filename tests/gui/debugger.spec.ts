@@ -646,6 +646,12 @@ test('DBG-18 integrated inspector refreshes getters, follows references and stay
   await expect(row('name').locator('output')).toHaveText('"Wuffi"');
   await expect(row('age').locator('output')).toHaveText('0');
   await expect(row('remaining').locator('output')).toHaveText('100');
+  await expect(row('friend').locator('output')).toHaveText('Friend()');
+  await integrated.getByRole('button', { name: 'Open referenced object age', exact: true }).click();
+  const ageInspector = page.getByRole('dialog', { name: 'Object inspector', exact: true });
+  await expect(ageInspector.locator('.inspect-scalar-value')).toHaveText('0');
+  await expect(ageInspector.locator('input,.inspect-edit')).toHaveCount(0);
+  await ageInspector.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(integrated.locator('input,.inspect-edit')).toHaveCount(0);
   await expect(page.locator('.inspector')).toHaveCount(0);
   await integrated.getByRole('button', { name: 'Show error for broken' }).click();

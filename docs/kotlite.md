@@ -128,15 +128,17 @@ project statement while leaving the worker available for controls.
 The debugger opens in a separate movable window. Local snapshots read simple
 values from existing storage. Object-valued locals can open the shared object
 inspector while execution is paused; passive field reads do not run getters.
-Computed properties remain listed and are marked as not evaluated, so
-inspecting a pause does not execute student code. Values do not call student
-`toString`, `equals`, or collection iterators. The current implementation
-shows values for the innermost project call frame. The synthetic call used to
+The passive local/attribute snapshot does not call student `toString`, `equals`
+or collection iterators. The visible receiver inspector explicitly refreshes
+properties through the suspended coroutine, including getters and `toString`,
+without advancing the paused statement or honoring inspection-only breakpoints.
+Both floating and integrated inspectors show text and an inspection arrow for
+every non-null value, including scalars. Arrow navigation uses the captured
+value rather than rerunning its getter. The current implementation shows
+locals for the innermost project call frame. The synthetic call used to
 give an `init` block its own lexical scope does not add debugger Step depth,
-so Step pauses at each statement in the block. In an object inspector opened
-from a paused debugger, a small button can explicitly run one computed
-property's getter; the debugger stays paused and refreshes the displayed value.
-The debugger's own Attributes list only labels these as computed properties.
+so Step pauses at each statement in the block. Inspector fields remain read-only
+while debugging; getters and value text refresh automatically at each pause.
 See the dated debugger entry in the [regression checklist](regression-checklist.md).
 
 ## Remaining technical debt

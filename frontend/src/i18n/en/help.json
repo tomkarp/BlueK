@@ -43,8 +43,8 @@
     "returnedValues": "A returned value appears in a result dialog. <strong>Get</strong> gives it a name on the bench. Get preserves object identity.",
     "inputOutput": "<code>print</code> and <code>println</code> write to the terminal. <code>readln()</code>, <code>readLine()</code> and <code>readlnOrNull()</code> wait for input there. Submit a line or use the terminal's EOF control. Stop cancels the wait.",
     "constructorsAndMethods": "Right-click a class to choose a constructor. Enter a name and Kotlin expressions for its arguments. Right-click a bench object to call a method. Clicking another bench object can insert its name into an argument field.",
-    "inspection": "Double-click an object to see its properties. Follow references to inspect connected objects. Field edits accept Kotlin expressions.",
-    "inspectionEffects": "Opening or refreshing the inspector evaluates getters. A getter may have effects or throw an exception. Automatic inspection is excluded from saved state and test recording. Removing an object from the bench hides or releases its name; references held by other objects may still keep it alive.",
+    "inspection": "Double-click an object to see its properties. Each value is displayed as text with a small arrow that opens its inspector, including values such as Int and String. Strings appear in quotation marks. The arrow is disabled for null, uninitialized values and failed getters. Field edits accept Kotlin expressions.",
+    "inspectionEffects": "Opening or refreshing the inspector evaluates getters and calls toString() to display values. These calls may have effects or throw an exception, which appears in the value field. Following a value's arrow does not evaluate its getter again. Automatic inspection is excluded from saved state and test recording. Removing an object from the bench hides or releases its name; references held by other objects may still keep it alive.",
     "codepadExecution": "Press Enter to run a statement or expression. Declarations remain available until Compile or Reset."
   },
   "projects": {

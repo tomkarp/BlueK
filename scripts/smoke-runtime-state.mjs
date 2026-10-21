@@ -627,14 +627,17 @@ projectClient.invalidate();
   assert.equal(getField('reads').value, '1', 'Side effects run once and appear in stored fields');
   assert.equal(getField('absent').value, 'null');
   assert.equal(getField('numbers').summary, true);
-  assert.match(getField('numbers').value, /size 2/);
-  // Pairs are summaries too, shown without running the elements' toString() (RT-52).
-  assert.equal(getField('pair').value, '(1, Leaf())');
+  assert.equal(getField('numbers').value, '[1, 2]');
+  // Active inspection uses toString, including elements of pairs and collections.
+  assert.equal(getField('pair').error, 'IllegalStateException: do not stringify');
   assert.equal(getField('pair').summary, true);
-  assert.equal(getField('computedPair').value, '(a, Leaf())');
+  assert.equal(getField('computedPair').error, 'IllegalStateException: do not stringify');
   assert.equal(getField('computedPair').summary, true);
   assert.equal(getField('child').reference, true);
-  assert(getField('child').objectId, 'Computed object references have a runtime-owned handle');
+  assert.equal(getField('child').error, 'IllegalStateException: do not stringify');
+  assert.equal(getField('child').inspectable, true, 'A value with a failing toString remains inspectable');
+  const child = await inspectionClient.execute({ op: 'inspectField', objectId: probe.objectId, property: 'child' });
+  assert.equal(child.className, 'Leaf', 'The arrow follows the runtime-captured getter result');
   assert.equal(getField('slow').value, '7', 'Suspending getters retain the normal async contract');
   assert.equal(inspectionClient.getSnapshot().phase, 'ready');
   assert.equal(inspectionClient.getSnapshot().error, null, 'Property errors stay in their row');

@@ -6,7 +6,7 @@
     ManifestProperty,
     InspectedField,
   } from "../../../runtime-contract/src/index";
-  import type { InspectionView, InspectorField } from "../inspectorModel";
+  import { inspectorFieldText, type InspectionView, type InspectorField } from "../inspectorModel";
 
   const language = useLanguage();
   $: t = $language.t;
@@ -88,15 +88,7 @@
             }}
           />
         {:else}
-          {#if field.reference}<button
-              class="inspect-reference"
-              aria-label={t("ui.inspector.openReferencedObject0", [field.name])}
-              title={t("ui.inspector.open0", [field.name])}
-              on:click={() => inspectFieldReference(data.objectId || "", field)}
-              ><svg viewBox="0 0 48 24" aria-hidden="true"
-                ><path d="M3 12h32" /><path d="m29 5 8 7-8 7" /></svg
-              ></button
-            >{:else if field.error}<button
+          {#if field.error}<button
               class="inspect-error-value"
               aria-label={t("ui.inspector.showErrorFor0", [field.name])}
               title={field.error}
@@ -118,11 +110,28 @@
                 : "Edit"}
               on:click={() => beginFieldEdit(field, data)}>✎</button
             >{/if}
+          <button
+            class="inspect-reference"
+            disabled={field.inspectable !== true}
+            aria-label={t("ui.inspector.openReferencedObject0", [field.name])}
+            title={t("ui.inspector.open0", [field.name])}
+            on:click={() => inspectFieldReference(data.objectId || "", field)}
+            ><svg viewBox="0 0 24 24" aria-hidden="true"
+              ><path d="M4 12h15" /><path d="m13 6 6 6-6 6" /></svg
+            ></button
+          >
         {/if}
       </div>
       {#if editing && fieldError}<small class="inspect-error"
           >{fieldError}</small
         >{/if}
     </div>
-  {:else}{t("ui.inspector.noFields")}{/each}
+  {:else}
+    {#if data.display !== undefined}
+      <output class="inspect-scalar-value" title={inspectorFieldText({ name: "", value: data.display, type: data.type })}
+        >{inspectorFieldText({ name: "", value: data.display, type: data.type })}</output
+      >
+    {/if}
+    <span>{t("ui.inspector.noFields")}</span>
+  {/each}
 </div>

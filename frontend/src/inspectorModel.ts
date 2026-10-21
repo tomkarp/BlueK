@@ -71,7 +71,7 @@ export class InspectorModel {
       do {
         token.repeat = false;
         const fields = (this.runtime.getSnapshot().inspections[objectId]?.fields || [])
-          .filter(field => !debugPaused || field.computed === true);
+          .filter(field => field.value !== '<uninitialized>');
         for (const field of fields) {
           const phase = this.runtime.getSnapshot().phase;
           if (!current() || (phase !== 'ready' && !(debugPaused && phase === 'debugPaused'))) return;

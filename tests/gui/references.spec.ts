@@ -101,7 +101,7 @@ test('RT-07 Codepad var bench view follows reassignment and removal preserves th
   await expect(page.locator('.bench .object')).toHaveCount(1);
 });
 
-test('GUI-88 inspector shows object references as arrows and opens them by their attribute name', async ({ page }) => {
+test('GUI-88 inspector shows object text beside arrows and opens values by their attribute name', async ({ page }) => {
   await load(page);
   await evaluate(page, 'val shared = Child(); val parent = Parent(shared, shared)');
   await evaluate(page, 'parent');
@@ -109,7 +109,7 @@ test('GUI-88 inspector shows object references as arrows and opens them by their
   await object(page, 'parent').dblclick();
   const inspector = page.getByRole('dialog', { name: 'Object inspector', exact: true });
   await expect(inspector.locator('.inspect-reference')).toHaveCount(2);
-  await expect(inspector.locator('.inspect-row').filter({ hasText: 'child : Child' }).locator('output')).toHaveCount(0);
+  await expect(inspector.locator('.inspect-row').filter({ hasText: 'child : Child' }).locator('output')).toHaveText('Child()');
   await inspector.getByRole('button', { name: 'Open referenced object child' }).click();
   const childInspector = page.getByRole('dialog', { name: 'Object inspector', exact: true }).filter({ hasText: 'child : Child' });
   await expect(childInspector).toBeVisible();
@@ -162,6 +162,86 @@ test('GUI-89 inspection does not flicker Compile and a reference click waits for
   await expect(page.getByLabel('Program active', { exact: true })).toBeVisible();
   await slowInspector.getByRole('button', { name: 'Open referenced object child' }).click();
   await expect(page.locator('.inspect-window h2').filter({ hasText: /^child : Child$/ })).toBeVisible();
+});
+
+test('GUI-148 every inspector value combines text with a compact inspection arrow', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, files: [
+    { fileName: 'Label.kt', kind: 'class', source: 'class Label(var text: String) { override fun toString(): String = "Label: $text" }' },
+    { fileName: 'Broken.kt', kind: 'class', source: 'class Broken { val safe = 7; override fun toString(): String = error("bad text") }' },
+    { fileName: 'Example.kt', kind: 'class', source: `class Example {
+      var number = 42
+      val text = "hello"
+      val flag = true
+      val numbers = listOf(1, 2)
+      val label = Label("shown")
+      val broken = Broken()
+      val absent: String? = null
+      var reads = 0
+      val calculated: Int get() { reads += 1; return reads * 10 }
+      val failed: Int get() = error("bad getter")
+    }` },
+  ] };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  await page.getByRole('button', { name: 'Compile', exact: true }).click();
+  await expect(page.getByLabel('Ready', { exact: true })).toBeVisible();
+  await evaluate(page, 'val example = Example(); example');
+  await adoptLast(page, 'example');
+  await object(page, 'example').dblclick();
+  const inspector = page.getByRole('dialog', { name: 'Object inspector', exact: true }).filter({ has: page.locator('h2').filter({ hasText: /^example : Example$/ }) });
+  const row = (name: string) => inspector.locator('.inspect-row').filter({ has: page.locator('span').filter({ hasText: new RegExp(`^${name} :`) }) });
+  const arrow = (name: string) => row(name).getByRole('button', { name: `Open referenced object ${name}`, exact: true });
+  await expect(row('calculated').locator('output')).toHaveText('10');
+  await expect(row('number').locator('output')).toHaveText('42');
+  await expect(row('text').locator('output')).toHaveText('"hello"');
+  await expect(row('flag').locator('output')).toHaveText('true');
+  await expect(row('numbers').locator('output')).toHaveText('[1, 2]');
+  await expect(row('label').locator('output')).toHaveText('Label: shown');
+  await expect(row('broken').getByRole('button', { name: 'Show error for broken' })).toContainText('bad text');
+  await expect(inspector.locator('.inspect-reference')).toHaveCount(10);
+  await expect(arrow('absent')).toBeDisabled();
+  await expect(arrow('failed')).toBeDisabled();
+  await expect(arrow('broken')).toBeEnabled();
+  const valueBox = (await row('number').locator('output').boundingBox())!;
+  const arrowBox = (await arrow('number').boundingBox())!;
+  expect(arrowBox.width).toBeLessThanOrEqual(28);
+  expect(arrowBox.x).toBeGreaterThanOrEqual(valueBox.x + valueBox.width);
+  const editBox = (await row('number').getByRole('button', { name: 'Edit number', exact: true }).boundingBox())!;
+  expect(editBox.x + editBox.width).toBeLessThanOrEqual(arrowBox.x);
+  const readonlyArrowBox = (await arrow('label').boundingBox())!;
+  expect(arrowBox.x).toBeCloseTo(readonlyArrowBox.x, 1);
+
+  const opened = (name: string, type: string) => page.getByRole('dialog', { name: 'Object inspector', exact: true })
+    .filter({ has: page.locator('h2').filter({ hasText: new RegExp(`^${name} : ${type}$`) }) });
+  for (const [name, type, text] of [['number', 'Int', '42'], ['text', 'String', '"hello"'], ['flag', 'Boolean', 'true'], ['calculated', 'Int', '10']]) {
+    await arrow(name).click();
+    const child = opened(name, type);
+    await expect(child.locator('.inspect-scalar-value')).toHaveText(text);
+    await child.getByRole('button', { name: 'Close', exact: true }).click();
+  }
+  await expect(row('reads').locator('output')).toHaveText('1');
+  await expect(row('calculated').locator('output')).toHaveText('10');
+  await arrow('broken').click();
+  const broken = opened('broken', 'Broken');
+  await expect(broken.locator('.inspect-row').filter({ hasText: 'safe : Int' }).locator('output')).toHaveText('7');
+  await broken.getByRole('button', { name: 'Close', exact: true }).click();
+  await inspector.getByRole('button', { name: 'Edit number', exact: true }).click();
+  await inspector.getByLabel('Value of number', { exact: true }).fill('43');
+  await inspector.getByLabel('Value of number', { exact: true }).press('Enter');
+  await expect(row('number').locator('output')).toHaveText('43');
+  await expect(row('calculated').locator('output')).toHaveText('20');
+  await arrow('label').click();
+  const label = opened('label', 'Label');
+  await label.getByRole('button', { name: 'Edit text', exact: true }).click();
+  await label.getByLabel('Value of text', { exact: true }).fill('"updated"');
+  await label.getByLabel('Value of text', { exact: true }).press('Enter');
+  await expect(row('label').locator('output')).toHaveText('Label: updated');
+  await label.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  const settings = page.getByRole('dialog', { name: 'Settings' });
+  await settings.getByLabel('Dark mode', { exact: true }).check();
+  await settings.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(arrow('number')).toBeEnabled();
+  expect(await inspector.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
 });
 
 test('GUI-92 inspector shows property exceptions and continues with values and null', async ({ page }) => {
