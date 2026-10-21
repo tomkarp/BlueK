@@ -45,6 +45,11 @@ package-qualified library expressions and package declarations are not supported
   non-null Boolean expressions; abrupt return/throw expressions remain valid.
   [Control-flow comparison and regression evidence](kotlin-control-flow.md).
 - Data classes with `toString`, `equals`, `hashCode`, `copy` and `componentN`.
+- Ordinary objects without a custom `toString` use BlueK's
+  `<object> : ClassName` representation. This default format is platform-specific
+  in Kotlin; BlueK uses a readable marker instead of a hash code or a constructor
+  expression. Interface displays translate the marker and omit a repeated type
+  in inspector property cells. Custom and data-class text stays unchanged.
 - Objects, companion objects and `const val`; enums with constructors, members,
   `name`, `ordinal`, `values`, `valueOf`, `entries` and ordering comparisons.
 - Destructuring in declarations, loops and lambda parameters, including

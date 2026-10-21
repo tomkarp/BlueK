@@ -323,6 +323,8 @@ below. No universal performance guarantee is implied.
 | GUI-145 | Save / Export → Export BlueJ Project downloads `<name>.zip` with the BlueJ library and all standard media; importing it restores the BluePlay project | Chromium pass (2026-10-18); German dialog inspected by the agent at 800×600. User acceptance in BlueJ pending. |
 | GUI-146 | After a BlueJ export, a notice names left-out test classes and MP3 sounds (BluePlay in BlueJ plays WAV only), but only if the project has them; it stays until closed; no MP3 conversion | Chromium pass with GUI-145 and EXP-17 (2026-10-18), including two simulated minutes without hiding and closing with ×; German test-class notice inspected by the agent in the dev server. |
 | GUI-148 | Every inspector property shows text plus a compact inspection arrow at the right edge, with the edit pencil immediately to its left; scalars, objects and collections use the same layout | Runtime and Chromium pass (2026-10-21), including custom toString, scalar/captured-getter navigation, disabled null/error arrows, inspectable formatting failures, nested edits and readonly debugger inspection. Agent inspected German light/dark views and opened an Int inspector. User accepted the overall layout and requested the final pencil/arrow ordering; acceptance of that final ordering is pending. |
+| GUI-149 | Default ordinary object text uses an object marker instead of a constructor expression; inspector cells omit the repeated type; English/German labels, computed properties and method results preserve custom text | Runtime/reference checks and four affected Chromium cases (GUI-88/148/149, DBG-18) passed (2026-10-21). Built-in-browser German view confirmed Image references, a computed Image property and custom text without a repeated type. User visual acceptance pending. |
+| GUI-150 | Object placeholders, inspection errors, uninitialized properties and pending computed values use Codepad's gray; actual values including null and exception objects keep their normal color | Six affected Chromium cases passed (GUI-89/92/149, DBG-12/18), including light/dark mode and a getter returning null (2026-10-21). Built-in-browser German screenshot confirmed gray object/error text beside normal numbers, strings and null. User visual acceptance pending. |
 | DBG-01 | A breakpoint starts debugging main; Step in is enabled only when the current instruction can enter project code; Step and Continue work and locals are inspectable | Chromium GUI pass (2026-10-20): medium-gray filled chevron sits behind the red breakpoint dot; the lighter gray improves dot visibility while keeping the arrow visible. Arrow and highlight share one source position without adding gutter width. Editing actions stay locked while paused; breakpoint controls remain usable. Runtime smoke verifies Step in reaches a constructor property initializer. New assertions for the Step in enabled state are written but not run. Visual user acceptance remains open. |
 | DBG-02 | Multiple gutter breakpoints stop an ordinary main run before each marked statement; Step in is disabled for standard-library-only instructions | Chromium GUI pass (2026-10-20): closing-brace line is rejected; an executable-line breakpoint survives recompilation and execution prints expected output. Latest built-in-browser check confirmed two breakpoints both survive compilation and stop on lines 2 and 3. New Step in assertion is written but not run. |
 | DBG-03 | Gutter breakpoint stops an explicit object-method call without `main`, showing parameters, `for` loop locals and receiver properties in a separate window | Chromium verifies `n = 4`, `i = 1`, stored `name = "Wuffi"` rendered with string delimiters, and the integrated inspector evaluates `label`. Runtime smoke separately verifies passive snapshot collection keeps the getter counter at zero. Continue re-hits the loop breakpoint, then finishes with output 5, 6 and 7 (2026-10-20). |
@@ -345,6 +347,43 @@ below. No universal performance guarantee is implied.
 | DBG-20 | BluePlay is above editors on show/start; a debugger pause reveals source above it; the next changed drawing restores the world and keyboard focus | Chromium and built-in-browser pass (2026-10-21): status/getter snapshots and a variable-only step keep the editor in front; a drawing change restores the world. The browser regression also confirms a subsequent Right key reaches the running world. User visual acceptance pending. |
 
 ## Recorded verification
+
+### Placeholder value colors — 2026-10-21
+
+Codepad, inspector, debugger and method-result placeholders share `#888`.
+Getter/formatting errors, uninitialized properties and pending getter text are
+gray; actual values retain their existing colors, including null, computed null,
+student text and exceptions stored as values. Error text remains clickable.
+Six affected Chromium cases passed across the focused runs, covering light/dark
+mode, receiver construction and getter/navigation behavior. The first run caught
+a computed-null value classified as pending; classification now checks the
+pending marker, and all four affected reference cases passed again. The
+built-in browser's German view confirmed the final object/error/null colors.
+Typecheck and frontend build passed; user visual acceptance remains pending.
+
+### Default object text — 2026-10-21
+
+Ordinary objects without a custom `toString` use `<object> : ClassName`, including
+collection text and program output. The runtime marks default object text
+explicitly, including the inherited native `Any.toString`; presentation never
+guesses from the returned string. English/German inspector cells show only the
+localized marker because their property label already contains the type.
+Method-result dialogs retain the type; Codepad object controls already used
+the marker. Custom/inherited/data-class text, enums, singleton names, null and
+exceptions retain their prior behavior.
+
+Runtime/reference, runtime-state, debugger, inspector-model and UI checks passed;
+typecheck reported zero errors/warnings, and Kotlin/frontend builds passed.
+Four affected Chromium cases (GUI-88/148/149 and DBG-18) passed, covering
+English/German marker text, computed references, method results, navigation,
+custom text and the integrated readonly debugger inspector. The built-in
+browser's German view confirmed Image markers and custom text visually.
+
+Initial checks exposed the native inherited-method distinction. Browser test
+setup also needed whitespace-tolerant Codepad text and a language-independent
+inspector locator after switching to German. An intermediate Kotlin build saw
+mismatched session/interpreter APIs during the correction; the final consistent
+rebuild passed. User visual acceptance remains pending.
 
 ### Uniform inspector values (BlueK-Feedback #14) — 2026-10-21
 

@@ -46,6 +46,7 @@ export type InvokeDialog = {
 export type ResultDialog = {
   method: string;
   value: string;
+  defaultObjectDisplay?: boolean;
   objectId?: string;
   className?: string;
 };

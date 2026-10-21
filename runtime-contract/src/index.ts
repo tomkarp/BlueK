@@ -80,10 +80,12 @@ export type Phase = 'uncompiled' | 'compiling' | 'ready' | 'running' | 'waitingF
 export interface DebugVariable { name: string; type: string; display: string | null; initialized: boolean; computed?: boolean; objectId?: string }
 export interface DebugPause { executionId: number; pauseId: number; fileName: string; line: number; column: number; depth: number; stepInAvailable: boolean; receiverObjectId?: string; variables: DebugVariable[]; attributes: DebugVariable[] }
 /** `reference`/`summary`: display text is not an editable Kotlin expression. `inspectable`: a captured non-null value can be opened, including scalars. */
-export interface InspectedField { name: string; value: string; type?: TypeRef | null; setterPrivate?: boolean; reference?: boolean; summary?: boolean; computed?: boolean; inspectable?: boolean; objectId?: string; error?: string }
+export interface InspectedField { name: string; value: string; type?: TypeRef | null; setterPrivate?: boolean; reference?: boolean; summary?: boolean; computed?: boolean; inspectable?: boolean; objectId?: string; error?: string; defaultObjectDisplay?: boolean }
 export interface RuntimeValue {
   kind: 'unit' | 'null' | 'scalar' | 'object' | 'inspect' | 'error';
   display?: string;
+  /** Default object text can be localized without interpreting student toString output. */
+  defaultObjectDisplay?: boolean;
   diagnostics?: Diagnostic[];
   type?: TypeRef;
   objectId?: string;

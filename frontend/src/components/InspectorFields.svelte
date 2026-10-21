@@ -43,9 +43,16 @@
   }) => void;
 
   function valueText(field: InspectorField) {
-    return field.value === "<uninitialized>"
+    if (field.defaultObjectDisplay && !field.error) return t("ui.codepad.object");
+    return field.value === "<uninitialized>" && !field.inspectable
       ? t("ui.debug.notInitialized")
       : fieldValue(data, field);
+  }
+
+  function isPlaceholder(field: InspectorField) {
+    return Boolean(field.defaultObjectDisplay || field.error ||
+      (!field.inspectable && (field.value === "<uninitialized>" ||
+        (field.computed && field.value === "…"))));
   }
 </script>
 
@@ -98,7 +105,7 @@
                   message: field.error!,
                 });
               }}>{valueText(field)}</button
-            >{:else}<output title={valueText(field)}>{valueText(field)}</output
+            >{:else}<output class:value-placeholder={isPlaceholder(field)} title={valueText(field)}>{valueText(field)}</output
             >{/if}
           {#if !readOnly && (editable || field.setterPrivate)}<button
               class="inspect-edit"

@@ -480,10 +480,13 @@ test('DBG-12 Step in pauses on a primary-constructor property assignment', async
   await expect(attributes).toContainText('name');
   await expect(attributes).toContainText('value');
   await expect(attributes).toContainText('not initialized');
+  const valueOutput = attributes.locator('.inspect-row').filter({ hasText: 'value : Int' }).locator('output');
+  await expect(valueOutput).toHaveCSS('color', 'rgb(136, 136, 136)');
 
   await page.locator('.debugger-window').getByRole('button', { name: 'Step', exact: true }).click();
   await expect(page.locator('.debugger-window')).toContainText('Next: NamedBox.kt, line 2');
   await expect(attributes).toContainText('"Bello"');
+  await expect(attributes.locator('.inspect-row').filter({ hasText: 'name : String' }).locator('output')).not.toHaveCSS('color', 'rgb(136, 136, 136)');
   await page.locator('.debugger-window').getByRole('button', { name: 'Stop', exact: true }).click();
 });
 
@@ -646,7 +649,8 @@ test('DBG-18 integrated inspector refreshes getters, follows references and stay
   await expect(row('name').locator('output')).toHaveText('"Wuffi"');
   await expect(row('age').locator('output')).toHaveText('0');
   await expect(row('remaining').locator('output')).toHaveText('100');
-  await expect(row('friend').locator('output')).toHaveText('Friend()');
+  await expect(row('friend').locator('output')).toHaveText('<object>');
+  await expect(row('friend').locator('output')).toHaveCSS('color', 'rgb(136, 136, 136)');
   await integrated.getByRole('button', { name: 'Open referenced object age', exact: true }).click();
   const ageInspector = page.getByRole('dialog', { name: 'Object inspector', exact: true });
   await expect(ageInspector.locator('.inspect-scalar-value')).toHaveText('0');

@@ -232,6 +232,9 @@ for (const [setup, access, release] of [
     if (JSON.parse(started).kind === 'error') resolve(started);
   }));
   assert.notEqual(loaded.kind, 'error', loaded.display);
+  const image = evaluate(s, 'Image(10, 20)');
+  assert.equal(image.display, '<object> : Image');
+  assert.equal(image.defaultObjectDisplay, true);
   evaluate(s, 'val pond = World(20, 20, 1)');
   const duck = ok(s.create('Duck', '', 'duck'));
   evaluate(s, 'pond.addObject(duck, 3, 4)');
@@ -290,5 +293,55 @@ for (const [setup, access, release] of [
   assert.equal(field('number').value, '43', 'A changed backing value invalidates its old text');
   assert.equal(ok(s.inspectField(owner.objectId, 'number')).display, '43');
   fail(s.inspect(oldNumber.objectId));
+}
+// GUI-149: default object text never suggests a nonexistent no-argument constructor.
+// Metadata distinguishes it from student strings; generated/inherited text remains intact.
+{
+  const s = api.bluekCreateKotliteSession();
+  ok(s.load('ObjectText.kt', `
+    class Plain(val number: Int)
+    open class Named { override fun toString() = "custom text" }
+    class Inherited : Named()
+    class ConstructorText { override fun toString() = "Plain()" }
+    class MarkerText { override fun toString() = "<object> : Plain" }
+    data class Point(val x: Int)
+    enum class Direction { NORTH, SOUTH }
+    class Holder {
+      val plain = Plain(3)
+      val inherited = Inherited()
+      val constructorText = ConstructorText()
+      val marker = MarkerText()
+      val point = Point(4)
+      val direction = Direction.NORTH
+      val text = "<object> : Plain"
+      val computed: Plain get() = plain
+      val missing: Plain? = null
+    }
+  `));
+  const holder = ok(s.create('Holder', '', 'holder'));
+  const plain = evaluate(s, 'holder.plain');
+  assert.equal(plain.display, '<object> : Plain');
+  assert.equal(plain.defaultObjectDisplay, true);
+  const fields = () => ok(s.inspect(holder.objectId)).fields;
+  assert.equal(fields().find(field => field.name === 'plain').defaultObjectDisplay, true);
+  for (const name of ['plain', 'computed']) {
+    assert.equal(ok(s.inspectGet(holder.objectId, name)).defaultObjectDisplay, true);
+    const field = fields().find(field => field.name === name);
+    assert.equal(field.value, '<object> : Plain');
+    assert.equal(field.defaultObjectDisplay, true);
+    assert.equal(field.inspectable, true);
+    assert.equal(ok(s.inspectField(holder.objectId, name)).className, 'Plain');
+  }
+  for (const [name, expected] of [['inherited', 'custom text'], ['constructorText', 'Plain()'], ['marker', '<object> : Plain'], ['point', 'Point(x=4)'], ['direction', 'NORTH'], ['text', '<object> : Plain'], ['missing', 'null']]) {
+    const result = ok(s.inspectGet(holder.objectId, name));
+    assert.equal(result.display, expected);
+    assert.notEqual(result.defaultObjectDisplay, true);
+    assert.equal(fields().find(field => field.name === name).defaultObjectDisplay, false);
+  }
+  assert.equal(evaluate(s, 'listOf(holder.plain).toString()').display, '[<object> : Plain]');
+  assert.equal(evaluate(s, 'holder.plain.toString()').display, '<object> : Plain');
+  evaluate(s, 'println(holder.plain)');
+  assert.equal(s.takeOutput(), '<object> : Plain\n');
+  assert.equal(evaluate(s, 'IllegalStateException("failure").toString()').display, 'IllegalStateException: failure');
 }
 console.log('Reference lifetime regressions passed.');

@@ -109,7 +109,7 @@ test('GUI-88 inspector shows object text beside arrows and opens values by their
   await object(page, 'parent').dblclick();
   const inspector = page.getByRole('dialog', { name: 'Object inspector', exact: true });
   await expect(inspector.locator('.inspect-reference')).toHaveCount(2);
-  await expect(inspector.locator('.inspect-row').filter({ hasText: 'child : Child' }).locator('output')).toHaveText('Child()');
+  await expect(inspector.locator('.inspect-row').filter({ hasText: 'child : Child' }).locator('output')).toHaveText('<object>');
   await inspector.getByRole('button', { name: 'Open referenced object child' }).click();
   const childInspector = page.getByRole('dialog', { name: 'Object inspector', exact: true }).filter({ hasText: 'child : Child' });
   await expect(childInspector).toBeVisible();
@@ -159,6 +159,9 @@ test('GUI-89 inspection does not flicker Compile and a reference click waits for
   await object(page, 'slow').dblclick();
   const slowInspector = page.getByRole('dialog', { name: 'Object inspector', exact: true }).filter({ hasText: 'slow : Slow' });
   await expect(slowInspector).toBeVisible();
+  const pending = slowInspector.locator('.inspect-row').filter({ hasText: 'second : Int' }).locator('output');
+  await expect(pending).toHaveText('…');
+  await expect(pending).toHaveCSS('color', 'rgb(136, 136, 136)');
   await expect(page.getByLabel('Program active', { exact: true })).toBeVisible();
   await slowInspector.getByRole('button', { name: 'Open referenced object child' }).click();
   await expect(page.locator('.inspect-window h2').filter({ hasText: /^child : Child$/ })).toBeVisible();
@@ -244,6 +247,68 @@ test('GUI-148 every inspector value combines text with a compact inspection arro
   expect(await inspector.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
 });
 
+test('GUI-149 default object markers are localized without repeating the property type', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, library: { id: 'blueplay', version: 1 }, files: [
+    { fileName: 'Label.kt', kind: 'class', source: 'class Label { override fun toString() = "Image()" }' },
+    { fileName: 'Example.kt', kind: 'class', source: `class Example {
+      val image = Image(10, 20)
+      val label = Label()
+      val text = "Image()"
+      val markerText = "<object>"
+      val actualError = IllegalStateException("real value")
+      val absent: Image? = null
+      val computed: Image get() = image
+      fun picture(): Image = image
+    }` },
+  ] };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  await expect(page.getByLabel('Ready', { exact: true })).toBeVisible();
+  const entry = await evaluate(page, 'val example = Example(); example');
+  await expect(entry.locator('.codepad-object-label')).toHaveText(/<object>\s*:\s*Example/);
+  await adoptLast(page, 'example');
+  await object(page, 'example').dblclick();
+  const inspector = page.locator('.inspect-window').filter({ has: page.locator('h2').filter({ hasText: /^example : Example$/ }) });
+  const row = (name: string) => inspector.locator('.inspect-row').filter({ has: page.locator('span').filter({ hasText: new RegExp(`^${name} :`) }) });
+  const markerColor = await entry.locator('.codepad-object-placeholder').evaluate(element => getComputedStyle(element).color);
+  for (const name of ['image', 'computed']) {
+    await expect(row(name).locator('span').first()).toHaveText(`${name} : Image`);
+    await expect(row(name).locator('output')).toHaveText('<object>');
+    await expect(row(name).locator('output')).toHaveCSS('color', markerColor);
+  }
+  await expect(row('label').locator('output')).toHaveText('Image()');
+  await expect(row('text').locator('output')).toHaveText('"Image()"');
+  await expect(row('markerText').locator('output')).toHaveText('"<object>"');
+  await expect(row('actualError').locator('output')).toHaveText('IllegalStateException: real value');
+  await expect(row('absent').locator('output')).toHaveText('null');
+  for (const name of ['label', 'text', 'markerText', 'actualError', 'absent']) {
+    await expect(row(name).locator('output')).not.toHaveCSS('color', markerColor);
+  }
+  await row('image').getByRole('button', { name: 'Open referenced object image', exact: true }).click();
+  const child = page.getByRole('dialog', { name: 'Object inspector', exact: true }).filter({ has: page.locator('h2').filter({ hasText: /^image : Image$/ }) });
+  await expect(child.locator('.inspect-row').filter({ hasText: 'width : Int' }).locator('output')).toHaveText('10');
+  await child.getByRole('button', { name: 'Close', exact: true }).click();
+  await object(page, 'example').click({ button: 'right' });
+  await page.locator('.popup').getByRole('button', { name: 'picture(): Image', exact: true }).click();
+  const result = page.locator('.result-dialog');
+  await expect(result.locator('.result-value')).toHaveText('<object> : Image');
+  await expect(result.locator('.value-placeholder')).toHaveCSS('color', markerColor);
+  await result.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByLabel('Dark mode', { exact: true }).check();
+  await page.getByRole('dialog', { name: 'Settings', exact: true }).getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(row('image').locator('output')).toHaveCSS('color', markerColor);
+  await expect(row('absent').locator('output')).not.toHaveCSS('color', markerColor);
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByLabel('Language', { exact: true }).selectOption('de');
+  await page.getByRole('dialog', { name: 'Einstellungen', exact: true }).getByRole('button', { name: 'Schließen', exact: true }).click();
+  for (const name of ['image', 'computed']) await expect(row(name).locator('output')).toHaveText('<Objekt>');
+  await expect(row('label').locator('output')).toHaveText('Image()');
+  await expect(entry.locator('.codepad-object-label')).toHaveText(/<Objekt>\s*:\s*Example/);
+  await object(page, 'example').click({ button: 'right' });
+  await page.locator('.popup').getByRole('button', { name: 'picture(): Image', exact: true }).click();
+  await expect(result.locator('.result-value')).toHaveText('<Objekt> : Image');
+});
+
 test('GUI-92 inspector shows property exceptions and continues with values and null', async ({ page }) => {
   await load(page);
   await evaluate(page, 'val faulty = Faulty(); faulty');
@@ -252,6 +317,7 @@ test('GUI-92 inspector shows property exceptions and continues with values and n
   const inspector = page.getByRole('dialog', { name: 'Object inspector', exact: true });
   const output = (name: string) => inspector.locator('.inspect-row').filter({ hasText: `${name} :` }).locator('output, .inspect-error-value');
   await expect(output('bad')).toHaveText('IllegalStateException: No world');
+  await expect(output('bad')).toHaveCSS('color', 'rgb(136, 136, 136)');
   await expect(output('bad')).toHaveCSS('white-space', 'nowrap');
   await expect(output('bad')).toHaveCSS('text-overflow', 'ellipsis');
   await output('bad').hover();
@@ -282,7 +348,8 @@ test('GUI-92 inspector shows property exceptions and continues with values and n
   const settings = page.getByRole('dialog', { name: 'Settings' });
   await settings.getByLabel('Dark mode', { exact: true }).check();
   await settings.getByRole('button', { name: 'Close', exact: true }).click();
-  await expect(output('bad')).toHaveCSS('color', await output('good').evaluate(element => getComputedStyle(element).color));
+  await expect(output('bad')).toHaveCSS('color', 'rgb(136, 136, 136)');
+  await expect(output('absent')).toHaveCSS('color', await output('good').evaluate(element => getComputedStyle(element).color));
   await page.screenshot({ path: '/tmp/bluek-inspector-errors-dark.png' });
   await inspector.getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByLabel('Codepad input').fill('faulty.bad');
@@ -309,7 +376,7 @@ test('GUI-92 detached Actor shows world getter errors and recovers after attachm
   await expect(failure).toHaveCSS('text-overflow', 'ellipsis');
   expect(await failure.evaluate(element => element.scrollWidth > element.clientWidth)).toBe(true);
   await expect(row('world').locator('.inspect-value')).toHaveCSS('grid-column-start', '2');
-  await expect(failure).toHaveCSS('color', await row('x').locator('output').evaluate(element => getComputedStyle(element).color));
+  await expect(failure).toHaveCSS('color', 'rgb(136, 136, 136)');
   await failure.click();
   const message = page.getByRole('dialog', { name: 'Property error: world', exact: true });
   await expect(message).toContainText('IllegalStateException: The actor is not in a world (add it with addObject first).');

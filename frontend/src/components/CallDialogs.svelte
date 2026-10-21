@@ -182,7 +182,7 @@
     >
       <h3>{t("ui.objects.methodResult")}</h3>
       <div class="result-method">{resultDialog.method}</div>
-      <output class="result-value">{resultDialog.value}</output>
+      <output class="result-value">{#if resultDialog.defaultObjectDisplay}<span class="value-placeholder">{t("ui.codepad.object")}</span> : {resultDialog.className}{:else}{resultDialog.value}{/if}</output>
       {#if recording && assertionAvailable}<div class="test-assertion">
           <label
             >{t("ui.objects.testAssertion")}<select bind:value={assertionKind}

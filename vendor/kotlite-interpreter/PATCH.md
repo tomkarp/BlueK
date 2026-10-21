@@ -24,6 +24,14 @@ browser-session fixes without replacing Kotlite with a separate interpreter.
 
 ## Changes
 
+Default ordinary object text uses `<object> : ClassName` instead of the
+constructor-like `ClassName()`, which incorrectly suggested an available empty
+constructor. `ClassInstance.usesDefaultObjectToString` exposes this distinction
+to the session without recognizing patterns in student text. Custom/inherited
+and data-class `toString`, enum names, singleton names and exception text retain
+their existing behavior. Inspector cells localize the marker and omit the type
+already shown in the property label (GUI-149; `scripts/smoke-references.mjs`).
+
 Primary-constructor `val`/`var` assignments invoke the debugger statement hook
 at their parameter position. This lets Step in pause on the class header while
 the attribute is about to be assigned. The receiver is bound before these

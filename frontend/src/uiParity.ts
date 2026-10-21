@@ -373,7 +373,7 @@ export function codepadResult(value: any) {
   if (!value || value.kind === "unit" || value.kind === "error")
     return undefined;
   const type = value.type?.displayName || value.className || "Any?";
-  const raw = String(value.display ?? "null");
+  const raw = value.defaultObjectDisplay ? "<object>" : String(value.display ?? "null");
   const display =
     type === "String"
       ? JSON.stringify(raw)

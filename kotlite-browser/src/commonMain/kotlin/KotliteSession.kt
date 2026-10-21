@@ -1528,7 +1528,7 @@ class KotliteSession {
                 val reference = member is ClassInstance && member !is DelegatedValue<*>
                 val summary = isInspectorSummary(member)
                 val inspectable = member != null && member !== NullValue
-                "{\"name\":\"${escape(name)}\",\"value\":\"${escape(display)}\",\"type\":${member?.let { jsonType(it.type().toTypeNode()) } ?: "null"},\"setterPrivate\":$setterPrivate,\"reference\":$reference,\"summary\":$summary,\"inspectable\":$inspectable}"
+                "{\"name\":\"${escape(name)}\",\"value\":\"${escape(display)}\",\"type\":${member?.let { jsonType(it.type().toTypeNode()) } ?: "null"},\"setterPrivate\":$setterPrivate,\"reference\":$reference,\"summary\":$summary,\"inspectable\":$inspectable,\"defaultObjectDisplay\":${usesDefaultObjectDisplay(member, passive = true)}}"
             }
         }
         return "{\"kind\":\"inspect\",\"objectId\":\"${escape(objectId)}\",\"className\":\"${escape(value.type().toTypeNode().descriptiveName())}\",\"fields\":$fields}"
@@ -1579,6 +1579,9 @@ class KotliteSession {
     private fun isInspectorSummary(value: RuntimeValue?): Boolean =
         (value as? DelegatedValue<*>)?.value.let { it is Collection<*> || it is Map<*, *> || it is Map.Entry<*, *> || it is Pair<*, *> || it is Triple<*, *, *> || it is StringBuilder }
 
+    private fun usesDefaultObjectDisplay(value: RuntimeValue?, passive: Boolean = false): Boolean =
+        value is ClassInstance && value !is DelegatedValue<*> && value.usesDefaultObjectToString(isCallCustomFunction = !passive)
+
     /** Explicit property access may run a getter; passive inspection never does. */
     fun get(objectId: String, propertyName: String): String {
         val binding = bindingNames[objectId]
@@ -1613,7 +1616,7 @@ class KotliteSession {
         val summary = isInspectorSummary(value)
         val reference = value is ClassInstance && value !is DelegatedValue<*>
         val inspectable = value != null && value !== NullValue
-        val field = "{\"name\":\"${escape(propertyName)}\",\"value\":\"${escape(parsed.display as? String ?: "<uninitialized>")}\",\"type\":${value?.let { jsonType(it.type().toTypeNode()) } ?: "null"},\"computed\":$computed,\"setterPrivate\":$setterPrivate,\"reference\":$reference,\"summary\":$summary,\"inspectable\":$inspectable" +
+        val field = "{\"name\":\"${escape(propertyName)}\",\"value\":\"${escape(parsed.display as? String ?: "<uninitialized>")}\",\"type\":${value?.let { jsonType(it.type().toTypeNode()) } ?: "null"},\"computed\":$computed,\"setterPrivate\":$setterPrivate,\"reference\":$reference,\"summary\":$summary,\"inspectable\":$inspectable,\"defaultObjectDisplay\":${parsed.defaultObjectDisplay == true}" +
             (if (parsed.kind == "error") ",\"error\":\"${escape(parsed.display as String)}\"" else "") + "}"
         inspectionResults.getOrPut(objectId) { linkedMapOf() }[propertyName] = field
         return response
@@ -1727,6 +1730,7 @@ class KotliteSession {
         val display = if (value === UnitValue) "Unit" else if (value === NullValue) "null" else if (inspection) inspectorDisplay(value) else value.convertToString()
         val actualKind = if (value === UnitValue) "unit" else if (value === NullValue) "null" else if (value is ClassInstance) "object" else "scalar"
         return "{\"kind\":\"$actualKind\",\"display\":\"${escape(display)}\",\"type\":${jsonType(value.type().toTypeNode())}" +
+            (if (usesDefaultObjectDisplay(value, passive = inspection)) ",\"defaultObjectDisplay\":true" else "") +
             (objectId?.let { ",\"objectId\":\"${escape(it)}\",\"className\":\"${escape(value.type().toTypeNode().descriptiveName())}\"" } ?: "") +
             (name?.let { ",\"name\":\"${escape(it)}\"" } ?: "") + "}"
     }

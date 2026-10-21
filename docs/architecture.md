@@ -304,8 +304,19 @@ Automatic inspection calls do not enter the test-state journal.
 
 Every displayed property shows its text and a compact inspection arrow at the
 right edge, with the edit pencil immediately to its left where applicable,
-including scalar and collection values. Strings retain their delimiters. Null,
-uninitialized values and failing getters have disabled arrows. A failing
+including scalar and collection values. Strings retain their delimiters.
+Objects using the default text representation show a localized `<object>`
+marker in property cells; the type is already in the property label. Other
+value displays include the type. The runtime identifies default object text
+explicitly; custom/inherited/data-class `toString` results are never recognized
+or replaced by matching text. Default Kotlin object text uses
+`<object> : ClassName`, also inside collection text and program output.
+Object markers, getter/formatting errors, uninitialized properties and pending
+computed values use the same gray as the Codepad object placeholder. Debugger
+locals and method-result markers share that color. Classification uses runtime
+metadata: actual values, including null, custom text and exception objects held
+as values, retain their ordinary value color in light and dark mode.
+Null, uninitialized values and failing getters have disabled arrows. A failing
 `toString` still leaves the captured value inspectable. Runtime inspection caches contain both
 the formatted property and its already-read value: arrow navigation never repeats
 a getter or `toString`. Stored-field text is reused only while the backing

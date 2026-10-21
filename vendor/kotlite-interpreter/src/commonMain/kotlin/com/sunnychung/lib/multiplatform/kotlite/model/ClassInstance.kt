@@ -291,6 +291,14 @@ open class ClassInstance(
 
     fun originalHashCode() = super.hashCode()
 
+    /** Whether text conversion uses BlueK's generic object marker rather than Kotlin-defined text. */
+    fun usesDefaultObjectToString(isCallCustomFunction: Boolean = true): Boolean =
+        (!isCallCustomFunction || clazz?.getSpecialFunction(SpecialFunction.Name.ToString)?.function.let {
+            // Registered native function copies retain their definition, but not their declaringClassName.
+            it == null || (it as? CustomFunctionDeclarationNode)?.definition ===
+                AnyClass.memberFunctions.first { function -> function.functionName == "toString" }
+        }) && throwablePart() == null && enumName == null && clazz?.isObjectDeclaration == false
+
     override fun convertToString(isCallCustomFunction: Boolean): String {
         if (isCallCustomFunction) {
             clazz?.getSpecialFunction(SpecialFunction.Name.ToString)
@@ -306,7 +314,7 @@ open class ClassInstance(
         enumName?.let { return it }
         // An object has no constructor call to show: `Hund`, `Karte.Companion` (RT-67).
         if (clazz!!.isObjectDeclaration) return clazz!!.fullQualifiedName
-        return "${clazz!!.fullQualifiedName}()"
+        return "<object> : ${clazz!!.fullQualifiedName}"
     }
 
     /** The `Throwable` part of an exception object, also of a student subclass such as `class MyEx : Exception()`. */

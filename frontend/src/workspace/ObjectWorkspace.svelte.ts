@@ -278,6 +278,7 @@ export class ObjectWorkspace {
           result.kind,
         objectId: result.objectId,
         className: result.className,
+        defaultObjectDisplay: result.defaultObjectDisplay,
       };
   };
   confirmInvoke = async () => {

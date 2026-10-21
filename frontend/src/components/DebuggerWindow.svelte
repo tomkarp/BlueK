@@ -137,12 +137,10 @@
                           })}
                       >
                         <span class="codepad-object-icon" aria-hidden="true"
-                        ></span><span
-                          >{t("ui.codepad.object")} : {variable.type}</span
-                        >
+                        ></span><span><span class="value-placeholder">{t("ui.codepad.object")}</span> : {variable.type}</span>
                       </button>
                     {:else}
-                      {valueText(variable)}
+                      <span class:value-placeholder={!variable.initialized || variable.computed || variable.display === null}>{valueText(variable)}</span>
                     {/if}
                   </dd>
                 </div>
