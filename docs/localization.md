@@ -43,11 +43,14 @@ Compile diagnostics show the English message without the interpreter's internal
   an allowlist. Other HTML is escaped. Source code remains outside translations.
 - Each locale must have the same keys. `{0}`, `{1}`, … substitute names or
   counts; preserve their indices in translations. CodeMirror phrases use `$`.
-- Keep Kotlin terminology intact: `Open Class`, `Abstract Class`, `Data Class`
-  and identifiers are not translated into literal German equivalents. Translate
-  terms only when the translation is natural and useful (for example, keep
-  Assertion rather than an awkward literal equivalent). Prefer the exact
-  English term to an awkward literal translation.
+- Keep Kotlin keywords, canonical labels (`Open Class`, `Abstract Class`,
+  `Data Class`) and identifiers intact: `open`, `abstract`, `data` and source
+  names are not translated. For user-facing object members, use
+  **Attribut** in German and **property** in English. Reserve *field* for an
+  actual backing field, a form/input field or an implementation detail. In
+  technical explanations, use Kotlin's precise terminology when that
+  distinction matters. Translate other terms only when natural and useful;
+  prefer the exact English term to an awkward literal translation.
 - To add a language, copy the three English files into a new locale directory,
   import/register them in `catalog.ts`, and add its self-name to `languages` in
   `Language.svelte.ts`. The locale type and saved-language validation derive

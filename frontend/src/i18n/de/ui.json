@@ -154,7 +154,7 @@
     "callFailed": "Aufruf fehlgeschlagen.",
     "theReferenceCouldNotBeAdded": "Die Referenz konnte nicht hinzugefügt werden.",
     "theObjectReferenceCouldNotBeRemoved": "Die Objektreferenz konnte nicht entfernt werden.",
-    "couldNotSetProperty": "Die Eigenschaft konnte nicht geändert werden."
+    "couldNotSetProperty": "Das Attribut konnte nicht geändert werden."
   },
   "diagram": {
     "nowSelectItsSuperclass": "Wähle jetzt ihre Oberklasse.",
@@ -211,7 +211,7 @@
     "edit0": "{0} bearbeiten",
     "theSetterIsPrivate": "Der Setter ist privat",
     "noFields": "Keine Attribute",
-    "propertyError": "Eigenschaftsfehler:"
+    "propertyError": "Attributfehler:"
   },
   "execution": {
     "chooseMain": "main auswählen",
@@ -487,8 +487,8 @@
     "idle": "bereit",
     "completed": "abgeschlossen",
     "resultCounts": "{0} erfolgreich · {1} fehlgeschlagen · {2} ignoriert",
-    "replaceWarning": "Das Ersetzen des Testzustands überschreibt alle Klasseneigenschaften und alle <code>@BeforeTest</code>-Methoden. Andere Methoden, einschließlich <code>@Test</code>-Methoden, bleiben erhalten.",
-    "replaceWithInitWarning": "Das Ersetzen des Testzustands überschreibt alle Klasseneigenschaften und alle <code>@BeforeTest</code>-Methoden sowie alle init-Blöcke. Andere Methoden, einschließlich <code>@Test</code>-Methoden, bleiben erhalten.",
+    "replaceWarning": "Das Ersetzen des Testzustands überschreibt alle Klassenattribute und alle <code>@BeforeTest</code>-Methoden. Andere Methoden, einschließlich <code>@Test</code>-Methoden, bleiben erhalten.",
+    "replaceWithInitWarning": "Das Ersetzen des Testzustands überschreibt alle Klassenattribute und alle <code>@BeforeTest</code>-Methoden sowie alle init-Blöcke. Andere Methoden, einschließlich <code>@Test</code>-Methoden, bleiben erhalten.",
     "attachedClass": "Gekoppelt an {0}. Verwendet normalen Kotlin-Code und kotlin.test.",
     "ignoredStatus": "ignoriert"
   },

@@ -302,17 +302,17 @@ use typed runtime access. Coalesce concurrent refreshes, invalidate requests
 on compile/close and rerun if refreshed while another pass was pending.
 Automatic inspection calls do not enter the test-state journal.
 
-Every field shows its text and a compact inspection arrow at the right edge,
-with the edit pencil immediately to its left where applicable, including scalar
-and collection values. Strings retain their delimiters. Null, uninitialized
-values and failing getters have disabled arrows. A failing `toString` still
-leaves the captured value inspectable. Runtime inspection caches contain both
-the formatted field and its already-read value: arrow navigation never repeats
+Every displayed property shows its text and a compact inspection arrow at the
+right edge, with the edit pencil immediately to its left where applicable,
+including scalar and collection values. Strings retain their delimiters. Null,
+uninitialized values and failing getters have disabled arrows. A failing
+`toString` still leaves the captured value inspectable. Runtime inspection caches contain both
+the formatted property and its already-read value: arrow navigation never repeats
 a getter or `toString`. Stored-field text is reused only while the backing
 value has the same identity. Opening scalar values shows their value and type
-without inventing fields. Handles are allocated on navigation, not for every
+without inventing properties. Handles are allocated on navigation, not for every
 property refresh; passive snapshots still never execute student formatting.
-Editing a field refreshes every open inspector so a parent object's formatted
+Editing a property refreshes every open inspector so a parent object's formatted
 value also reflects changes made through a child's inspector.
 
 The debugger embeds the same `InspectorFields` presentation as floating object
@@ -320,12 +320,12 @@ inspectors. A pause exposes its receiver through a pinned object handle;
 runtime snapshots supply the receiver's inspection through the existing
 inspection map. `ObjectWorkspace` refreshes the integrated receiver and open
 inspectors once per pause, deduplicating shared handles. Computed getters run
-automatically through the paused coroutine's inspection path; fields remain
+automatically through the paused coroutine's inspection path; properties remain
 read-only and object references open ordinary inspectors. Snapshot publication
 itself remains passive; active inspector views request getter execution.
 
 Getter errors appear in normal value cells with tooltip/full-message action.
-Field edits use typed runtime `set`; displayed object/collection text is not
+Property edits use typed runtime `set`; displayed object/collection text is not
 valid editable Kotlin and begins with an empty input. Empty Enter cancels;
 clicking a bench object inserts its snapshot name. Simulation inspection uses
 the last completed tick. Shared window activation orders editors, inspectors

@@ -476,7 +476,7 @@ test('DBG-12 Step in pauses on a primary-constructor property assignment', async
   await page.locator('.debugger-window').getByRole('button', { name: 'Step in', exact: true }).click();
   await expect(page.locator('.debugger-window')).toContainText('Next: NamedBox.kt, line 1');
   await expect(namedBoxEditor.locator('.cm-debug-current-line')).toHaveCount(1);
-  const attributes = page.locator('[aria-label="Attributes"]');
+  const attributes = page.locator('[aria-label="Properties"]');
   await expect(attributes).toContainText('name');
   await expect(attributes).toContainText('value');
   await expect(attributes).toContainText('not initialized');
@@ -529,7 +529,7 @@ test('DBG-03 a method breakpoint works through the ordinary object menu without 
   await expect(variables).toContainText('4');
   await expect(variables).toContainText('i');
   await expect(variables).toContainText('1');
-  const attributes = page.locator('[aria-label="Attributes"]');
+  const attributes = page.locator('[aria-label="Properties"]');
   await expect(attributes).toContainText('name');
   await expect(attributes).toContainText('Wuffi');
   await expect(attributes).toContainText('label');

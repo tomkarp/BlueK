@@ -1052,7 +1052,7 @@ test('GUI-03 GUI-04 computed values update after every inspector edit', async ({
   await expect(computed).toHaveText('90');
 });
 
-test('GUI-90 editing an object or list field starts empty and a bench click inserts an object name', async ({ page }) => {
+test('GUI-90 editing an object or list property starts empty and a bench click inserts an object name', async ({ page }) => {
   await project(page, 'class Hund { var freund: Hund? = null; var tricks = mutableListOf("Sitz"); var paar = Pair(1, "a"); var alter: Int = 3 }');
   const object = (name: string) => page.locator('.bench .object').filter({ hasText: new RegExp(`^${name}:`) });
   for (const name of ['hund1', 'hund2', 'hund3']) {
@@ -1133,7 +1133,7 @@ test('RT-42 RT-43 a setter that calls itself is a compile warning and a StackOve
   await expect(inspector.locator('.inspect-error')).toHaveText('StackOverflowError: More than 1000 nested calls. Does a function or property accessor call itself endlessly?');
 });
 
-test('GUI-48 private fields are readable and private setters stay visible but cannot be edited', async ({ page }) => {
+test('GUI-48 private properties are readable and private setters stay visible but cannot be edited', async ({ page }) => {
   await project(page, 'class Timer { private val secret: Int = 7\nvar min: Int = 0\nprivate set }');
   const entry = await evaluate(page, 'Timer()');
   await entry.getByRole('button').click();
@@ -1227,8 +1227,8 @@ test('GUI-18 primitive inspectors stay compact, show their type and the active i
   await expect(inspectors).toHaveCount(2);
   await expect(inspectors.nth(0).locator('h2')).toHaveText('zahl : Int');
   await expect(inspectors.nth(1).locator('h2')).toHaveText('text : String');
-  await expect(inspectors.nth(0).locator('.inspect-no-fields')).toHaveText('No fields');
-  await expect(inspectors.nth(1).locator('.inspect-no-fields')).toHaveText('No fields');
+  await expect(inspectors.nth(0).locator('.inspect-no-fields')).toHaveText('No properties');
+  await expect(inspectors.nth(1).locator('.inspect-no-fields')).toHaveText('No properties');
   const compactBox = (await inspectors.nth(0).boundingBox())!;
   expect(compactBox.height).toBeLessThan(200);
   await expect(inspectors.nth(0)).toHaveCSS('padding', '12px');

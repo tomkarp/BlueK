@@ -31,7 +31,7 @@
     "pauseRequested": "Pause requested",
     "variables": "Local variables",
     "noVariables": "There are no local variables here yet.",
-    "attributes": "Attributes",
+    "attributes": "Properties",
     "computedProperty": "computed property",
     "notInitialized": "not initialized"
   },
@@ -210,7 +210,7 @@
     "showErrorFor0": "Show error for {0}",
     "edit0": "Edit {0}",
     "theSetterIsPrivate": "The setter is private",
-    "noFields": "No fields",
+    "noFields": "No properties",
     "propertyError": "Property error:"
   },
   "execution": {

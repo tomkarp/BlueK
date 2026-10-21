@@ -71,7 +71,7 @@
   },
   "sections": {
     "constructors": "Konstruktoren",
-    "properties": "Eigenschaften",
+    "properties": "Attribute",
     "methods": "Methoden",
     "functions": "Funktionen"
   }

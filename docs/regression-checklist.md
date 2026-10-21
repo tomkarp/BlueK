@@ -26,7 +26,7 @@ below. No universal performance guarantee is implied.
 | GUI-01 | Project templates, demo grouping and order | Recorded browser pass; `test:blueplay-demos` |
 | GUI-02 | Parameterless creation still asks for an object name | Recorded automated pass |
 | GUI-03 | Inspector computed property values | Recorded browser pass; user confirmation recorded |
-| GUI-04 | Inspector getter refresh after field/codepad changes | Recorded browser pass |
+| GUI-04 | Inspector getter refresh after property/codepad changes | Recorded browser pass |
 | GUI-05 | Codepad Enter/history/focus after output | Recorded browser pass |
 | GUI-06 | Terminal splitter geometry, icons and full height | Recorded browser pass |
 | GUI-07 | Codepad result handles for primitives, Strings and objects | Recorded browser pass |
@@ -71,7 +71,7 @@ below. No universal performance guarantee is implied.
 | GUI-45 | Reload own draft; fresh tab does not select another draft | Recorded browser pass |
 | GUI-46 | Method-result label/value/actions do not overlap | Build passed; dedicated GUI/visual check pending |
 | GUI-47 | Parameterless calls and activity state | Recorded browser pass |
-| GUI-48 | Private-field styling and read-only private-set controls | Recorded inspector checks; current private-row visual/CSS acceptance pending |
+| GUI-48 | Private-property styling and read-only private-set controls | Recorded inspector checks; current private-row visual/CSS acceptance pending |
 | GUI-49 | Long method menu signatures stay on one line | Recorded browser pass |
 | GUI-35 | Short-link display, copy, expiry and loading roundtrip | Recorded browser pass |
 | API-01 | Short-link SQLite roundtrip, three-word codes and 30-day expiry | Share-service test passed; production/load tests pending |
@@ -152,7 +152,7 @@ below. No universal performance guarantee is implied.
 | GUI-87 | Inspector/editor activation and stacking | Recorded browser pass |
 | GUI-88 | Reference arrows and passive navigation to referenced objects | Recorded browser pass; `npm run typecheck`, `npm run build:kotlite`, `npm run build:svelte` |
 | GUI-89 | Passive inspection does not flicker compile activity | Recorded runtime/browser pass; `test:references`, `test:runtime-state` |
-| GUI-90 | Object/collection field edits start empty and insert bench names | Recorded browser pass |
+| GUI-90 | Object/collection property edits start empty and insert bench names | Recorded browser pass |
 | RT-31 | Missing images produce clear errors | Recorded browser pass; `smoke-blueplay-browser` |
 | RT-15 | Private methods enforce visibility and manifest flags | Recorded automated pass; `smoke-curriculum-kotlin` |
 | RT-16 | String-template identifier boundaries and literal dollar signs | Recorded automated pass; `smoke-curriculum-kotlin` |
@@ -322,25 +322,25 @@ below. No universal performance guarantee is implied.
 | GUI-144 | BluePlay information in New Project links to the BluePlay documentation in BlueK | Chromium test passed with GUI-01 (2026-10-18); German panel inspected by the agent at 800×600. User visual acceptance pending. |
 | GUI-145 | Save / Export → Export BlueJ Project downloads `<name>.zip` with the BlueJ library and all standard media; importing it restores the BluePlay project | Chromium pass (2026-10-18); German dialog inspected by the agent at 800×600. User acceptance in BlueJ pending. |
 | GUI-146 | After a BlueJ export, a notice names left-out test classes and MP3 sounds (BluePlay in BlueJ plays WAV only), but only if the project has them; it stays until closed; no MP3 conversion | Chromium pass with GUI-145 and EXP-17 (2026-10-18), including two simulated minutes without hiding and closing with ×; German test-class notice inspected by the agent in the dev server. |
-| GUI-148 | Every inspector attribute shows text plus a compact inspection arrow at the right edge, with the edit pencil immediately to its left; scalars, objects and collections use the same layout | Runtime and Chromium pass (2026-10-21), including custom toString, scalar/captured-getter navigation, disabled null/error arrows, inspectable formatting failures, nested edits and readonly debugger inspection. Agent inspected German light/dark views and opened an Int inspector. User accepted the overall layout and requested the final pencil/arrow ordering; acceptance of that final ordering is pending. |
+| GUI-148 | Every inspector property shows text plus a compact inspection arrow at the right edge, with the edit pencil immediately to its left; scalars, objects and collections use the same layout | Runtime and Chromium pass (2026-10-21), including custom toString, scalar/captured-getter navigation, disabled null/error arrows, inspectable formatting failures, nested edits and readonly debugger inspection. Agent inspected German light/dark views and opened an Int inspector. User accepted the overall layout and requested the final pencil/arrow ordering; acceptance of that final ordering is pending. |
 | DBG-01 | A breakpoint starts debugging main; Step in is enabled only when the current instruction can enter project code; Step and Continue work and locals are inspectable | Chromium GUI pass (2026-10-20): medium-gray filled chevron sits behind the red breakpoint dot; the lighter gray improves dot visibility while keeping the arrow visible. Arrow and highlight share one source position without adding gutter width. Editing actions stay locked while paused; breakpoint controls remain usable. Runtime smoke verifies Step in reaches a constructor property initializer. New assertions for the Step in enabled state are written but not run. Visual user acceptance remains open. |
 | DBG-02 | Multiple gutter breakpoints stop an ordinary main run before each marked statement; Step in is disabled for standard-library-only instructions | Chromium GUI pass (2026-10-20): closing-brace line is rejected; an executable-line breakpoint survives recompilation and execution prints expected output. Latest built-in-browser check confirmed two breakpoints both survive compilation and stop on lines 2 and 3. New Step in assertion is written but not run. |
-| DBG-03 | Gutter breakpoint stops an explicit object-method call without `main`, showing parameters, `for` loop locals and receiver attributes in a separate window | Chromium verifies `n = 4`, `i = 1`, stored `name = "Wuffi"` rendered with string delimiters, and the integrated inspector evaluates `label`. Runtime smoke separately verifies passive snapshot collection keeps the getter counter at zero. Continue re-hits the loop breakpoint, then finishes with output 5, 6 and 7 (2026-10-20). |
+| DBG-03 | Gutter breakpoint stops an explicit object-method call without `main`, showing parameters, `for` loop locals and receiver properties in a separate window | Chromium verifies `n = 4`, `i = 1`, stored `name = "Wuffi"` rendered with string delimiters, and the integrated inspector evaluates `label`. Runtime smoke separately verifies passive snapshot collection keeps the getter counter at zero. Continue re-hits the loop breakpoint, then finishes with output 5, 6 and 7 (2026-10-20). |
 | DBG-04 | Request Pause during a running loop, suspend at the next safe project step and stop | Chromium pass (2026-10-20): debugger window is absent during a normal run and Pause remains available in the sidebar; it opens on the requested pause. Stop from the paused state works. Stop during terminal input remains open. |
 | DBG-05 | When stepping into another file at the same line number, highlight and arrow follow the reported file and line; breakpoint markers persist across tab switches | Added browser regression for Main.kt line 2 → Tier.kt line 2, then back to Main.kt line 3; built-in-browser run confirmed the highlight follows line 2 and both Main breakpoints remain visible and active. Automated run is blocked by worktree write permissions (EPERM). |
 | DBG-06 | Breakpoint dots keep the same position and size on inactive rows and inside the current-line chevron, including two-digit line numbers; both have the same flat style | Built-in-browser check with breakpoints on lines 2 and 10: horizontal centers and dimensions match exactly; both dot centers and the arrow center align with their gutter row centers to within 0.01 CSS px. Both dots use the same solid red fill and round shape with no shadow. Automated GUI assertion updated; light and dark rendering inspected. |
 | DBG-07 | Step over a constructor call and pause in the caller; Step in may enter the constructor | Added a browser regression for `val t = Tier()`; constructor activation records now count as interpreted frames for debugger depth. |
-| DBG-08 | Step pauses on statements inside `init` blocks; debugger locals and attributes show simple values directly and open the shared object inspector for object values | Implementation and regression checklist updated (2026-10-20). Kotlin build passed. Built-in-browser inspection of `exception.bluek.json` exposed an NPE after stepping through `Tier.bellen()`; fixed below and verified a full step-through completes without an exception. The constructor `init` browser case now also confirms attributes show the partially built object and do not evaluate computed getters. Object-valued attributes now use the same inspectable object reference as locals; this follow-up has not been browser-verified. |
+| DBG-08 | Step pauses on statements inside `init` blocks; debugger locals and properties show simple values directly and open the shared object inspector for object values | Implementation and regression checklist updated (2026-10-20). Kotlin build passed. Built-in-browser inspection of `exception.bluek.json` exposed an NPE after stepping through `Tier.bellen()`; fixed below and verified a full step-through completes without an exception. The constructor `init` browser case now also confirms properties show the partially built object and do not evaluate computed getters. Object-valued properties now use the same inspectable object reference as locals; this follow-up has not been browser-verified. |
 | DBG-09 | Step through a `for` loop returns to its header between body iterations, without duplicating the initial header pause; the previous loop value remains visible at the header | Built-in-browser pass (2026-10-20): the initial `Tier.kt:10` pause has no `i`; Step enters line 11 with `i = 1`; Step returns to line 10 with `i = 1`; Step there advances to line 11 with `i = 2`. |
 | DBG-10 | While paused, breakpoint markers can be added and removed from the gutter or editor action; comment and format actions appear disabled | Built-in-browser pass (2026-10-20): removed the breakpoint at the paused line, added one on another line, then removed it; comment and format actions were disabled in the accessibility tree and visibly gray. |
-| DBG-11 | While stepping through construction, the debugger shows the object taking shape: all attributes appear immediately, assigned properties gain values, remaining properties are uninitialized, and computed properties remain unevaluated | Built-in-browser pass (2026-10-20): before `name` initialization, showed `name` and `alter` as uninitialized and `rest` as computed without running its getter; after one Step, showed `name = "Wuffi"`, with `alter` still uninitialized and `rest` unevaluated. The `init` block pause showed `name = "Wuffi"`, `alter = 0` and `rest` still unevaluated. |
-| DBG-12 | Step in to a constructor with a primary-constructor property pauses on its class-header line before assigning that attribute; all stored attributes are already listed, and a constructor without property parameters proceeds to its first initializer | Runtime smoke and Chromium GUI case passed (2026-10-20): `NamedBox.kt:1` showed both `name` and later `value` as uninitialized; Step advanced to line 2 with `name = "Bello"`. The existing parameterless-constructor smoke still pauses first at its property initializer (`Box.kt:2`). Initial GUI attempts used a stale accessible label and a non-visible gutter spacer; corrected test passed. |
+| DBG-11 | While stepping through construction, the debugger shows the object taking shape: all properties appear immediately, assigned properties gain values, remaining properties are uninitialized, and computed properties remain unevaluated | Built-in-browser pass (2026-10-20): before `name` initialization, showed `name` and `alter` as uninitialized and `rest` as computed without running its getter; after one Step, showed `name = "Wuffi"`, with `alter` still uninitialized and `rest` unevaluated. The `init` block pause showed `name = "Wuffi"`, `alter = 0` and `rest` still unevaluated. |
+| DBG-12 | Step in to a constructor with a primary-constructor property pauses on its class-header line before assigning that property; all stored properties are already listed, and a constructor without property parameters proceeds to its first initializer | Runtime smoke and Chromium GUI case passed (2026-10-20): `NamedBox.kt:1` showed both `name` and later `value` as uninitialized; Step advanced to line 2 with `name = "Bello"`. The existing parameterless-constructor smoke still pauses first at its property initializer (`Box.kt:2`). Initial GUI attempts used a stale accessible label and a non-visible gutter spacer; corrected test passed. |
 | DBG-13 | Integrated and floating object inspectors evaluate computed properties automatically while debugging and refresh them after each step | Browser regression initially reproduced a loop: getter inspection re-emitted the same source statement as a fresh pause, which retriggered inspection and kept Step disabled. Fixed by re-suspending at the original pause without a new pause event; breakpoints are ignored during this inspector-only evaluation. Kotlin bundle build, typecheck, and focused Chromium GUI test passed (2026-10-21); Step was enabled after inspection and advanced to the next line with the refreshed value. |
-| DBG-14 | BluePlay game simulation pauses at breakpoints in `World.act()` and `Actor.act()` on each tick; Step, Continue and removing a breakpoint while paused behave correctly | Runtime smoke, Playwright GUI and built-in-browser pass (2026-10-21): Act once and Run pause in `World.act`; Continue reaches `Actor.act`; Step updates fields; breakpoints recur on later ticks; removing a breakpoint while paused lets the tick finish. See performance and suite results below. |
+| DBG-14 | BluePlay game simulation pauses at breakpoints in `World.act()` and `Actor.act()` on each tick; Step, Continue and removing a breakpoint while paused behave correctly | Runtime smoke, Playwright GUI and built-in-browser pass (2026-10-21): Act once and Run pause in `World.act`; Continue reaches `Actor.act`; Step updates properties; breakpoints recur on later ticks; removing a breakpoint while paused lets the tick finish. See performance and suite results below. |
 | DBG-15 | Key releases during a debugger pause clear BluePlay's held-key state; a short Space press cannot keep triggering shooting after Continue | Playwright GUI regression passes (2026-10-21): Space is pressed until the actor pauses at the shot statement, released while paused, then Continue yields one shot and no later breakpoint. |
 | DBG-16 | A BluePlay click delivered during a debugger pause is consumed once after Continue | Playwright GUI regression passes (2026-10-21): click sent while paused before `isClicked`, one actor response follows, and later ticks do not repeat it. |
-| DBG-17 | Debugger attributes omit Actor's cached world dimensions while keeping student and public Actor properties | Runtime smoke checks that `worldWidth`, `worldHeight` and `worldCellSize` are omitted from an Actor pause while `acts`, `x`, `y`, `rotation` and `image` remain visible. |
-| DBG-18 | The debugger embeds the shared readonly object inspector for its receiver and automatically refreshes getters at each pause | Chromium pass (2026-10-21): computed values follow two field updates, String delimiters and reference arrows match floating inspectors, a failing getter shows its details without blocking Step, and returning to main removes the receiver view. |
+| DBG-17 | Debugger properties omit Actor's cached world dimensions while keeping student and public Actor properties | Runtime smoke checks that `worldWidth`, `worldHeight` and `worldCellSize` are omitted from an Actor pause while `acts`, `x`, `y`, `rotation` and `image` remain visible. |
+| DBG-18 | The debugger embeds the shared readonly object inspector for its receiver and automatically refreshes getters at each pause | Chromium pass (2026-10-21): computed values follow two property updates, String delimiters and reference arrows match floating inspectors, a failing getter shows its details without blocking Step, and returning to main removes the receiver view. |
 | DBG-19 | Completing a debugged BluePlay tick with Step resumes a previously running game; Act once remains paused | Chromium and built-in-browser pass (2026-10-21): final Step resumes a Run tick; a manually started Act tick ends paused with no subsequent tick output. |
 | DBG-20 | BluePlay is above editors on show/start; a debugger pause reveals source above it; the next changed drawing restores the world and keyboard focus | Chromium and built-in-browser pass (2026-10-21): status/getter snapshots and a variable-only step keep the editor in front; a drawing change restores the world. The browser regression also confirms a subsequent Right key reaches the running world. User visual acceptance pending. |
 
@@ -348,12 +348,12 @@ below. No universal performance guarantee is implied.
 
 ### Uniform inspector values (BlueK-Feedback #14) — 2026-10-21
 
-All fields now show text and a compact arrow, with an optional edit pencil to
+All properties now show text and a compact arrow, with an optional edit pencil to
 its left so arrows align at the right edge. Active inspection calls toString;
 ordinary formatting failures stay in their row and leave the captured object
 inspectable. Passive snapshots and arrow navigation do not rerun student
 formatting/getters. Scalar navigation shows the value and type without adding
-synthetic attributes. Null/uninitialized values and failed getters disable the
+synthetic properties. Null/uninitialized values and failed getters disable the
 arrow. Editing a child refreshes text in other open inspectors too.
 
 The initial eleven focused Chromium cases passed. The final broader run passed
@@ -386,9 +386,9 @@ for this window-ordering change.
 
 ### Integrated debugger inspector — 2026-10-21
 
-The receiver attribute list now uses the same `InspectorFields` component and
+The receiver property inspector now uses the same `InspectorFields` component and
 runtime inspection model as floating object inspectors. Getter values refresh
-automatically when the receiver is displayed and after each pause; all fields
+automatically when the receiver is displayed and after each pause; all properties
 are readonly. Local variables retain their separate list. Receiver handles are
 runtime-owned and debugger-pinned, including during constructor initialization.
 This supersedes the earlier rule that the debugger panel never evaluates getters.
@@ -399,7 +399,7 @@ passed, covering construction, separate inspectors, BluePlay ticks, integrated
 getter refresh, reference navigation, error details and continuing execution.
 A Svelte warning from an assignment-returning error callback was corrected.
 Built-in-browser visual inspection in German at 751×810 confirmed the same
-readonly field table in light and dark mode, with `alter`/`rest` updating from
+readonly property table in light and dark mode, with `alter`/`rest` updating from
 0/100 to 5/95 and 15/85. Shared inspector reference navigation and editing
 regressions passed. The initial broader run found stale breakpoint-control,
 gutter and tab selectors, plus a BluePlay regression: automatic `isClicked`
@@ -421,14 +421,14 @@ Act once remains paused. No user visual acceptance is claimed.
 
 The checked-in Kotlin bundle pauses and resumes the same coroutine at
 breakpoints. Runtime smoke verified an explicit object method with no `main`,
-stored attributes, computed getters staying uncalled, rejection of a closing
+stored properties, computed getters staying uncalled, rejection of a closing
 brace as a breakpoint, and Step in reaching a constructor property initializer.
 Chromium passed DBG-01 through DBG-04, including the movable debugger window,
 lockout of editing controls while paused, no debugger flash on normal runs and
 a breakpoint surviving recompilation. Typecheck (zero errors/warnings), i18n
 (766 messages), runtime smoke, Chromium GUI and `build:kotlite` passed. The
 first runtime smoke exposed that a pause did not set the resumable state; the
-first method-attribute run exposed that the receiver-binding scope was missing
+first method-inspector run exposed that the receiver-binding scope was missing
 from debugger frames. Both were fixed and the final runs passed. An initial
 DBG-03 selector also matched both values lists; the test now scopes to locals.
 The first gutter browser run exposed missing empty gutter rows; the gutter now
@@ -500,7 +500,7 @@ in the enclosing constructor frame. Built-in-browser inspection showed
 Step, `name` displayed as `"Wuffi"`, `alter` remained uninitialized, and
 `rest` stayed unevaluated. A further Step paused inside the `init` block with
 `name = "Wuffi"`, `alter = 0` and `rest` still unevaluated. The debugger heading
-now reads “Attribute” in German and “Attributes” in English. Kotlin bundle
+now reads “Attribute” in German and “Properties” in English. Kotlin bundle
 build and typecheck passed; no automated tests were run for this follow-up.
 
 ### BluePlay simulation debugger — 2026-10-21
@@ -510,14 +510,14 @@ DBG-14 adds breakpoint pauses to game ticks in `World.act()` and
 single-step state updates, live breakpoint edits, and expected output. The
 focused Chromium GUI case passed. In the built-in browser, Act once stopped at
 the world breakpoint; Continue reached the actor breakpoint in the same tick;
-Step updated the actor field; and Continue completed the tick. Run then stopped
+Step updated the actor property; and Continue completed the tick. Run then stopped
 at both breakpoints on successive ticks, and removing a breakpoint while
 paused let execution continue. The visible debugger snapshot showed the live
-world and actor attributes.
+world and actor properties.
 
 DBG-17 removes `Actor`'s three cached copies of its containing world's width,
-height and cell size from the debugger attribute list. They are private engine
-bookkeeping fields on `Actor`, not public world or student attributes; public
+height and cell size from the debugger property list. They are private engine
+bookkeeping fields on `Actor`, not public world or student properties; public
 `World` properties remain on a `World` receiver, and other student properties
 are unaffected. Runtime smoke asserts that the three fields are omitted while
 student `acts` and public Actor properties remain. The focused DBG-14

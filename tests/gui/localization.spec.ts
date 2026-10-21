@@ -290,9 +290,21 @@ test("GUI-130 BluePlay reference translates explanations and preserves signature
   await expect(
     api.getByRole("heading", { name: "Konstruktoren", exact: true }),
   ).toBeVisible();
+  await expect(
+    api.getByRole("heading", { name: "Attribute", exact: true }),
+  ).toBeVisible();
   await expect(api).toContainText(
     "Erzeugt ein Zellraster; cellSize wird in Pixeln angegeben.",
   );
   await expect(api.locator("code").first()).toContainText("World(");
   await expect(api).toContainText("fun addObject");
+  await api.getByRole("button", { name: "Schließen", exact: true }).click();
+  await page.getByRole("button", { name: "Einstellungen", exact: true }).click();
+  await page.getByLabel("Sprache", { exact: true }).selectOption("en");
+  await page.getByRole("button", { name: "Close", exact: true }).click();
+  await page.locator('.classcard[aria-label="World"]').dblclick();
+  const englishApi = page.getByRole("dialog", { name: "World API", exact: true });
+  await expect(
+    englishApi.getByRole("heading", { name: "Properties", exact: true }),
+  ).toBeVisible();
 });

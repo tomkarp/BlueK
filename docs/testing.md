@@ -110,9 +110,9 @@ Any test class can be selected, even without Test methods.
 
 **Save State from Object Bench** turns constructors, method calls, explicit
 property reads, assignments and supported codepad statements into properties
-and setup code. Fields are `val`; no `lateinit` or marker comments are needed.
-Simple preparation uses field initializers plus BeforeTest. Interleaved
-construction/actions or returned objects use assignments in `init` to retain
+and setup code. Generated bindings are `val` properties; no `lateinit` or
+marker comments are needed. Simple preparation uses property initializers plus
+BeforeTest. Interleaved construction/actions or returned objects use assignments in `init` to retain
 chronological order. Preview uses the normal embedded Kotlin editor, including
 highlighting, formatting, comments and editor settings.
 
@@ -124,13 +124,14 @@ Tests window.
 
 Automatic inspector getter evaluations are excluded. Explicit getter calls
 remain. Automatically named results are local variables only if later steps
-need them. Objects removed from the bench are not fields: retain a local binding
-only if later preparation needs it; otherwise keep just the constructor's
-execution, preserving its effects.
+need them. Objects removed from the bench have no saved binding of their own:
+retain a local binding only if later preparation needs it; otherwise keep just
+the constructor's execution, preserving its effects.
 
 **Load State to Object Bench** recompiles, creates the chosen test instance,
-runs setup and binds initialized stored fields to the bench. Identity and shared
-references survive. Computed properties do not run merely to transfer state.
+runs setup and binds initialized stored properties to the bench. Identity and
+shared references survive. Computed properties do not run merely to transfer
+state.
 Loading works after page reload without a manual Compile, and opens neither
 the Tests window nor editor. You can then modify the objects and save again.
 Manually edited setup code can also be loaded.
@@ -149,9 +150,10 @@ steps and `main` execution cannot be saved this way.
 After a failed runtime call, partial effects can remain; BlueK requires reset
 and fresh preparation. Reused names, internal handles and non-reconstructible
 bindings are rejected with an explanation. Codepad reference reassignment and
-locals shadowing state fields cannot be reproduced as unchanged val fields.
-Primitive bench fields (numbers, Boolean, Char) are excluded; String references
-are supported. The editable preview is checked by the ordinary compiler path.
+locals shadowing state properties cannot be reproduced as unchanged val
+properties. Primitive values on the bench (numbers, Boolean, Char) are excluded;
+String references are supported. The editable preview is checked by the ordinary
+compiler path.
 
 ## Recording a test
 
