@@ -78,7 +78,7 @@ footer{flex:0 0 108px}
 .inspect-window{width:min(520px,calc(100vw - 40px));min-width:0}
 .inspect-row{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);align-items:center;margin:3px 0;background:#fff0f0;border:1px solid #e65f6b}
 .inspect-row span{min-width:0;padding:5px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:16px Arial,sans-serif}
-.inspect-value{grid-column:2;display:flex;align-items:stretch;min-width:0;background:#fff;border-left:2px solid #e65f6b}
+.inspect-value{grid-column:2;display:flex;align-items:stretch;min-width:0;min-height:32px;background:#fff;border-left:2px solid #e65f6b}
 .inspect-value output,.inspect-value .inspect-error-value{flex:1 1 auto;min-width:0;padding:5px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:16px monospace}
 .inspect-value input{width:100%;min-width:0;padding:5px;border:1px solid #888;font:16px monospace}
 .inspect-row input[aria-invalid="true"]{outline:2px solid #c00000;outline-offset:-2px}

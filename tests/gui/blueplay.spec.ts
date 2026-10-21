@@ -101,6 +101,74 @@ test('GUI-58 BluePlay library cards are normal movable cards with per-file API d
   await expect(menu.getByRole('button', { name: 'Compile', exact: true })).toHaveCount(0);
 });
 
+test('GUI-151 BluePlay library constructors create real bench objects through the standard dialog', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, library: { id: 'blueplay', version: 1 }, files: [{ fileName: 'Main.kt', kind: 'functions', source: 'fun main() {}' }] };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  await page.getByRole('button', { name: 'Compile', exact: true }).click();
+  await expect(page.getByLabel('Ready', { exact: true })).toBeVisible();
+  for (const [name, count] of [['World', 1], ['Actor', 1], ['Image', 3], ['BluePlayFunctions', 0]] as const) {
+    await page.locator(`.classcard[aria-label="${name}"]`).click({ button: 'right' });
+    const menu = page.locator('.popup');
+    await expect(menu.locator('.constructor-menu-item')).toHaveCount(count);
+    await expect(menu.getByRole('button', { name: 'Show API documentation', exact: true })).toBeEnabled();
+    for (const action of ['Open Editor', 'Delete', 'Duplicate', 'Create test class', 'Compile']) {
+      await expect(menu.getByRole('button', { name: action, exact: true })).toHaveCount(0);
+    }
+    await page.keyboard.press('Escape');
+  }
+
+  async function create(name: string, signature: string, instance: string, args: Record<string, string>) {
+    await page.locator(`.classcard[aria-label="${name}"]`).click({ button: 'right' });
+    await page.locator('.popup').getByRole('button', { name: signature, exact: true }).click();
+    const dialog = page.locator('.create-object-dialog');
+    await expect(dialog).toBeVisible();
+    await dialog.getByLabel('Name of instance', { exact: true }).fill(instance);
+    for (const [label, value] of Object.entries(args)) await dialog.getByLabel(label, { exact: true }).fill(value);
+    await expect(dialog.getByLabel('Name of instance', { exact: true })).toHaveValue(instance);
+    await dialog.getByRole('button', { name: 'Create', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.locator('.bench .object').filter({ hasText: new RegExp(`^${instance}:`) })).toBeVisible();
+  }
+  await create('World', 'World(width: Int, height: Int, cellSize: Int)', 'testWorld', { 'width: Int': '80', 'height: Int': '60', 'cellSize: Int': '1' });
+  await create('Actor', 'Actor()', 'testActor', {});
+  await create('Image', 'Image(width: Int, height: Int)', 'blankImage', { 'width: Int': '20', 'height: Int': '30' });
+  await create('Image', 'Image(fileName: String)', 'loadedImage', { 'fileName: String': '"apple.png"' });
+  await create('Image', 'Image(other: Image)', 'copiedImage', { 'other: Image': 'blankImage' });
+  await expect(page.locator('.bench .object')).toHaveCount(5);
+
+  const input = page.getByLabel('Codepad input', { exact: true });
+  await input.fill('listOf(testWorld.width, testWorld.height, testActor.x, blankImage.width, blankImage.height, loadedImage.width, copiedImage.width, copiedImage.height).toString()');
+  await input.press('Enter');
+  await expect(page.locator('.codepad-entry').last()).toContainText('[80, 60, 0, 20, 30, 64, 20, 30]');
+  await input.fill('blankImage.setColor(10, 90, 150); blankImage.fill(); testActor.image = blankImage; testWorld.addObject(testActor, 20, 25); testWorld.show()');
+  await input.press('Enter');
+  const stage = page.getByRole('dialog', { name: 'BluePlay – World', exact: true });
+  await expect(stage).toBeVisible();
+  await expect(page.locator('.codepad-error')).toHaveCount(0);
+  await stage.getByRole('button', { name: 'Close BluePlay world', exact: true }).click();
+  await page.locator('.classcard[aria-label="Image"]').dblclick();
+  await expect(page.getByRole('dialog', { name: 'Image API', exact: true })).toContainText('Image(other: Image)');
+  await expect(page.locator('.editor-dialog')).toHaveCount(0);
+});
+
+test('GUI-151 BluePlay constructors are disabled while another runtime command runs', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, library: { id: 'blueplay', version: 1 }, files: [{ fileName: 'Main.kt', kind: 'functions', source: 'fun main() {}' }] };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  await page.getByRole('button', { name: 'Compile', exact: true }).click();
+  await expect(page.getByLabel('Ready', { exact: true })).toBeVisible();
+  const input = page.getByLabel('Codepad input', { exact: true });
+  await input.fill('Thread.sleep(3000)');
+  await input.press('Enter');
+  await expect(page.getByLabel('Program active', { exact: true })).toBeVisible();
+  await page.locator('.classcard[aria-label="Image"]').click({ button: 'right' });
+  const constructors = page.locator('.popup .constructor-menu-item');
+  await expect(constructors).toHaveCount(3);
+  for (const constructor of await constructors.all()) await expect(constructor).toBeDisabled();
+  await expect(page.locator('.popup').getByRole('button', { name: 'Show API documentation', exact: true })).toBeEnabled();
+  await expect(page.getByLabel('Ready', { exact: true })).toBeVisible();
+  for (const constructor of await constructors.all()) await expect(constructor).toBeEnabled();
+});
+
 test('GUI-59 new classes are laid out after the current BluePlay cards', async ({ page }) => {
   await loadBluePlay(page);
   await page.getByRole('button', { name: 'New File', exact: true }).click();

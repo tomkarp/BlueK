@@ -7,8 +7,12 @@ simple graphical games and simulations with worlds, actors, images and sounds.
 BlueK supplies a browser version of its BlueJ student API.
 
 Choose a BluePlay project under **New Project**. The library cards World, Actor,
-Image and BluePlayFunctions are read-only API references, not editable project
-files. Double-click a library card to open help.
+Image and BluePlayFunctions represent the built-in library rather than editable
+project files. Double-click a library card to open API help. After compilation,
+right-click World, Actor or Image to call a public constructor and put an
+instance on the object bench. Image offers its size, file and copy constructors.
+Library cards cannot be edited, duplicated or deleted, or have a test class
+created for them.
 
 **Contents:** [Minimal example](#minimal-example) ·
 [Project structure](#how-a-blueplay-project-is-structured) ·

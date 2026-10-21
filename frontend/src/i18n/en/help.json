@@ -123,7 +123,7 @@
     "execution": "Execution",
     "functions": "Functions",
     "resourcesAndBoundaries": "Resources and boundaries",
-    "introduction": "BluePlay provides worlds, actors, images, keyboard/mouse input and sound. Choose a BluePlay template or demo in <strong>New Project</strong>. Its library cards are read-only; double-click one for signatures and API help.",
+    "introduction": "BluePlay provides worlds, actors, images, keyboard/mouse input and sound. Choose a BluePlay template or demo in <strong>New Project</strong>. Double-click a library card for signatures and API help. After compilation, right-click World, Actor or Image to create an instance on the object bench. Library source cannot be edited.",
     "controls": "<strong>Act</strong> performs one step. <strong>Run/Pause</strong> repeats steps; <strong>Speed</strong> controls their rate. Each step calls the world's act and then its actors' act methods. Pause before using the codepad or object operations.",
     "reset": "<strong>Reset</strong> calls the selected main again in the current session. It does not reinitialize top-level properties. Showing a world pauses it.",
     "properties": "Use Kotlin properties: <code>actor.image = Image(\"duck.png\")</code>. World requires width, height and cellSize. Add an actor with <code>world.addObject(actor, x, y)</code>. Accessing <code>actor.world</code> before adding it throws an exception.",

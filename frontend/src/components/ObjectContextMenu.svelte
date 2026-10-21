@@ -59,6 +59,10 @@
 </script>
 
 {#if menu}
+  {@const fileClassName = menu.file?.fileName.replace(".kt", "") || ""}
+  {@const constructors = menu.file && !isTestFile(menu.file)
+    ? classes.find((item) => item.name === fileClassName)?.constructors || []
+    : []}
   <div
     class="popup"
     style={`left:${menu.x}px;top:${menu.y}px`}
@@ -68,7 +72,22 @@
     <div class="popup-title">
       {menu.object?.className || menu.file?.fileName.replace(".kt", "")}
     </div>
+    {#each constructors as constructor, index}
+      <button
+        class="constructor-menu-item"
+        disabled={!canExecute}
+        on:click={() => createObject(fileClassName, index)}
+      >
+        {fileClassName}({constructor.parameters
+          ?.map(
+            (parameter) =>
+              `${parameter.name}: ${parameter.type?.displayName || "Any?"}`,
+          )
+          .join(", ")})
+      </button>
+    {/each}
     {#if menu.file && isBluePlayLibraryFile(menu.file)}
+      {#if constructors.length}<hr />{/if}
       <button on:click={() => openBluePlayApi(menu!.file!)}
         >{t("ui.objects.showAPIDocumentation")}</button
       >
@@ -115,22 +134,6 @@
             recordTest(name);
           }}>{t("ui.common.recordTest")}</button
         >
-      {:else}
-        {#each classes.find((item) => item.name === menu!.file!.fileName.replace(".kt", ""))?.constructors || [] as constructor, index}
-          <button
-            class="constructor-menu-item"
-            disabled={!canExecute}
-            on:click={() =>
-              createObject(menu!.file!.fileName.replace(".kt", ""), index)}
-          >
-            {menu.file.fileName.replace(".kt", "")}({constructor.parameters
-              ?.map(
-                (parameter: any) =>
-                  `${parameter.name}: ${parameter.type?.displayName || "Any?"}`,
-              )
-              .join(", ")})
-          </button>
-        {/each}
       {/if}
       {#each fileMethods(menu.file, classes) as method}
         <button

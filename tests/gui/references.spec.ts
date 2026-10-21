@@ -357,6 +357,39 @@ test('GUI-92 inspector shows property exceptions and continues with values and n
   await expect(page.locator('.codepad-entry').last().locator('.codepad-error')).toContainText('IllegalStateException: No world');
 });
 
+test('GUI-152 inspector rows keep the pencil height during BluePlay Run and Pause', async ({ page }) => {
+  const payload = { format: 'bluek-project', version: 1, library: { id: 'blueplay', version: 1 }, files: [] };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  await expect(page.getByLabel('Ready', { exact: true })).toBeVisible();
+  await evaluate(page, 'val actor = Actor(); actor');
+  await adoptLast(page, 'actor');
+  await evaluate(page, 'val habitat = World(100, 80, 1); habitat.addObject(actor, 50, 40); habitat.show()');
+  await object(page, 'actor').dblclick();
+  const inspector = page.getByRole('dialog', { name: 'Object inspector', exact: true });
+  const rows = inspector.locator('.inspect-row');
+  await expect(rows).toHaveCount(7);
+  await expect(inspector.locator('.inspect-edit')).toHaveCount(4);
+  await expect(rows.filter({ hasText: 'world : World' }).locator('output')).toHaveText('<object>');
+  const heights = () => rows.evaluateAll(elements => elements.map(element => element.getBoundingClientRect().height));
+  const pencilHeight = (await inspector.locator('.inspect-edit').first().boundingBox())!.height;
+  const expectedHeights = Array(7).fill(pencilHeight + 2); // One-pixel row borders.
+  expect(await heights()).toEqual(expectedHeights);
+  const inspectorHeight = (await inspector.boundingBox())!.height;
+  const stage = page.getByRole('dialog', { name: 'BluePlay – World', exact: true });
+  for (let cycle = 0; cycle < 2; cycle++) {
+    await stage.getByRole('button', { name: 'Run BluePlay world', exact: true }).click();
+    await expect(stage).toHaveAttribute('data-simulation', 'running');
+    await expect(inspector.locator('.inspect-edit')).toHaveCount(0);
+    expect(await heights()).toEqual(expectedHeights);
+    expect((await inspector.boundingBox())!.height).toBe(inspectorHeight);
+    await stage.getByRole('button', { name: 'Pause BluePlay world', exact: true }).click();
+    await expect(stage).toHaveAttribute('data-simulation', 'paused');
+    await expect(inspector.locator('.inspect-edit')).toHaveCount(4);
+    expect(await heights()).toEqual(expectedHeights);
+    expect((await inspector.boundingBox())!.height).toBe(inspectorHeight);
+  }
+});
+
 test('GUI-92 detached Actor shows world getter errors and recovers after attachment', async ({ page }) => {
   const payload = { format: 'bluek-project', version: 1, library: { id: 'blueplay', version: 1 }, files: [] };
   await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));

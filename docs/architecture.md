@@ -229,6 +229,12 @@ to its source unit: a future codepad overload must not change old resolution,
 and library source must not see project declarations.
 Detailed analyzer contracts: [Kotlite](kotlite.md#forward-declarations).
 
+Library-card context menus use the same manifest constructor entries and
+create-object dialog as project classes, including Image overload selection.
+Execution availability disables constructor calls while the runtime is busy.
+Library cards expose API help and public constructors, without project-source
+editing, duplication, deletion or test-class actions.
+
 ### Suspension and checkpoints
 
 Input stores one continuation and emits `inputRequested`; a matching line or

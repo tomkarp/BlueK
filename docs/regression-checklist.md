@@ -325,6 +325,8 @@ below. No universal performance guarantee is implied.
 | GUI-148 | Every inspector property shows text plus a compact inspection arrow at the right edge, with the edit pencil immediately to its left; scalars, objects and collections use the same layout | Runtime and Chromium pass (2026-10-21), including custom toString, scalar/captured-getter navigation, disabled null/error arrows, inspectable formatting failures, nested edits and readonly debugger inspection. Agent inspected German light/dark views and opened an Int inspector. User accepted the overall layout and requested the final pencil/arrow ordering; acceptance of that final ordering is pending. |
 | GUI-149 | Default ordinary object text uses an object marker instead of a constructor expression; inspector cells omit the repeated type; English/German labels, computed properties and method results preserve custom text | Runtime/reference checks and four affected Chromium cases (GUI-88/148/149, DBG-18) passed (2026-10-21). Built-in-browser German view confirmed Image references, a computed Image property and custom text without a repeated type. User visual acceptance pending. |
 | GUI-150 | Object placeholders, inspection errors, uninitialized properties and pending computed values use Codepad's gray; actual values including null and exception objects keep their normal color | Six affected Chromium cases passed (GUI-89/92/149, DBG-12/18), including light/dark mode and a getter returning null (2026-10-21). Built-in-browser German screenshot confirmed gray object/error text beside normal numbers, strings and null. User visual acceptance pending. |
+| GUI-151 | BluePlay library-card menus offer World/Actor constructors and all three Image overloads through the standard create dialog; busy runtimes disable construction, and source/test actions remain absent | Thirteen affected Chromium cases and the offline language/manual case passed (2026-10-21), including real bench objects, image dimensions/copying, actor/world integration, API help, ordinary class constructors and translations. Built-in-browser German check created World, Actor and Image, inspected width/height and confirmed all Image menu overloads. User visual acceptance pending. |
+| GUI-152 | Inspector property rows retain the edit-pencil height when readonly or when BluePlay Run hides the pencils; Run/Pause does not resize the inspector | Chromium geometry checks and both affected GUI-92 cases passed (2026-10-21): all seven Actor rows measure 34px and the window height stays constant through two Run/Pause cycles. Built-in-browser German Run/Pause visual check confirmed equal editable/readonly row heights. User visual acceptance pending. |
 | DBG-01 | A breakpoint starts debugging main; Step in is enabled only when the current instruction can enter project code; Step and Continue work and locals are inspectable | Chromium GUI pass (2026-10-20): medium-gray filled chevron sits behind the red breakpoint dot; the lighter gray improves dot visibility while keeping the arrow visible. Arrow and highlight share one source position without adding gutter width. Editing actions stay locked while paused; breakpoint controls remain usable. Runtime smoke verifies Step in reaches a constructor property initializer. New assertions for the Step in enabled state are written but not run. Visual user acceptance remains open. |
 | DBG-02 | Multiple gutter breakpoints stop an ordinary main run before each marked statement; Step in is disabled for standard-library-only instructions | Chromium GUI pass (2026-10-20): closing-brace line is rejected; an executable-line breakpoint survives recompilation and execution prints expected output. Latest built-in-browser check confirmed two breakpoints both survive compilation and stop on lines 2 and 3. New Step in assertion is written but not run. |
 | DBG-03 | Gutter breakpoint stops an explicit object-method call without `main`, showing parameters, `for` loop locals and receiver properties in a separate window | Chromium verifies `n = 4`, `i = 1`, stored `name = "Wuffi"` rendered with string delimiters, and the integrated inspector evaluates `label`. Runtime smoke separately verifies passive snapshot collection keeps the getter counter at zero. Continue re-hits the loop breakpoint, then finishes with output 5, 6 and 7 (2026-10-20). |
@@ -347,6 +349,30 @@ below. No universal performance guarantee is implied.
 | DBG-20 | BluePlay is above editors on show/start; a debugger pause reveals source above it; the next changed drawing restores the world and keyboard focus | Chromium and built-in-browser pass (2026-10-21): status/getter snapshots and a variable-only step keep the editor in front; a drawing change restores the world. The browser regression also confirms a subsequent Right key reaches the running world. User visual acceptance pending. |
 
 ## Recorded verification
+
+### BluePlay library constructors (BlueK-Feedback #15) — 2026-10-21
+
+Library cards share project classes' manifest-driven constructor menu and
+creation dialog. World and Actor each offer their constructor; Image offers
+size, filename and copy overloads. Constructors follow runtime availability.
+Library editing/deletion/duplication/test-class actions stay absent, while
+double-click and the API-help menu action still open documentation.
+
+The corrected baseline fixture reproduced the missing constructor. Initial
+browser attempts used an empty project with Compile disabled, timed out once
+waiting for the first bench object, and expected a Codepad list to display its
+contents; the final fixture explicitly converts that list to String.
+All 13 affected Chromium cases then passed, covering five real constructor calls,
+dimensions, image copying, actor/world use, busy-state controls, existing class
+and companion menus, API help and all six GUI-130 language cases. The rebuilt
+offline language/manual case passed separately (1/1). Typecheck reported zero
+errors/warnings; i18n and frontend/offline builds passed. A direct session check
+also confirmed World creation yields an interactive bench reference.
+
+The built-in browser's German view independently created World, Actor (with a
+custom instance name) and Image. The inspector showed the requested 20×30 image
+dimensions, and the context menu showed all three Image overloads alongside
+API help. User visual acceptance remains pending.
 
 ### Placeholder value colors — 2026-10-21
 
