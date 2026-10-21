@@ -1311,3 +1311,10 @@ a new debugger pause. This preserves the existing pause identity and prevents
 each inspector refresh from appearing as a fresh pause and recursively
 restarting the getter. Breakpoints are ignored during this inspector-only
 evaluation so a getter cannot take over the paused program's debugger flow.
+
+## 2026-10-21: identify debugger property owners (DBG-17)
+
+Expose a debugger-only `ClassInstance` query for the declaring class of a
+property. BlueK uses this to omit only BluePlay `Actor`'s cached world
+dimensions from debugger attributes. Other private student properties remain
+visible, and stored values and computed-property metadata are unchanged.

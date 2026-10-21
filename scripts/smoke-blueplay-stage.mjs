@@ -5,7 +5,7 @@ import { rolldown } from 'rolldown';
 const bundle = await rolldown({ input: 'frontend/src/bluePlayStage.ts' });
 const { output } = await bundle.generate({ format: 'esm' });
 await bundle.close();
-const { StageRenderer, decorateStage, resourceData, stageKeyName, stageStyle } =
+const { StageRenderer, decorateStage, resourceData, stageKeyName, stageStyle, stageDrawingKey } =
   await import('data:text/javascript;base64,' + Buffer.from(output[0].code).toString('base64'));
 
 assert.equal(stageKeyName('ArrowLeft'), 'left');
@@ -42,6 +42,9 @@ const stage = {
   ],
   texts: [], speed: 50, simulation: 'paused',
 };
+assert.equal(stageDrawingKey(stage), stageDrawingKey({ ...stage, frameVersion: 2, speed: 70, simulation: 'running' }), 'Status-only snapshots do not take focus from breakpoint source');
+assert.notEqual(stageDrawingKey(stage), stageDrawingKey({ ...stage, texts: [{ x: 1, y: 1, text: 'next' }] }), 'Text changes return focus to the world');
+assert.notEqual(stageDrawingKey(stage), stageDrawingKey({ ...stage, objects: stage.objects.map(actor => ({ ...actor, x: actor.x + 1 })) }), 'Actor movement changes the drawing');
 const decorated = decorateStage(stage, resources, { 'images/rocket.png': { width: 16, height: 12 } });
 assert.equal(decorated.images[0].data, 'data:image/png;base64,ROCKET', 'Resource image resolves to its data');
 assert.deepEqual([decorated.images[0].width, decorated.images[0].height], [30, 30], 'Runtime size preserves explicit scaling over natural resource dimensions');

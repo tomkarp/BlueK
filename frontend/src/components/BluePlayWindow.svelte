@@ -8,6 +8,7 @@
   import { stageStyle } from "../bluePlayStage";
   export let stage: StageFrame | null;
   export let stageWindowOpen: boolean;
+  export let debugEditorInFront: boolean;
   export let stageMaximized: boolean;
   export let stageCanvas: HTMLCanvasElement | null;
   export let speed: number;
@@ -28,6 +29,7 @@
 {#if stage && stageWindowOpen}
   <div
     class:maximized={stageMaximized}
+    class:debug-editor-in-front={debugEditorInFront}
     class:stage-compact={(stage.width || 1) * (stage.cellSize || 1) < 560}
     class="stage-window"
     role="dialog"

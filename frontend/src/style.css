@@ -627,6 +627,7 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 /* Terminal and editor are non-modal floating windows with one shared chrome. */
 .terminal-modal,.editor-modal{z-index:20}
 .terminal-modal.window-active,.editor-modal.window-active{z-index:30}
+.stage-window.debug-editor-in-front{z-index:15}
 .editor-modal{background:transparent;pointer-events:none}
 .editor-modal .editor-dialog{pointer-events:auto}
 .window-header{display:flex;align-items:center;justify-content:space-between;margin:0 0 8px;font-weight:bold;cursor:move;user-select:none}
@@ -1060,6 +1061,10 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 .debugger-window-header{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:42px;padding:8px 12px;background:#eee6d2;border-bottom:1px solid #c6b77f;cursor:move;touch-action:none}
 .debugger-window-header>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#51482e}
 .debugger-window-body{display:grid;gap:14px;min-height:0;overflow:auto;padding:14px}
+.debugger-inspector{padding:8px;background:#ff2b3e;border:1px solid #a51e2b;border-radius:6px}
+.debugger-inspector-type{margin:0 0 8px;color:#fff;font-weight:bold;text-align:center}
+.debugger-inspector .inspect-fields{margin:0;padding:5px;min-height:0}
+.debugger-inspector .inspect-row{cursor:default}
 .debugger-help{margin:0}
 .debugger-values{display:grid;gap:6px}
 .debugger-values h3{margin:0}

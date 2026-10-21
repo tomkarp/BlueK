@@ -256,6 +256,10 @@ internal class BluePlayEngine(private val playSound: (String) -> Unit = {}) {
     var speed = 50; private set
     private var intent = ""
     private var runningQuery: () -> Boolean = { false }
+    private var inspectionQuery: () -> Boolean = { false }
+
+    /** Inspector reads must not consume input intended for the next act(). */
+    fun setInspectionQuery(query: () -> Boolean) { inspectionQuery = query }
 
     val hasShownWorld: Boolean get() = shownWorld != null
 
@@ -436,12 +440,12 @@ internal class BluePlayEngine(private val playSound: (String) -> Unit = {}) {
             val entry = requireActor(args.instance(0))
             val matches = if (!clickActorId.isNullOrEmpty()) clickActorId == entry.hitId
                 else clickX == entry.x.int() && clickY == entry.y.int()
-            if (matches) { clickX = null; clickY = null; clickActorId = null }
+            if (matches && !inspectionQuery()) { clickX = null; clickY = null; clickActorId = null }
             interpreter.boolean(matches)
         }
         function("bluekIsWorldClicked", "Boolean", emptyList()) { interpreter, _, _ ->
             val matches = clickX != null && clickY != null && clickActorId.isNullOrEmpty()
-            if (matches) { clickX = null; clickY = null; clickActorId = null }
+            if (matches && !inspectionQuery()) { clickX = null; clickY = null; clickActorId = null }
             interpreter.boolean(matches)
         }
         function("bluekIsKeyDown", "Boolean", listOf(parameter("key", "String"))) { interpreter, args, _ ->

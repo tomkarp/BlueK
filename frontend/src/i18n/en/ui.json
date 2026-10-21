@@ -32,7 +32,6 @@
     "variables": "Local variables",
     "noVariables": "There are no local variables here yet.",
     "attributes": "Attributes",
-    "attributesHelp": "Calculated properties are listed without running their getters.",
     "computedProperty": "computed property",
     "notInitialized": "not initialized"
   },

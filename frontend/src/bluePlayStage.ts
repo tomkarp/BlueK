@@ -14,6 +14,14 @@ export type StageImage = BluePlayImageFrame & { data?: string };
 export type StageFrame = Omit<BluePlayStage, "images"> & { images: StageImage[] };
 export interface StagePointer { x: number; y: number; actorId?: string }
 
+/** Canvas content only: status, speed and frame counters do not change the drawing. */
+export function stageDrawingKey(value: BluePlayStage): string {
+  return JSON.stringify([
+    value.width, value.height, value.cellSize, value.backgroundColor,
+    value.background, value.images, value.objects, value.texts,
+  ]);
+}
+
 export function resourceData(resources: ProjectResource[], path: string | undefined) {
   if (!path) return undefined;
   return resources.find((item) => item.path === path || item.path.endsWith(`/${path}`))?.data;

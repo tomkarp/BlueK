@@ -53,6 +53,17 @@ stop or exception, publishes a full snapshot including inspection.
 
 Key/click acknowledgments update input only, never falsely set running phase or
 republish stale frames. During Run, execution commands are rejected until Pause.
+During property inspection, `Actor.isClicked` and `World.isClicked` report the
+pending click without consuming it. The session supplies an inspection-context
+query to the engine; normal student reads still consume matching clicks once.
+This protects game input when the debugger's integrated inspector refreshes
+getters. Other effects in student getters execute normally.
+
+Completing a debugged tick resumes Run if that tick began automatically,
+including when its last instruction was executed with Step. A tick started
+through Act remains paused after completion. Errors and explicit `stop()` still
+stop the scheduler.
+
 Reset selects main, stops scheduling and invokes it in the same session via
 startBluePlayMain. It may request input. The IDE world window always renders
 Act, Run/Pause and Reset.
@@ -86,6 +97,15 @@ clearWorld (Reset/Compile). Caches and alpha masks are bounded; no world state i
 owned there. The IDE owns focus, pressed keys and render timing. Draw at most
 once per requestAnimationFrame; unloaded images get deterministic hittable
 placeholders.
+
+Showing or explicitly activating the world raises it above editors and focuses
+its canvas. A new debugger pause temporarily lowers the world below the source
+editor. Status-only snapshots, automatic getter inspection and steps without a
+drawing change preserve that ordering. The first changed drawing (or explicit
+World.show) restores the world and keyboard focus. Compare raw frame drawing
+content only while the world has yielded to debugger source; ordinary game
+frames incur no extra content comparison. Cancel pending focus requests at a
+new pause or when the world closes.
 
 Canvas retains real pixel dimensions. The window body scrolls/centers content,
 uses gray margins for small worlds, and maximizes to viewport without scaling.

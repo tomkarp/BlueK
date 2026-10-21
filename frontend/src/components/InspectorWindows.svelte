@@ -2,6 +2,7 @@
   import { useLanguage } from "../i18n/Language.svelte";
   const language = useLanguage();
   $: t = $language.t;
+  import InspectorFields from "./InspectorFields.svelte";
   import { focusOnMount, containClicks } from "../uiActions";
 
   import type {
@@ -80,89 +81,21 @@
       <h2>
         {`${inspector.referenceName} : ${inspectorType(inspector.data)}`}
       </h2>
-      <div
-        class="inspect-fields"
-        class:inspect-no-fields={!inspector.data.fields?.length}
-      >
-        {#each inspector.data.fields || [] as field}
-          {@const property = fieldProperty(inspector.data, field)}
-          {@const editable = canEditField(field, inspector.data)}
-          {@const privateField = property?.visibility === "private"}
-          {@const editing =
-            editingField === field.name && inspected?.objectId === inspector.id}
-          <div
-            class:editable
-            class:private-field={privateField}
-            class:private-setter={field.setterPrivate === true}
-            class="inspect-row"
-            role="group"
-          >
-            <span
-              >{field.name} : {fieldProperty(inspector.data, field)?.type
-                ?.displayName ||
-                field.type?.displayName ||
-                "Any?"}</span
-            >
-            <div class="inspect-value">
-              {#if editing}
-                <input
-                  use:focusOnMount
-                  bind:this={fieldInput}
-                  aria-label={t("ui.inspector.valueOf0", [field.name])}
-                  aria-invalid={Boolean(fieldError)}
-                  placeholder={t("ui.inspector.expression")}
-                  bind:value={fieldDraft}
-                  on:keydown={(event) => {
-                    if (event.key === "Escape") {
-                      event.stopPropagation();
-                      editingField = "";
-                    }
-                    if (event.key === "Enter") saveField(field);
-                  }}
-                />
-              {:else}
-                {#if field.reference}<button
-                    class="inspect-reference"
-                    aria-label={t("ui.inspector.openReferencedObject0", [
-                      field.name,
-                    ])}
-                    title={t("ui.inspector.open0", [field.name])}
-                    on:click={() => inspectFieldReference(inspector.id, field)}
-                    ><svg viewBox="0 0 48 24" aria-hidden="true"
-                      ><path d="M3 12h32" /><path d="m29 5 8 7-8 7" /></svg
-                    ></button
-                  >{:else if field.error}<button
-                    class="inspect-error-value"
-                    aria-label={t("ui.inspector.showErrorFor0", [field.name])}
-                    title={field.error}
-                    on:click={() => {
-                      inspectorError = {
-                        property: field.name,
-                        message: field.error!,
-                      };
-                    }}>{fieldValue(inspector.data, field)}</button
-                  >{:else}<output title={fieldValue(inspector.data, field)}
-                    >{fieldValue(inspector.data, field)}</output
-                  >{/if}
-                {#if editable || field.setterPrivate}<button
-                    class="inspect-edit"
-                    class:inspect-edit-disabled={!editable}
-                    disabled={!editable}
-                    aria-label={t("ui.inspector.edit0", [field.name])}
-                    title={field.setterPrivate
-                      ? t("ui.inspector.theSetterIsPrivate")
-                      : "Edit"}
-                    on:click={() => beginFieldEdit(field, inspector.data)}
-                    >✎</button
-                  >{/if}
-              {/if}
-            </div>
-            {#if editing && fieldError}<small class="inspect-error"
-                >{fieldError}</small
-              >{/if}
-          </div>
-        {:else}{t("ui.inspector.noFields")}{/each}
-      </div>
+      <InspectorFields
+        data={inspector.data}
+        {inspected}
+        bind:editingField
+        bind:fieldInput
+        bind:fieldDraft
+        {fieldError}
+        {fieldProperty}
+        {canEditField}
+        {fieldValue}
+        {saveField}
+        {inspectFieldReference}
+        {beginFieldEdit}
+        onFieldError={(error) => (inspectorError = error)}
+      />
       <div class="dialog-actions">
         <button on:click={() => closeInspector(inspector.id)}
           >{t("ui.common.close")}</button

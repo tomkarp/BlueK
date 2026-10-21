@@ -78,7 +78,7 @@ export type SimulationState = 'inactive' | 'paused' | 'running' | 'stopping' | '
 /** A session has exactly one phase, shared by every UI surface. */
 export type Phase = 'uncompiled' | 'compiling' | 'ready' | 'running' | 'waitingForInput' | 'debugPaused' | 'faulted';
 export interface DebugVariable { name: string; type: string; display: string | null; initialized: boolean; computed?: boolean; objectId?: string }
-export interface DebugPause { executionId: number; pauseId: number; fileName: string; line: number; column: number; depth: number; stepInAvailable: boolean; variables: DebugVariable[]; attributes: DebugVariable[] }
+export interface DebugPause { executionId: number; pauseId: number; fileName: string; line: number; column: number; depth: number; stepInAvailable: boolean; receiverObjectId?: string; variables: DebugVariable[]; attributes: DebugVariable[] }
 /** `reference`: the value is an object; `summary`: the value text describes a collection or pair and is no Kotlin expression. */
 export interface InspectedField { name: string; value: string; type?: TypeRef | null; setterPrivate?: boolean; reference?: boolean; summary?: boolean; computed?: boolean; objectId?: string; error?: string }
 export interface RuntimeValue {

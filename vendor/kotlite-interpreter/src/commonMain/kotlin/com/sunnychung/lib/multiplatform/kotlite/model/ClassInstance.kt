@@ -229,6 +229,10 @@ open class ClassInstance(
         }
         ?: emptyList()
 
+    /** Name of the class that declares a stored or computed member property. */
+    fun debugPropertyOwnerName(declaredName: String): String? =
+        clazz?.findMemberPropertyOwnerName(declaredName)
+
     private fun hasCustomGetter(declaredName: String): Boolean {
         val accessors = clazz?.getDeclaredPropertyAccessorsInThisClass()?.get(declaredName)
         if (accessors != null) return accessors.getter != null

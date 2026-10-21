@@ -613,9 +613,13 @@ export class ObjectWorkspace {
     );
   };
   refreshComputedInspectors = async () => {
-    for (const inspector of this.inspectorWindows) {
+    const ids = new Set(this.inspectorWindows.map(inspector => inspector.id));
+    const runtime = this.host.session().runtime;
+    if (runtime.phase === "debugPaused" && runtime.debug?.receiverObjectId)
+      ids.add(runtime.debug.receiverObjectId);
+    for (const id of ids) {
       try {
-        await this.inspectorModel.refresh(inspector.id);
+        await this.inspectorModel.refresh(id);
       } catch {
         // A reset or a newer runtime action can invalidate an inspector refresh.
       }
@@ -684,6 +688,12 @@ export class ObjectWorkspace {
         reason instanceof Error ? reason.message : String(reason);
     }
   };
+  debugInspection = $derived.by(() => {
+    void this.inspectorRevision;
+    const runtime = this.host.session().runtime;
+    const id = runtime.phase === "debugPaused" ? runtime.debug?.receiverObjectId : undefined;
+    return id ? this.inspectorModel.view(id) : null;
+  });
   inspectorViews = $derived.by(() => {
     void this.inspectorRevision;
     const runtime = this.host.session().runtime;

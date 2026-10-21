@@ -68,6 +68,8 @@ private data class DebugInspectionRequest(
     val onComplete: (String) -> Unit,
 )
 
+private val bluePlayInternalActorProperties = setOf("worldWidth", "worldHeight", "worldCellSize")
+
 @OptIn(ExperimentalJsExport::class)
 @JsExport
 class KotliteSession {
@@ -93,6 +95,7 @@ class KotliteSession {
     private val computedPropertyNames = linkedMapOf<String, MutableSet<String>>()
     // Inspector results belong to the runtime. Snapshots never execute getters.
     private val inspectionResults = linkedMapOf<String, MutableMap<String, String>>()
+    private var inspectionDepth = 0
     private var inspectionFailure: String? = null
     private var inspectedPropertyValue: RuntimeValue? = null
     private val privateSetterNames = linkedMapOf<String, MutableSet<String>>()
@@ -404,11 +407,18 @@ class KotliteSession {
         registerRead("readln", false)
         registerRead("readLine", true)
         registerRead("readlnOrNull", true)
-        if (bluePlayEnabled) bluePlay.register(environment)
+        if (bluePlayEnabled) {
+            bluePlay.setInspectionQuery { inspectionDepth > 0 }
+            bluePlay.register(environment)
+        }
         interpreter = KotliteInterpreter("<BlueK>", "", environment)
         interpreter.stackFrameFormatter = ::stackFrame
         interpreter.checkpointHook = Interpreter.CheckpointHook(::runtimeCheckpointDue) { awaitRuntimeCheckpoint() }
         interpreter.stackResetHook = { awaitRuntimeStackReset() }
+        installDebugStatementHook()
+    }
+
+    private fun installDebugStatementHook() {
         interpreter.debugStatementHook = { position, depth -> debugAtStatement(position, depth) }
     }
 
@@ -449,14 +459,21 @@ class KotliteSession {
                 val objectId = value?.let(::debugObjectHandle)
                 "{\"name\":${JSON.stringify(item.name)},\"type\":${JSON.stringify(item.type)},\"display\":${display?.let { JSON.stringify(it) } ?: "null"},\"initialized\":${value != null}${objectId?.let { ",\"objectId\":${JSON.stringify(it)}" } ?: ""}}"
             }
-            val attributes = receiver?.debugStoredProperties().orEmpty().joinToString(",", "[", "]") { item ->
+            val attributes = receiver?.debugStoredProperties().orEmpty()
+                .filterNot {
+                    bluePlayEnabled
+                        && it.name in bluePlayInternalActorProperties
+                        && receiver?.debugPropertyOwnerName(it.name) == "Actor"
+                }
+                .joinToString(",", "[", "]") { item ->
                 val display = debugValueDisplay(item.value)
                 val computed = if (item.computed) ",\"computed\":true" else ""
                 val objectId = item.value?.let(::debugObjectHandle)
                 "{\"name\":${JSON.stringify(item.name)},\"type\":${JSON.stringify(item.type)},\"display\":${display?.let { JSON.stringify(it) } ?: "null"},\"initialized\":${item.value != null}$computed${objectId?.let { ",\"objectId\":${JSON.stringify(it)}" } ?: ""}}"
             }
             val stepInAvailable = debugStepInAvailable(position)
-            val payload = "{\"fileName\":${JSON.stringify(source.first)},\"line\":$line,\"column\":${position.col},\"depth\":$depth,\"stepInAvailable\":$stepInAvailable,\"variables\":$variables,\"attributes\":$attributes}"
+            val receiverObjectId = receiver?.let(::debugObjectHandle)?.let { ",\"receiverObjectId\":${JSON.stringify(it)}" } ?: ""
+            val payload = "{\"fileName\":${JSON.stringify(source.first)},\"line\":$line,\"column\":${position.col},\"depth\":$depth,\"stepInAvailable\":$stepInAvailable$receiverObjectId,\"variables\":$variables,\"attributes\":$attributes}"
             suspendCoroutine<Unit> { continuation ->
                 debugContinuation = continuation
                 if (notifyPause) debugPauseCallback?.invoke(payload)
@@ -495,6 +512,7 @@ class KotliteSession {
         if (executionCompleted == null) return errorMessage("There is no active execution to pause.", "request")
         if (debugMode == "paused" || debugMode == "pauseRequested") return errorMessage("A debugger pause is already active or requested.", "request")
         debugMode = "pauseRequested"
+        installDebugStatementHook()
         return result("unit", UnitValue)
     }
 
@@ -788,6 +806,12 @@ class KotliteSession {
     fun startBluePlayStep(onInput: (Int) -> Unit, onComplete: (String) -> Unit): String {
         if (!bluePlay.hasShownWorld) return errorMessage("No BluePlay world has been shown yet.")
         if (executionCompleted != null) return errorMessage("Another runtime command is running.")
+        // Keep normal BluePlay ticks on the existing fast path unless the user
+        // has armed a breakpoint or requested a pause. Reinstall the hook when
+        // Pause is requested while a tick is running.
+        if (debugMode == null && debugBreakpoints.isNotEmpty()) debugMode = "continue"
+        val debuggerActiveForStep = debugMode != null
+        if (!debuggerActiveForStep) interpreter.debugStatementHook = null
         inputRequested = onInput
         executionCompleted = onComplete
         bluePlay.beginBatch() // any earlier frame is stale once the step runs
@@ -807,8 +831,14 @@ class KotliteSession {
                     reportUncaught(throwable)
                     error(throwable, "runtime", throwable.isFatal)
                 }
-                executionCompleted?.invoke(response)
-                executionCompleted = null
+                try {
+                    executionCompleted?.invoke(response)
+                } finally {
+                    executionCompleted = null
+                    debugMode = null
+                    debugPauseCallback = null
+                    if (!debuggerActiveForStep) installDebugStatementHook()
+                }
             }
         })
         return result("started", UnitValue)
@@ -1214,6 +1244,7 @@ class KotliteSession {
         } catch (error: Throwable) {
             return error(error, "analysis")
         }
+        if (inspection) inspectionDepth += 1
         return try {
             var value: RuntimeValue = UnitValue
             for (node in analyzed.nodes.filter { it.position.index >= boundary }) {
@@ -1250,6 +1281,8 @@ class KotliteSession {
             faulted = error.isFatal
             if (program) reportUncaught(error)
             error(error, "runtime", faulted)
+        } finally {
+            if (inspection) inspectionDepth -= 1
         }
     }
 

@@ -301,12 +301,24 @@ use typed runtime access. Coalesce concurrent refreshes, invalidate requests
 on compile/close and rerun if refreshed while another pass was pending.
 Automatic inspection calls do not enter the test-state journal.
 
+The debugger embeds the same `InspectorFields` presentation as floating object
+inspectors. A pause exposes its receiver through a pinned object handle;
+runtime snapshots supply the receiver's inspection through the existing
+inspection map. `ObjectWorkspace` refreshes the integrated receiver and open
+inspectors once per pause, deduplicating shared handles. Computed getters run
+automatically through the paused coroutine's inspection path; fields remain
+read-only and object references open ordinary inspectors. Snapshot publication
+itself remains passive; active inspector views request getter execution.
+
 Getter errors appear in normal value cells with tooltip/full-message action.
 Field edits use typed runtime `set`; displayed object/collection text is not
 valid editable Kotlin and begins with an empty input. Empty Enter cancels;
 clicking a bench object inserts its snapshot name. Simulation inspection uses
 the last completed tick. Shared window activation orders editors, inspectors
 and terminal; context menus sit above them, modal action dialogs above menus.
+BluePlay normally sits above editors. A new debugger pause asks
+`BluePlayWorkspace` to yield to the source editor; its next changed drawing or
+explicit activation restores the world and canvas keyboard focus.
 
 ## Codepad and main
 

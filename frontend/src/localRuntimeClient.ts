@@ -147,7 +147,7 @@ export class LocalRuntimeClient {
     if (!passiveDuringSimulation && this.snapshot.simulation !== 'inactive' && this.snapshot.simulation !== 'paused') {
       throw new Error('BluePlay simulation is running. Stop it before executing code.');
     }
-    const simulationPhaseAllowed = (simulationCommand || deviceInput) && (this.snapshot.phase === 'ready' || this.snapshot.phase === 'running' || this.snapshot.phase === 'waitingForInput');
+    const simulationPhaseAllowed = (simulationCommand || deviceInput) && (this.snapshot.phase === 'ready' || this.snapshot.phase === 'running' || this.snapshot.phase === 'waitingForInput' || (deviceInput && this.snapshot.phase === 'debugPaused'));
     if (this.snapshot.phase !== 'ready' && !simulationPhaseAllowed && !(inputCommand && this.snapshot.phase === 'waitingForInput') && !((debugControl || debugBreakpoint || passiveInspection || debugGetterInspection) && this.snapshot.phase === 'debugPaused') && ( !debugPauseRequest || this.snapshot.phase !== 'running' || !this.snapshot.activeExecutionId || command.executionId !== this.snapshot.activeExecutionId) && !(this.snapshot.phase === 'faulted' && command.op === 'inspect' && this.worker)) {
       throw new Error(this.snapshot.phase === 'running' ? 'Another runtime command is running.' : 'Reset or compile the project before running code.');
     }

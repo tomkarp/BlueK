@@ -26,7 +26,7 @@ import type { TerminalWorkspace } from "./TerminalWorkspace.svelte";
 interface ExecutionWorkspaceHost {
   play: () => Pick<
     BluePlayWorkspace,
-    "clearWorld" | "allowWorld" | "acceptFrame" | "playEffect"
+    "clearWorld" | "allowWorld" | "acceptFrame" | "playEffect" | "revealDebugEditor"
   >;
   objects: () => Pick<
     ObjectWorkspace,
@@ -425,6 +425,7 @@ export class ExecutionWorkspace {
         const key = `${this.runtime.generationId}:${pause.executionId}:${pause.pauseId}`;
         if (key !== lastDebugPause) {
           lastDebugPause = key;
+          this.host.play().revealDebugEditor();
           void this.host.editor().revealPosition(
             pause.fileName,
             pause.line,

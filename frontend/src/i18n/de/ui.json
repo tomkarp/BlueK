@@ -32,7 +32,6 @@
     "variables": "Lokale Variablen",
     "noVariables": "Hier sind noch keine lokalen Variablen vorhanden.",
     "attributes": "Attribute",
-    "attributesHelp": "Berechnete Properties werden angezeigt, ohne ihren Getter auszuführen.",
     "computedProperty": "Abgeleitetes Attribut",
     "notInitialized": "nicht initialisiert"
   },

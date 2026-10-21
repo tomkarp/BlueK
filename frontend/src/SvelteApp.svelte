@@ -393,10 +393,7 @@
       project.readmeHelp = false;
   }}
   on:keydown={handleWindowKeydown}
-  on:keyup={(event) =>
-    (document.activeElement?.classList.contains("game-stage") ||
-      play.stageRunning) &&
-    play.stageKey(event, false)}
+  on:keyup={(event) => play.stageKey(event, false)}
   on:blur={play.releaseStageKeys}
 />
 
@@ -411,6 +408,7 @@
   <BluePlayWindow
     stage={play.stage}
     stageWindowOpen={play.stageWindowOpen}
+    debugEditorInFront={play.debugEditorInFront}
     bind:stageMaximized={play.stageMaximized}
     bind:stageCanvas={play.stageCanvas}
     bind:speed={play.speed}
@@ -710,6 +708,11 @@
     requestDebugPause={session.requestDebugPause}
     stopDebug={session.stopDebug}
     inspectObject={objects.inspectObject}
+    inspection={objects.debugInspection}
+    fieldProperty={objects.fieldProperty}
+    fieldValue={objects.fieldValue}
+    inspectFieldReference={objects.inspectFieldReference}
+    onFieldError={(error) => { objects.inspectorError = error; }}
   />
   <TestPanel
     {tests}

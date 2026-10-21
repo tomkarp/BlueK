@@ -95,6 +95,7 @@ export class RuntimeHost {
       const handles = new Set<string>(references.liveObjectIds);
       if (this.snapshot.phase === 'debugPaused') {
         Object.keys(this.snapshot.inspections).forEach(handle => handles.add(handle));
+        if (this.snapshot.debug?.receiverObjectId) handles.add(this.snapshot.debug.receiverObjectId);
       }
       for (const handle of handles) {
         try { inspections[handle] = JSON.parse(this.session!.inspect(handle)); }
@@ -364,7 +365,7 @@ export class RuntimeHost {
       };
       const onDebugPause = (pauseJson: string) => {
         if (!this.active || this.active.executionId !== executionId) return;
-        const position = JSON.parse(pauseJson) as { fileName: string; line: number; column: number; depth: number; stepInAvailable: boolean; variables: NonNullable<RuntimeSnapshot['debug']>['variables']; attributes: NonNullable<RuntimeSnapshot['debug']>['attributes'] };
+        const position = JSON.parse(pauseJson) as Omit<NonNullable<RuntimeSnapshot['debug']>, 'executionId' | 'pauseId'>;
         const pauseId = ++this.debugPauseSequence;
         this.snapshot = { ...this.snapshot, phase: 'debugPaused', activeExecutionId: executionId, debugPauseRequested: false, debugSessionActive: true, debug: { ...position, executionId, pauseId } };
         this.emitEvent(executionId, 'snapshot', emit);
@@ -470,7 +471,15 @@ export class RuntimeHost {
   private runSimulationStep(id: number, emit: Emit, automatic: boolean) {
     if (!this.session) return;
     const startedAt = performance.now();
-    const executionId = automatic ? ++this.sequence : id; this.active = { executionId, automaticSimulation: automatic };
+    const executionId = automatic ? ++this.sequence : id; this.active = { executionId, automaticSimulation: automatic, debugEligible: true };
+    this.session.setDebugPauseCallback(pauseJson => {
+      if (!this.active || this.active.executionId !== executionId) return;
+      const position = JSON.parse(pauseJson) as Omit<NonNullable<RuntimeSnapshot['debug']>, 'executionId' | 'pauseId'>;
+      const pauseId = ++this.debugPauseSequence;
+      if (automatic) this.simulation.state = 'paused';
+      this.snapshot = { ...this.snapshot, phase: 'debugPaused', activeExecutionId: executionId, debugPauseRequested: false, debugSessionActive: true, debug: { ...position, executionId, pauseId } };
+      this.emitEvent(executionId, 'snapshot', emit);
+    });
     const onInput = (inputRequestId: number) => {
       if (!this.active || this.active.executionId !== executionId) return;
       this.active.inputRequestId = inputRequestId; this.snapshot.phase = 'waitingForInput'; this.simulation.state = 'waiting';
@@ -479,17 +488,20 @@ export class RuntimeHost {
     const onComplete = (result: string) => {
       if (!this.active || this.active.executionId !== executionId) return;
       this.active = null; const response = JSON.parse(result) as RuntimeValue; const intent = this.session!.takeBluePlayIntent();
+      this.session!.setDebugPauseCallback(null);
       // An exception in act() stops the simulation; the world stays usable (RT-82).
       if (response.fatal) this.simulation.state = 'faulted'; else if (response.kind === 'error' || intent === 'stop' || this.simulation.state === 'stopping') this.simulation.state = 'paused'; else this.simulation.state = automatic ? 'running' : 'paused';
-      this.snapshot.phase = response.fatal ? 'faulted' : 'ready';
+      this.snapshot = { ...this.snapshot, phase: response.fatal ? 'faulted' : 'ready', activeExecutionId: undefined, debugPauseRequested: false, debugSessionActive: false, debug: undefined };
       if (automatic) this.emitSimulationFrame(executionId, emit, response); else emit(this.publish(id, response));
       if (automatic && this.simulation.state === 'running') this.scheduleSimulationStep(performance.now() - startedAt);
     };
+    this.snapshot = { ...this.snapshot, phase: 'running', activeExecutionId: executionId, debugPauseRequested: false, debugSessionActive: true, debug: undefined };
     const started = this.session.startBluePlayStep(onInput, onComplete); const initial = JSON.parse(started) as RuntimeValue;
     if (initial.kind === 'error') {
       this.active = null;
+      this.session.setDebugPauseCallback(null);
       this.simulation.state = initial.fatal ? 'faulted' : 'paused';
-      this.snapshot.phase = initial.fatal ? 'faulted' : 'ready';
+      this.snapshot = { ...this.snapshot, phase: initial.fatal ? 'faulted' : 'ready', activeExecutionId: undefined, debugPauseRequested: false, debugSessionActive: false, debug: undefined };
       if (automatic) this.emitSimulationSnapshot(executionId, emit, initial);
       else emit(this.publish(id, initial));
     }

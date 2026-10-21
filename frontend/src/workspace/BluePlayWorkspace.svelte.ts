@@ -1,4 +1,4 @@
-import { untrack } from "svelte";
+import { tick, untrack } from "svelte";
 import type {
   BluePlayStage,
   RuntimeEffect,
@@ -14,6 +14,7 @@ import {
   decorateStage,
   measureImageSizes,
   stageKeyName,
+  stageDrawingKey,
 } from "../bluePlayStage";
 
 import type { ProjectResource } from "../../../runtime-contract/src/index";
@@ -48,6 +49,10 @@ export class BluePlayWorkspace {
   speed = $state(50);
   stageWindowOpen = $state(false);
   stageWindowDismissed = $state(false);
+  debugEditorInFront = $state(false);
+  private debugDrawingAtPause: string | null = null;
+  private debugShowCount = 0;
+  private focusRequest = 0;
   /** `showCount` of the last frame; a higher count means World.show() ran. */
   private shownCount = 0;
   stageMaximized = $state(false);
@@ -94,8 +99,12 @@ export class BluePlayWorkspace {
   };
   stageKey = (event: KeyboardEvent, pressed: boolean) => {
     const key = stageKeyName(event.key);
+    const wasPressed = this.stageKeysDown.has(key);
+    // A debugger breakpoint pauses the simulation, so stageRunning becomes
+    // false before the matching keyup arrives. Ignore unrelated keyups, but
+    // always forward releases for keys we already sent to the runtime.
+    if (wasPressed === pressed) return;
     event.preventDefault();
-    if (this.stageKeysDown.has(key) === pressed) return;
     if (pressed) this.stageKeysDown.add(key);
     else this.stageKeysDown.delete(key);
     this.host
@@ -112,6 +121,7 @@ export class BluePlayWorkspace {
     this.stageKeysDown.clear();
   };
   stageClick = (event: MouseEvent) => {
+    this.activateWorld();
     const target = event.currentTarget as HTMLElement;
     target.focus();
     if (!this.stage) return;
@@ -148,7 +158,7 @@ export class BluePlayWorkspace {
       this.host.session().runtime.phase !== "waitingForInput"
     )
       return;
-    if (action === "start") this.stageCanvas?.focus();
+    if (action === "start" || action === "step") this.activateWorld();
     if (this.host.project().library?.id === "blueplay") {
       this.host
         .session()
@@ -182,6 +192,7 @@ export class BluePlayWorkspace {
       await this.host.session().runMain();
   };
   beginStageDrag = (event: PointerEvent) => {
+    this.activateWorld();
     if (!this.stageMaximized)
       beginWindowDrag(
         event,
@@ -206,7 +217,32 @@ export class BluePlayWorkspace {
       window.devicePixelRatio,
     );
   };
+  /** Keep breakpoint source visible until the world actually changes its drawing. */
+  revealDebugEditor = () => {
+    const frame = this.host.session().runtime.stage;
+    if (!frame || !this.stageWindowOpen) return;
+    this.focusRequest += 1;
+    if (document.activeElement === this.stageCanvas) this.stageCanvas?.blur();
+    this.debugDrawingAtPause = stageDrawingKey(frame);
+    this.debugShowCount = frame.showCount;
+    this.debugEditorInFront = true;
+  };
+  activateWorld = () => {
+    this.debugEditorInFront = false;
+    this.debugDrawingAtPause = null;
+    const request = ++this.focusRequest;
+    void tick().then(() => {
+      if (request === this.focusRequest && this.stageWindowOpen && !this.debugEditorInFront)
+        this.stageCanvas?.focus({ preventScroll: true });
+    });
+  };
   acceptFrame = (value: BluePlayStage) => {
+    const shown = value.showCount !== this.shownCount;
+    // Only compare drawing content while a debug pause has lowered the world.
+    // Ordinary game frames keep the existing rendering path and keyboard focus.
+    const returnToWorld = this.debugEditorInFront
+      ? value.showCount !== this.debugShowCount || stageDrawingKey(value) !== this.debugDrawingAtPause
+      : shown;
     this.stage = decorateStage(
       value,
       this.host.project().runtimeResources,
@@ -214,12 +250,13 @@ export class BluePlayWorkspace {
     );
     // Repeated snapshots must not reopen a window dismissed by the user,
     // an explicit World.show() (object menu, codepad, main) does.
-    if (value.showCount !== this.shownCount) {
+    if (shown) {
       this.shownCount = value.showCount;
       this.stageWindowDismissed = false;
     }
     if (!this.stageWindowDismissed) this.stageWindowOpen = true;
     this.speed = Number(value.speed) || this.speed;
+    if (returnToWorld && this.stageWindowOpen) this.activateWorld();
   };
   connect = () => {
     // A running world stays visible, so that it can always be paused, also when
@@ -228,8 +265,10 @@ export class BluePlayWorkspace {
       if (!this.stageRunning) return;
       untrack(() => {
         if (!this.stage) return;
+        const reopening = !this.stageWindowOpen;
         this.stageWindowDismissed = false;
         this.stageWindowOpen = true;
+        if (reopening) this.activateWorld();
       });
     });
     $effect(() => {
@@ -267,8 +306,12 @@ export class BluePlayWorkspace {
     this.stageWindowOpen = false;
     this.stageWindowDismissed = true;
     this.stageMaximized = false;
+    this.focusRequest += 1;
   };
   clearWorld = () => {
+    this.focusRequest += 1;
+    this.debugEditorInFront = false;
+    this.debugDrawingAtPause = null;
     this.stageAudio.stopAll();
     this.stage = null;
     this.shownCount = 0;
@@ -281,6 +324,7 @@ export class BluePlayWorkspace {
   showWorld = () => {
     this.allowWorld();
     this.stageWindowOpen = true;
+    this.activateWorld();
   };
   playEffect = (effect: RuntimeEffect) => {
     if (effect.name === "terminalBell") this.stageAudio.beep();
