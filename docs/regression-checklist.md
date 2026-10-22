@@ -327,6 +327,7 @@ below. No universal performance guarantee is implied.
 | GUI-150 | Object placeholders, inspection errors, uninitialized properties and pending computed values use Codepad's gray; actual values including null and exception objects keep their normal color | Six affected Chromium cases passed (GUI-89/92/149, DBG-12/18), including light/dark mode and a getter returning null (2026-10-21). Built-in-browser German screenshot confirmed gray object/error text beside normal numbers, strings and null. User visual acceptance pending. |
 | GUI-151 | BluePlay library-card menus offer World/Actor constructors and all three Image overloads through the standard create dialog; busy runtimes disable construction, and source/test actions remain absent | Thirteen affected Chromium cases and the offline language/manual case passed (2026-10-21), including real bench objects, image dimensions/copying, actor/world integration, API help, ordinary class constructors and translations. Built-in-browser German check created World, Actor and Image, inspected width/height and confirmed all Image menu overloads. User visual acceptance pending. |
 | GUI-152 | Inspector property rows retain the edit-pencil height when readonly or when BluePlay Run hides the pencils; Run/Pause does not resize the inspector | Chromium geometry checks and both affected GUI-92 cases passed (2026-10-21): all seven Actor rows measure 34px and the window height stays constant through two Run/Pause cycles. Built-in-browser German Run/Pause visual check confirmed equal editable/readonly row heights. User visual acceptance pending. |
+| GUI-153 | Held Space keeps canvas focus and project source unchanged; game keys also recover from background Vim editor focus | Natural WebKit focus transfer reproduced with the old repeat handling and fixed (2026-10-22). Standard-sprite/apple regressions cover both native repeat and explicit background-editor focus. Final checks below; user reports stable local play, deployed acceptance pending. |
 | DBG-01 | A breakpoint starts debugging main; Step in is enabled only when the current instruction can enter project code; Step and Continue work and locals are inspectable | Chromium GUI pass (2026-10-20): medium-gray filled chevron sits behind the red breakpoint dot; the lighter gray improves dot visibility while keeping the arrow visible. Arrow and highlight share one source position without adding gutter width. Editing actions stay locked while paused; breakpoint controls remain usable. Runtime smoke verifies Step in reaches a constructor property initializer. New assertions for the Step in enabled state are written but not run. Visual user acceptance remains open. |
 | DBG-02 | Multiple gutter breakpoints stop an ordinary main run before each marked statement; Step in is disabled for standard-library-only instructions | Chromium GUI pass (2026-10-20): closing-brace line is rejected; an executable-line breakpoint survives recompilation and execution prints expected output. Latest built-in-browser check confirmed two breakpoints both survive compilation and stop on lines 2 and 3. New Step in assertion is written but not run. |
 | DBG-03 | Gutter breakpoint stops an explicit object-method call without `main`, showing parameters, `for` loop locals and receiver properties in a separate window | Chromium verifies `n = 4`, `i = 1`, stored `name = "Wuffi"` rendered with string delimiters, and the integrated inspector evaluates `label`. Runtime smoke separately verifies passive snapshot collection keeps the getter counter at zero. Continue re-hits the loop breakpoint, then finishes with output 5, 6 and 7 (2026-10-20). |
@@ -349,6 +350,45 @@ below. No universal performance guarantee is implied.
 | DBG-20 | BluePlay is above editors on show/start; a debugger pause reveals source above it; the next changed drawing restores the world and keyboard focus | Chromium and built-in-browser pass (2026-10-21): status/getter snapshots and a variable-only step keep the editor in front; a drawing change restores the world. The browser regression also confirms a subsequent Right key reaches the running world. User visual acceptance pending. |
 
 ## Recorded verification
+
+### BluePlay input after background-editor focus — 2026-10-22
+
+Reproduced the original focus transfer without clicks or explicit refocusing
+after Run. Edit Defender in Vim Insert mode, then start Space Invaders and hold
+Space. The canvas is the active element, while the DOM selection still points
+into the previous editor. The initial key was prevented, but repeated keydown
+events returned before suppressing the browser default. WebKit sends that
+default text input to the previous contenteditable selection, then moves focus
+back to the editor. The inserted space invalidates the runtime, leaving the
+reported inactive world with disabled controls and an empty terminal.
+
+An isolated comparison restored only the old repeat handling in the served
+module. Event tracing showed canvas keydown followed by editor beforeinput and
+editor focusin, then changed source and phase `uncompiled`. The corrected
+handling kept every repeated key on the canvas, produced no editor input or
+focus transfer, and left source unchanged. The same Safari mechanism is
+[documented by CodeMirror's maintainer](https://discuss.codemirror.net/t/how-to-force-unfocus-of-the-codemirror-element-in-safari/8095).
+
+Prevent defaults before deduplicating key state to stop the actual trigger.
+Also capture plain game keys from a background source editor before Vim and
+restore canvas focus; debugger pauses retain their editor. The regression uses
+both the original Defender sprite and
+`Image("apple.png")`, checks visible movement/shooting and unchanged source,
+and verifies that the editor can retain focus after Pause. Its first phase
+holds/repeats Space on the canvas with no focus manipulation; the second
+explicitly moves focus to the editor to check recovery.
+
+A separate one-minute WebKit run completed eleven rounds with an open Vim
+editor, unchanged source and no worker/page errors; it lacked key repeats and
+therefore missed the trigger initially. Initial browser launch needed sandbox
+escalation. Early regression runs exposed an innerText/textContent mismatch,
+a Space release before the next simulation tick, and missing synchronization
+with the confirmed Run state; those test issues were corrected. This evidence
+does not imply that every possible runtime crash has the same cause. Final
+verification: GUI-153 passed with standard sprite and apple in both WebKit and
+Chromium. RT-11, PERF-01, DBG-15 and DBG-20 also passed in both browsers across
+the focused runs. Final typecheck reported zero errors/warnings. User reports
+stable local play; confirmation after deployment remains pending.
 
 ### BluePlay library constructors (BlueK-Feedback #15) — 2026-10-21
 

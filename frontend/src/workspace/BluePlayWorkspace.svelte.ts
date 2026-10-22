@@ -103,8 +103,11 @@ export class BluePlayWorkspace {
     // A debugger breakpoint pauses the simulation, so stageRunning becomes
     // false before the matching keyup arrives. Ignore unrelated keyups, but
     // always forward releases for keys we already sent to the runtime.
-    if (wasPressed === pressed) return;
+    if (!pressed && !wasPressed) return;
+    // Suppress every repeat: WebKit can send default text input back to the
+    // previous contenteditable selection even while the canvas has focus.
     event.preventDefault();
+    if (wasPressed === pressed) return;
     if (pressed) this.stageKeysDown.add(key);
     else this.stageKeysDown.delete(key);
     this.host
@@ -119,6 +122,21 @@ export class BluePlayWorkspace {
         .client?.sendKey(key, false)
         .catch(() => undefined);
     this.stageKeysDown.clear();
+  };
+  captureEditorGameKey = (event: KeyboardEvent) => {
+    if (
+      !this.stageRunning || !this.stageWindowOpen || this.debugEditorInFront ||
+      event.metaKey || event.ctrlKey || event.altKey ||
+      event.key === "Escape" || event.key === "Tab" ||
+      !(event.target instanceof Element) ||
+      !event.target.closest(".editor-dialog .cm-content")
+    ) return;
+    // CodeMirror/Vim consumes arrows before the bubbling window handler. A
+    // running world's keys must reach the game before a background editor can
+    // handle them or edit source and invalidate the runtime.
+    event.stopPropagation();
+    this.stageKey(event, true);
+    this.activateWorld();
   };
   stageClick = (event: MouseEvent) => {
     this.activateWorld();

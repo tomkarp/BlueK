@@ -392,6 +392,7 @@
     )
       project.readmeHelp = false;
   }}
+  on:keydown|capture={play.captureEditorGameKey}
   on:keydown={handleWindowKeydown}
   on:keyup={(event) => play.stageKey(event, false)}
   on:blur={play.releaseStageKeys}

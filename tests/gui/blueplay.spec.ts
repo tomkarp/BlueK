@@ -20,12 +20,13 @@ async function loadBluePlay(page: Page) {
   return stage;
 }
 
-async function loadSpaceInvaders(page: Page) {
+async function loadSpaceInvaders(page: Page, openDefenderEditor = false) {
   await page.goto('/');
   await page.getByRole('button', { name: 'New Project', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Create New Project' });
   await dialog.getByRole('button', { name: /^Space Invaders Demo/ }).click();
   await expect(dialog).toBeHidden();
+  if (openDefenderEditor) await page.locator('.classcard[aria-label="Defender"]').dblclick();
   const input = page.getByLabel('Codepad input');
   await input.fill('main()');
   await input.press('Enter');
@@ -33,6 +34,71 @@ async function loadSpaceInvaders(page: Page) {
   await expect(stage).toBeVisible();
   return stage;
 }
+
+for (const apple of [false, true]) test(`GUI-153 held Space keeps game focus and source unchanged (${apple ? 'apple' : 'standard sprite'})`, async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('bluek-ui-settings', JSON.stringify({ vimMode: true })));
+  if (apple) await page.route('**/examples/space-invaders.bluek.json', async route => {
+    const project = await (await route.fetch()).json();
+    const defender = project.files.find((file: { fileName: string }) => file.fileName === 'Defender.kt');
+    defender.source = defender.source.replace('image = sprite', 'image = Image("apple.png")');
+    await route.fulfill({ json: project });
+  });
+  const stage = await loadSpaceInvaders(page, true);
+  const content = page.locator('.editor-dialog .cm-content');
+  await content.press('i');
+  const source = await content.innerText();
+  const canvas = stage.locator('canvas');
+  const defenderX = () => canvas.evaluate((element: HTMLCanvasElement, apple: boolean) => {
+    const { width, height } = element;
+    const pixels = element.getContext('2d')!.getImageData(0, 0, width, height).data;
+    const xs: number[] = [];
+    for (let y = height * .8 | 0; y < height; y++) for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      if (apple
+        ? pixels[i] > 180 && pixels[i + 1] < 100 && pixels[i + 2] < 80
+        : pixels[i] === 80 && pixels[i + 1] === 170 && pixels[i + 2] === 255) xs.push(x);
+    }
+    return xs.length ? xs.reduce((a, b) => a + b) / xs.length : -1;
+  }, apple);
+  await expect.poll(defenderX).toBeGreaterThan(0);
+  const initialX = await defenderX();
+  await stage.getByRole('button', { name: 'Run BluePlay world' }).click();
+  await expect(stage).toHaveAttribute('data-simulation', 'running');
+  await expect(canvas).toBeFocused();
+  // No focus manipulation here: WebKit's default typing action can return to
+  // the previous contenteditable selection when a repeated Space is allowed.
+  await page.keyboard.down('Space');
+  await page.keyboard.down('Space');
+  await expect(stage).toHaveAttribute('data-simulation', 'running');
+  await expect(canvas).toBeFocused();
+  await expect.poll(() => content.innerText()).toBe(source);
+  await page.keyboard.up('Space');
+  // Also recover if focus reaches the background editor for any other reason.
+  await content.focus();
+  await page.keyboard.down('ArrowLeft');
+  await page.keyboard.down('Space');
+  await content.focus();
+  await page.keyboard.down('Space'); // native key repeat while Space is held
+  try {
+    await expect(stage).toHaveAttribute('data-simulation', 'running');
+    await expect(canvas).toBeFocused();
+    await expect.poll(defenderX).toBeLessThan(initialX - 10);
+    await expect.poll(() => canvas.evaluate((element: HTMLCanvasElement) => {
+      const pixels = element.getContext('2d')!.getImageData(0, 0, element.width, element.height).data;
+      for (let i = 0; i < pixels.length; i += 4)
+        if (pixels[i] === 255 && pixels[i + 1] === 230 && pixels[i + 2] === 90) return true;
+      return false;
+    })).toBe(true);
+  } finally {
+    await page.keyboard.up('ArrowLeft');
+    await page.keyboard.up('Space');
+  }
+  await expect.poll(() => content.innerText()).toBe(source);
+  await stage.getByRole('button', { name: 'Pause BluePlay world' }).click();
+  await expect(stage).toHaveAttribute('data-simulation', 'paused');
+  await content.focus();
+  await expect(content).toBeFocused();
+});
 
 test('GUI-58 BluePlay library cards are normal movable cards with per-file API docs', async ({ page }) => {
   const stage = await loadBluePlay(page);

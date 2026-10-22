@@ -107,6 +107,16 @@ content only while the world has yielded to debugger source; ordinary game
 frames incur no extra content comparison. Cancel pending focus requests at a
 new pause or when the world closes.
 
+While a world is running, plain game keys addressed to a background source
+editor are captured before CodeMirror/Vim can consume them, and canvas focus
+is restored. Modifier shortcuts, Escape and Tab retain their usual routing;
+modal inputs are outside this recovery path. Suppress browser defaults on
+every key repeat even though only key-state changes are sent to the runtime.
+WebKit can direct a repeated Space's default text input to the previously
+selected contenteditable editor even when the canvas has focus. That default
+input restores editor focus, edits source, invalidates the runtime and leaves
+an inactive world on screen. Prevent defaults before deduplicating key state.
+
 Canvas retains real pixel dimensions. The window body scrolls/centers content,
 uses gray margins for small worlds, and maximizes to viewport without scaling.
 Virtual library cards participate in diagram drag/inheritance/placement but
