@@ -407,3 +407,75 @@ test("CLOUD-08 selected account projects can be deleted together", async ({
   await expect(account.getByText("Project 3")).toBeVisible();
   expect(deleteRequests).toBe(3);
 });
+
+for (const locale of ["en", "de"])
+  test(`CLOUD-09 username changes check availability and update the account view (${locale})`, async ({
+    page,
+  }) => {
+  await page.addInitScript(
+    (value) => localStorage.setItem("bluek-language", value),
+    locale,
+  );
+  const de = locale === "de";
+  let username = "learner";
+  await page.route("**/api/account", (route) =>
+    route.fulfill({ json: { user: { id: "account", username } } }),
+  );
+  await page.route("**/api/private-projects", (route) =>
+    route.fulfill({ json: { projects: [] } }),
+  );
+  await page.route("**/api/account/username", async (route) => {
+    const body = route.request().postDataJSON() as {
+      password: string;
+      newUsername: string;
+    };
+    expect(body.password).toBe("current-password");
+    if (body.newUsername.toLowerCase() === "taken.name")
+      return route.fulfill({ status: 409, json: { error: "username-taken" } });
+    username = body.newUsername.toLowerCase();
+    return route.fulfill({ json: { user: { id: "account", username } } });
+  });
+
+  await page.goto(link(project));
+  await page.locator(".toolbar-account button").click();
+  const account = page.getByRole("dialog", {
+    name: de ? "Konto" : "Account",
+    exact: true,
+  });
+  await account
+    .getByRole("button", {
+      name: de ? "Benutzernamen ändern" : "Change username",
+    })
+    .click();
+  const rename = page.getByRole("dialog", {
+    name: de ? "Benutzernamen ändern" : "Change username",
+    exact: true,
+  });
+  await rename.getByLabel(de ? "Neuer Benutzername" : "New username").fill("taken.name");
+  await rename.getByLabel(de ? "Aktuelles Passwort" : "Current password").fill("current-password");
+  await rename
+    .getByRole("button", {
+      name: de ? "Benutzernamen ändern" : "Change username",
+    })
+    .click();
+  await expect(rename.getByRole("alert")).toHaveText(
+    de ? "Dieser Benutzername ist bereits vergeben." : "This username is already taken.",
+  );
+
+  await rename
+    .getByLabel(de ? "Aktuelles Passwort" : "Current password")
+    .fill("current-password");
+  await rename.getByLabel(de ? "Neuer Benutzername" : "New username").fill("New.Learner");
+  await rename
+    .getByRole("button", {
+      name: de ? "Benutzernamen ändern" : "Change username",
+    })
+    .click();
+  await expect(rename).toHaveCount(0);
+  await expect(account).toContainText(
+    de ? "Angemeldet als new.learner" : "Signed in as new.learner",
+  );
+  await expect(
+    account.getByText(de ? "Benutzername geändert." : "Username changed."),
+  ).toBeVisible();
+});

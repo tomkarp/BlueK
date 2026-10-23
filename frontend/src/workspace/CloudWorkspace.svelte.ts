@@ -169,6 +169,15 @@ export class CloudWorkspace {
       });
       this.notice = this.text("ui.cloud.passwordChanged");
     });
+  changeUsername = (password: string, newUsername: string) =>
+    this.run(async () => {
+      const result = await apiRequest<{ user: User }>("/api/account/username", {
+        method: "POST",
+        body: JSON.stringify({ password, newUsername }),
+      });
+      this.user = result.user;
+      this.notice = this.text("ui.cloud.usernameChanged");
+    });
   save = (copy = false) =>
     this.run(async () => {
       const project = this.host.project();

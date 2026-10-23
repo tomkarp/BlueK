@@ -83,6 +83,7 @@ below. No universal performance guarantee is implied.
 | CLOUD-03 | German/English account advice, password-manager fields, failed-save backup advice and mobile layout | Chromium passed, 2026-10-22; agent inspected German mobile screenshot; user acceptance pending |
 | CLOUD-04 | Malformed successful API receipt does not claim a private save succeeded | Chromium passed, 2026-10-22 |
 | CLOUD-05 | Private account save requires a non-empty project name | Chromium passed, 2026-10-23 |
+| CLOUD-09 | Change username with the current password; normalize case, reject taken names, preserve account ID/session/projects | Chromium and temporary-SQLite API checks passed, 2026-10-23 |
 | GUI-156 | Local save options require a non-empty name for an unnamed project | Chromium passed, including blank-name rejection and JSON download, 2026-10-23 |
 | NAV-01 | Four project actions, separated account/view controls, grouped Save choices, separate Share and stable sidebar in English/German; Restore is the rightmost Open tab | Chromium passed at desktop and 390 px Save width; agent inspected German screenshots, 2026-10-22; human acceptance pending |
 | NAV-02 | Sign-in from Save returns without uploading; explicit save/update remains in Save and account settings remain separate | Chromium passed, 2026-10-22 |
@@ -1604,3 +1605,10 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
   six existing warnings), i18n, the real temporary-SQLite API test and Svelte
   production build passed. Existing Svelte accessibility and bundle-size
   warnings remain.
+- Account username changes, 2026-10-23: added a current-password-confirmed
+  change action in the account dialog. Names are trimmed, lowercased and checked
+  against the unique account name; collisions return the existing localized
+  “already taken” message. Account ID, projects and current sessions survive.
+  CLOUD-09 passes in Chromium; the temporary-SQLite API test covers collision,
+  wrong password, case normalization, continued session/project access and login
+  under the new name. Typecheck, i18n and `git diff --check` passed.

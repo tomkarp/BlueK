@@ -115,6 +115,28 @@ try {
   assert.equal((await post('/api/account/register', { username: 'ten_chars', password: '1234567890' })).status, 200, 'Ten-character passwords are accepted');
   const second = await post('/api/account/register', { username: 'student.two', password: 'another-unique-password' });
   assert.equal(second.status, 200, 'Usernames may contain periods');
+  const renameAccount = await post('/api/account/register', { username: 'rename_user', password: 'a-unique-test-password' });
+  const renameProject = await post('/api/private-projects', project, renameAccount.cookie);
+  const takenUsername = await request('/api/account/username', {
+    method: 'POST', cookie: renameAccount.cookie,
+    value: { password: 'a-unique-test-password', newUsername: 'STUDENT.TWO' },
+  });
+  assert.equal(takenUsername.status, 409, 'Username changes reject a case-insensitive collision');
+  const usernameChanged = await request('/api/account/username', {
+    method: 'POST', cookie: renameAccount.cookie,
+    value: { password: 'a-unique-test-password', newUsername: 'Renamed.User' },
+  });
+  assert.equal(usernameChanged.status, 200);
+  assert.deepEqual(usernameChanged.data.user, { id: renameAccount.data.user.id, username: 'renamed.user' });
+  assert.deepEqual((await request('/api/account', { cookie: renameAccount.cookie })).data.user, usernameChanged.data.user, 'Rename preserves the current session');
+  assert.equal((await request('/api/private-projects', { cookie: renameAccount.cookie })).data.projects[0].id, renameProject.data.id, 'Rename preserves account projects');
+  assert.equal((await post('/api/account/login', { username: 'RENAMED.USER', password: 'a-unique-test-password' })).data.user.username, 'renamed.user', 'Sign-in normalizes case after rename');
+  const wrongCurrentPassword = await request('/api/account/username', {
+    method: 'POST', cookie: renameAccount.cookie,
+    value: { password: 'wrong-current-password', newUsername: 'another.name' },
+  });
+  assert.equal(wrongCurrentPassword.status, 401);
+  assert.equal(wrongCurrentPassword.data.error, 'current-password');
   const privateSaved = await post('/api/private-projects', { ...project, resources: media }, cookie);
   assert.equal(privateSaved.status, 201, 'Private media permitted');
   const privatePath = `/api/private-projects/${privateSaved.data.id}`;

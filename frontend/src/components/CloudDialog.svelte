@@ -11,6 +11,8 @@
   let password = $state("");
   let newPassword = $state("");
   let passwordOpen = $state(false);
+  let newUsername = $state("");
+  let usernameOpen = $state(false);
   let acknowledged = $state(false);
   async function authenticate() {
     await cloud.authenticate(register, username, password);
@@ -30,7 +32,7 @@
       use:containClicks
     >
       <h3 id="cloud-title">{t("ui.cloud.title")}</h3>
-      {#if cloud.error}<p class="dialog-error" role="alert">
+      {#if cloud.error && !passwordOpen && !usernameOpen}<p class="dialog-error" role="alert">
           {cloud.error}
         </p>{/if}
       {#if cloud.notice}<p role="status">{cloud.notice}</p>{/if}
@@ -39,6 +41,14 @@
           <div class="cloud-account-heading">
             <p>{t("ui.cloud.signedIn", [cloud.user.username])}</p>
             <div class="cloud-account-actions">
+              <button
+                disabled={cloud.busy}
+                onclick={() => {
+                  usernameOpen = true;
+                  password = "";
+                  newUsername = cloud.user?.username ?? "";
+                }}>{t("ui.cloud.changeUsername")}</button
+              >
               <button
                 disabled={cloud.busy}
                 onclick={() => {
@@ -112,6 +122,57 @@
                 <div class="dialog-actions">
                   <button type="button" disabled={cloud.busy} onclick={() => (passwordOpen = false)}>{t("ui.common.cancel")}</button>
                   <button type="submit" disabled={cloud.busy}>{t("ui.cloud.changePassword")}</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        {/if}
+        {#if usernameOpen}
+          <div class="modal topmost-modal account-password-modal" role="presentation">
+            <div
+              class="dialog cloud-password-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="cloud-username-title"
+              tabindex="-1"
+              use:containClicks
+            >
+              <h3 id="cloud-username-title">{t("ui.cloud.changeUsername")}</h3>
+              {#if cloud.error}<p class="dialog-error" role="alert">{cloud.error}</p>{/if}
+              <form
+                onsubmit={async (event) => {
+                  event.preventDefault();
+                  const changed = await cloud.changeUsername(password, newUsername);
+                  password = "";
+                  if (changed) usernameOpen = false;
+                }}
+              >
+                <label
+                  >{t("ui.cloud.newUsername")}<input
+                    name="username"
+                    autocomplete="username"
+                    autocapitalize="none"
+                    spellcheck="false"
+                    bind:value={newUsername}
+                    required
+                    minlength="3"
+                    maxlength="32"
+                    pattern="[A-Za-z0-9._-]+"
+                  /></label
+                >
+                <label
+                  >{t("ui.cloud.currentPassword")}<input
+                    type="password"
+                    name="current-password"
+                    autocomplete="current-password"
+                    bind:value={password}
+                    required
+                    maxlength="128"
+                  /></label
+                >
+                <div class="dialog-actions">
+                  <button type="button" disabled={cloud.busy} onclick={() => (usernameOpen = false)}>{t("ui.common.cancel")}</button>
+                  <button type="submit" disabled={cloud.busy}>{t("ui.cloud.changeUsername")}</button>
                 </div>
               </form>
             </div>
@@ -193,6 +254,7 @@
             password = "";
             newPassword = "";
             passwordOpen = false;
+            usernameOpen = false;
           }}>{t("ui.common.close")}</button
         >
       </div>
