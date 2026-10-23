@@ -99,6 +99,7 @@
   export let loadSharedProjectFromCode: () => Promise<void>;
   export let saveShortProject: () => Promise<void>;
   export let exportProject: () => void;
+  export let markProjectSaved: () => void;
   export let exportBlueJProject: () => void;
   export let exportHtml: () => Promise<void>;
   export let copySharedLink: () => Promise<void>;
@@ -392,6 +393,7 @@
                 toolbarDialog = null;
               }}
               onSaved={() => {
+                markProjectSaved();
                 toolbarDialog = null;
                 showNotice(t("ui.cloud.saved"));
               }}

@@ -103,6 +103,33 @@ test("GUI-120 multiple tabs keep independent edits and reload their own draft", 
   expect(session).not.toContain("class Hund");
 });
 
+test("GUI-129 leaving BlueK warns only when project changes have not been explicitly saved", async ({
+  page,
+}) => {
+  await load(page);
+  const dispatchBeforeUnload = () =>
+    page.evaluate(() => {
+      const event = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    });
+
+  expect(await dispatchBeforeUnload()).toBe(false);
+  await page.getByLabel("Project name").fill("Unsaved change");
+  expect(await dispatchBeforeUnload()).toBe(true);
+
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page
+      .getByRole("dialog", { name: "Save", exact: true })
+      .getByRole("button", { name: /^Download BlueK project file/ })
+      .click(),
+  ]);
+  expect(download.suggestedFilename()).toBe("Unsaved change.bluek.json");
+  expect(await dispatchBeforeUnload()).toBe(false);
+});
+
 test("GUI-121 an opener-copied session forks the live draft; reopening a link starts fresh", async ({
   page,
 }) => {
@@ -121,11 +148,12 @@ test("GUI-121 an opener-copied session forks the live draft; reopening a link st
     .toContain("77");
   await edit(duplicate, "class Hund { val age = 88 }");
   expect((await saved(page)).files[0].source).toContain("77");
+  duplicate.on("dialog", (dialog) => dialog.accept());
   await duplicate.reload();
   await expect
     .poll(() => saved(duplicate).then((p) => p?.files[0].source))
     .toContain("88");
-  page.once("dialog", (dialog) => dialog.accept());
+  page.on("dialog", (dialog) => dialog.accept());
   await page.goto(link(project("Dogs")));
   await page.waitForURL((url) => !url.hash);
   await expect(
@@ -144,9 +172,15 @@ test("GUI-154 replacing a non-empty project asks first and can be cancelled", as
   await edit(page, "class Hund { val age = 42 }");
 
   let prompt = "";
-  page.once("dialog", async (dialog) => {
+  let replace = false;
+  page.on("dialog", async (dialog) => {
+    if (dialog.type() === "beforeunload") {
+      await dialog.accept();
+      return;
+    }
     prompt = dialog.message();
-    await dialog.dismiss();
+    if (replace) await dialog.accept();
+    else await dialog.dismiss();
   });
   await page.goto(link(project("Incoming project")));
   await expect(page.getByLabel("Project name")).toHaveValue("Current work");
@@ -155,7 +189,7 @@ test("GUI-154 replacing a non-empty project asks first and can be cancelled", as
     .toContain("42");
   expect(prompt).toContain("browser autosave");
 
-  page.once("dialog", (dialog) => dialog.accept());
+  replace = true;
   await page.goto(link(project("Incoming project")));
   await expect(page.getByLabel("Project name")).toHaveValue("Incoming project");
   await expect

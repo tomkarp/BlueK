@@ -870,6 +870,7 @@
     loadSharedProjectFromCode={project.loadSharedProjectFromCode}
     saveShortProject={project.saveShortProject}
     exportProject={project.exportProject}
+    markProjectSaved={project.markProjectSaved}
     exportBlueJProject={project.exportBlueJProject}
     exportHtml={project.exportHtml}
     copySharedLink={project.copySharedLink}

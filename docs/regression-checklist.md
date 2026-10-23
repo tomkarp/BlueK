@@ -1683,3 +1683,12 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
   smoke test, project-draft smoke test, Svelte production build and
   `git diff --check`. Initial sandboxed test-server attempts hit `EPERM`; the
   reruns with local server access passed. Visual acceptance remains pending.
+- Unsaved project warning, 2026-10-24: BlueK requests the browser's native
+  leave confirmation when the open project differs from its last explicitly
+  saved state. A JSON download or successful account save clears the warning;
+  browser draft autosave still preserves recovery but does not count as an
+  explicit save. GUI-129 verifies clean, edited and exported states in
+  Chromium; CLOUD-13 verifies successful account saves clear it. The cloud
+  and browser-draft suites passed 29/29; typecheck (zero errors, six existing
+  warnings), i18n and the Svelte production build passed. Visual acceptance
+  remains pending.

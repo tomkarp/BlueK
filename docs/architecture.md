@@ -126,7 +126,11 @@ The active tab's draft is restored automatically and omitted from Open's
 **Restore** list. That list contains drafts from other tabs or earlier sessions;
 it shows the three newest first and expands on request. Loading a project into a
 non-empty workspace asks before replacing both the open project and that tab's
-autosave. Reload recovery stays automatic and does not prompt.
+autosave. Reload restores the active draft automatically without asking the
+user to select it from Open → Restore. Leaving with changes since the latest
+explicit JSON export or successful account save invokes the browser's native
+`beforeunload` confirmation. Browser draft autosave preserves recovery but
+does not count as an explicit project save.
 
 A failed save names its reason: a full Local Storage quota (with the sizes of
 this project and the other drafts), storage blocked by the browser, or the
