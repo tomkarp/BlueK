@@ -10,6 +10,9 @@ interpreter after Kotlin changes. Record failures/blockers and distinguish
 written tests from executed tests. Browser artifacts: playwright-report/ and
 test-results/. Full Kotlin conformance is not implied by any passing suite.
 
+Latest storage/account/publication verification: [2026-10-22 results](#accounts-private-storage-and-staticapi-split--2026-10-22).
+Latest project navigation verification: [2026-10-22 results](#new-open-save-and-share-navigation--2026-10-22).
+
 ## Coverage register
 
 GUI-74 and GUI-80 each have two historical meanings, also in test titles.
@@ -44,8 +47,8 @@ below. No universal performance guarantee is implied.
 | GUI-19 | Compact codepad history spacing | Recorded browser pass |
 | GUI-20 | Single-line result truncation with full-value tooltip | Recorded browser pass |
 | GUI-21 | Shared object aliases and inspector reference names | Recorded browser pass |
-| GUI-22 | Grouped project actions; upload/drop UI names JSON and BlueJ ZIP/folder and the file chooser accepts .json and .zip; BlueJ export enabled | Chromium pass (2026-10-18) after updating its stale “BlueJ export disabled” expectation |
-| GUI-23 | Save/Export disabled for an empty project | Recorded browser pass |
+| GUI-22 | New/Open/Save/Share project actions; Open accepts JSON and BlueJ ZIP/folder; Save includes BlueJ export | Chromium passed, 2026-10-22 |
+| GUI-23 | Save disabled for an empty project | Chromium passed, 2026-10-22 |
 | RT-01 | Identity, setters/getters, main/reset/input and stale replies | Existing runtime-state integration coverage; no new run claimed |
 | GUI-24 | Invalid project statements prevent initializer/codepad effects | Recorded browser pass |
 | GUI-25 | No automatic completion; four-space manual indentation | Recorded browser pass |
@@ -66,7 +69,7 @@ below. No universal performance guarantee is implied.
 | GUI-41 | Project-transfer dialogs above ordinary windows | Recorded browser pass |
 | GUI-42 | Escape without Vim; Vim Escape and Shift+Escape behavior | Recorded browser pass |
 | GUI-43 | Remove short-link path after import; later templates work | Recorded browser pass |
-| GUI-44 | Open/Import three-word code loading | Recorded browser pass |
+| GUI-44 | Open loads a shared project code, including legacy three-word codes | Chromium passed, 2026-10-22 |
 | GUI-50 | Remove full-project hash after import | Recorded browser pass |
 | GUI-45 | Reload own draft; fresh tab does not select another draft | Recorded browser pass |
 | GUI-46 | Method-result label/value/actions do not overlap | Build passed; dedicated GUI/visual check pending |
@@ -74,7 +77,16 @@ below. No universal performance guarantee is implied.
 | GUI-48 | Private-property styling and read-only private-set controls | Recorded inspector checks; current private-row visual/CSS acceptance pending |
 | GUI-49 | Long method menu signatures stay on one line | Recorded browser pass |
 | GUI-35 | Short-link display, copy, expiry and loading roundtrip | Recorded browser pass |
-| API-01 | Short-link SQLite roundtrip, three-word codes and 30-day expiry | Share-service test passed; production/load tests pending |
+| API-01 | Additive legacy migration, permanent identifier reservations, account/session ownership, immutable seven-day copies, UTF-8 limits, media policy, blocks and retention; content reporting removed | Real temporary-SQLite API test passed, 2026-10-23; live migration/deployment/load capacity pending |
+| CLOUD-01 | Own/counterfeit media rejected by project and program publication UI; local JSON retains every resource | Chromium passed; all 42 actual standards independently checked by client/server helper, 2026-10-22 |
+| CLOUD-02 | Delayed public loads cannot replace edits made while pending; draft survives reload | Chromium passed, 2026-10-22 |
+| CLOUD-03 | German/English account advice, password-manager fields, failed-save backup advice and mobile layout | Chromium passed, 2026-10-22; agent inspected German mobile screenshot; user acceptance pending |
+| CLOUD-04 | Malformed successful API receipt does not claim a private save succeeded | Chromium passed, 2026-10-22 |
+| CLOUD-05 | Private account save requires a non-empty project name | Chromium passed, 2026-10-23 |
+| GUI-156 | Local save options require a non-empty name for an unnamed project | Chromium passed, including blank-name rejection and JSON download, 2026-10-23 |
+| NAV-01 | Four project actions, separated account/view controls, grouped Save choices, separate Share and stable sidebar in English/German; Restore is the rightmost Open tab | Chromium passed at desktop and 390 px Save width; agent inspected German screenshots, 2026-10-22; human acceptance pending |
+| NAV-02 | Sign-in from Save returns without uploading; explicit save/update remains in Save and account settings remain separate | Chromium passed, 2026-10-22 |
+| NAV-03 | Private projects open/delete through Open; canceling sign-in retains the selected source | Chromium passed, 2026-10-22 |
 | RT-02 | Validate all files before initializer side effects | Recorded runtime pass; `test:runtime-state` |
 | RT-03 | One class or top-level declarations per file | Recorded runtime pass; `test:runtime-state` |
 | RT-04 | Suspendable Thread.sleep, cancellation and invalid arguments | Recorded runtime/browser pass |
@@ -181,8 +193,8 @@ below. No universal performance guarantee is implied.
 | EXP-01 | Standalone console HTML, input/EOF/Stop/Restart and title | Recorded browser pass |
 | EXP-02 | Chosen main file honored | Recorded automated pass |
 | EXP-03 | Compile/main/runtime errors reported without duplicate execution | Recorded automated pass |
-| EXP-04 | Unmodified project download and Open in BlueK | Recorded Chromium pass; public online target not automatically opened |
-| EXP-05 | Omit Open in BlueK beyond 1 MB link limit | Recorded automated pass |
+| EXP-04 | Local HTML downloads unchanged JSON; Open in BlueK opens a clean home URL and JSON import restores the project | Chromium passed, 2026-10-22; no generated content URL |
+| EXP-05 | Large local HTML projects retain JSON download and a content-free BlueK home link | Chromium passed, 2026-10-22; local files are not subject to the server size limit |
 | EXP-06 | Paused BluePlay player with Step/Run/input/Reset/speed | Recorded browser pass; sound playback/visual acceptance pending |
 | EXP-07 | Console/BluePlay file:// export in WebKit | Recorded WebKit pass; actual Safari not separately tested |
 | EXP-08 | IDE export Beta label and project naming | Recorded browser pass |
@@ -190,13 +202,13 @@ below. No universal performance guarantee is implied.
 | EXP-10 | No HTML export without a supported main | Recorded automated pass |
 | EXP-11 | IDE-to-player world/output transfer | Recorded automated pass |
 | EXP-12 | Shared ANSI/text-sizing terminal parser in player | Recorded browser pass; `npm run build:player` |
-| EXP-13 | Full runnable link, explicit main/cancel, console input, project download and developer view | Chromium browser pass, 2026-10-10 |
-| EXP-14 | 30-day runnable short link, stored options, developer import and expiry | Chromium with mocked API and real SQLite service checks passed, 2026-10-10; production deployment pending |
+| EXP-13 | Published runnable link, explicit main/cancel, console input, project download and developer view | Chromium passed, 2026-10-22; full content links are read-only legacy fixtures |
+| EXP-14 | Seven-day program publication, stored options, same-copy developer link, distinct expiry/unknown/blocked responses | Chromium UI and real SQLite API passed, 2026-10-22; live deployment pending |
 | EXP-15 | BluePlay autostart/buttons/speed combinations, required Run button, reset and HTML options | Six valid combinations and IDE/HTML flow passed in Chromium, 2026-10-10; agent inspected desktop/mobile screenshots; user acceptance pending |
 | EXP-16 | Optional project heading/tab title for full/short links and HTML; no status label or empty header | Format/server checks and Chromium browser cases passed, 2026-10-10; agent inspected mobile options; user acceptance pending |
-| EXP-17 | Stable export window across views/options, persistent Cancel and one options panel for full/short/HTML | Chromium bounds and identical exported settings passed, 2026-10-10; agent inspected desktop/mobile; user acceptance pending |
-| EXP-18 | bluek/run fragments and short paths, player/IDE navigation, deployment prefixes and transitional /load | Chromium/WebKit and prefixed production routing passed, 2026-10-11; user acceptance pending |
-| EXP-19 | Unavailable program links: translated player explanation for expired/unknown codes (30-day note, BlueK link), malformed codes and undecodable `#run`; a project code under /run/ offers its project; capitalized codes play | Chromium GUI, real-service routing (Chromium/WebKit) and agent end-to-end passed, 2026-10-11; German player screen inspected; user acceptance pending |
+| EXP-17 | Stable Share window across project/program options, persistent Cancel and shared program settings with Save → HTML | Seven Chromium cases passed, 2026-10-22; agent inspected desktop/mobile; user acceptance pending |
+| EXP-18 | New ?p/?run query links, read-only legacy fragments/paths, player/IDE navigation, deployment prefixes and /load | Separate-origin real API plus static root/prefix builds passed in Chromium/WebKit, 2026-10-22; live Pages acceptance pending |
+| EXP-19 | Translated distinct expired/unknown/operator-blocked/developer-disabled link failures; malformed/legacy links; project code opened as player; capitalized codes | Chromium UI and separate-origin Chromium/WebKit routing passed, 2026-10-22; operator/TLS/live acceptance pending |
 | EXP-20 | A short program code opens its project under /bluek/ and in code import with one request; disabled “Open in BlueK” refuses both (403) | Share-server smoke, real-service routing (Chromium/WebKit), GUI-138 and agent end-to-end passed, 2026-10-11; production deployment pending |
 | EXP-21 | BlueJ ZIP export: one folder with Kotlin files (test classes omitted), README.TXT and package.bluej with the displayed card positions; BluePlay adds the JVM library from assets/bluej-blueplay and every standard image/sound, project files win; re-import keeps unchanged standard media as standard resources | `test:bluej-export` passed (2026-10-18); all four bundled examples compiled with kotlinc 2.2.21 after export (`check-bluej-export-kotlinc.mjs`). Not yet opened or run in BlueJ itself. |
 | RT-37 | Suspendable binary-stdlib lambda replay and canSuspend boundary | Recorded Node/bundle pass; dedicated browser check not performed in original record |
@@ -324,6 +336,8 @@ below. No universal performance guarantee is implied.
 | GUI-146 | After a BlueJ export, a notice names left-out test classes and MP3 sounds (BluePlay in BlueJ plays WAV only), but only if the project has them; it stays until closed; no MP3 conversion | Chromium pass with GUI-145 and EXP-17 (2026-10-18), including two simulated minutes without hiding and closing with ×; German test-class notice inspected by the agent in the dev server. |
 | GUI-148 | Every inspector property shows text plus a compact inspection arrow at the right edge, with the edit pencil immediately to its left; scalars, objects and collections use the same layout | Runtime and Chromium pass (2026-10-21), including custom toString, scalar/captured-getter navigation, disabled null/error arrows, inspectable formatting failures, nested edits and readonly debugger inspection. Agent inspected German light/dark views and opened an Int inspector. User accepted the overall layout and requested the final pencil/arrow ordering; acceptance of that final ordering is pending. |
 | GUI-149 | Default ordinary object text uses an object marker instead of a constructor expression; inspector cells omit the repeated type; English/German labels, computed properties and method results preserve custom text | Runtime/reference checks and four affected Chromium cases (GUI-88/148/149, DBG-18) passed (2026-10-21). Built-in-browser German view confirmed Image references, a computed Image property and custom text without a repeated type. User visual acceptance pending. |
+| GUI-154 | Loading a project into non-empty work asks before replacing the project and its browser autosave; cancel preserves current work | Passed in focused draft GUI run, 2026-10-23 |
+| GUI-155 | Browser recovery list shows three newest drafts first and expands/collapses older drafts | Passed in focused draft GUI run, 2026-10-23 |
 | GUI-150 | Object placeholders, inspection errors, uninitialized properties and pending computed values use Codepad's gray; actual values including null and exception objects keep their normal color | Six affected Chromium cases passed (GUI-89/92/149, DBG-12/18), including light/dark mode and a getter returning null (2026-10-21). Built-in-browser German screenshot confirmed gray object/error text beside normal numbers, strings and null. User visual acceptance pending. |
 | GUI-151 | BluePlay library-card menus offer World/Actor constructors and all three Image overloads through the standard create dialog; busy runtimes disable construction, and source/test actions remain absent | Thirteen affected Chromium cases and the offline language/manual case passed (2026-10-21), including real bench objects, image dimensions/copying, actor/world integration, API help, ordinary class constructors and translations. Built-in-browser German check created World, Actor and Image, inspected width/height and confirmed all Image menu overloads. User visual acceptance pending. |
 | GUI-152 | Inspector property rows retain the edit-pencil height when readonly or when BluePlay Run hides the pencils; Run/Pause does not resize the inspector | Chromium geometry checks and both affected GUI-92 cases passed (2026-10-21): all seven Actor rows measure 34px and the window height stays constant through two Run/Pause cycles. Built-in-browser German Run/Pause visual check confirmed equal editable/readonly row heights. User visual acceptance pending. |
@@ -1321,3 +1335,188 @@ button contains no “Beta”. Typecheck and i18n passed; the HTML export,
 localization, offline and program-link specs passed in Chromium (37/37). The
 remaining stage notes (testing in alpha, offline version little tested) are
 unchanged.
+
+### Accounts, private storage and static/API split — 2026-10-22
+
+Step 1 adds optional pseudonymous accounts, owner-only private projects,
+immutable seven-day public copies, content reports and a protected local
+operator CLI. New links carry query identifiers only. Old stored payloads keep
+their deadlines; old full-content links remain readable behind one compatibility
+gate without an invented shutdown date. No inf-schule/SVN work, live migration,
+DNS change, deployment, commit or push was performed.
+
+- Helpers/builds: typecheck (zero errors/warnings), i18n (812 messages), static
+  and Svelte architecture, `test:ui`, `test:project-format`, `test:project-drafts`,
+  `test:workspace`, `test:program-export`, `test:bluej-export`,
+  `test:bluej-selection` and `test:publication-policy` passed. The latter checks
+  every one of the 42 shipped images/sounds against client/server validation,
+  rejects same-name counterfeits and preserves private inputs. Player, offline
+  and Svelte production builds passed. Standard-media regeneration left the
+  existing frontend modules unchanged and created the API checksum manifest.
+- Actual service: `test:share-server` passed with a fresh/legacy temporary SQLite
+  database and restart. Covers account isolation, password changes and revoked/
+  expired sessions, target-account waits without an IP ban, exact CORS/CSRF,
+  revision conflicts, independent copies, nested program validation, direct
+  standard-media uploads, 1 MiB UTF-8 limits, repeated publications from one IP,
+  anonymous reports, CLI review/block, production `__Host-` cookie attributes,
+  all public read paths, seven-day reads,
+  identifier tombstones and account/report cleanup. An expired cookie does not
+  disable anonymous publication. Technical feedback remains a separate route.
+- Actual browsers: 34/34 focused publication/cloud/link/state cases passed;
+  follow-up mobile dialog checks passed (10/10), followed by the final cloud
+  receipt/publication cases (7/7). BlueJ export/reimport and conditional notices
+  also passed (GUI-145/146, 2/2). Earlier player, HTML export, localization,
+  testing, draft and feedback cases were exercised in their focused runs;
+  corrected failures are described below. The real separate-origin API/static
+  production integration passed in Chromium and WebKit at both `/` and
+  `/BlueK/`: direct query links, legacy 404 path fallback, report/administrative
+  block and publication. At the root it also exercises real cookie registration,
+  login/logout, password change, private create/load/update/delete and restored
+  local execution with the API blocked. This is a local browser integration,
+  not a live GitHub Pages/DNS/TLS test.
+- Offline: 6/6 actual file:// Chromium/WebKit cases passed with all HTTP blocked,
+  including Kotlin execution/input, drafts/JSON, templates/standard BluePlay
+  media, formatter, HTML player, bundled help and German settings. Account,
+  publication and full-content-link generation controls are absent.
+- Failures resolved: the initial sandbox prevented loopback binding; the
+  authorized local-server run passed. Browser tests exposed the new account
+  dialog's legacy-component reactivity issue, fixed by using Svelte runes.
+  Stale full-link/30-day expectations, an extensionless downloaded-JSON test
+  fixture, a receipt-modal test sequence and a German wording expectation were
+  corrected. A workspace helper needed the new build-time API variable.
+  WebKit exposed a transient duplicate status announcement, now avoided.
+- Agent visual inspection: German account/error dialog and program export at
+  390×720; JSON backup remains in the export footer. Human visual acceptance
+  remains pending. Build warnings about the existing formatter's Node/import.meta
+  fallback, runtime asset URL and chunk sizes remain; tested execution succeeded.
+- Not performed: full `test:regression`, Kotlin rebuild/conformance (no Kotlin
+  changed), live-database migration, actual DNS/Pages/TLS/Caddy operations,
+  deployment, production load/capacity and Safari application testing. Beta
+  retains its existing static host. Daily report review, finite backups, capacity
+  monitoring and live acceptance are operator responsibilities documented in
+  [deployment](deployment.md). No aggregate disk quota was invented.
+
+### New, Open, Save and Share navigation — 2026-10-22
+
+The classic workspace and sidebar remain in place. New groups templates and
+examples; Open groups browser drafts, private account projects, local/BlueJ
+imports and shared codes. Save owns BlueK downloads, private saves, BlueJ ZIP
+and HTML export. Share owns public project/program copies. Account settings
+are separated from the existing view toggles. Contextual authentication returns
+to Open or Save without an implicit upload. Program options are shared with
+HTML export; the former blanket JSON footer action is now the main Save choice.
+
+- Helpers: typecheck (zero errors/warnings), i18n (829 matching messages),
+  workspace controllers, UI behavior, static architecture and Svelte
+  architecture passed.
+- Chromium: 45/45 HTML export, program-link, browser-draft, BlueJ-import and
+  localization cases passed; 13/13 focused toolbar, BlueJ export/reimport,
+  project-link/state and sidebar/view-toggle cases passed. Final navigation
+  and cloud cases passed 9/9, including English/German Save bounds at 390 px,
+  contextual authentication, explicit upload, project opening/deletion and
+  malformed receipts. Initial EXP-08 failed because its generic Save selector
+  also matched Save state; exact button matching fixed it and the later
+  45-case run passed.
+- Real separate API/production builds: routing smoke passed in Chromium and
+  WebKit at `/` and `/BlueK/`, including public/legacy links, reports/blocks and
+  publication. Root runs also passed real cookie accounts/password changes,
+  private CRUD through the new dialogs and execution during an API outage.
+  These runs use temporary SQLite data, not a production database.
+- Offline: all six file:// Chromium/WebKit tests passed with HTTP blocked.
+  The downloadable offline package was rebuilt with the new navigation.
+- Agent visual inspection: German desktop toolbar, Save and Share, plus Save
+  at 390×844. The Share description still mentioned file exports; it was
+  corrected in both catalogs and the i18n check passed again. Human visual
+  acceptance remains pending. Existing formatter/import.meta build warnings
+  remain; offline execution and formatting tests passed.
+- At the initial storage implementation review, the full regression suite had
+  not yet been run. Kotlin rebuild/conformance (no Kotlin changes), live
+  deployment, production migration, commit and push were not performed.
+- Full-suite follow-up, 2026-10-22: `npm run test:regression` passed all stages
+  through `test:testing`, then stopped at the unchanged Kotlin-surface fixture
+  `ScP.toString().startsWith("ScP")` (actual `false`, expected `true`). No
+  Kotlin source or generated interpreter bundle was changed. All remaining
+  script stages were run separately and passed, including offline (6/6) and
+  GUI (324 cases). Three GUI assertions failed on first run: two exact-text
+  expectations included unrelated rendered text/stack frames, and the template
+  test still expected the old spacing/note instead of the new section labels.
+  Their assertions were updated and the three affected GUI cases passed on
+  focused rerun. The Kotlin-surface mismatch remains open; no full rerun after
+  those test-only updates was performed.
+- Share-code entry follow-up, 2026-10-22: shared project codes display in
+  4-4-4 groups; opening accepts grouped codes and pasted full links. Focused
+  Chromium checks EXP-14, EXP-15 and NAV-06 passed (3/3). Codes retain 12
+  characters because public read endpoints currently have no per-code request
+  limit; shortening them would reduce resistance to guessing.
+- Share-dialog density follow-up, 2026-10-22: removed repeated expiry text,
+  shortened the two action descriptions, hid unavailable README/state choices,
+  and changed publication actions to compact white/red buttons that match the
+  Save dialog's choice cards. Typecheck and i18n passed; focused publication,
+  layout and navigation checks passed (12/12),
+  followed by the English/German dialog screenshots (NAV-01, 2/2). Agent visual
+  inspection confirmed the dialog is shorter and its two link actions remain
+  distinct. Human visual acceptance remains pending.
+- Private-project management follow-up, 2026-10-22: account-saved projects can
+  be renamed in place through an owner-checked, revision-guarded API action;
+  both the list label and embedded project name change. The redundant manual
+  Refresh buttons were removed because selecting the account source already
+  loads the list. Share-server smoke passed, including owner ACL, stale revision
+  rejection and reading back the renamed embedded project name. NAV-03 and
+  NAV-05 passed (2/2); typecheck and i18n passed. NAV-03 verifies rename from
+  Open updates the loaded project name, while NAV-05 confirms the Save list
+  sends the displayed revision and updates in place. Human visual acceptance
+  remains pending.
+- Content-report removal and Open dialog sizing, 2026-10-23: removed the
+  public-project report control from editor/player, the public reporting API,
+  operator CLI commands and current documentation. Technical “Problem melden…”
+  remains separate. Existing databases are not destructively migrated; any
+  legacy `content_reports` rows remain inaccessible to the app. Share-server
+  smoke passed, including 404 for the removed endpoint; i18n passed. Typecheck
+  passed with zero errors and six existing warnings. NAV-01 initially failed
+  because its no-network assertion included the intentional account-tab load;
+  the assertion now checks that non-account tabs make no requests and the
+  account tab loads once. Typecheck (zero errors, six warnings), i18n,
+  temporary-SQLite share-server smoke, and focused NAV-01/NAV-04 passed. The
+  separate-origin routing test initially hit stale selectors for the Share and
+  Open tabs; after updating them to current labels/roles, Chromium and WebKit
+  passed at `/` and `/BlueK/`, including no report action, publication, player,
+  accounts and private CRUD. The Open dialog keeps a 520 px maximum height while
+  switching tabs; NAV-01 confirms equal height. Visual acceptance remains
+  pending. Existing SQLite report rows are left untouched and are no longer
+  available through the app or operator CLI.
+- Browser recovery UX, 2026-10-23: the current tab's autosave is omitted from
+  Open → Restore because reload restores it automatically; the list now shows
+  the three newest drafts and expands on request. Loading a different project
+  into non-empty work asks before replacing the project and tab autosave.
+  Draft GUI suite passed (12/12), including GUI-154/155;
+  project-draft storage smoke, i18n (842 messages) and typecheck (zero errors,
+  six existing warnings) passed. Related GUI-43 passed. GUI-67 reached the
+  Share dialog but failed on its stale expectation of one “Publish Project
+  Link” action; the current dialog exposes “Create editing link” and “Create
+  runnable link”. That assertion is outside this recovery change.
+- Open-tab order and required save names, 2026-10-23: Restore is the rightmost
+  Open tab in English and German. JSON, BlueJ, HTML and account saves check for
+  a project name; blank prompt input does not proceed and keeps Save open for a
+  retry. Typecheck (zero errors, six warnings), i18n (843 messages), and all 15
+  project-navigation/account browser tests passed, including NAV-01/03,
+  CLOUD-05 and GUI-156. GUI-67 and CLOUD-01 also passed after updating their
+  selectors and dialog handling for the current Share layout and replacement
+  confirmation.
+- Toolbar project title, 2026-10-23: The title is centered in the window on
+  wide toolbars and stays between action groups on narrower toolbars. NAV-01
+  passed in English and German, including geometry checks at 1440 px and 900 px.
+  Typecheck passed with zero errors and six existing warnings; `git diff
+  --check` passed.
+- Beta account rollout, 2026-10-23: the beta workflow builds and tests the
+  account API before deployment, backs up the running service's configured
+  SQLite path (or its unchanged legacy default), restarts the shared API, checks
+  health, and only then updates beta static files. Backup consistency/privacy,
+  API migration, publication policy, workflow YAML and shell syntax passed
+  locally. The local full build could not run because Gradle was not cached and
+  `services.gradle.org` was unreachable; the GitHub Actions production build
+  and deployment tests passed. The first public health check failed because the
+  runner could not resolve external DNS; checking the API over SSH to localhost
+  fixed the workflow. Run 39915611716 passed, including the backup, API health
+  check and beta static deploy. A live browser confirmed `beta.bluek.de`
+  redirects to `beta.bluek.online` and exposes the account dialog; the beta API
+  health and credentialed CORS preflight pass. `main` was not pushed or deployed.

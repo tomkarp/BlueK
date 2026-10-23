@@ -32,7 +32,7 @@ test("GUI-130 native confirmations localize; switching back preserves edited cod
   await expect(content).toContainText("Preserve this edit");
   await expect(page.locator(".classcard small")).toHaveText("«functions»");
   await page
-    .getByRole("button", { name: "Neues Projekt", exact: true })
+    .getByRole("button", { name: "Neu", exact: true })
     .click();
   let message = "";
   page.once("dialog", async (dialog) => {

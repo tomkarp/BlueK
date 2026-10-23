@@ -40,7 +40,7 @@ Student Kotlin is interpreted, not compiled. `npm run build` builds these tools:
 
 `npm run build:svelte` builds the frontend without rebuilding Kotlin.
 `npm run build:standard-images` regenerates the committed image/alpha-mask,
-sound and BlueJ library modules after changing `assets/standard-images/`,
+sound and BlueJ library modules plus the API standard-media checksum manifest after changing `assets/standard-images/`,
 `assets/standard-sounds/` or `assets/bluej-blueplay/`. The latter holds the
 JVM version of BluePlay that BlueJ exports contain; it starts as a copy of the
 final BlueJ version and is maintained here. `npm run test:bluej-export` checks
@@ -71,7 +71,7 @@ python3 -m http.server 4173 --directory frontend/dist
 | `jvm/` | Gradle 8.14.1 wrapper; directory name is historical |
 | `frontend/public/` | Checked-in interpreter and templates; generated player/download assets |
 | `scripts/`, `tests/gui/` | Build scripts, runtime/helper tests, Playwright tests |
-| `server/`, `data/` | Optional SQLite share service and attributed word list |
+| `server/`, `data/` | Optional account/private-project/publication API and retained legacy word-list attribution |
 
 Session changes belong in `KotliteSession.kt`; language semantics in the
 vendored interpreter. Stdlib additions belong in `BlueKStdlibModule.kt`, while
@@ -111,8 +111,9 @@ a helper passing does not prove a visible browser interaction.
 | `npm run test:project-drafts` | Draft ownership, migration, locks, storage failure and unchanged saves |
 | `npm run test:offline` | Build/ZIP checks and real Chromium/WebKit file:// execution without HTTP |
 | `npm run test:gui` | Chromium against a dedicated Vite server on port 5194 |
-| `npm run test:share-server` | Share service with a temporary SQLite database |
-| `node scripts/smoke-share-routing.mjs` | Production build below `/BlueK/` with a SPA fallback and the real share service (temporary database); four share-link forms, transitional `/load/`, player/developer navigation and unavailable/blocked codes in Chromium/WebKit |
+| `npm run test:publication-policy` | Client/server verification of every built-in image/sound, same-name counterfeit rejection and non-mutating normalization |
+| `npm run test:share-server` | Account/publication API, migration, moderation and retention with a temporary SQLite database |
+| `node scripts/smoke-share-routing.mjs` | Root and `/BlueK/` production builds on a static host plus separate-origin API; query/legacy links, real cookie accounts, publications/blocks and API outage execution in Chromium/WebKit |
 | `npm run test:performance` | Interpreter benchmarks with thresholds; avoid competing heavy loads |
 | `npm run test:conformance` | Pinned official Kotlin box tests; separate from regression suite, downloads corpus initially |
 | `node scripts/benchmark-blueplay.mjs` | Tick/frame and collision costs with 0–400 shots |
@@ -148,7 +149,10 @@ and translation checks.
 
 ## Deployment
 
-`main` deploys to bluek.online and GitHub Pages; `beta` to beta.bluek.online.
-Pushes trigger full builds through `.github/workflows/`.
-See [deployment instructions](docs/deployment.md) for Caddy, secrets and the
-optional share service. Commit and push only when explicitly requested.
+`main` is prepared to deploy the static app to GitHub Pages (bluek.online)
+and the optional Node API to the existing server (api.bluek.online). `beta`
+retains its own static deployment and reaches the same API through its `/api`
+proxy. See
+[deployment instructions](docs/deployment.md) for required DNS/Pages cutover,
+Caddy, secrets, migration and operator acceptance; workflow changes alone do
+not perform the cutover. See [storage contracts](docs/server-storage.md). Commit and push only when explicitly requested.

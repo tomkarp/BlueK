@@ -39,6 +39,8 @@
   import { BluePlayWorkspace } from "./workspace/BluePlayWorkspace.svelte";
   import { TerminalWorkspace } from "./workspace/TerminalWorkspace.svelte";
   import { onMount, untrack } from "svelte";
+  import { CloudWorkspace } from "./workspace/CloudWorkspace.svelte";
+  import CloudDialog from "./components/CloudDialog.svelte";
   const ui: WorkspaceUi = new WorkspaceUi();
   const project: ProjectWorkspace = new ProjectWorkspace({
     language: () => language,
@@ -47,6 +49,10 @@
     session: () => session,
     ui: () => ui,
     editor: () => editor,
+  });
+  const cloud = new CloudWorkspace({
+    language: () => language,
+    project: () => project,
   });
   const editor: EditorWorkspace = new EditorWorkspace({
     project: () => project,
@@ -190,7 +196,10 @@
     };
   });
   function escapeWindowAction(): (() => void) | null {
-    if (project.blueJImportChoice) return () => { project.blueJImportChoice = null; };
+    if (project.blueJImportChoice)
+      return () => {
+        project.blueJImportChoice = null;
+      };
     if (feedback.open) return feedback.close;
     if (objects.inspectorError)
       return () => {
@@ -272,6 +281,10 @@
       return () => {
         project.mediaErrors.sound = "";
         project.soundLibraryOpen = false;
+      };
+    if (cloud.open)
+      return () => {
+        cloud.open = false;
       };
     if (project.shareLinkDialog)
       return () => {
@@ -424,7 +437,13 @@
     closeWorld={play.closeWorld}
     bluePlayAction={play.bluePlayAction}
   />
+  {#if !offlineBuild}<CloudDialog {cloud} />{/if}
   <AppToolbar
+    cloudAvailable={!offlineBuild}
+    openCloud={() => {
+      void cloud.show();
+    }}
+    accountName={cloud.user?.username ?? ""}
     bind:newProjectOpen={project.newProjectOpen}
     bind:toolbarDialog={project.toolbarDialog}
     files={project.files}
@@ -580,7 +599,11 @@
         </div>
       {/if}
       {#if project.blueJExportNotice}
-        <div class="project-recovery-notice bluej-export-notice" role="status" aria-live="polite">
+        <div
+          class="project-recovery-notice bluej-export-notice"
+          role="status"
+          aria-live="polite"
+        >
           <span>{project.blueJExportNotice}</span>
           <button
             aria-label={t("ui.workspace.dismissBlueJExportNotice")}
@@ -713,7 +736,9 @@
     fieldProperty={objects.fieldProperty}
     fieldValue={objects.fieldValue}
     inspectFieldReference={objects.inspectFieldReference}
-    onFieldError={(error) => { objects.inspectorError = error; }}
+    onFieldError={(error) => {
+      objects.inspectorError = error;
+    }}
   />
   <TestPanel
     {tests}
@@ -809,6 +834,9 @@
     downloadUrl={OFFLINE_DOWNLOAD}
   />
   <ProjectTransferDialogs
+    {cloud}
+    bind:projectName={project.projectName}
+    serverProjectBytes={project.serverProjectBytes}
     recentProjects={project.recentProjects}
     openRecentProject={project.openRecentProject}
     deleteRecentProject={project.deleteRecentProject}
@@ -829,17 +857,16 @@
     bind:programAllowBlueK={project.programAllowBlueK}
     bind:programShowProjectName={project.programShowProjectName}
     bluePlay={project.library?.id === "blueplay"}
+    ensureProjectName={project.ensureProjectName}
     bind:programAutoRun={project.programAutoRun}
     bind:programShowControls={project.programShowControls}
     bind:programShowSpeed={project.programShowSpeed}
-    shareFullProgram={project.shareFullProgram}
     shareShortProgram={project.shareShortProgram}
     openProjectDrop={project.openProjectDrop}
     bind:blueJImportChoice={project.blueJImportChoice}
     chooseBlueJProject={project.chooseBlueJProject}
     importProject={project.importProject}
     loadSharedProjectFromCode={project.loadSharedProjectFromCode}
-    shareProject={project.shareProject}
     saveShortProject={project.saveShortProject}
     exportProject={project.exportProject}
     exportBlueJProject={project.exportBlueJProject}

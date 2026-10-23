@@ -11,7 +11,8 @@ an entire application first. Student code runs locally in your browser.
 - Work with class diagrams, a Kotlin editor, an object bench and inspectors.
 - Evaluate expressions in the codepad and run programs with terminal input/output.
 - Build games with the included BluePlay library and project templates.
-- Save projects as JSON, import and export BlueJ projects and share project links.
+- Save projects as JSON, import/export BlueJ projects, optionally store private
+  projects in an account, and publish seven-day links without custom media.
 - Export a program as a standalone HTML page or use BlueK offline.
 - Save and reload an interactive object state, record tests and run a reduced
   `kotlin.test` API. **Testing is currently in alpha.**
@@ -50,5 +51,5 @@ has not yet been widely tested in practice.
 
 Kotlite is by Sunny Chung, licensed under MIT; see the
 [vendored license](vendor/kotlite-interpreter/LICENSE).
-Short-link words are derived from the EFF Large Wordlist;
+Legacy short-link words are derived from the EFF Large Wordlist;
 see [attribution and curation](docs/share-wordlist.md).

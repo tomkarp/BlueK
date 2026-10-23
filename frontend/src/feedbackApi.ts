@@ -1,3 +1,4 @@
+import { apiUrl } from "./apiClient";
 import type { Diagnostic } from "../../runtime-contract/src/index";
 import type { BuildInfo } from "./buildInfo";
 import type { SavedProject } from "./projectFormat";
@@ -41,21 +42,7 @@ export class FeedbackRequestError extends Error {
 }
 export const maxFeedbackBytes = 10 * 1024 * 1024;
 
-// Pages and the downloaded app use the same private-report service. A dev
-// server uses Vite's existing API proxy; no credential is bundled here.
-function feedbackUrl(path: string) {
-  const origin = window.location.origin;
-  const local = ["localhost", "127.0.0.1", "[::1]"].includes(
-    window.location.hostname,
-  );
-  const ownHost = ["bluek.online", "beta.bluek.online"].includes(
-    window.location.hostname,
-  );
-  return new URL(
-    path,
-    (local || ownHost) && origin !== "null" ? origin : "https://bluek.online",
-  ).toString();
-}
+const feedbackUrl = apiUrl;
 export async function feedbackAvailable(): Promise<boolean> {
   try {
     const response = await fetch(feedbackUrl("/api/feedback/config"), {

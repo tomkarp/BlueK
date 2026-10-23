@@ -92,7 +92,7 @@ test('EXP-03 compile errors, a missing main and runtime errors are shown instead
     'before\nException in thread "main" IndexOutOfBoundsException: index: 5, size: 1\n    at get(Kotlin library)\n    at main(App.kt:4)\n');
 });
 
-test('EXP-04 the project can be downloaded as .bluek.json and opened in BlueK by link', async ({ page, context, baseURL }, testInfo) => {
+test('EXP-04 the project can be downloaded as .bluek.json and imported in BlueK from JSON', async ({ page, context, baseURL }, testInfo) => {
   const url = await exportFile(testInfo, 'links', greeter, 'App.kt', { projectName: 'Hunde: 1/2', readme: '# Hunde' }, baseURL + '/');
   await openPlayer(page, url);
   const [download] = await Promise.all([
@@ -105,21 +105,25 @@ test('EXP-04 the project can be downloaded as .bluek.json and opened in BlueK by
     files: greeter.map(file => ({ kind: 'functions', ...file })) });
 
   const open = page.getByRole('link', { name: 'Open in BlueK' });
-  await expect(open).toHaveAttribute('href', new RegExp(`^${baseURL}/#bluek=d1\\.`));
+  await expect(open).toHaveAttribute('href', `${baseURL}/`);
   await expect(open).toHaveAttribute('target', '_blank');
   const [blueK] = await Promise.all([context.waitForEvent('page'), open.click()]);
+  await blueK.getByRole('button', { name: 'Open', exact: true }).click();
+  await blueK.getByLabel('Choose project file').setInputFiles({ name: download.suggestedFilename(), mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(saved)) });
   await expect(blueK.getByLabel('Project name')).toHaveValue('Hunde: 1/2');
   await expect(blueK.locator('.classcard[aria-label="Greeter"]')).toBeVisible();
   await expect(blueK.locator('.classcard[aria-label="App"]')).toBeVisible();
 });
 
-test('EXP-05 a project too large for a link offers only the download', async ({ page }, testInfo) => {
+test('EXP-05 large local projects never generate content links', async ({ page }, testInfo) => {
   // Random data does not compress, so the link would exceed the 1 MB limit.
   const data = 'data:audio/wav;base64,' + randomBytes(900_000).toString('base64');
   await openPlayer(page, await exportFile(testInfo, 'large', greeter, 'App.kt', { resources: [{ path: 'sounds/noise.wav', data }] }));
   await expect(page.getByRole('region', { name: 'Terminal' }).locator('pre')).toHaveText('Name?\n');
-  await expect(page.getByText('Too large for a link: download the project and open it in BlueK.')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Open in BlueK' })).toHaveCount(0);
+  await expect(page.getByText(/To edit this local HTML program/)).toBeVisible();
+  const target = await page.getByRole('link', { name: 'Open in BlueK' }).getAttribute('href');
+  expect(new URL(target!).hash).toBe('');
+  expect(new URL(target!).search).toBe('');
   await expect(page.getByRole('button', { name: 'Download project (.bluek.json)' })).toBeVisible();
 });
 

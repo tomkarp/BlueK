@@ -6,7 +6,7 @@ import { STANDARD_SOUNDS } from '../../frontend/src/standardSounds.generated';
 
 async function loadBluePlay(page: Page) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'New Project', exact: true }).click();
+  await page.getByRole('button', { name: 'New', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Create New Project' });
   await dialog.getByRole('button', { name: /^BluePlay Example/ }).click();
   await expect(dialog).toBeHidden();
@@ -22,7 +22,7 @@ async function loadBluePlay(page: Page) {
 
 async function loadSpaceInvaders(page: Page, openDefenderEditor = false) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'New Project', exact: true }).click();
+  await page.getByRole('button', { name: 'New', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Create New Project' });
   await dialog.getByRole('button', { name: /^Space Invaders Demo/ }).click();
   await expect(dialog).toBeHidden();
@@ -248,7 +248,7 @@ test('GUI-59 new classes are laid out after the current BluePlay cards', async (
 
 test('GUI-76 BluePlay templates use the reference card order and shared grid spacing', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'New Project', exact: true }).click();
+  await page.getByRole('button', { name: 'New', exact: true }).click();
   let dialog = page.getByRole('dialog', { name: 'Create New Project' });
   await dialog.getByRole('button', { name: /^BluePlay Example/ }).click();
   await expect(dialog).toBeHidden();
@@ -274,7 +274,7 @@ test('GUI-76 BluePlay templates use the reference card order and shared grid spa
   );
 
   page.once('dialog', (confirmation) => confirmation.accept());
-  await page.getByRole('button', { name: 'New Project', exact: true }).click();
+  await page.getByRole('button', { name: 'New', exact: true }).click();
   dialog = page.getByRole('dialog', { name: 'Create New Project' });
   await dialog.getByRole('button', { name: /^Space Invaders Demo/ }).click();
   await expect(dialog).toBeHidden();
@@ -796,7 +796,7 @@ test('GUI-131 the Audio dialog adds, previews and removes sounds; playSound() pl
     };
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'New Project', exact: true }).click();
+  await page.getByRole('button', { name: 'New', exact: true }).click();
   await page.getByRole('dialog', { name: 'Create New Project' }).getByRole('button', { name: /^BluePlay Example/ }).click();
   await expect(page.locator('.classcard[aria-label="World"]')).toBeVisible();
   await expect(page.getByLabel('Codepad input')).toBeEnabled();
@@ -873,7 +873,7 @@ test('GUI-131 the Audio dialog adds, previews and removes sounds; playSound() pl
 
 test('GUI-132 own sounds can be renamed, keeping their file type; standard sounds cannot', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'New Project', exact: true }).click();
+  await page.getByRole('button', { name: 'New', exact: true }).click();
   await page.getByRole('dialog', { name: 'Create New Project' }).getByRole('button', { name: /^BluePlay Example/ }).click();
   await expect(page.getByLabel('Codepad input')).toBeEnabled();
   await page.getByRole('button', { name: 'Audio', exact: true }).click();
@@ -934,7 +934,7 @@ test('GUI-132 own sounds can be renamed, keeping their file type; standard sound
 
 test('GUI-133 own PNG/JPEG images are added, renamed and removed; PNG transparency and JPEG rectangles decide collisions', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'New Project', exact: true }).click();
+  await page.getByRole('button', { name: 'New', exact: true }).click();
   await page.getByRole('dialog', { name: 'Create New Project' }).getByRole('button', { name: /^BluePlay Template/ }).click();
   await expect(page.locator('.classcard[aria-label="World"]')).toBeVisible();
   // ring.png: only its top-left 10x10 pixels are opaque. wall.jpg: no transparency.
@@ -1061,13 +1061,13 @@ test('GUI-135 the world window can only be closed while paused and reopens when 
 
 test('GUI-145 BlueJ export downloads a BlueJ project with the BlueJ library and all standard media; importing it restores the project', async ({ page }, info) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'New Project', exact: true }).click();
+  await page.getByRole('button', { name: 'New', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Create New Project' });
   await dialog.getByRole('button', { name: /^BluePlay Example/ }).click();
   await expect(page.locator('.classcard[aria-label="World"]')).toBeVisible();
   await page.getByLabel('Project name').fill('Game');
   await page.getByLabel('Project name').press('Enter');
-  await page.getByRole('button', { name: 'Save / Export', exact: true }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   const [download] = await Promise.all([
     page.waitForEvent('download'), page.getByRole('button', { name: /^Export BlueJ Project/ }).click(),
   ]);
@@ -1086,10 +1086,10 @@ test('GUI-145 BlueJ export downloads a BlueJ project with the BlueJ library and 
   await expect(page.locator('.bluej-export-notice')).toHaveCount(0);
 
   page.on('dialog', confirmation => confirmation.accept());
-  await page.getByRole('button', { name: 'New Project', exact: true }).click();
+  await page.getByRole('button', { name: 'New', exact: true }).click();
   await dialog.getByRole('button', { name: /^Empty Project/ }).click();
   await expect(page.locator('.classcard[aria-label="World"]')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Open / Import', exact: true }).click();
+  await page.getByRole('button', { name: 'Open', exact: true }).click();
   await page.getByLabel('Choose project file').setInputFiles(file);
   await expect(page.locator('.classcard[aria-label="World"]')).toBeVisible();
   await expect(page.locator('.classcard[aria-label="Figure"]')).toBeVisible();
@@ -1107,10 +1107,10 @@ test('GUI-146 BlueJ export names left-out test classes and MP3 sounds only when 
   await writeFile(source, JSON.stringify(project));
   await page.clock.install();
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open / Import', exact: true }).click();
+  await page.getByRole('button', { name: 'Open', exact: true }).click();
   await page.getByLabel('Choose project file').setInputFiles(source);
   await expect(page.locator('.classcard[aria-label="FigureTest"]')).toBeVisible();
-  await page.getByRole('button', { name: 'Save / Export', exact: true }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   const [download] = await Promise.all([
     page.waitForEvent('download'), page.getByRole('button', { name: /^Export BlueJ Project/ }).click(),
   ]);

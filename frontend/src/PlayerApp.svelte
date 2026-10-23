@@ -8,8 +8,8 @@
   import { isCompileError } from "./compileDiagnostics";
   import { mainFiles } from "./mainEntries";
   import { projectModelFromPayload } from "./projectFormat";
-  import { MAX_PROJECT_LINK_LENGTH, exportFileName, type ExportedProgram } from "./programExport";
-  import { appendTerminal, combineTerminalOutput, encodeBlueKLink, terminalParts } from "./uiParity";
+  import { exportFileName, type ExportedProgram } from "./programExport";
+  import { appendTerminal, combineTerminalOutput, terminalParts } from "./uiParity";
   import { prepareRuntimeResources } from "./imageAlpha";
   import { withStandardResources } from "./standardImages";
   import {
@@ -65,7 +65,6 @@
   let inputElement: HTMLInputElement | null = null;
   let outputElement: HTMLPreElement | null = null;
   let blueKLink = "";
-  let linkTooLong = false;
   let run = 0;
 
   $: inputReady = runtime.phase === "waitingForInput";
@@ -232,14 +231,7 @@
         scheduleDraw();
       }
     });
-    if (program.allowBlueK !== false && developerUrl) blueKLink = developerUrl;
-    else if (program.allowBlueK !== false) encodeBlueKLink(program.project)
-      .then((encoded) => {
-        const link = `${program.blueKUrl}#bluek=${encoded}`;
-        linkTooLong = link.length > MAX_PROJECT_LINK_LENGTH;
-        blueKLink = linkTooLong ? "" : link;
-      })
-      .catch(() => (linkTooLong = true));
+    if (program.allowBlueK !== false) blueKLink = developerUrl || program.blueKUrl;
     void start();
   });
   onDestroy(() => {
@@ -257,8 +249,9 @@
     {#if program.allowBlueK !== false || program.allowDownload !== false}<nav class="player-actions" aria-label={t("ui.player.project")}>
       {#if program.allowBlueK !== false && blueKLink}
         <a class="player-button" href={blueKLink} target="_blank" rel="noopener">{t("ui.player.openBlueK")}</a>
-      {:else if program.allowBlueK !== false && linkTooLong}
-        <span class="player-note">{t(program.allowDownload !== false ? "ui.player.linkTooLarge" : "ui.player.linkUnavailable")}</span>
+      {/if}
+      {#if program.allowBlueK !== false && !developerUrl}
+        <span class="player-note">{t('ui.cloud.localPlayerAdvice')}</span>
       {/if}
       {#if program.allowDownload !== false}<button class="player-button" on:click={downloadProject}>{t("ui.player.download")}</button>{/if}
     </nav>{/if}

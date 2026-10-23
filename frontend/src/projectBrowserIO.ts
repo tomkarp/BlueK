@@ -1,4 +1,3 @@
-import { encodeBlueKLink } from "./uiParity";
 import { loadEditableProjectFromServer, saveProjectToServer } from "./shareApi";
 import {
   blueJProjectFromEntries,
@@ -7,9 +6,13 @@ import {
 } from "./blueJImport";
 import type { SavedProject as ProjectSource } from "./projectFormat";
 import type { ShareLinkDialog } from "./uiTypes";
-import { applicationUrl, shortShareUrl } from "./shareLinks";
+import { shortShareUrl } from "./shareLinks";
 
-export function downloadFile(content: string | Uint8Array<ArrayBuffer>, type: string, fileName: string) {
+export function downloadFile(
+  content: string | Uint8Array<ArrayBuffer>,
+  type: string,
+  fileName: string,
+) {
   const link = document.createElement("a");
   link.href = URL.createObjectURL(new Blob([content], { type }));
   link.download = fileName;
@@ -60,17 +63,6 @@ export async function copyLink(
   }
 }
 
-export async function copyFullProjectLink(
-  payload: ProjectSource,
-  readme: boolean,
-  state: boolean,
-  promptLabel = "Copy this project link:",
-): Promise<boolean> {
-  const url = applicationUrl(import.meta.env.BASE_URL, window.location.href);
-  url.hash = `bluek=${await encodeBlueKLink(payload)}${readme ? "&readme=1" : ""}${state ? "&state=1" : ""}`;
-  return copyLink(url.href, promptLabel);
-}
-
 export async function saveShortProjectLink(
   payload: ProjectSource,
   readme: boolean,
@@ -89,16 +81,35 @@ export async function saveShortProjectLink(
   return { url: url.href, code, copied: await copyLink(url.href, promptLabel) };
 }
 
-export async function readSharedProject(code: string): Promise<unknown> {
-  const words = code
-    .trim()
-    .toLowerCase()
-    .split(/[-\s]+/)
-    .filter(Boolean);
-  if (words.length !== 3 || words.some((word) => !/^[a-z]{4,6}$/.test(word))) {
-    throw new Error("Enter exactly three words, each 4–6 letters long.");
+export function normalizeSharedProjectCode(input: string): string {
+  let value = input.trim();
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      const url = new URL(value);
+      const queryCode =
+        url.searchParams.get("p") ?? url.searchParams.get("run");
+      if (queryCode) value = queryCode;
+      else {
+        const pathCode = url.pathname.match(
+          /(?:^|\/)(?:BlueK\/)?(?:bluek|run|load)\/([^/]+)\/?$/i,
+        )?.[1];
+        if (pathCode) value = pathCode;
+      }
+    } catch {
+      // Keep the original text so the regular validation below reports an error.
+    }
   }
-  return loadEditableProjectFromServer(words.join("-"));
+  const lower = value.toLowerCase();
+  const compact = lower.replace(/[\s-]+/g, "");
+  if (/^[a-z0-9]{12}$/.test(compact)) return compact;
+  return lower.replace(/\s+/g, "-");
+}
+
+export async function readSharedProject(code: string): Promise<unknown> {
+  const normalized = normalizeSharedProjectCode(code);
+  if (!/^(?:[a-z0-9]{12}|(?:[a-z]{4,6}-){2,3}[a-z]{4,6})$/.test(normalized))
+    throw new Error("Enter a 12-character code or an existing word code.");
+  return loadEditableProjectFromServer(normalized);
 }
 
 export async function readProjectFile(file: File): Promise<unknown> {

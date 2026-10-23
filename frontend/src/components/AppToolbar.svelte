@@ -5,8 +5,11 @@
   import type { ProjectFile } from "../../../runtime-contract/src/index";
 
   import type { ActiveWindow } from "../uiTypes";
+  export let cloudAvailable = false;
+  export let openCloud: () => void = () => {};
+  export let accountName = "";
   export let newProjectOpen: boolean;
-  export let toolbarDialog: "open" | "save" | null;
+  export let toolbarDialog: "open" | "save" | "share" | null;
   export let files: ProjectFile[];
   export let libraryId: string;
   export let imageLibraryOpen: boolean;
@@ -59,6 +62,22 @@
       ></span
     ><span>{t("ui.common.saveExport")}</span>
   </button>
+  {#if cloudAvailable}<button
+      class="toolbar-main-action"
+      disabled={!files.length}
+      aria-label={t("ui.transfer.share")}
+      title={t("ui.transfer.share")}
+      on:click={() => (toolbarDialog = "share")}
+      ><span class="toolbar-action-icon" aria-hidden="true"
+        ><svg viewBox="0 0 24 24"
+          ><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle
+            cx="18"
+            cy="19"
+            r="3"
+          /><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4" /></svg
+        ></span
+      ><span>{t("ui.transfer.share")}</span></button
+    >{/if}
   {#if libraryId === "blueplay"}
     <button
       class="toolbar-icon-button media-tool-button"
@@ -160,4 +179,22 @@
       </svg>
     </button>
   </div>
+  {#if cloudAvailable}<div class="toolbar-account">
+      <button
+        class="toolbar-main-action toolbar-account-button"
+        aria-label={t(accountName ? "ui.cloud.title" : "ui.cloud.login")}
+        title={accountName
+          ? t("ui.cloud.signedIn", [accountName])
+          : t("ui.cloud.login")}
+        on:click={openCloud}
+        ><span class="toolbar-action-icon" aria-hidden="true"
+          ><svg viewBox="0 0 24 24"
+            ><circle cx="12" cy="7" r="4" /><path
+              d="M4 22v-4a8 8 0 0 1 16 0v4"
+            /></svg
+          ></span
+        ><span>{t(accountName ? "ui.cloud.title" : "ui.cloud.login")}</span
+        ></button
+      >
+    </div>{/if}
 </div>

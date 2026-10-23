@@ -39,6 +39,10 @@ export class ProjectDraftStorage {
   private lockCompletion: Promise<unknown> = Promise.resolve();
   sessionAvailable = true;
 
+  get activeId(): string {
+    return this.id;
+  }
+
   constructor(private readonly host: DraftStorageHost) {}
 
   private read(id: string): ProjectDraft | null {

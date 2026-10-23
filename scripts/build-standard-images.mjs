@@ -8,6 +8,7 @@
 // in one of these folders.
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { inflateSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -105,6 +106,20 @@ ${soundEntries.join('\n')}
 ];
 `);
 console.log(`Standard sounds: ${soundNames.length} files generated.`);
+
+// The API verifies any supplied copy by content, never merely by its filename.
+// It stores verified built-ins as versioned library references (no media upload).
+const mediaHashes = {};
+for (const [prefix, directory, files, mime] of [
+  ['images', folder, names, 'image/png'], ['sounds', soundFolder, soundNames, 'audio/wav'],
+]) {
+  for (const name of files) {
+    const data = `data:${mime};base64,${(await readFile(path.join(directory, name))).toString('base64')}`;
+    mediaHashes[`${prefix}/${name}`] = createHash('sha256').update(data).digest('hex');
+  }
+}
+await writeFile(path.join(repository, 'server/standard-media.json'), JSON.stringify({ library: { id: 'blueplay', version: 1 }, sha256: mediaHashes }, null, 2) + '\n');
+
 
 // The BlueJ (JVM) version of the BluePlay library. BlueK writes it into BlueJ
 // exports of BluePlay projects instead of its built-in interpreted library.

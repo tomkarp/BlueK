@@ -1,3 +1,4 @@
+import { mockPublications } from './publicationFixtures';
 import { test, expect, type Page } from "@playwright/test";
 const fixture = `import kotlin.test.*
 class HundTest {
@@ -57,6 +58,8 @@ async function menu(page: Page, name: string) {
 async function expandTesting(page: Page) {
   await page.locator(".sidebar-testing summary").click();
 }
+test.beforeEach(async ({ context }) => { await mockPublications(context); });
+
 test("GUI-118 project links optionally load the default state and open README", async ({
   page,
   context,
@@ -82,8 +85,8 @@ test("GUI-118 project links optionally load the default state and open README", 
   const copiedLink = () =>
     prompted ||
     page.evaluate(() => navigator.clipboard.readText().catch(() => ""));
-  await page.getByRole("button", { name: "Save / Export" }).click();
-  const save = page.getByRole("dialog", { name: "Save / Export" });
+  await page.getByRole("button", { name: "Share" }).click();
+  const save = page.getByRole("dialog", { name: "Share" });
   const stateOptions = save.getByLabel(
     "Load default test class state with the link",
   );
@@ -103,9 +106,8 @@ test("GUI-118 project links optionally load the default state and open README", 
         left: button.getBoundingClientRect().left,
       })),
     );
-  expect(Math.abs(choiceBounds[0].width - choiceBounds[1].width)).toBeLessThan(1);
   const listBounds = await save.locator(".project-choice-list").boundingBox();
-  for (const box of choiceBounds.slice(2)) {
+  for (const box of choiceBounds.slice(1)) {
     expect(Math.abs(box.width - listBounds!.width)).toBeLessThan(1);
     expect(box.width).toBeGreaterThan(choiceBounds[0].width);
   }
@@ -122,7 +124,7 @@ test("GUI-118 project links optionally load the default state and open README", 
   expect(cancelBounds!.y + cancelBounds!.height).toBeLessThanOrEqual(700);
   await page.screenshot({ path: "test-results/project-link-state-option.png" });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await save.getByRole("button", { name: "Copy Full Project Link" }).click();
+  await save.getByRole("button", { name: "Publish Project Link" }).click();
   await expect.poll(copiedLink).toContain("&state=1");
   const stateLink = await copiedLink();
   expect(stateLink).not.toContain("readme=1");
@@ -140,11 +142,11 @@ test("GUI-118 project links optionally load the default state and open README", 
     .click();
 
   // Both link options can be combined; they are sender preferences, not project state.
-  await page.getByRole("button", { name: "Save / Export" }).click();
+  await page.getByRole("button", { name: "Share" }).click();
   await stateOptions.first().check();
   await save.getByLabel("Open README.md with the link").first().check();
   prompted = "";
-  await save.getByRole("button", { name: "Copy Full Project Link" }).click();
+  await save.getByRole("button", { name: "Publish Project Link" }).click();
   await expect.poll(copiedLink).toContain("&readme=1&state=1");
   const bothLink = await copiedLink();
   await page.goto("about:blank");
@@ -181,27 +183,27 @@ test("GUI-119 short links carry both options and unavailable state is reported",
   await page.goto(
     "/#bluek=p1." + Buffer.from(JSON.stringify(project)).toString("base64url"),
   );
-  await page.getByRole("button", { name: "Save / Export" }).click();
-  const save = page.getByRole("dialog", { name: "Save / Export" });
+  await page.getByRole("button", { name: "Share" }).click();
+  const save = page.getByRole("dialog", { name: "Share" });
   await save
     .getByLabel("Load default test class state with the link")
     .last()
     .check();
-  await save.getByRole("button", { name: "Copy Short Link" }).click();
+  await save.getByRole("button", { name: "Publish Project Link" }).click();
   const shortLink = page.getByRole("button", {
     name: "Complete project link",
     exact: true,
   });
-  await expect(shortLink).toContainText("/bluek/green-lamp-river?state=1");
+  await expect(shortLink).toContainText("/?p=green-lamp-river&state=1");
   await page
     .getByRole("dialog", { name: "Short project link" })
     .getByRole("button", { name: "Close", exact: true })
     .click();
-  await page.getByRole("button", { name: "Save / Export" }).click();
+  await page.getByRole("button", { name: "Share" }).click();
   await save.getByLabel("Open README.md with the link").last().check();
-  await save.getByRole("button", { name: "Copy Short Link" }).click();
+  await save.getByRole("button", { name: "Publish Project Link" }).click();
   await expect(shortLink).toContainText(
-    "/bluek/green-lamp-river?readme=1&state=1",
+    "/?p=green-lamp-river&readme=1&state=1",
   );
   const url = await shortLink.innerText();
   await page.goto(url);
@@ -221,7 +223,7 @@ test("GUI-119 short links carry both options and unavailable state is reported",
     "Choose a default test class",
   );
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Save / Export" }).click();
+  await page.getByRole("button", { name: "Share" }).click();
   await expect(
     save.getByLabel("Load default test class state with the link").first(),
   ).toBeDisabled();

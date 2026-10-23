@@ -33,11 +33,12 @@ The submission receipt shows its issue number or queued reference and the
 optional email-contact explanation; the storage notice remains available from
 the header's information button.
 
-Main, beta and local Vite use their `/api` endpoint. Vite forwards feedback to
-the live `https://bluek.online` service by default, without copying its token to the
-development machine. `BLUEK_FEEDBACK_PROXY_TARGET` can select a local backend
-instead. Pages and offline BlueK use `https://bluek.online/api/feedback`; sending
-requires internet. No GitHub credential is bundled in any frontend build.
+Production, beta and offline BlueK send technical feedback to
+`https://api.bluek.online/api/feedback`, independently of accounts and project
+sharing. Local Vite uses its `/api/feedback` proxy to that origin;
+`BLUEK_FEEDBACK_PROXY_TARGET` can select a local test backend. Sending requires
+internet. No GitHub credential is bundled in any frontend build. The project
+storage/publication 1 MiB limit does not apply to these 10 MiB reports.
 
 ## Delivery and limits
 

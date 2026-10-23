@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VITE_BASE_PATH: /
+      VITE_BLUEK_API_URL: https://beta.bluek.online
 
     steps:
       - name: Check out repository
@@ -27,12 +28,12 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: "21"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
           cache: npm
 
       - name: Install dependencies
@@ -40,6 +41,9 @@ jobs:
 
       - name: Build beta application
         run: npm run build
+
+      - name: Test account API and database migration
+        run: npm run test:publication-policy && npm run test:share-server && npm run test:database-backup
 
       - name: Install rsync
         run: sudo apt-get update && sudo apt-get install -y rsync
@@ -54,6 +58,42 @@ jobs:
           chmod 600 ~/.ssh/bluek_deploy
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
+
+      - name: Deploy API before enabling beta accounts
+        env:
+          HOST: ${{ secrets.BLUEK_DEPLOY_HOST }}
+          USER: ${{ secrets.BLUEK_DEPLOY_USER }}
+          PORT: ${{ secrets.BLUEK_DEPLOY_PORT }}
+        run: |
+          ssh -i ~/.ssh/bluek_deploy -p "$PORT" "$USER@$HOST" \
+            'install -d -o bluek-share -g bluek-share /opt/bluek-share/server /opt/bluek-share/data'
+          rsync -az \
+            -e "ssh -i ~/.ssh/bluek_deploy -p $PORT" \
+            --exclude=/data/ server/ "$USER@$HOST:/opt/bluek-share/server/"
+          rsync -az \
+            -e "ssh -i ~/.ssh/bluek_deploy -p $PORT" \
+            package.json package-lock.json "$USER@$HOST:/opt/bluek-share/"
+          ssh -i ~/.ssh/bluek_deploy -p "$PORT" "$USER@$HOST" "bash -s" <<'REMOTE'
+          set -eu
+          cd /opt/bluek-share
+          npm ci --omit=dev
+          chown -R bluek-share:bluek-share /opt/bluek-share
+          install -d -m 700 /opt/bluek-share/backups
+          PID="$(systemctl show --property=MainPID --value bluek-share)"
+          test "$PID" -gt 0
+          DB_PATH="$(tr '\000' '\n' <"/proc/$PID/environ" | sed -n 's/^BLUEK_SHARE_DB=//p' | head -n 1)"
+          DB_PATH="${DB_PATH:-/opt/bluek-share/server/data/projects.sqlite}"
+          test -f "$DB_PATH"
+          node server/backup-database.mjs "$DB_PATH" /opt/bluek-share/backups
+          systemctl restart bluek-share
+          REMOTE
+
+      - name: Confirm shared API is healthy
+        env:
+          HOST: ${{ secrets.BLUEK_DEPLOY_HOST }}
+          USER: ${{ secrets.BLUEK_DEPLOY_USER }}
+          PORT: ${{ secrets.BLUEK_DEPLOY_PORT }}
+        run: ssh -i ~/.ssh/bluek_deploy -p "$PORT" "$USER@$HOST" 'curl --fail --retry 10 --retry-delay 2 --retry-all-errors http://127.0.0.1:8787/api/health'
 
       - name: Deploy beta static files
         env:
