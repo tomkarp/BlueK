@@ -3,8 +3,11 @@ import { shareRoute } from "./shareRoutes";
 import { reloadOnLinkNavigation } from "./linkNavigation";
 
 const isProgramLink = () =>
-  Boolean(legacyContent(new URLSearchParams(window.location.hash.slice(1)), "run")) ||
-  shareRoute(import.meta.env.BASE_URL, window.location.href)?.kind === "run";
+  !new URLSearchParams(window.location.search).has("import") &&
+  (Boolean(
+    legacyContent(new URLSearchParams(window.location.hash.slice(1)), "run"),
+  ) ||
+    shareRoute(import.meta.env.BASE_URL, window.location.href)?.kind === "run");
 const playing = isProgramLink();
 
 // Choose the UI before loading it, so program links never initialize the IDE

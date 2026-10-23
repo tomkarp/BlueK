@@ -583,8 +583,13 @@
     >
       {language.message(project.shareNotice)}
     </div>{/if}
-  {#if project.linkProblem || project.blueJExportNotice || project.savedProjectsNotice || storageWarning}
+  {#if project.handoffPending || project.linkProblem || project.blueJExportNotice || project.savedProjectsNotice || storageWarning}
     <div class="workspace-notices">
+      {#if project.handoffPending}
+        <div class="project-recovery-notice" role="status" aria-live="polite">
+          <span>{t("ui.handoff.waiting")}</span>
+        </div>
+      {/if}
       {#if project.linkProblem}
         <div class="link-problem-notice" role="alert">
           <span
@@ -870,6 +875,7 @@
     loadSharedProjectFromCode={project.loadSharedProjectFromCode}
     saveShortProject={project.saveShortProject}
     exportProject={project.exportProject}
+    markProjectSaved={project.markProjectSaved}
     exportBlueJProject={project.exportBlueJProject}
     exportHtml={project.exportHtml}
     copySharedLink={project.copySharedLink}

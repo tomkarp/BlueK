@@ -787,3 +787,38 @@ for (const locale of ["en", "de"])
     );
     expect(deleted).toBe(true);
   });
+
+test("CLOUD-13 a successful account save clears the unsaved-project warning", async ({
+  page,
+}) => {
+  let saved = false;
+  await page.route("**/api/account", (route) =>
+    route.fulfill({ json: { user: { id: "account", username: "learner" } } }),
+  );
+  await page.route("**/api/private-projects", (route) => {
+    if (route.request().method() === "GET")
+      return route.fulfill({ json: { projects: [] } });
+    expect(route.request().method()).toBe("POST");
+    saved = true;
+    return route.fulfill({
+      json: { id: "123e4567-e89b-42d3-a456-426614174000", revision: 1 },
+    });
+  });
+  await page.goto(link(project));
+  await page.getByLabel("Project name").fill("Updated project");
+  const dispatchBeforeUnload = () =>
+    page.evaluate(() => {
+      const event = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    });
+  expect(await dispatchBeforeUnload()).toBe(true);
+
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Save", exact: true });
+  await dialog.getByRole("button", { name: /^Save in account/ }).click();
+  await dialog.locator(".cloud-save-choice").click();
+  await expect(dialog).toHaveCount(0);
+  expect(saved).toBe(true);
+  expect(await dispatchBeforeUnload()).toBe(false);
+});

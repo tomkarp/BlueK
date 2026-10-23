@@ -2,7 +2,9 @@
 
 Step 1 implementation for BlueK/bluek.online. Local work never requires an
 account or an API connection. Svelte and the browser interpreter remain the
-only maintained editor/runtime. There is no inf-schule build or handoff bridge.
+only maintained editor/runtime. The optional
+[inf-schule handoff](inf-schule-handoff.md) imports editorial JSON directly from
+its trusted opener without using this service. There is no inf-schule build.
 See [deployment](deployment.md) for the operator cutover and
 [regression evidence](regression-checklist.md) for tests actually run.
 

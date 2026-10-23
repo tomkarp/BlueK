@@ -427,19 +427,21 @@ test("NAV-05 account overview includes project management and supports project a
   await expect(
     save.getByRole("button", { name: /Rename|Delete|Download/ }),
   ).toHaveCount(0);
-  await save
-    .getByRole("button", {
+  await expect(
+    save.getByRole("button", {
       name: "Project management in your account",
       exact: true,
-    })
-    .click();
+    }),
+  ).toHaveCount(0);
+  await save.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.getByRole("button", { name: "Account", exact: true }).click();
   const account = page.getByRole("dialog", { name: "Account", exact: true });
   const manager = account.locator(".cloud-project-management");
   await expect(manager).toContainText("Inheritance exercises");
   await expect(manager).toContainText("Hello World");
   const row = manager
     .locator("li")
-    .filter({ hasText: "Inheritance exercises" });
+    .filter({ has: page.getByRole("checkbox", { name: "Select project “Inheritance exercises”", exact: true }) });
   await expect(
     row.getByRole("button", { name: "Open", exact: true }),
   ).toBeVisible();
@@ -467,6 +469,11 @@ test("NAV-05 account overview includes project management and supports project a
     "Hello World.bluek.json",
     "Inheritance exercises.bluek.json",
   ]);
+  page.once("dialog", (dialog) => dialog.accept());
+  await row.getByRole("button", { name: "Open", exact: true }).click();
+  await expect(account).toBeHidden();
+  await expect(page.getByLabel("Project name")).toHaveValue("Inheritance exercises");
+  await page.getByRole("button", { name: "Account", exact: true }).click();
   const rowHeight = (await row.boundingBox())!.height;
   await row
     .getByRole("button", { name: "Rename “Inheritance exercises”" })
@@ -479,6 +486,7 @@ test("NAV-05 account overview includes project management and supports project a
   await renameInput.press("Enter");
   await expect(account.getByRole("status")).toHaveCount(0);
   await expect(manager).toContainText("Inheritance unit");
+  await expect(page.getByLabel("Project name")).toHaveValue("Inheritance unit");
   expect(renamedRequest).toEqual({
     body: { name: "Inheritance unit" },
     revision: "2",

@@ -31,6 +31,7 @@
     "test:blueplay-demos": "node scripts/smoke-space-invaders.mjs",
     "test:ui": "node scripts/smoke-ui-behavior.mjs",
     "test:gui": "playwright test",
+    "test:handoff": "playwright test tests/gui/project-handoff.spec.ts && playwright test tests/gui/project-handoff.spec.ts --browser=webkit",
     "test:inspector": "node scripts/smoke-inspector-model.mjs",
     "test:blueplay-stage": "node scripts/smoke-blueplay-stage.mjs",
     "test:project-format": "node scripts/smoke-project-format.mjs",

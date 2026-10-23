@@ -65,5 +65,6 @@ Shared instructions for coding agents. Do not add tool-specific files such as
 - [Interface languages](docs/localization.md)
 - [Regression evidence](docs/regression-checklist.md)
 - [Server storage, accounts and moderation](docs/server-storage.md)
+- [Editorial inf-schule handoff](docs/inf-schule-handoff.md)
 - [Deployment](docs/deployment.md)
 - [Vendored interpreter changes](vendor/kotlite-interpreter/PATCH.md)

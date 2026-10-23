@@ -78,6 +78,7 @@ below. No universal performance guarantee is implied.
 | GUI-49 | Long method menu signatures stay on one line | Recorded browser pass |
 | GUI-35 | Short-link display, copy, expiry and loading roundtrip | Recorded browser pass |
 | API-01 | Additive legacy migration, permanent identifier reservations, account/session ownership, immutable seven-day copies, UTF-8 limits, media policy, blocks and retention; content reporting removed | Real temporary-SQLite API test passed, 2026-10-23; live migration/deployment/load capacity pending |
+| HANDOFF-01–14 | Main/beta static app imports editorial inf-schule JSON using one central script and plain chapter links; exact opener/origin, normal runtime/drafts, cancellation, pending edits, local origins, popup fallback and keyboard retry | Chromium 14/14 and WebKit 14/14 passed, 2026-10-24; includes dev.inf-schule.de and domain lookalikes; live inf-schule acceptance pending |
 | CLOUD-01 | Own/counterfeit media rejected by project and program publication UI; local JSON retains every resource | Chromium passed; all 42 actual standards independently checked by client/server helper, 2026-10-22 |
 | CLOUD-02 | Delayed public loads cannot replace edits made while pending; draft survives reload | Chromium passed, 2026-10-22 |
 | CLOUD-03 | German/English account advice, password-manager fields, failed-save backup advice and mobile layout | Chromium passed, 2026-10-22; agent inspected German mobile screenshot; user acceptance pending |
@@ -1683,3 +1684,52 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
   smoke test, project-draft smoke test, Svelte production build and
   `git diff --check`. Initial sandboxed test-server attempts hit `EPERM`; the
   reruns with local server access passed. Visual acceptance remains pending.
+- Unsaved project warning, 2026-10-24: BlueK requests the browser's native
+  leave confirmation when the open project differs from its last explicitly
+  saved state. A JSON download or successful account save clears the warning;
+  browser draft autosave still preserves recovery but does not count as an
+  explicit save. GUI-129 verifies clean, edited and exported states in
+  Chromium; CLOUD-13 verifies successful account saves clear it. The cloud
+  and browser-draft suites passed 29/29; typecheck (zero errors, six existing
+  warnings), i18n and the Svelte production build passed. Visual acceptance
+  remains pending.
+- Editorial inf-schule handoff, 2026-10-24: normal main/beta static builds
+  accept one project from an exact trusted opener, without API/CORS/server
+  dependencies or a special build flag. A central classic script handles plain
+  HTML chapter links and relative JSON paths; main is the default target and
+  beta is selected once in the central include. Loopback source hosts on any
+  port also work. HANDOFF-01–12 passed 12/12 in Chromium and 12/12 in WebKit,
+  including API outage, lookalike origins/claimed origins, wrong window,
+  malformed messages/projects, replay, delayed edits, replacement cancellation,
+  source failure, timeout, reload, full JSON over 1 MiB, local origins, popup
+  blocking and keyboard retry. Typecheck (zero errors, six existing warnings),
+  i18n (877 messages), architecture smoke and the normal production build passed.
+  The compiled static build also imported successfully on simulated main and
+  beta HTTPS origins in both browsers (4/4), with the API blocked; its German
+  success screenshot was inspected. The first static check used an incorrect
+  fixture-name expectation; reading the name from the fixture fixed the check.
+  Earlier combined draft/program-link/handoff checks passed 43/43 in Chromium.
+  An earlier NAV-05 failure used stale UI expectations; the updated test passes
+  and verifies attached-project renaming through the owner action. No inf-schule
+  checkout/SVN changes were made. Public response headers currently show no
+  incompatible COOP; live chapter publication, deployment and user acceptance
+  remain pending.
+- Kotlin chapter integration, 2026-10-24: explicitly authorized changes in the
+  inf-schule checkout append the sender to the existing chapter `_skripte.js`,
+  replace the initial KrokoAlarm content link and add `krokoalarm.bluek.json`.
+  Compared against the previous compressed link: the payload is identical apart
+  from the added project name. Existing Kotlin Playground setup and unrelated
+  getter-page edits are preserved. The actual Kirby page served at loopback
+  port 5197 opened live beta in Chromium and WebKit: import, compilation, main,
+  800-pixel canvas, Run and Pause all passed (2/2); screenshot inspected.
+  The first game check used `.game-stage canvas` although `.game-stage` is the
+  canvas itself; the corrected stage canvas selector passed. The temporary PHP
+  preview requires no Apache changes. No SVN command or commit was performed;
+  inf-schule publication and acceptance remain pending.
+- Editorial development origin, 2026-10-24: HANDOFF-13 reproduced the missing
+  dev.inf-schule.de origin before the fix. BlueK now explicitly trusts that
+  HTTPS origin alongside inf-schule.de/www and loopback hosts on main and beta.
+  No sender/chapter changes are needed; arbitrary subdomains remain excluded.
+  HANDOFF-14 covers a dev-domain lookalike. All 14 cases passed in Chromium and
+  WebKit (28/28); typecheck passed with zero errors/six existing warnings, and
+  the production frontend build passed. Live dev.inf-schule acceptance pending.

@@ -1,4 +1,15 @@
 {
+  "handoff": {
+    "waiting": "Waiting for the project from inf-schule…",
+    "loaded": "Project from inf-schule opened.",
+    "unavailable": "Opening projects directly from inf-schule is unavailable in the offline version. Download the JSON file and open it in BlueK instead.",
+    "invalidRequest": "This project transfer link is invalid. Open the project again using the button on inf-schule.",
+    "noOpener": "The connection to inf-schule is missing. Open the project using its button on inf-schule, or download the JSON file and open it in BlueK.",
+    "timeout": "The project did not arrive from inf-schule. Try its button again, or download the JSON file and open it in BlueK. Your current work has been kept.",
+    "invalidProject": "The file received from inf-schule is not a valid BlueK project. Your current work has been kept.",
+    "changed": "You changed or opened a project while the transfer was pending. Your work has been kept. Open the project again using the button on inf-schule.",
+    "sourceFailed": "inf-schule could not transfer the project. Download the JSON file and open it in BlueK instead. Your current work has been kept."
+  },
   "sidebar": {
     "newFile": "New File",
     "saveProject": "Save Project",

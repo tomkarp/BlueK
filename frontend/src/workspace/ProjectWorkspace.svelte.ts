@@ -69,6 +69,7 @@ import {
   ShareCodeError,
 } from "../shareApi";
 import { shareRoute } from "../shareRoutes";
+import { receiveProjectHandoff } from "../projectHandoff";
 import { programForLink, shortProgramLink } from "../programLinks";
 
 import type {
@@ -172,8 +173,12 @@ export class ProjectWorkspace {
   savedProjectsNotice = $state(false);
   /** Project replacements invalidate cloud associations; source edits keep them. */
   documentVersion = $state(0);
+  /** Fingerprint of the latest project explicitly exported or saved to an account. */
+  private savedPayloadFingerprint = $state("");
   /** Why the opened link could not be loaded; cleared when a project loads. */
   linkProblem: { message: string; expired: boolean } | null = $state(null);
+  handoffPending = $state(false);
+  private disconnectHandoff: () => void = () => {};
   /** What the last BlueJ export could not carry over; stays until closed or the next BlueJ export. */
   blueJExportNotice = $state("");
   blueJImportChoice = $state.raw<{
@@ -428,6 +433,15 @@ export class ProjectWorkspace {
       this.projectName,
       this.defaultTestClass,
     );
+  };
+  hasUnsavedChanges = $derived(
+    JSON.stringify(this.projectPayload()) !== this.savedPayloadFingerprint,
+  );
+  markProjectSaved = () => {
+    this.savedPayloadFingerprint = JSON.stringify(this.projectPayload());
+  };
+  setProjectName = (name: string) => {
+    this.projectName = name;
   };
   commitProjectName = (event: KeyboardEvent) => {
     if (event.key !== "Enter" || event.isComposing) return;
@@ -739,11 +753,13 @@ export class ProjectWorkspace {
   };
   exportProject = () => {
     if (!this.ensureProjectName()) return;
+    const payload = this.projectPayload();
     downloadFile(
-      JSON.stringify(this.projectPayload(), null, 2),
+      JSON.stringify(payload, null, 2),
       "application/json",
       exportFileName(this.projectName, ".bluek.json"),
     );
+    this.markProjectSaved();
     this.host.ui().status = "Project exported";
   };
   /** A ZIP for BlueJ, with the cards where the class diagram shows them. */
@@ -986,6 +1002,7 @@ export class ProjectWorkspace {
       )
         ? imported.defaultTestClass
         : "";
+    this.markProjectSaved();
     this.closeReadme();
     this.selected = 0;
     this.host.editor().resetWindows();
@@ -1198,6 +1215,10 @@ export class ProjectWorkspace {
   moveCard = this.diagram.moveCard;
   endCardDrag = this.diagram.endCardDrag;
   initialize = async (): Promise<void> => {
+    this.markProjectSaved();
+    const handoffRequested = new URLSearchParams(window.location.search).has(
+      "import",
+    );
     const route = shareRoute(import.meta.env.BASE_URL, window.location.href);
     const linkOpensReadme =
       (new URLSearchParams(window.location.hash.slice(1)).get("readme") ??
@@ -1306,6 +1327,31 @@ export class ProjectWorkspace {
     await restoreTab();
     this.autosaveReady = true;
     this.saveAutosave();
+    if (handoffRequested) {
+      const before = JSON.stringify(this.projectPayload());
+      const version = this.documentVersion;
+      this.disconnectHandoff = receiveProjectHandoff({
+        waiting: (waiting) => {
+          this.handoffPending = waiting;
+        },
+        failed: (problem) => {
+          this.linkProblem = {
+            message: this.text(`ui.handoff.${problem}`),
+            expired: false,
+          };
+        },
+        load: async (payload) => {
+          if (
+            version !== this.documentVersion ||
+            before !== JSON.stringify(this.projectPayload())
+          )
+            return "changed";
+          return (await this.loadProject(payload)) ? "loaded" : "cancelled";
+        },
+        loaded: () => this.showExportNotice(this.text("ui.handoff.loaded")),
+      });
+      return;
+    }
     if (hasExplicitProject) {
       const problem = await openLinkedProject();
       if (problem) this.linkProblem = problem;
@@ -1335,6 +1381,11 @@ export class ProjectWorkspace {
       this.saveAutosave();
       this.drafts.release();
     };
+    const beforeunload = (event: BeforeUnloadEvent) => {
+      if (!this.hasUnsavedChanges) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
     const pageshow = (event: PageTransitionEvent) => {
       if (event.persisted) {
         this.autosaveReady = false;
@@ -1349,12 +1400,15 @@ export class ProjectWorkspace {
         this.refreshRecentProjects();
     };
     window.addEventListener("pagehide", pagehide);
+    window.addEventListener("beforeunload", beforeunload);
     window.addEventListener("pageshow", pageshow);
     window.addEventListener("storage", storageChanged);
     return () => {
+      this.disconnectHandoff();
       pagehide();
       window.clearInterval(timer);
       window.removeEventListener("pagehide", pagehide);
+      window.removeEventListener("beforeunload", beforeunload);
       window.removeEventListener("pageshow", pageshow);
       window.removeEventListener("storage", storageChanged);
     };

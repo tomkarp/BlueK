@@ -35,7 +35,8 @@ interface CloudHost {
   language: () => Pick<Language, "t">;
   project: () => {
     projectPayload: () => SavedProject;
-    projectName: string;
+    readonly projectName: string;
+    setProjectName: (name: string) => void;
     loadProject: (
       payload: unknown,
       message?: string,
@@ -259,7 +260,7 @@ export class CloudWorkspace {
       );
       if (this.binding?.id === id) {
         this.binding = { ...this.binding, revision: result.revision };
-        if (this.attached) this.host.project().projectName = name;
+        if (this.attached) this.host.project().setProjectName(name);
       }
     });
   duplicate = (id: string) =>
