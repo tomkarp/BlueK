@@ -86,7 +86,8 @@ below. No universal performance guarantee is implied.
 | GUI-156 | Local save options require a non-empty name for an unnamed project | Chromium passed, including blank-name rejection and JSON download, 2026-10-23 |
 | NAV-01 | Four project actions, separated account/view controls, grouped Save choices, separate Share and stable sidebar in English/German; Restore is the rightmost Open tab | Chromium passed at desktop and 390 px Save width; agent inspected German screenshots, 2026-10-22; human acceptance pending |
 | NAV-02 | Sign-in from Save returns without uploading; explicit save/update remains in Save and account settings remain separate | Chromium passed, 2026-10-22 |
-| NAV-03 | Private projects open/delete through Open; canceling sign-in retains the selected source | Chromium passed, 2026-10-22 |
+| NAV-03 | Open lists account projects for opening only; project management in Account owns rename/delete; canceling sign-in retains the selected source | Chromium passed, 2026-10-23 |
+| NAV-05 | Save reuses the toolbar project name; account project management provides open, rename, delete, individual JSON and all-project ZIP downloads | Chromium passed, 2026-10-23 |
 | RT-02 | Validate all files before initializer side effects | Recorded runtime pass; `test:runtime-state` |
 | RT-03 | One class or top-level declarations per file | Recorded runtime pass; `test:runtime-state` |
 | RT-04 | Suspendable Thread.sleep, cancellation and invalid arguments | Recorded runtime/browser pass |
@@ -1466,6 +1467,37 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
   Open updates the loaded project name, while NAV-05 confirms the Save list
   sends the displayed revision and updates in place. Human visual acceptance
   remains pending.
+- Account project rename follow-up, 2026-10-23: removed the transient success
+  notice after renaming. The updated name confirms the change without making
+  the account dialog grow and shift; focused rename checks assert the notice is
+  absent. Typecheck passed with 0 errors and 6 warnings; i18n passed (856
+  German/English messages). GUI verification could not start because the test
+  server was denied permission to bind to 127.0.0.1:5194 (EPERM).
+- Account dialog layout follow-up, 2026-10-23: removed the transient
+  “Working…” paragraph from the account dialog; it appeared during async
+  actions and caused the same temporary height change. The dialog exposes its
+  busy state through `aria-busy`, and busy controls remain disabled. Typecheck
+  and i18n passed; GUI verification remains blocked by the bind permission
+  failure above.
+- Account rename field sizing, 2026-10-23: set the inline project-name input
+  to the same 24 px height as the regular title row and tightened the GUI
+  regression assertion to a 1 px row-height tolerance. Typecheck and i18n
+  passed; GUI verification remains blocked by the bind permission failure.
+- Account project duplication, 2026-10-23: added a per-project duplicate action
+  in account management. It copies the validated saved project payload through
+  the private-project API, assigns a localized “(Copy)”/“(Kopie)” name, and
+  inserts the new independent project at the top of the list. NAV-07 covers the
+  submitted payload and new list item. Typecheck passed (0 errors, 6 existing
+  warnings), i18n passed (858 German/English messages), the workspace
+  controller smoke passed and Vite production build passed. GUI verification
+  could not start because its server port bind is denied (EPERM); the share
+  server smoke was blocked by the same restriction on 127.0.0.1:18787.
+- Private-project JSON download extensions, 2026-10-23: account project
+  downloads and JSON entries in the all-projects ZIP now use `.bluek.json`,
+  matching the regular project download and player export. NAV-05 asserts the
+  individual filename and ZIP entry names. Typecheck, i18n, workspace smoke
+  and Vite build passed; GUI verification could not start because local port
+  binding is denied (EPERM).
 - Content-report removal and Open dialog sizing, 2026-10-23: removed the
   public-project report control from editor/player, the public reporting API,
   operator CLI commands and current documentation. Technical “Problem melden…”
@@ -1521,8 +1553,35 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
 - Open source order, 2026-10-23: The Open tabs are File, Account, Link and
   Restore, and each newly opened dialog selects File. NAV-01 checks the order
   and verifies the default both on first open and after reopening.
-- Account project rows, 2026-10-23: The project card, rename action and delete
-  action stretch to the same row height. NAV-03 checks their browser geometry.
+- Account project management, 2026-10-23: Open and Save now expose only their
+  direct project actions and link to management inside the Account dialog. The
+  toolbar project name is reused for account saves, including the existing
+  required-name prompt. Management supports open, rename, delete, per-project
+  JSON and all-project ZIP downloads; duplicate status messages were removed.
+  CLOUD-03/04/05 and NAV-03/05 passed in Chromium (6/6); typecheck (zero
+  errors, six existing warnings), i18n and `git diff --check` passed. Visual
+  acceptance remains pending.
+- Account bulk-delete checkboxes, 2026-10-23: Reset project-selection checkbox
+  sizing and label layout that inherited the dialog's full-width text-input
+  styles. CLOUD-08 now checks only projects 1, 4 and 5, verifies compact
+  checkbox geometry, and confirms the other projects remain. Typecheck, i18n
+  and direct Vite production build passed. Playwright could not launch Chromium
+  in this environment (macOS Mach port permission denied); visual acceptance
+  remains pending.
+- Account overview layout, 2026-10-23: Project management now appears directly
+  in the signed-in account view. The project list has its own scroll area,
+  password changes use a separate dialog, and sign-out is compact. The account
+  controls use a bordered card, and project management uses a single underlined
+  heading based on the Settings dialog's section headings. NAV-05 and CLOUD-08
+  were updated for the new layout. Typecheck and i18n passed; Playwright
+  execution is still blocked by Chromium's macOS Mach port permission error.
+  Visual acceptance remains pending.
+- Account project rename interaction, 2026-10-23: Rename now edits the title
+  inline, focuses the field, saves with Enter, and cancels with Escape. The
+  pencil sits beside the project name without a button frame, keeping the row's
+  actions and layout in place. NAV-05 checks focus, stable row height and Enter
+  submission. Typecheck, i18n and direct Vite production build passed; visual
+  acceptance remains pending.
 - Beta account rollout, 2026-10-23: the beta workflow builds and tests the
   account API before deployment, backs up the running service's configured
   SQLite path (or its unchanged legacy default), restarts the shared API, checks

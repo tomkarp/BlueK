@@ -13,12 +13,9 @@
   import type { ShareLinkDialog } from "../uiTypes";
   import type { ProjectDraftSummary } from "../projectDraftStorage";
   export let cloud: CloudWorkspace;
-  export let projectName: string;
   export let serverProjectBytes = 0;
   export let recentProjects: ProjectDraftSummary[];
   export let openRecentProject: (id: string) => Promise<void>;
-  export let deleteRecentProject: (id: string) => void;
-  export let deleteAllRecentProjects: () => void;
   export let toolbarDialog: "open" | "save" | "share" | null;
   export let shareLinkDialog: ShareLinkDialog | null;
   // A compile-time condition also removes server-only controls from offline JS.
@@ -81,7 +78,11 @@
   }
   function showPrivateSave() {
     saveView = "account";
-    void cloud.refresh(true);
+    void cloud.refresh();
+  }
+  function openProjectManagement() {
+    toolbarDialog = null;
+    void cloud.show("manage");
   }
   export let openProjectDrop: (event: DragEvent) => Promise<void>;
   export let blueJImportChoice: {
@@ -172,23 +173,9 @@
                 <h4>{t("ui.transfer.browserRecovery")}</h4>
                 <p>{t("ui.transfer.savedInThisBrowserChooseAProjectTo")}</p>
               </div>
-              {#if recentProjects.length}<button
-                  class="delete-all-projects"
-                  aria-label={t("ui.transfer.deleteAllSavedProjects")}
-                  on:click={deleteAllRecentProjects}
-                >
-                  <svg viewBox="0 0 24 24" aria-hidden="true"
-                    ><path
-                      d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"
-                    /></svg
-                  >
-                  <span>{t("ui.transfer.deleteAll")}</span>
-                </button>{/if}
             </div>
             {#if recentProjects.length}<div class="recent-project-list">
-                {#each showAllRecoveryDrafts
-                  ? recentProjects
-                  : recentProjects.slice(0, 3) as project (project.id)}
+                {#each showAllRecoveryDrafts ? recentProjects : recentProjects.slice(0, 3) as project (project.id)}
                   <div class="recent-project-row">
                     <button
                       class="recent-project"
@@ -210,29 +197,14 @@
                         )}</span
                       >
                     </button>
-                    <button
-                      class="delete-recent-project"
-                      aria-label={t("ui.transfer.deleteSavedProject0", [
-                        project.name,
-                      ])}
-                      title={t("ui.transfer.deleteSavedProject0", [
-                        project.name,
-                      ])}
-                      on:click={() => deleteRecentProject(project.id)}
-                    >
-                      <svg viewBox="0 0 24 24" aria-hidden="true"
-                        ><path
-                          d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"
-                        /></svg
-                      >
-                    </button>
                   </div>
                 {/each}
               </div>
               {#if recentProjects.length > 3}<button
                   class="recovery-drafts-toggle"
                   aria-expanded={showAllRecoveryDrafts}
-                  on:click={() => (showAllRecoveryDrafts = !showAllRecoveryDrafts)}
+                  on:click={() =>
+                    (showAllRecoveryDrafts = !showAllRecoveryDrafts)}
                   >{showAllRecoveryDrafts
                     ? t("ui.transfer.showFewerRecoveryDrafts")
                     : t("ui.transfer.showMoreRecoveryDrafts", [
@@ -242,7 +214,7 @@
                 {t("ui.transfer.noBrowserProjects")}
               </p>{/if}
           </section>{:else if openSource === "account"}<section
-            class="open-source-panel"
+            class="open-source-panel open-account-panel"
             role="tabpanel"
             id="open-panel-account"
             aria-labelledby="open-source-account"
@@ -253,6 +225,7 @@
               onLoaded={() => {
                 toolbarDialog = null;
               }}
+              onManage={openProjectManagement}
               {exportProject}
             />
           </section>{:else if openSource === "computer"}<section
@@ -378,7 +351,7 @@
                 aria-label={t("ui.transfer.htmlFile")}
                 disabled={!files.length}
                 on:click={() => {
-                    if (!ensureProjectName()) return;
+                  if (!ensureProjectName()) return;
                   saveView = "html";
                 }}
                 ><strong>{t("ui.transfer.htmlFile")}</strong><span
@@ -391,10 +364,10 @@
             <CloudProjectPanel
               {cloud}
               mode="save"
-              bind:projectName
               onLoaded={() => {
                 toolbarDialog = null;
               }}
+              onManage={openProjectManagement}
               {exportProject}
             />
           {:else if saveView === "html"}
@@ -451,21 +424,20 @@
                   <legend id="link-options-label"
                     >{t("ui.transfer.whenOpeningALink")}</legend
                   >
-                  {#if readme.trim()}<label class="share-link-option"
-                      title={t(
-                        "ui.transfer.showREADMEMdRightAwayWhenThisLink",
-                      )}
+                  {#if readme.trim()}<label
+                      class="share-link-option"
+                      title={t("ui.transfer.showREADMEMdRightAwayWhenThisLink")}
                       ><input
                         type="checkbox"
                         aria-label={t("ui.transfer.openREADMEMdWithTheLink")}
                         bind:checked={shareWithReadme}
                       /><span>{t("ui.transfer.openREADME")}</span></label
                     >{/if}
-                  {#if canShareState}<label class="share-link-option"
-                      title={t(
-                        "ui.transfer.loadStateFrom0IntoTheObjectBench",
-                        [defaultTestClass],
-                      )}
+                  {#if canShareState}<label
+                      class="share-link-option"
+                      title={t("ui.transfer.loadStateFrom0IntoTheObjectBench", [
+                        defaultTestClass,
+                      ])}
                       ><input
                         type="checkbox"
                         aria-label={t(

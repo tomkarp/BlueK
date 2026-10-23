@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { unzipSync } from "fflate";
 
 const project = {
   format: "bluek-project",
@@ -75,7 +76,8 @@ for (const locale of ["en", "de"])
     ]);
     expect(
       Math.abs(
-        titleBounds!.x + titleBounds!.width / 2 -
+        titleBounds!.x +
+          titleBounds!.width / 2 -
           (toolbarBounds!.x + toolbarBounds!.width / 2),
       ),
     ).toBeLessThan(1);
@@ -88,9 +90,9 @@ for (const locale of ["en", "de"])
     expect(titleAtNarrowWidth!.x).toBeGreaterThanOrEqual(
       leftAction!.x + leftAction!.width,
     );
-    expect(titleAtNarrowWidth!.x + titleAtNarrowWidth!.width).toBeLessThanOrEqual(
-      viewActions!.x,
-    );
+    expect(
+      titleAtNarrowWidth!.x + titleAtNarrowWidth!.width,
+    ).toBeLessThanOrEqual(viewActions!.x);
     await page.setViewportSize({ width: 1440, height: 1000 });
     const sidebar = await page.locator(".sidebar").innerText();
     await toolbar
@@ -195,16 +197,16 @@ for (const locale of ["en", "de"])
     );
     await open.locator("#open-source-browser").click();
     await expect(open.locator("#open-panel-browser")).toBeVisible();
-    const openHeight = await open.evaluate((element) =>
-      element.getBoundingClientRect().height,
+    const openHeight = await open.evaluate(
+      (element) => element.getBoundingClientRect().height,
     );
     expect(apiCalls).toBe(1);
     await open.locator("#open-source-account").click();
     await expect(open.locator("#open-panel-account")).toBeVisible();
     expect(
       Math.abs(
-        (await open.evaluate((element) =>
-          element.getBoundingClientRect().height,
+        (await open.evaluate(
+          (element) => element.getBoundingClientRect().height,
         )) - openHeight,
       ),
     ).toBeLessThan(1);
@@ -214,8 +216,8 @@ for (const locale of ["en", "de"])
     ).toBeVisible();
     expect(
       Math.abs(
-        (await open.evaluate((element) =>
-          element.getBoundingClientRect().height,
+        (await open.evaluate(
+          (element) => element.getBoundingClientRect().height,
         )) - openHeight,
       ),
     ).toBeLessThan(1);
@@ -249,9 +251,7 @@ test("GUI-156 saving an unnamed project requires a non-empty project name", asyn
     format: "bluek-project",
     version: 1,
     projectName: "",
-    files: [
-      { fileName: "App.kt", kind: "functions", source: "fun main() {}" },
-    ],
+    files: [{ fileName: "App.kt", kind: "functions", source: "fun main() {}" }],
   };
   await page.goto(
     "/#bluek=p1." + Buffer.from(JSON.stringify(unnamed)).toString("base64url"),
@@ -350,30 +350,49 @@ test("NAV-02 signing in from Save returns to the save step without silently uplo
     account.getByRole("button", { name: "Change password", exact: true }),
   ).toBeVisible();
   await expect(
-    account.getByRole("button", { name: /Save|Open project|Download/ }),
-  ).toHaveCount(0);
+    account.locator(".cloud-project-management"),
+  ).toBeVisible();
+  await account
+    .getByRole("button", { name: "Change password", exact: true })
+    .click();
+  await expect(
+    page.getByRole("dialog", { name: "Change password", exact: true }),
+  ).toBeVisible();
 });
 
-test("NAV-05 account save names the project and lists existing private projects", async ({
+test("NAV-05 account overview includes project management and supports project actions and ZIP export", async ({
   page,
 }, info) => {
   const firstId = "00000000-0000-0000-0000-000000000002";
   let renamedRequest: { body: unknown; revision: string | undefined } | null =
     null;
+  let firstName = "Inheritance exercises";
+  let firstRevision = 2;
   await page.route("**/api/account", (route) =>
     route.fulfill({ json: { user: { id: "a", username: "learner" } } }),
   );
   await page.route("**/api/private-projects/*", async (route) => {
-    renamedRequest = {
-      body: route.request().postDataJSON(),
-      revision: route.request().headers()["if-match"],
-    };
-    await route.fulfill({
+    const request = route.request();
+    if (request.method() === "PATCH") {
+      renamedRequest = {
+        body: request.postDataJSON(),
+        revision: request.headers()["if-match"],
+      };
+      firstName = request.postDataJSON().name;
+      firstRevision++;
+      return route.fulfill({
+        json: {
+          id: firstId,
+          name: firstName,
+          updatedAt: 1792800000000,
+          revision: firstRevision,
+        },
+      });
+    }
+    return route.fulfill({
       json: {
-        id: firstId,
-        name: "Inheritance unit",
-        updatedAt: 1792800000000,
-        revision: 3,
+        project: { ...project, projectName: firstName },
+        revision: firstRevision,
       },
     });
   });
@@ -383,9 +402,9 @@ test("NAV-05 account save names the project and lists existing private projects"
         projects: [
           {
             id: firstId,
-            name: "Inheritance exercises",
+            name: firstName,
             updatedAt: 1792700000000,
-            revision: 2,
+            revision: firstRevision,
           },
           {
             id: "00000000-0000-0000-0000-000000000003",
@@ -401,22 +420,65 @@ test("NAV-05 account save names the project and lists existing private projects"
   await page.getByRole("button", { name: "Save", exact: true }).click();
   const save = page.getByRole("dialog", { name: "Save", exact: true });
   await save.getByRole("button", { name: /^Save in account/ }).click();
-  await expect(save.getByLabel("Name for this account copy")).toHaveValue(
+  await expect(page.getByLabel("Project name")).toHaveValue(
     project.projectName,
   );
-  const saved = save.locator(".cloud-saved-projects");
-  await expect(saved).toContainText("Projects in your account");
-  await expect(saved).toContainText("Inheritance exercises");
-  await expect(saved).toContainText("Hello World");
-  await saved
+  await expect(save.getByLabel(/Name for this account copy/)).toHaveCount(0);
+  await expect(
+    save.getByRole("button", { name: /Rename|Delete|Download/ }),
+  ).toHaveCount(0);
+  await save
+    .getByRole("button", {
+      name: "Project management in your account",
+      exact: true,
+    })
+    .click();
+  const account = page.getByRole("dialog", { name: "Account", exact: true });
+  const manager = account.locator(".cloud-project-management");
+  await expect(manager).toContainText("Inheritance exercises");
+  await expect(manager).toContainText("Hello World");
+  const row = manager
+    .locator("li")
+    .filter({ hasText: "Inheritance exercises" });
+  await expect(
+    row.getByRole("button", { name: "Open", exact: true }),
+  ).toBeVisible();
+  const [jsonDownload] = await Promise.all([
+    page.waitForEvent("download"),
+    row.getByRole("button", { name: "Download JSON", exact: true }).click(),
+  ]);
+  expect(await jsonDownload.suggestedFilename()).toBe(
+    "Inheritance exercises.bluek.json",
+  );
+  const [zipDownload] = await Promise.all([
+    page.waitForEvent("download"),
+    manager
+      .getByRole("button", {
+        name: "Download all projects as ZIP",
+        exact: true,
+      })
+      .click(),
+  ]);
+  expect(await zipDownload.suggestedFilename()).toBe("BlueK-Projekte.zip");
+  const zipStream = await zipDownload.createReadStream();
+  const zipChunks: Buffer[] = [];
+  for await (const chunk of zipStream) zipChunks.push(Buffer.from(chunk));
+  expect(Object.keys(unzipSync(Buffer.concat(zipChunks))).sort()).toEqual([
+    "Hello World.bluek.json",
+    "Inheritance exercises.bluek.json",
+  ]);
+  const rowHeight = (await row.boundingBox())!.height;
+  await row
     .getByRole("button", { name: "Rename “Inheritance exercises”" })
     .click();
-  await saved
-    .getByLabel("New name for “Inheritance exercises”")
-    .fill("Inheritance unit");
-  await saved.getByRole("button", { name: "Rename", exact: true }).click();
-  await expect(save.getByRole("status")).toContainText("Project renamed.");
-  await expect(saved).toContainText("Inheritance unit");
+  const renameInput = manager.getByLabel("New name for “Inheritance exercises”");
+  await expect(renameInput).toBeFocused();
+  await expect(row.getByRole("button", { name: "Open", exact: true })).toBeVisible();
+  expect(Math.abs((await row.boundingBox())!.height - rowHeight)).toBeLessThanOrEqual(1);
+  await renameInput.fill("Inheritance unit");
+  await renameInput.press("Enter");
+  await expect(account.getByRole("status")).toHaveCount(0);
+  await expect(manager).toContainText("Inheritance unit");
   expect(renamedRequest).toEqual({
     body: { name: "Inheritance unit" },
     revision: "2",
@@ -446,7 +508,63 @@ test("NAV-06 shared project codes are grouped for display and accept pasted link
   expect(requestedCode).toBe("7m4kr9wp3x6d");
 });
 
-test("NAV-03 private projects open and delete through Open; canceling login keeps the selected source", async ({
+test("NAV-07 account project management creates a separate named copy", async ({
+  page,
+}) => {
+  const sourceId = "00000000-0000-0000-0000-000000000011";
+  const copyId = "00000000-0000-0000-0000-000000000012";
+  let projects = [
+    {
+      id: sourceId,
+      name: "Navigation project",
+      updatedAt: 1792700000000,
+      revision: 1,
+    },
+  ];
+  let duplicatedPayload: unknown;
+  await page.route("**/api/account", (route) =>
+    route.fulfill({ json: { user: { id: "a", username: "learner" } } }),
+  );
+  await page.route("**/api/private-projects/*", (route) =>
+    route.fulfill({ json: { project, revision: 1 } }),
+  );
+  await page.route("**/api/private-projects", async (route) => {
+    if (route.request().method() === "GET")
+      return route.fulfill({ json: { projects } });
+    duplicatedPayload = route.request().postDataJSON();
+    projects = [
+      {
+        id: copyId,
+        name: "Navigation project (Copy)",
+        updatedAt: Date.now(),
+        revision: 1,
+      },
+      ...projects,
+    ];
+    return route.fulfill({ status: 201, json: { id: copyId, revision: 1 } });
+  });
+  await page.goto(link);
+  await page
+    .locator(".toolbar-account")
+    .getByRole("button", { name: "Account", exact: true })
+    .click();
+  const account = page.getByRole("dialog", { name: "Account", exact: true });
+  const manager = account.locator(".cloud-project-management");
+  const sourceRow = manager.locator("li").filter({
+    hasText: "Navigation project",
+  });
+  await sourceRow
+    .getByRole("button", { name: "Duplicate “Navigation project”" })
+    .click();
+  await expect(manager).toContainText("Navigation project (Copy)");
+  expect(duplicatedPayload).toEqual({
+    ...project,
+    projectName: "Navigation project (Copy)",
+  });
+  await expect(manager.locator("li")).toHaveCount(2);
+});
+
+test("NAV-03 Open only opens private projects; management owns rename and delete", async ({
   page,
 }, info) => {
   let signedIn = false,
@@ -520,42 +638,49 @@ test("NAV-03 private projects open and delete through Open; canceling login keep
   await expect(account).toBeHidden();
   await expect(open.getByRole("button", { name: "Refresh" })).toHaveCount(0);
   const projectRow = open.locator("#open-panel-account .cloud-projects li");
-  await expect(projectRow.locator(".cloud-project-rename svg")).toBeVisible();
-  await expect(projectRow.locator(".cloud-project-delete svg")).toBeVisible();
-  const rowElementHeights = await Promise.all(
-    [
-      ".cloud-project-open",
-      ".cloud-project-rename",
-      ".cloud-project-delete",
-    ].map(async (selector) =>
-      (await projectRow.locator(selector).boundingBox())!.height,
-    ),
-  );
-  expect(
-    Math.max(...rowElementHeights) - Math.min(...rowElementHeights),
-  ).toBeLessThan(1);
-  await open.getByRole("button", { name: "Rename “Account project”" }).click();
+  await expect(projectRow.locator(".cloud-project-open")).toBeVisible();
+  await expect(
+    projectRow.getByRole("button", { name: /Rename|Delete|Download/ }),
+  ).toHaveCount(0);
   await open
-    .getByLabel("New name for “Account project”")
-    .fill("Renamed account project");
-  await open.getByRole("button", { name: "Rename", exact: true }).click();
-  await expect(open.getByRole("status")).toContainText("Project renamed.");
+    .getByRole("button", {
+      name: "Project management in your account",
+      exact: true,
+    })
+    .click();
+  const managerDialog = page.getByRole("dialog", {
+    name: "Account",
+    exact: true,
+  });
+  const manager = managerDialog.locator(".cloud-project-management");
+  await expect(manager).toContainText("Account project");
+  await manager
+    .getByRole("button", { name: "Rename “Account project”" })
+    .click();
+  const renameInput = manager.getByLabel("New name for “Account project”");
+  await renameInput.fill("Renamed account project");
+  await renameInput.press("Enter");
+  await expect(managerDialog.getByRole("status")).toHaveCount(0);
   await page.screenshot({
-    path: info.outputPath("open-account-projects-renamed.png"),
+    path: info.outputPath("account-projects-renamed.png"),
   });
   page.once("dialog", (dialog) => dialog.accept());
-  await open
-    .getByRole("button", { name: /^Renamed account project/ })
-    .click();
-  await expect(open).toBeHidden();
+  await manager.getByRole("button", { name: "Open", exact: true }).click();
+  await expect(managerDialog).toBeHidden();
   await expect(page.getByLabel("Project name")).toHaveValue(
     "Renamed account project",
   );
-  await page.getByRole("button", { name: "Open", exact: true }).click();
-  await open.locator("#open-source-account").click();
+  await page.getByRole("button", { name: "Account", exact: true }).click();
+  const reopenedManager = page.getByRole("dialog", {
+    name: "Account",
+    exact: true,
+  });
+  const projectManager = reopenedManager.locator(".cloud-project-management");
   page.once("dialog", (dialog) => dialog.accept());
-  await open.locator(".cloud-project-delete").click();
-  await expect(open).toContainText("No private projects saved yet.");
+  await projectManager
+    .getByRole("button", { name: "Delete “Renamed account project”" })
+    .click();
+  await expect(projectManager).toContainText("No private projects saved yet.");
   await expect(page.getByLabel("Project name")).toHaveValue(
     "Renamed account project",
   );

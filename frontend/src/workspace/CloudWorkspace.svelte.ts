@@ -6,6 +6,7 @@ import {
 } from "../apiClient";
 import type { SavedProject } from "../projectFormat";
 import type { Language } from "../i18n/Language.svelte";
+import { strToU8, zipSync } from "fflate";
 type User = { id: string; username: string };
 type CloudProject = {
   id: string;
@@ -13,6 +14,23 @@ type CloudProject = {
   updatedAt: number;
   revision: number;
 };
+function safeFilename(value: string) {
+  return (
+    value
+      .normalize("NFKC")
+      .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_")
+      .replace(/[. ]+$/g, "")
+      .trim() || "BlueK-Projekt"
+  );
+}
+function downloadFile(filename: string, data: BlobPart, type: string) {
+  const url = URL.createObjectURL(new Blob([data], { type }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 interface CloudHost {
   language: () => Pick<Language, "t">;
   project: () => {
@@ -32,7 +50,7 @@ interface CloudHost {
 export class CloudWorkspace {
   constructor(private readonly host: CloudHost) {}
   open = $state(false);
-  private intent: "account" | "open" | "save" = "account";
+  private intent: "account" | "open" | "save" | "manage" = "account";
   busy = $state(false);
   sessionReady = $state(false);
   user: User | null = $state(null);
@@ -111,10 +129,12 @@ export class CloudWorkspace {
     this.refreshPromise = pending;
     return pending;
   };
-  show = (intent: "account" | "open" | "save" = "account") => {
+  show = (intent: "account" | "open" | "save" | "manage" = "account") => {
     this.intent = intent;
     this.open = true;
-    return this.refresh(intent === "open");
+    return this.refresh(
+      intent === "account" || intent === "open" || intent === "manage",
+    );
   };
   authenticate = (register: boolean, username: string, password: string) =>
     this.run(async () => {
@@ -125,8 +145,14 @@ export class CloudWorkspace {
         )
       ).user;
       this.binding = null;
-      if (this.intent !== "account") this.open = false;
-      if (this.intent === "open") await this.list();
+      if (this.intent !== "account" && this.intent !== "manage")
+        this.open = false;
+      if (
+        this.intent === "account" ||
+        this.intent === "open" ||
+        this.intent === "manage"
+      )
+        await this.list();
     });
   logout = () =>
     this.run(async () => {
@@ -214,7 +240,41 @@ export class CloudWorkspace {
         this.binding = { ...this.binding, revision: result.revision };
         if (this.attached) this.host.project().projectName = name;
       }
-      this.notice = this.text("ui.cloud.renamed");
+    });
+  duplicate = (id: string) =>
+    this.run(async () => {
+      const source = this.projects.find((item) => item.id === id);
+      if (!source) throw new ApiError("private-missing");
+      const { project } = await apiRequest<{ project: SavedProject }>(
+        `/api/private-projects/${id}`,
+      );
+      checkServerProject(project);
+      const suffix = this.text("ui.cloud.copySuffix");
+      const baseName = (source.name || project.projectName || "BlueK-Projekt")
+        .trim();
+      const name = `${baseName.slice(0, 120 - suffix.length - 3)} (${suffix})`;
+      const copy = { ...project, projectName: name };
+      checkServerProject(copy);
+      const result = await apiRequest<{ id: string; revision: number }>(
+        "/api/private-projects",
+        { method: "POST", body: JSON.stringify(copy) },
+      );
+      if (
+        typeof result.id !== "string" ||
+        !/^[a-f0-9-]{36}$/.test(result.id) ||
+        result.id === id ||
+        result.revision !== 1
+      )
+        throw new ApiError("network");
+      this.projects = [
+        {
+          id: result.id,
+          name,
+          updatedAt: Date.now(),
+          revision: result.revision,
+        },
+        ...this.projects,
+      ];
     });
   load = (id: string) =>
     this.run(async () => {
@@ -247,4 +307,73 @@ export class CloudWorkspace {
       await this.list();
     });
   };
+  removeMany = (ids: string[]) =>
+    this.run(async () => {
+      const selected = [...new Set(ids)].filter((id) =>
+        this.projects.some((project) => project.id === id),
+      );
+      const removed: string[] = [];
+      let failure: unknown;
+      for (const id of selected) {
+        try {
+          await apiRequest(`/api/private-projects/${id}`, {
+            method: "DELETE",
+          });
+          removed.push(id);
+        } catch (error) {
+          failure = error;
+          break;
+        }
+      }
+      if (this.binding && removed.includes(this.binding.id))
+        this.binding = null;
+      try {
+        await this.list();
+      } catch (error) {
+        failure ??= error;
+      }
+      if (failure) throw failure;
+      this.notice = this.text(
+        removed.length === 1
+          ? "ui.cloud.projectDeleted"
+          : "ui.cloud.projectsDeleted",
+        [removed.length],
+      );
+    });
+  downloadProjectJSON = (id: string) =>
+    this.run(async () => {
+      const result = await apiRequest<{ project: SavedProject }>(
+        `/api/private-projects/${id}`,
+      );
+      checkServerProject(result.project);
+      const name = safeFilename(result.project.projectName || "BlueK-Projekt");
+      downloadFile(
+        `${name}.bluek.json`,
+        JSON.stringify(result.project, null, 2),
+        "application/json",
+      );
+      this.notice = this.text("ui.cloud.projectDownloaded");
+    });
+  downloadAllProjectsZip = () =>
+    this.run(async () => {
+      if (!this.projects.length) return;
+      const files: Record<string, Uint8Array> = {};
+      const usedNames = new Set<string>();
+      for (const item of this.projects) {
+        const result = await apiRequest<{ project: SavedProject }>(
+          `/api/private-projects/${item.id}`,
+        );
+        checkServerProject(result.project);
+        const base = safeFilename(item.name || "BlueK-Projekt");
+        let filename = `${base}.bluek.json`;
+        let suffix = 2;
+        while (usedNames.has(filename.toLocaleLowerCase())) {
+          filename = `${base} (${suffix++}).bluek.json`;
+        }
+        usedNames.add(filename.toLocaleLowerCase());
+        files[filename] = strToU8(JSON.stringify(result.project, null, 2));
+      }
+      downloadFile("BlueK-Projekte.zip", zipSync(files), "application/zip");
+      this.notice = this.text("ui.cloud.projectsDownloaded");
+    });
 }

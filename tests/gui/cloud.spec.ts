@@ -173,7 +173,7 @@ for (const locale of ["en", "de"])
         : "manual account recovery",
     );
     await expect(cloud).toContainText(
-      de ? "keine Mindestaufbewahrungsfrist" : "not a minimum retention period",
+      de ? "nach längerer Zeit ohne Anmeldung" : "after an extended period",
     );
     await expect(cloud.locator("input[type=email]")).toHaveCount(0);
     await expect(cloud.locator("input[autocomplete=new-password]")).toHaveCount(
@@ -206,6 +206,7 @@ for (const locale of ["en", "de"])
         name: de ? /^Im Konto speichern/ : /^Save in account/,
       })
       .click();
+    await expect(save.getByText(/Angemeldet als|Signed in as/)).toHaveCount(0);
     await save
       .getByRole("button", {
         name: de
@@ -218,10 +219,11 @@ for (const locale of ["en", "de"])
       de ? "lokale JSON-Sicherung" : "local JSON backup",
     );
     await expect(
-      page.getByLabel(
-        de ? "Name der Kontokopie" : "Name for this account copy",
-      ),
+      page.getByLabel(de ? "Projektname" : "Project name"),
     ).toHaveValue(project.projectName);
+    await expect(
+      save.getByLabel(/Name der Kontokopie|Name for this account copy/),
+    ).toHaveCount(0);
     await expect(save.getByRole("status")).toHaveCount(0);
     await page.setViewportSize({ width: 390, height: 720 });
     const bounds = await save.boundingBox();
@@ -257,9 +259,10 @@ test("CLOUD-04 a malformed success receipt does not claim that a private save su
     "download a local JSON backup",
   );
   await expect(cloud.getByRole("status")).toHaveCount(0);
-  await expect(page.getByLabel("Name for this account copy")).toHaveValue(
+  await expect(page.getByLabel("Project name")).toHaveValue(
     project.projectName,
   );
+  await expect(cloud.getByLabel(/Name for this account copy/)).toHaveCount(0);
 });
 
 test("CLOUD-05 saving an unnamed project to an account requires a name", async ({
@@ -286,7 +289,7 @@ test("CLOUD-05 saving an unnamed project to an account requires a name", async (
   await page.getByRole("button", { name: "Save", exact: true }).click();
   const save = page.getByRole("dialog", { name: "Save", exact: true });
   await save.getByRole("button", { name: /^Save in account/ }).click();
-  await expect(save.getByLabel("Name for this account copy")).toHaveValue("");
+  await expect(page.getByLabel("Project name")).toHaveValue("");
   page.once("dialog", (dialog) => dialog.accept("Named account project"));
   await save
     .getByRole("button", { name: "Save current project privately" })
@@ -297,4 +300,103 @@ test("CLOUD-05 saving an unnamed project to an account requires a name", async (
   await expect(page.getByLabel("Project name")).toHaveValue(
     "Named account project",
   );
+});
+
+test("CLOUD-07 project management link stays above the scrollable account project list", async ({
+  page,
+}) => {
+  const projects = Array.from({ length: 16 }, (_, index) => ({
+    id: `00000000-0000-0000-0000-${String(index + 1).padStart(12, "0")}`,
+    name: `Project ${index + 1}`,
+    updatedAt: Date.now() - index * 1000,
+    revision: 1,
+  }));
+  await page.route("**/api/account", (route) =>
+    route.fulfill({ json: { user: { id: "account", username: "learner" } } }),
+  );
+  await page.route("**/api/private-projects", (route) =>
+    route.fulfill({ json: { projects } }),
+  );
+  await page.goto(link(project));
+  await page.getByRole("button", { name: "Open", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Open", exact: true });
+  await dialog.getByRole("tab", { name: "Account" }).click();
+  const managementLink = dialog.getByRole("button", {
+    name: "Project management in your account",
+  });
+  const projectList = dialog.locator(".cloud-projects");
+  await expect(managementLink).toBeVisible();
+  await expect(dialog.getByText("Signed in as learner")).toHaveCount(0);
+  await expect(projectList.getByText("Project 16")).toBeVisible();
+  const before = await managementLink.boundingBox();
+  const listSize = await projectList.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }));
+  expect(listSize.scrollHeight).toBeGreaterThan(listSize.clientHeight);
+  await projectList.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  const after = await managementLink.boundingBox();
+  expect(after!.y).toBe(before!.y);
+  await expect(managementLink).toBeVisible();
+});
+
+test("CLOUD-08 selected account projects can be deleted together", async ({
+  page,
+}) => {
+  let projects = Array.from({ length: 5 }, (_, index) => ({
+    id: `00000000-0000-0000-0000-${String(index + 1).padStart(12, "0")}`,
+    name: `Project ${index + 1}`,
+    updatedAt: Date.now() - index * 1000,
+    revision: 1,
+  }));
+  let deleteRequests = 0;
+  await page.route("**/api/account", (route) =>
+    route.fulfill({ json: { user: { id: "account", username: "learner" } } }),
+  );
+  await page.route("**/api/private-projects**", (route) => {
+    if (route.request().method() === "GET")
+      return route.fulfill({ json: { projects } });
+    if (route.request().method() === "DELETE") {
+      deleteRequests++;
+      const id = new URL(route.request().url()).pathname.split("/").at(-1);
+      projects = projects.filter((project) => project.id !== id);
+      return route.fulfill({ json: { ok: true } });
+    }
+    throw new Error(`Unexpected account-project request: ${route.request().method()}`);
+  });
+  await page.goto(link(project));
+  await page.locator(".toolbar-account button").click();
+  const account = page.getByRole("dialog", { name: "Account", exact: true });
+  await expect(account.locator(".cloud-project-management")).toBeVisible();
+  await expect(account.getByText("Project 4")).toBeVisible();
+  const firstCheckbox = account.getByRole("checkbox", {
+    name: "Select project “Project 1”",
+  });
+  const fourthCheckbox = account.getByRole("checkbox", {
+    name: "Select project “Project 4”",
+  });
+  const fifthCheckbox = account.getByRole("checkbox", {
+    name: "Select project “Project 5”",
+  });
+  for (const checkbox of [firstCheckbox, fourthCheckbox, fifthCheckbox]) {
+    const box = await checkbox.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.width).toBeLessThanOrEqual(20);
+    expect(box!.height).toBeLessThanOrEqual(20);
+  }
+  await firstCheckbox.check();
+  await fourthCheckbox.check();
+  await fifthCheckbox.check();
+  page.once("dialog", (dialog) => dialog.accept());
+  await account
+    .getByRole("button", { name: "Delete selected projects (3)" })
+    .click();
+  await expect(account.getByText("Project 1")).toHaveCount(0);
+  await expect(account.getByText("Project 4")).toHaveCount(0);
+  await expect(account.getByText("Project 5")).toHaveCount(0);
+  await expect(account.getByText("Project 2")).toBeVisible();
+  await expect(account.getByText("Project 3")).toBeVisible();
+  expect(deleteRequests).toBe(3);
 });
