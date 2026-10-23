@@ -1512,7 +1512,11 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
   SQLite path (or its unchanged legacy default), restarts the shared API, checks
   health, and only then updates beta static files. Backup consistency/privacy,
   API migration, publication policy, workflow YAML and shell syntax passed
-  locally. The complete production build could not run because Gradle was not
-  cached and `services.gradle.org` was unreachable; GitHub Actions runs that
-  build before any server or static deployment. Live deployment remains
-  pending because GitHub and the beta hosts were unreachable from this session.
+  locally. The local full build could not run because Gradle was not cached and
+  `services.gradle.org` was unreachable; the GitHub Actions production build
+  and deployment tests passed. The first public health check failed because the
+  runner could not resolve external DNS; checking the API over SSH to localhost
+  fixed the workflow. Run 39915611716 passed, including the backup, API health
+  check and beta static deploy. A live browser confirmed `beta.bluek.de`
+  redirects to `beta.bluek.online` and exposes the account dialog; the beta API
+  health and credentialed CORS preflight pass. `main` was not pushed or deployed.
