@@ -149,9 +149,10 @@ and translation checks.
 
 ## Deployment
 
-`main` independently deploys the static app to GitHub Pages (bluek.online)
+`main` is prepared to deploy the static app to GitHub Pages (bluek.online)
 and the optional Node API to the existing server (api.bluek.online). `beta`
-retains its own static deployment and uses the same API. See
+retains its own static deployment and reaches the same API through its `/api`
+proxy. See
 [deployment instructions](docs/deployment.md) for required DNS/Pages cutover,
 Caddy, secrets, migration and operator acceptance; workflow changes alone do
 not perform the cutover. See [storage contracts](docs/server-storage.md). Commit and push only when explicitly requested.

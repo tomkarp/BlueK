@@ -15,7 +15,7 @@ change is part of the implementation. See [storage contract](server-storage.md).
 
 | Workflow | Trigger | Result |
 | --- | --- | --- |
-| deploy-pages.yml | main push/manual | Full build; root base `/`, explicit `https://api.bluek.online`; independent Pages artifact/deployment |
+| deploy-pages.yml | main push/manual | Full build; root base `/`, dedicated API at `https://api.bluek.online`; independent Pages artifact/deployment |
 | deploy-server.yml | main push/manual | API/migration tests, API source/dependencies only, restart existing bluek-share service; no static build or rsync |
 | deploy-beta.yml | beta push/manual | Full build and API tests; restricted database backup; deploy additive API migration to the shared service, then deploy beta static files |
 
@@ -99,7 +99,7 @@ expired public payloads. Keep all account/private data restricted during repair.
 | BLUEK_API_ORIGINS | `https://bluek.online,https://beta.bluek.online,http://localhost:5173,http://127.0.0.1:5173`; production set only the two HTTPS origins |
 | BLUEK_COOKIE_SECURE | secure by default; `0` only for local HTTP tests/development |
 | BLUEK_COOKIE_SAMESITE | `Lax`; optional `None` requires Secure and explicit cross-site Origin |
-| VITE_BLUEK_API_URL | build-time API origin; hosted/offline feedback fallback `https://api.bluek.online`; localhost uses Vite's `/api` proxy |
+| VITE_BLUEK_API_URL | build-time API origin; beta uses its same-site `/api` proxy on `https://beta.bluek.online`, later Pages builds use `https://api.bluek.online`; localhost uses Vite's `/api` proxy |
 | VITE_BASE_PATH | `/`; optional static-prefix builds use the same app/configuration |
 | BLUEK_FEEDBACK_* | existing private-feedback configuration, see [feedback](feedback.md) |
 

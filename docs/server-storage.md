@@ -75,8 +75,10 @@ session and owner on every request and recheck after awaited uploads.
 The API uses exact Origin allowlists and credentialed CORS, never `*`.
 Authenticated writes require `X-BlueK-Request: 1`; JSON requests and custom
 headers force a preflight from other origins. Production `bluek.online`, beta
-and `api.bluek.online` are HTTPS and same-site; no third-party cookie dependency
-is required there. Optional genuinely cross-site deployments need an explicit
+and the shared API endpoints are HTTPS and same-site; beta currently reaches
+`/api` through its own host, while a later Pages build uses `api.bluek.online`.
+No third-party cookie dependency is required there. Optional genuinely
+cross-site deployments need an explicit
 Origin and `SameSite=None; Secure` and may still be blocked by browser policy.
 Do not allow `null` or arbitrary sibling origins for accounts.
 
