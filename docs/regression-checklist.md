@@ -1514,6 +1514,15 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
   from the username field so opening the dialog does not summon password-manager
   suggestions. CLOUD-03 asserts the field is not focused on open; GUI verification
   checks the account form still works in English and German.
+- Account session startup, 2026-10-23: BlueK checks the existing account session
+  on startup and keeps the toolbar action disabled with a checking label until
+  the response arrives. CLOUD-06 verifies the restored signed-in username and
+  NAV-01 counts the startup check separately from account-tab requests.
+- Open source order, 2026-10-23: The Open tabs are File, Account, Link and
+  Restore, and each newly opened dialog selects File. NAV-01 checks the order
+  and verifies the default both on first open and after reopening.
+- Account project rows, 2026-10-23: The project card, rename action and delete
+  action stretch to the same row height. NAV-03 checks their browser geometry.
 - Beta account rollout, 2026-10-23: the beta workflow builds and tests the
   account API before deployment, backs up the running service's configured
   SQLite path (or its unchanged legacy default), restarts the shared API, checks

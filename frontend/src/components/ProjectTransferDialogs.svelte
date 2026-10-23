@@ -76,7 +76,7 @@
   }
   $: if (toolbarDialog === null) {
     saveView = "choices";
-    openSource = recentProjects.length ? "browser" : "computer";
+    openSource = "computer";
     showAllRecoveryDrafts = false;
   }
   function showPrivateSave() {
@@ -121,15 +121,6 @@
           aria-label={t("ui.transfer.openFrom")}
           on:keydown={handleOpenSourceKeydown}
         >
-          {#if serverFeatures}<button
-              id="open-source-account"
-              role="tab"
-              aria-selected={openSource === "account"}
-              tabindex={openSource === "account" ? 0 : -1}
-              aria-controls="open-panel-account"
-              on:click={() => selectOpenSource("account")}
-              >{t("ui.transfer.sourceAccount")}</button
-            >{/if}
           <button
             id="open-source-computer"
             role="tab"
@@ -139,6 +130,15 @@
             on:click={() => selectOpenSource("computer")}
             >{t("ui.transfer.sourceComputer")}</button
           >
+          {#if serverFeatures}<button
+              id="open-source-account"
+              role="tab"
+              aria-selected={openSource === "account"}
+              tabindex={openSource === "account" ? 0 : -1}
+              aria-controls="open-panel-account"
+              on:click={() => selectOpenSource("account")}
+              >{t("ui.transfer.sourceAccount")}</button
+            >{/if}
           {#if serverFeatures}<button
               id="open-source-link"
               role="tab"

@@ -37,12 +37,14 @@
       {cloud.error}
       {mode === "save" ? t("ui.cloud.failureBackup") : ""}
     </p>{/if}
-  {#if cloud.notice}<p role="status">{cloud.notice}</p>{:else if cloud.busy}<p
+  {#if cloud.notice}<p role="status">{cloud.notice}</p>{:else if cloud.busy && cloud.sessionReady}<p
       role="status"
     >
       {t("ui.cloud.working")}
     </p>{/if}
-  {#if cloud.user}
+  {#if !cloud.sessionReady}
+    <p role="status">{t("ui.cloud.working")}</p>
+  {:else if cloud.user}
     <p>{t("ui.cloud.signedIn", [cloud.user.username])}</p>
     {#if mode === "save"}
       <p>{t("ui.cloud.storageAdvice")}</p>
@@ -115,12 +117,17 @@
                     aria-label={t("ui.cloud.renameProject0", [
                       project.name || t("ui.common.untitledProject"),
                     ])}
+                    title={t("ui.cloud.renameProject0", [
+                      project.name || t("ui.common.untitledProject"),
+                    ])}
                     onclick={() =>
                       beginRename(
                         project.id,
                         project.name || t("ui.common.untitledProject"),
                       )}
-                    >{t("ui.cloud.rename")}</button
+                    ><svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="m14 5 5 5M4 20l4.2-1 10.6-10.6a2.1 2.1 0 0 0-3-3L5.2 16 4 20Z" />
+                    </svg></button
                   >{/if}
               </li>
             {/each}
@@ -165,7 +172,13 @@
                 aria-label={t("ui.transfer.deleteSavedProject0", [
                   project.name || t("ui.common.untitledProject"),
                 ])}
-                onclick={() => cloud.remove(project.id)}>×</button
+                title={t("ui.transfer.deleteSavedProject0", [
+                  project.name || t("ui.common.untitledProject"),
+                ])}
+                onclick={() => cloud.remove(project.id)}
+                ><svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7" />
+                </svg></button
               >{:else}<button
                 class="cloud-project-open"
                 disabled={cloud.busy}
@@ -189,12 +202,17 @@
                 aria-label={t("ui.cloud.renameProject0", [
                   project.name || t("ui.common.untitledProject"),
                 ])}
+                title={t("ui.cloud.renameProject0", [
+                  project.name || t("ui.common.untitledProject"),
+                ])}
                 onclick={() =>
                   beginRename(
                     project.id,
                     project.name || t("ui.common.untitledProject"),
                   )}
-                >{t("ui.cloud.rename")}</button
+                ><svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="m14 5 5 5M4 20l4.2-1 10.6-10.6a2.1 2.1 0 0 0-3-3L5.2 16 4 20Z" />
+                </svg></button
               >
               <button
                 disabled={cloud.busy}
@@ -202,7 +220,13 @@
                 aria-label={t("ui.transfer.deleteSavedProject0", [
                   project.name || t("ui.common.untitledProject"),
                 ])}
-                onclick={() => cloud.remove(project.id)}>×</button
+                title={t("ui.transfer.deleteSavedProject0", [
+                  project.name || t("ui.common.untitledProject"),
+                ])}
+                onclick={() => cloud.remove(project.id)}
+                ><svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7" />
+                </svg></button
               >{/if}
           </li>
         {/each}
@@ -264,6 +288,7 @@
   }
   .cloud-projects li {
     display: grid;
+    align-items: stretch;
     grid-template-columns: minmax(0, 1fr) auto auto;
     gap: 4px 10px;
     padding: 8px 10px;
@@ -287,7 +312,22 @@
   .cloud-project-rename {
     grid-column: 2;
     grid-row: 1;
-    align-self: start;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    min-width: 36px;
+    padding: 6px;
+  }
+  .cloud-project-rename svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7px;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
   .cloud-rename-form {
     grid-column: 1 / -1;
@@ -314,7 +354,8 @@
     margin: 8px 0;
   }
   .cloud-project-open {
-    flex: 1;
+    grid-column: 1;
+    grid-row: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
@@ -329,9 +370,23 @@
     font-size: 12px;
   }
   .cloud-project-delete {
-    flex: none;
     grid-column: 3;
     grid-row: 1;
-    align-self: start;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    min-width: 36px;
+    padding: 6px;
+  }
+  .cloud-project-delete svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7px;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
 </style>

@@ -51,6 +51,9 @@ for (const locale of ["en", "de"])
     });
     await page.goto(link);
     const toolbar = page.locator(".toolbar");
+    await expect(toolbar.locator(".toolbar-account button")).toContainText(
+      de ? "Anmelden" : "Sign in",
+    );
     await expect(toolbar.locator(":scope > .toolbar-main-action")).toHaveText(
       de
         ? ["Neu", "Öffnen", "Speichern", "Teilen"]
@@ -172,7 +175,7 @@ for (const locale of ["en", "de"])
     ).toBeVisible();
     await page.keyboard.press("Escape");
     expect(await page.locator(".sidebar").innerText()).toBe(sidebar);
-    expect(apiCalls).toBe(0);
+    expect(apiCalls).toBe(1);
     await toolbar
       .getByRole("button", { name: de ? "Öffnen" : "Open", exact: true })
       .click();
@@ -182,14 +185,20 @@ for (const locale of ["en", "de"])
     });
     await expect(open.locator('[role="tab"]')).toHaveCount(4);
     await expect(open.locator('[role="tab"]')).toHaveText(
-      de ? ["Konto", "Datei", "Link", "Wiederherstellen"] : ["Account", "File", "Link", "Restore"],
+      de
+        ? ["Datei", "Konto", "Link", "Wiederherstellen"]
+        : ["File", "Account", "Link", "Restore"],
+    );
+    await expect(open.locator("#open-source-computer")).toHaveAttribute(
+      "aria-selected",
+      "true",
     );
     await open.locator("#open-source-browser").click();
     await expect(open.locator("#open-panel-browser")).toBeVisible();
     const openHeight = await open.evaluate((element) =>
       element.getBoundingClientRect().height,
     );
-    expect(apiCalls).toBe(0);
+    expect(apiCalls).toBe(1);
     await open.locator("#open-source-account").click();
     await expect(open.locator("#open-panel-account")).toBeVisible();
     expect(
@@ -214,11 +223,23 @@ for (const locale of ["en", "de"])
     await expect(open.locator("#open-panel-link")).toContainText(
       de ? "12-stellige Kennung" : "12-character code",
     );
-    expect(apiCalls).toBe(1);
+    expect(apiCalls).toBe(2);
     await page.keyboard.press("Escape");
     await page.screenshot({
       path: info.outputPath(`navigation-${locale}-desktop.png`),
     });
+    await toolbar
+      .getByRole("button", { name: de ? "Öffnen" : "Open", exact: true })
+      .click();
+    const reopened = page.getByRole("dialog", {
+      name: de ? "Öffnen" : "Open",
+      exact: true,
+    });
+    await expect(reopened.locator("#open-source-computer")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await page.keyboard.press("Escape");
   });
 
 test("GUI-156 saving an unnamed project requires a non-empty project name", async ({
@@ -498,6 +519,21 @@ test("NAV-03 private projects open and delete through Open; canceling login keep
     .click();
   await expect(account).toBeHidden();
   await expect(open.getByRole("button", { name: "Refresh" })).toHaveCount(0);
+  const projectRow = open.locator("#open-panel-account .cloud-projects li");
+  await expect(projectRow.locator(".cloud-project-rename svg")).toBeVisible();
+  await expect(projectRow.locator(".cloud-project-delete svg")).toBeVisible();
+  const rowElementHeights = await Promise.all(
+    [
+      ".cloud-project-open",
+      ".cloud-project-rename",
+      ".cloud-project-delete",
+    ].map(async (selector) =>
+      (await projectRow.locator(selector).boundingBox())!.height,
+    ),
+  );
+  expect(
+    Math.max(...rowElementHeights) - Math.min(...rowElementHeights),
+  ).toBeLessThan(1);
   await open.getByRole("button", { name: "Rename “Account project”" }).click();
   await open
     .getByLabel("New name for “Account project”")

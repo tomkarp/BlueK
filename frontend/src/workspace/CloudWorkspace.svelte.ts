@@ -18,19 +18,23 @@ interface CloudHost {
   project: () => {
     projectPayload: () => SavedProject;
     projectName: string;
-    loadProject: (payload: unknown, message?: string) => Promise<boolean | void>;
+    loadProject: (
+      payload: unknown,
+      message?: string,
+    ) => Promise<boolean | void>;
     ensureProjectName: () => boolean;
     readonly documentVersion: number;
     exportProject: () => void;
   };
 }
-/** Cloud state is separate from editor and runtime ownership. No startup request
- * or unsuccessful cloud response can replace the local project/draft. */
+/** Cloud state is separate from editor and runtime ownership. Session checks
+ * never replace the local project/draft. */
 export class CloudWorkspace {
   constructor(private readonly host: CloudHost) {}
   open = $state(false);
   private intent: "account" | "open" | "save" = "account";
   busy = $state(false);
+  sessionReady = $state(false);
   user: User | null = $state(null);
   projects: CloudProject[] = $state.raw([]);
   error = $state("");
@@ -40,6 +44,7 @@ export class CloudWorkspace {
     revision: number;
     documentVersion: number;
   } | null = $state(null);
+  private refreshPromise: Promise<boolean> | null = null;
   get attached() {
     return (
       this.binding?.documentVersion === this.host.project().documentVersion
@@ -85,14 +90,27 @@ export class CloudWorkspace {
       await apiRequest<{ projects: CloudProject[] }>("/api/private-projects")
     ).projects;
   };
-  refresh = (includeProjects = false) =>
-    this.run(async () => {
+  refresh = (includeProjects = false): Promise<boolean> => {
+    if (this.refreshPromise) {
+      return this.refreshPromise.then(() => {
+        if (!includeProjects || !this.user) return true;
+        return this.run(async () => this.list());
+      });
+    }
+    let pending: Promise<boolean>;
+    pending = this.run(async () => {
       const { user } = await apiRequest<{ user: User | null }>("/api/account");
       if (this.user?.id !== user?.id) this.binding = null;
       this.user = user;
       this.projects = [];
       if (user && includeProjects) await this.list();
+    }).finally(() => {
+      this.sessionReady = true;
+      if (this.refreshPromise === pending) this.refreshPromise = null;
     });
+    this.refreshPromise = pending;
+    return pending;
+  };
   show = (intent: "account" | "open" | "save" = "account") => {
     this.intent = intent;
     this.open = true;

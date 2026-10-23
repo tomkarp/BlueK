@@ -419,7 +419,8 @@ exports after asynchronous template loading/storage.
 
 `CloudWorkspace` owns account/session presentation, private-project metadata,
 revision associations and pending/error state, using narrow project/language
-capabilities. It never owns source/runtime state or probes the server at startup.
+capabilities. It checks the account session at startup without owning or
+replacing source/runtime state.
 `CloudDialog` contains authentication/account settings only; `CloudProjectPanel`
 presents private opening/deletion under Open and private save/update/copy under
 Save. Authentication remembers its initiating dialog, returns there on success

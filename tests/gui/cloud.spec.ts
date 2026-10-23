@@ -14,6 +14,28 @@ const project = {
 const link = (value: unknown) =>
   "/#bluek=p1." + Buffer.from(JSON.stringify(value)).toString("base64url");
 
+test("CLOUD-06 restores the account status from the existing session on startup", async ({
+  page,
+}) => {
+  let releaseSession!: () => void;
+  const pendingSession = new Promise<void>((resolve) => {
+    releaseSession = resolve;
+  });
+  await page.route("**/api/account", async (route) => {
+    await pendingSession;
+    await route.fulfill({
+      json: { user: { id: "account", username: "learner" } },
+    });
+  });
+  await page.goto(link(project));
+  const accountButton = page.locator(".toolbar-account button");
+  await expect(accountButton).toContainText("Checking account…");
+  await expect(accountButton).toBeDisabled();
+  releaseSession();
+  await expect(accountButton).toHaveText("Account");
+  await expect(accountButton).toHaveAttribute("title", "Signed in as learner");
+});
+
 test("CLOUD-01 custom media cannot be published from either project or program UI and remain in local JSON", async ({
   page,
 }) => {
@@ -136,7 +158,9 @@ for (const locale of ["en", "de"])
       name: de ? "Konto" : "Account",
       exact: true,
     });
-    await expect(cloud.locator("input[autocomplete=username]")).not.toBeFocused();
+    await expect(
+      cloud.locator("input[autocomplete=username]"),
+    ).not.toBeFocused();
     await cloud
       .getByRole("button", {
         name: de ? "Konto erstellen" : "Create account",
@@ -262,13 +286,15 @@ test("CLOUD-05 saving an unnamed project to an account requires a name", async (
   await page.getByRole("button", { name: "Save", exact: true }).click();
   const save = page.getByRole("dialog", { name: "Save", exact: true });
   await save.getByRole("button", { name: /^Save in account/ }).click();
-  await expect(
-    save.getByLabel("Name for this account copy"),
-  ).toHaveValue("");
+  await expect(save.getByLabel("Name for this account copy")).toHaveValue("");
   page.once("dialog", (dialog) => dialog.accept("Named account project"));
   await save
     .getByRole("button", { name: "Save current project privately" })
     .click();
-  await expect.poll(() => savedProject?.projectName).toBe("Named account project");
-  await expect(page.getByLabel("Project name")).toHaveValue("Named account project");
+  await expect
+    .poll(() => savedProject?.projectName)
+    .toBe("Named account project");
+  await expect(page.getByLabel("Project name")).toHaveValue(
+    "Named account project",
+  );
 });
