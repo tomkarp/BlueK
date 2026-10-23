@@ -1507,6 +1507,9 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
   passed in English and German, including geometry checks at 1440 px and 900 px.
   Typecheck passed with zero errors and six existing warnings; `git diff
   --check` passed.
+- Publication confirmation copy, 2026-10-23: Removed the extra publisher
+  withdrawal/operator blocking and visit-extension sentences from the copied-
+  link confirmation in English and German. The seven-day expiry notice remains.
 - Beta account rollout, 2026-10-23: the beta workflow builds and tests the
   account API before deployment, backs up the running service's configured
   SQLite path (or its unchanged legacy default), restarts the shared API, checks

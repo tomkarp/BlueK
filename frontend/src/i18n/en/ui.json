@@ -340,7 +340,7 @@
     "copyProjectLink": "Copy project link",
     "completeLink": "Complete link:",
     "completeProjectLink": "Complete project link",
-    "thisProjectWillBeDeletedAfter30Days": "This public copy expires after seven days. Visits do not extend its lifetime. It cannot be withdrawn by its publisher; the operator can block it.",
+    "thisProjectWillBeDeletedAfter30Days": "This public copy expires after seven days.",
     "delete0FromThisBrowserSSavedProjects": "Delete the browser recovery draft “{0}”?",
     "deleteAllSavedProjectsFromThisBrowser": "Delete all recovery drafts from this browser?",
     "whatShouldYourProjectBeCalled": "What should your project be called?",

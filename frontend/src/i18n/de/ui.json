@@ -340,7 +340,7 @@
     "copyProjectLink": "Projektlink kopieren",
     "completeLink": "Vollständiger Link:",
     "completeProjectLink": "Vollständiger Projektlink",
-    "thisProjectWillBeDeletedAfter30Days": "Diese öffentliche Kopie läuft nach sieben Tagen ab. Abrufe verlängern die Laufzeit nicht. Veröffentlichende können sie nicht zurücknehmen; der Betreiber kann sie sperren.",
+    "thisProjectWillBeDeletedAfter30Days": "Diese öffentliche Kopie läuft nach sieben Tagen ab.",
     "delete0FromThisBrowserSSavedProjects": "Den Wiederherstellungsentwurf „{0}“ aus diesem Browser löschen?",
     "deleteAllSavedProjectsFromThisBrowser": "Alle Wiederherstellungsentwürfe aus diesem Browser löschen?",
     "whatShouldYourProjectBeCalled": "Wie soll dein Projekt heißen?",
