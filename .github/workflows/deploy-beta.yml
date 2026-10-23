@@ -89,7 +89,11 @@ jobs:
           REMOTE
 
       - name: Confirm shared API is healthy
-        run: curl --fail --retry 10 --retry-delay 2 --retry-all-errors https://beta.bluek.online/api/health
+        env:
+          HOST: ${{ secrets.BLUEK_DEPLOY_HOST }}
+          USER: ${{ secrets.BLUEK_DEPLOY_USER }}
+          PORT: ${{ secrets.BLUEK_DEPLOY_PORT }}
+        run: ssh -i ~/.ssh/bluek_deploy -p "$PORT" "$USER@$HOST" 'curl --fail --retry 10 --retry-delay 2 --retry-all-errors http://127.0.0.1:8787/api/health'
 
       - name: Deploy beta static files
         env:
