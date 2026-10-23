@@ -5,7 +5,7 @@ import { buildInfo } from './build/buildInfo.mjs';
 
 export default defineConfig({
   root: path.resolve(process.cwd(), 'frontend'),
-  base: process.env.VITE_BASE_PATH || (process.env.GITHUB_ACTIONS ? '/BlueK/' : '/'),
+  base: process.env.VITE_BASE_PATH || '/',
   plugins: [svelte()],
   define: { __BLUEK_BUILD_INFO__: JSON.stringify(buildInfo()) },
   server: {
@@ -13,7 +13,7 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api/feedback': {
-        target: process.env.BLUEK_FEEDBACK_PROXY_TARGET || 'https://bluek.online',
+        target: process.env.BLUEK_FEEDBACK_PROXY_TARGET || 'https://api.bluek.online',
         changeOrigin: true,
       },
       '/api': 'http://127.0.0.1:8787',

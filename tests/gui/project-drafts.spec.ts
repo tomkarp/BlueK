@@ -125,6 +125,7 @@ test("GUI-121 an opener-copied session forks the live draft; reopening a link st
   await expect
     .poll(() => saved(duplicate).then((p) => p?.files[0].source))
     .toContain("88");
+  page.once("dialog", (dialog) => dialog.accept());
   await page.goto(link(project("Dogs")));
   await page.waitForURL((url) => !url.hash);
   await expect(
@@ -134,6 +135,56 @@ test("GUI-121 an opener-copied session forks the live draft; reopening a link st
   await expect
     .poll(() => saved(page).then((p) => p?.files[0].source))
     .toContain("age = 1");
+});
+
+test("GUI-154 replacing a non-empty project asks first and can be cancelled", async ({
+  page,
+}) => {
+  await load(page, project("Current work"));
+  await edit(page, "class Hund { val age = 42 }");
+
+  let prompt = "";
+  page.once("dialog", async (dialog) => {
+    prompt = dialog.message();
+    await dialog.dismiss();
+  });
+  await page.goto(link(project("Incoming project")));
+  await expect(page.getByLabel("Project name")).toHaveValue("Current work");
+  await expect
+    .poll(() => saved(page).then((p) => p?.files[0].source))
+    .toContain("42");
+  expect(prompt).toContain("browser autosave");
+
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.goto(link(project("Incoming project")));
+  await expect(page.getByLabel("Project name")).toHaveValue("Incoming project");
+  await expect
+    .poll(() => saved(page).then((p) => p?.files[0].source))
+    .toBe("class Hund { val age = 1 }");
+});
+
+test("GUI-155 restore list starts with the three newest drafts and can expand", async ({
+  page,
+  context,
+}) => {
+  const tabs: Page[] = [page];
+  for (let index = 1; index < 5; index++) tabs.push(await context.newPage());
+  for (const [index, tab] of tabs.entries())
+    await load(tab, project(`Draft ${index + 1}`));
+
+  const fresh = await context.newPage();
+  await fresh.goto("/");
+  await fresh.getByRole("button", { name: "Open", exact: true }).click();
+  const open = fresh.getByRole("dialog", { name: "Open", exact: true });
+  await expect(open.locator(".recent-project")).toHaveCount(3);
+  const expand = open.getByRole("button", { name: "Show 2 more drafts" });
+  await expect(expand).toHaveAttribute("aria-expanded", "false");
+  await expand.click();
+  await expect(open.locator(".recent-project")).toHaveCount(5);
+  const collapse = open.getByRole("button", { name: "Show fewer drafts" });
+  await expect(collapse).toHaveAttribute("aria-expanded", "true");
+  await collapse.click();
+  await expect(open.locator(".recent-project")).toHaveCount(3);
 });
 
 test("GUI-122 closed tabs stay in Recent work; fresh startup shows a dismissible notice and restores full project data", async ({
@@ -166,15 +217,15 @@ test("GUI-122 closed tabs stay in Recent work; fresh startup shows a dismissible
   await fresh.goto("/");
   await expect(fresh.locator(".classcard")).toHaveCount(0);
   const notice = fresh.locator(".project-recovery-notice");
-  await expect(notice).toContainText("You have saved projects. Open / Import");
+  await expect(notice).toContainText("Other browser drafts are available. Open → Restore");
   await fresh
-    .getByRole("button", { name: "Dismiss saved projects notice" })
+    .getByRole("button", { name: "Dismiss recovery drafts notice" })
     .click();
   await expect(notice).toHaveCount(0);
   await fresh
-    .getByRole("button", { name: "Open / Import", exact: true })
+    .getByRole("button", { name: "Open", exact: true })
     .click();
-  const open = fresh.getByRole("dialog", { name: "Open / Import" });
+  const open = fresh.getByRole("dialog", { name: "Open", exact: true });
   await expect(open.locator(".recent-project")).toHaveCount(2);
   await expect(open.locator(".recent-project").first()).toContainText("Dogs B");
   await fresh.setViewportSize({ width: 700, height: 500 });
@@ -196,9 +247,9 @@ test("GUI-122 closed tabs stay in Recent work; fresh startup shows a dismissible
   // Choosing a draft still owned by another live tab gives an independent copy.
   const another = await context.newPage();
   await another.goto("/");
-  await another.getByRole("button", { name: "Open / Import" }).click();
+  await another.getByRole("button", { name: "Open", exact: true }).click();
   await another
-    .getByRole("dialog", { name: "Open / Import" })
+    .getByRole("dialog", { name: "Open", exact: true })
     .getByRole("button", { name: /^Dogs A/ })
     .click();
   await expect(another.getByLabel("Project name")).toHaveValue("Dogs A");
@@ -222,8 +273,8 @@ test("GUI-123 migrates the old autosave, ignores corrupt drafts and has no recov
   expect(
     await page.evaluate(() => localStorage.getItem("bluek.current-project.v1")),
   ).toBeNull();
-  await page.getByRole("button", { name: "Open / Import" }).click();
-  const open = page.getByRole("dialog", { name: "Open / Import" });
+  await page.getByRole("button", { name: "Open", exact: true }).click();
+  const open = page.getByRole("dialog", { name: "Open", exact: true });
   await expect(open.locator(".recent-project")).toHaveCount(1);
   await open.getByRole("button", { name: /^Old autosave/ }).click();
   await expect(
@@ -251,7 +302,7 @@ test("GUI-124 project replacement updates the same tab draft and an empty projec
     ],
   });
   const originalId = await draftId(page);
-  await page.getByRole("button", { name: "New Project", exact: true }).click();
+  await page.getByRole("button", { name: "New", exact: true }).click();
   page.once("dialog", (dialog) => dialog.accept());
   await page
     .getByRole("dialog", { name: "Create New Project" })
@@ -264,13 +315,10 @@ test("GUI-124 project replacement updates the same tab draft and an empty projec
     .poll(() => saved(page).then((p) => p?.projectName))
     .toBe("New blank project");
   expect(await saved(page)).not.toHaveProperty("defaultTestClass");
-  await page.getByRole("button", { name: "Open / Import" }).click();
-  const open = page.getByRole("dialog", { name: "Open / Import" });
-  await expect(open.locator(".recent-project")).toHaveCount(1);
+  await page.getByRole("button", { name: "Open", exact: true }).click();
+  const open = page.getByRole("dialog", { name: "Open", exact: true });
+  await expect(open.locator(".recent-project")).toHaveCount(0);
   await expect(open.getByRole("button", { name: /^Original/ })).toHaveCount(0);
-  await expect(
-    open.getByRole("button", { name: /^New blank project/ }),
-  ).toBeVisible();
 });
 
 test("GUI-125 unavailable storage reports the limitation and leaves editing and export usable", async ({
@@ -289,13 +337,13 @@ test("GUI-125 unavailable storage reports the limitation and leaves editing and 
   await expect(notice).toContainText(
     "Your changes could not be saved in this browser because its storage for BlueK is full",
   );
-  await expect(notice).toContainText(/This project needs about \d+\.\d MB; 0 other saved projects use about 0\.0 MB\./);
-  await expect(notice).toContainText("Open / Import → Recent work");
-  await page.getByRole("button", { name: "Save / Export" }).click();
+  await expect(notice).toContainText(/This project needs about \d+\.\d MB; 0 other recovery drafts use about 0\.0 MB\./);
+  await expect(notice).toContainText("Open → Restore");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(
     page
-      .getByRole("dialog", { name: "Save / Export" })
-      .getByRole("button", { name: "Export Project JSON" }),
+      .getByRole("dialog", { name: "Save", exact: true })
+      .getByRole("button", { name: "Download BlueK project file" }),
   ).toBeEnabled();
   await page.keyboard.press("Escape");
 
@@ -328,6 +376,7 @@ test("GUI-125 blocked storage and other storage errors name their reason", async
       throw new TypeError("Disk unavailable");
     };
   });
+  page.once("dialog", (dialog) => dialog.accept());
   await page.goto(link(project("Failing")));
   await expect(notice).toContainText(
     "Your changes could not be saved in this browser (TypeError: Disk unavailable).",
@@ -358,17 +407,19 @@ test("GUI-126 browser restart keeps multiple projects in the persistent profile"
     await fresh.goto("/");
     await expect(fresh.locator(".project-recovery-notice")).toBeVisible();
     await expect(fresh.locator(".classcard")).toHaveCount(0);
-    await fresh.getByRole("button", { name: "Open / Import" }).click();
-    const open = fresh.getByRole("dialog", { name: "Open / Import" });
+    await fresh.getByRole("button", { name: "Open", exact: true }).click();
+    const open = fresh.getByRole("dialog", { name: "Open", exact: true });
     await expect(open.locator(".recent-project")).toHaveCount(2);
     await open.getByRole("button", { name: /^Before closing A/ }).click();
     await expect
       .poll(() => saved(fresh).then((p) => p?.files[0].source))
       .toContain("123");
-    await fresh.getByRole("button", { name: "Open / Import" }).click();
+    await fresh.getByRole("button", { name: "Open", exact: true }).click();
+    // Loading B replaces the currently restored A project.
+    fresh.once("dialog", (dialog) => dialog.accept());
     await fresh
-      .getByRole("dialog", { name: "Open / Import" })
-      .getByRole("button", { name: /^Before closing B/ })
+      .getByRole("dialog", { name: "Open", exact: true })
+    .getByRole("button", { name: /^Before closing B/ })
       .click();
     await expect
       .poll(() => saved(fresh).then((p) => p?.files[0].source))
@@ -387,31 +438,29 @@ test("GUI-127 saved projects can be deleted individually, with cancel and cross-
   const removeId = await draftId(page);
   const other = await context.newPage();
   await load(other, project("Keep me"));
-  await other.getByRole("button", { name: "Open / Import" }).click();
-  await page.getByRole("button", { name: "Open / Import" }).click();
-  const open = page.getByRole("dialog", { name: "Open / Import" });
-  const remove = open.getByRole("button", {
-    name: "Delete saved project Delete me",
+  await other.getByRole("button", { name: "Open", exact: true }).click();
+  await page.getByRole("button", { name: "Open", exact: true }).click();
+  const open = page.getByRole("dialog", { name: "Open", exact: true });
+  const otherOpen = other.getByRole("dialog", { name: "Open", exact: true });
+  await expect(open.locator(".recent-project")).toHaveCount(1);
+  await expect(otherOpen.locator(".recent-project")).toHaveCount(1);
+  const otherRemove = otherOpen.getByRole("button", {
+    name: "Delete browser recovery draft Delete me",
     exact: true,
   });
-  page.once("dialog", (dialog) => dialog.dismiss());
-  await remove.click();
-  await expect(open.locator(".recent-project")).toHaveCount(2);
-  page.once("dialog", (dialog) => dialog.accept());
-  await remove.click();
+  other.once("dialog", (dialog) => dialog.dismiss());
+  await otherRemove.click();
+  await expect(otherOpen.locator(".recent-project")).toHaveCount(1);
+  other.once("dialog", (dialog) => dialog.accept());
+  await otherRemove.click();
+  await expect(otherOpen.locator(".recent-project")).toHaveCount(0);
   await expect(open.locator(".recent-project")).toHaveCount(1);
-  await expect(
-    other
-      .getByRole("dialog", { name: "Open / Import" })
-      .locator(".recent-project"),
-  ).toHaveCount(1);
   expect(
     await page.evaluate(
       (id) => localStorage.getItem("bluek.project-draft.v1." + id),
       removeId,
     ),
   ).toBeNull();
-  await expect(open.getByRole("button", { name: /^Keep me/ })).toBeVisible();
   await open.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Hund", exact: true }),
@@ -437,10 +486,10 @@ test("GUI-128 Delete all removes saved projects, keeps settings and requires con
   const fresh = await context.newPage();
   await fresh.goto("/");
   await expect(fresh.locator(".project-recovery-notice")).toBeVisible();
-  await fresh.getByRole("button", { name: "Open / Import" }).click();
-  const open = fresh.getByRole("dialog", { name: "Open / Import" });
+  await fresh.getByRole("button", { name: "Open", exact: true }).click();
+  const open = fresh.getByRole("dialog", { name: "Open", exact: true });
   const removeAll = open.getByRole("button", {
-    name: "Delete all saved projects",
+    name: "Delete all recovery drafts",
   });
   await expect(removeAll.locator("svg")).toBeVisible();
   fresh.once("dialog", (dialog) => dialog.dismiss());
@@ -461,10 +510,10 @@ test("GUI-128 Delete all removes saved projects, keeps settings and requires con
   await Promise.all([page.close(), second.close()]);
   await fresh.reload();
   await expect(fresh.locator(".project-recovery-notice")).toHaveCount(0);
-  await fresh.getByRole("button", { name: "Open / Import" }).click();
+  await fresh.getByRole("button", { name: "Open", exact: true }).click();
   await expect(
     fresh
-      .getByRole("dialog", { name: "Open / Import" })
+      .getByRole("dialog", { name: "Open", exact: true })
       .locator(".recent-project"),
   ).toHaveCount(0);
 });

@@ -64,5 +64,6 @@ Shared instructions for coding agents. Do not add tool-specific files such as
 - [Test/state implementation](docs/testing-internals.md)
 - [Interface languages](docs/localization.md)
 - [Regression evidence](docs/regression-checklist.md)
+- [Server storage, accounts and moderation](docs/server-storage.md)
 - [Deployment](docs/deployment.md)
 - [Vendored interpreter changes](vendor/kotlite-interpreter/PATCH.md)

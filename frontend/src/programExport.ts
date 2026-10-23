@@ -33,9 +33,6 @@ export type ProgramOptions = Pick<ExportedProgram, "allowDownload" | "allowBlueK
 export const PROGRAM_ELEMENT_ID = "bluek-program";
 export const PROGRAM_PLACEHOLDER = `<script type="application/json" id="${PROGRAM_ELEMENT_ID}"></script>`;
 
-/** Longest "Open in BlueK" link offered; Chrome rejects URLs above 2 MB. */
-export const MAX_PROJECT_LINK_LENGTH = 1_000_000;
-
 /** Where exports made from a local or offline BlueK send "Open in BlueK". */
 export const PUBLIC_BLUEK_URL = "https://bluek.online/";
 

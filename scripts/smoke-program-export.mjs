@@ -56,30 +56,20 @@ try {
   assert.deepEqual(json(parseEmbeddedProgram(parsed.text)), json(program));
   assert.equal(parseEmbeddedProgram(parsed.text).project.files[1].source, hostile);
   const links = await page.evaluate(async ({ moduleUrl, project }) => {
-    const { programForLink, fullProgramLink, shortProgramLink } = await import(moduleUrl);
+    const { programForLink, shortProgramLink } = await import(moduleUrl);
     const program = programForLink(project, 'App.kt', '/BlueK/', 'https://example.github.io/BlueK/', { allowBlueK: false });
-    // Exercise the uncompressed fallback as well as the shared URL length guard.
-    Object.defineProperty(window, 'CompressionStream', { configurable: true, value: undefined });
-    delete window.CompressionStream;
-    let largeError = '';
-    try {
-      await fullProgramLink({ ...program, project: { ...project, files: [{ fileName: 'App.kt', kind: 'functions', source: 'x'.repeat(1_000_000) }] } }, '/BlueK/', 'https://example.github.io/BlueK/');
-    } catch (error) { largeError = error.message; }
     return {
       hosted: program.blueKUrl,
       offline: programForLink(project, 'App.kt', './', 'file:///tmp/BlueK.html', {}).blueKUrl,
       developer: program.blueKUrl,
-      full: await fullProgramLink(program, '/BlueK/', 'https://example.github.io/BlueK/'),
       short: shortProgramLink('green-lamp-river', '/BlueK/', 'https://example.github.io/BlueK/'),
-      largeError,
     };
   }, { moduleUrl: linksModule, project });
   assert.equal(links.hosted, 'https://example.github.io/BlueK/');
   assert.equal(links.offline, 'https://bluek.online/');
   assert.equal(links.developer, 'https://example.github.io/BlueK/');
-  assert.match(links.full, /^https:\/\/example\.github\.io\/BlueK\/#run=p1\./);
-  assert.equal(links.short, 'https://example.github.io/BlueK/run/green-lamp-river');
-  assert.match(links.largeError, /too large for a full link/);
+  assert.equal(links.short, 'https://example.github.io/BlueK/?run=green-lamp-river');
+  assert.equal(new URL(links.short).hash, '', 'No project data in links');
 } finally {
   await browser.close();
 }

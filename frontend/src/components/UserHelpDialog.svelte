@@ -136,10 +136,6 @@ counter.value`}</code
             <dd>
               {t("help.projects.jsonExport")}
             </dd>
-            <dt>{t("ui.common.copyFullProjectLink")}</dt>
-            <dd>
-              {t("help.projects.fullLink")}
-            </dd>
             <dt>{t("ui.common.copyShortLink")}</dt>
             <dd>
               {t("help.projects.shortLink")}

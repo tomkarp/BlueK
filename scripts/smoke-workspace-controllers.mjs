@@ -10,6 +10,7 @@ const bundle = await rolldown({
   transform: { define: {
     __BLUEK_BUILD_INFO__: JSON.stringify({ version: 'test', revision: 'test', channel: 'local', builtAt: '' }),
     'import.meta.env.VITE_BLUEK_OFFLINE': JSON.stringify('0'),
+    'import.meta.env.VITE_BLUEK_API_URL': JSON.stringify(''),
   } },
   resolve: { conditionNames: ['browser', 'import', 'default'] },
   plugins: [{

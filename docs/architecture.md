@@ -50,6 +50,7 @@ only the tools are compiled at build time.
 | `BluePlayWorkspace.svelte.ts` | World window, canvas/input/audio presentation |
 | `TerminalWorkspace.svelte.ts` | Terminal output/window presentation |
 | `WorkspaceUi.svelte.ts` | Shared focus, status, settings and pane sizes |
+| `CloudWorkspace.svelte.ts` | Optional accounts/private-project UI, owner/revision association and bounded service requests |
 | `FeedbackWorkspace.svelte.ts` | In-memory report draft, captured project/diagnostic context, opt-in attachments and private-service receipts |
 
 Controllers use one `$state`/`$derived` instance per domain. Host interfaces
@@ -121,12 +122,18 @@ replace that tab's entry without version history. Storage events derive Recent
 work from the saved entries. Web Locks prevent copied tabs sharing writes; the
 fallback forks on restoration. Legacy single-project autosave is migrated.
 
+The active tab's draft is restored automatically and omitted from Open's
+**Restore** list. That list contains drafts from other tabs or earlier sessions;
+it shows the three newest first and expands on request. Loading a project into a
+non-empty workspace asks before replacing both the open project and that tab's
+autosave. Reload recovery stays automatic and does not prompt.
+
 A failed save names its reason: a full Local Storage quota (with the sizes of
 this project and the other drafts), storage blocked by the browser, or the
 error text. The warning stays until closed or until saving succeeds; a closed
 warning returns only for a different reason.
 
-Deleting saved drafts requires confirmation and keeps settings/open projects.
+Deleting recovery drafts requires confirmation and keeps settings/open projects.
 Deleting a project source file also requires confirmation before changing files,
 test attachments, editor windows or the runtime session.
 An unchanged tab does not recreate a deleted entry on close or BFCache return;
@@ -386,59 +393,60 @@ main on opening, then optionally starts simulation. Reset respects autostart.
 The player does not display execution status text. `showProjectName: false`
 hides the heading and uses a generic tab title without changing project data.
 When name and actions are disabled, the header is omitted.
-Project download preserves JSON. Open in BlueK uses a full project link within
-the 1 MB limit, or the stored program code for a short link. Player presentation
-uses its own app-local language instance with the same bundled catalogs.
-IDE export compiles on demand,
-chooses main, checks unchanged generation, obtains the generated template and
-downloads HTML. Projects use `#bluek=<payload>` or `/bluek/<code>`; runnable
-exports use `#run=<payload>` or `/run/<code>`. Execution options and main choice
-remain inside the program envelope. `entry.ts` dynamically loads only
-the selected IDE or hosted player. `linkNavigation.ts` is the only hash-navigation
-handler: hosted and offline entries reload when a `#bluek` or `#run` link opens
-on the same page, and the IDE stores its draft on pagehide.
+Project download preserves JSON. A published player's Open in BlueK action
+uses the same public identifier; a local HTML player opens the home page and
+explains JSON import. No player/export path encodes project data in a new URL.
+Player presentation uses the same app-local language catalogs.
+
+IDE export compiles on demand, chooses main, checks unchanged generation,
+obtains the generated template and downloads HTML. Project links use `?p=<code>`;
+runnable links use `?run=<code>`. Main and execution/presentation options remain
+in the stored envelope. `entry.ts` loads only the selected IDE or player.
 `playerBootstrap.ts` validates and mounts the same player for hosted links and
-standalone HTML. Hosted links use the existing module worker; standalone HTML
-uses the embedded Blob worker. Neither program path initializes project drafts.
-When no program can be loaded, `PlayerProblem.svelte` shows a translated
-explanation in the player style: expired short links mention the 30-day
-retention, a project code opened under `/run/` links to `/bluek/<code>`, and
-hosted links lead back to the BlueK start page.
-`shareRoutes.ts` recognizes paths below the configured deployment prefix and
-accepts capitalized codes.
-Permanent `#bluek` links retain their format; `/load/<code>` is transitional
-([cleanup issue #26](https://github.com/tomkarp/BlueK/issues/26)).
-`shareLinks.ts` preserves the deployment prefix and supplies the common base;
-`programLinks.ts` owns program URL construction and the full-link size limit; no separate
-IDE/runtime path is introduced. The Save / Export dialog has fixed dimensions
-bounded by the viewport, a scrolling content area and a persistent action footer.
-One shared program options panel covers full links, short links and HTML.
-`ProjectWorkspace` owns export options and routes
-main selection through `ExecutionWorkspace`. Generation checks prevent handing
-out stale exports after asynchronous template loading, encoding or storage.
+standalone HTML. Hosted links use a module worker; HTML uses the embedded Blob
+worker. Neither player path initializes browser drafts.
 
-The share service stores program envelopes in the existing SQLite table with
-the same 30-day expiry and size limit. `/api/programs` validates the envelope,
-main membership and options. The service decides which view a code may open:
-`GET /api/projects/<code>` returns a project, or a runnable export's project
-unless its author disabled “Open in BlueK” (403). `GET /api/programs/<code>`
-answers project codes with 409. `/bluek/<code>` and manual code import open
-the editable IDE view through `loadEditableProjectFromServer` with one request,
-without running main or adopting execution options. `/run/<code>` opens the
-stored execution package with its main and presentation options.
-`shareApi.ts` turns the 400/403/404/409 replies into `ShareCodeError` reasons
-with catalog texts, so a server's English wording never reaches the interface.
+`shareRoutes.ts` also reads legacy `/bluek/`, `/run/`, `/load/` paths below the
+configured prefix (and former `/BlueK/` prefix at the production root).
+`legacyContentLinks.ts` centrally gates read-only compatibility for existing
+`#bluek`/`#run` payloads, with no agreed shutdown date. `linkNavigation.ts` owns
+same-document hash reloads. Save and Share are separate viewport-bounded dialogs
+with fixed dimensions, scrolling content and a persistent footer. Save offers
+private storage and file formats; Share offers public editor/player copies.
+`ProgramExportOptions` presents the same bound options for published programs
+and HTML downloads. Generation checks prevent handing out stale
+exports after asynchronous template loading/storage.
 
-An IDE link that cannot be loaded (`/bluek/`, `/load/`, `#bluek` or the BluePlay
-example) restores the tab's draft instead of leaving an empty project that
-would overwrite it. A dismissible link notice explains the failure and
-disappears when a project loads; the link address is removed so a reload
-starts normally.
+`CloudWorkspace` owns account/session presentation, private-project metadata,
+revision associations and pending/error state, using narrow project/language
+capabilities. It never owns source/runtime state or probes the server at startup.
+`CloudDialog` contains authentication/account settings only; `CloudProjectPanel`
+presents private opening/deletion under Open and private save/update/copy under
+Save. Authentication remembers its initiating dialog, returns there on success
+and never saves implicitly. The toolbar account action stays separate from
+the unchanged view toggles.
+`apiClient.ts` owns the configured API origin, credentials, bounded requests,
+size checks and translated service errors. `shareApi.ts` adds publication and
+link-error semantics. The editor and hosted player provide no content-report
+action; technical feedback remains a separate service.
 
-The offline IDE embeds the same app, formatter, assets and player template.
-Only worker/asset factories change; no alternate execution model. Short links
-are hidden, full links target the public site, removing the project hash keeps
-the local file path intact.
+The Node/SQLite service enforces owner permissions, session invalidation,
+immutable seven-day public copies, 1 MiB project limits, closed publication
+schemas and the no-custom-media policy. A separate local operator CLI inspects
+JSON and blocks copies/accounts. The additive migration preserves old
+payloads/deadlines and reserves every code permanently before cleanup. See
+[server-storage.md](server-storage.md) for precise API, security and retention
+contracts and [deployment.md](deployment.md) for the static/API split.
+
+Before optional link requests, the IDE restores/enables the tab draft. Failed
+loads retain it and show a dismissible translated notice. Successful delayed
+responses cannot replace edits made in the meantime. Link options still
+restore README/default test state through the ordinary owners.
+
+The offline IDE embeds the same app, formatter, resources and player template.
+Only worker/asset factories change; no alternate execution model. Account and
+publication controls are hidden. Local JSON, BlueJ and HTML exports remain
+available. Old content links can still be read during the transition.
 
 ## Related contracts and remaining work
 

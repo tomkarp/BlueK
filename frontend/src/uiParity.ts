@@ -5,29 +5,12 @@ type ClassModel = ClassMeta;
 type ObjectModel = { className: string };
 type ResourceModel = { path: string; data: string };
 
-const bytesToBase64Url = (bytes: Uint8Array) => {
-  let binary = "";
-  for (let index = 0; index < bytes.length; index += 0x8000)
-    binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
-  return btoa(binary)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "");
-};
 const base64UrlToBytes = (value: string) => {
   const base64 =
     value.replace(/-/g, "+").replace(/_/g, "/") +
     "=".repeat((4 - (value.length % 4)) % 4);
   const binary = atob(base64);
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
-};
-const encodeBlueKLink = async (payload: unknown) => {
-  const json = JSON.stringify(payload);
-  if (!("CompressionStream" in window))
-    return `p1.${bytesToBase64Url(new TextEncoder().encode(json))}`;
-  const stream = byteStream(new TextEncoder().encode(json))
-    .pipeThrough(new CompressionStream("deflate-raw"));
-  return `d1.${bytesToBase64Url(new Uint8Array(await new Response(stream).arrayBuffer()))}`;
 };
 const decodeBlueKLink = async (value: string) => {
   const separator = value.indexOf(".");
@@ -333,7 +316,6 @@ const cardBorderPoint = (
 };
 
 export {
-  encodeBlueKLink,
   decodeBlueKLink,
   drawnImageDataUrl,
   runtimeClassName,

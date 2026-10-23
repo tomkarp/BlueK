@@ -1,8 +1,9 @@
+import { legacyContent } from "./legacyContentLinks";
 import { shareRoute } from "./shareRoutes";
 import { reloadOnLinkNavigation } from "./linkNavigation";
 
 const isProgramLink = () =>
-  new URLSearchParams(window.location.hash.slice(1)).has("run") ||
+  Boolean(legacyContent(new URLSearchParams(window.location.hash.slice(1)), "run")) ||
   shareRoute(import.meta.env.BASE_URL, window.location.href)?.kind === "run";
 const playing = isProgramLink();
 

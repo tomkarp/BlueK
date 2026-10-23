@@ -141,12 +141,10 @@ test("GUI-130 German help, transfer and test-state actions work in small viewpor
   );
   await page.screenshot({ path: "test-results/help-german.png" });
   await help.getByRole("button", { name: "Schließen", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Speichern / Exportieren", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Teilen", exact: true }).click();
   await expect(
     page.getByRole("button", {
-      name: "Vollständigen Projektlink kopieren",
+      name: "Bearbeitungslink erstellen",
       exact: false,
     }),
   ).toBeVisible();
@@ -205,7 +203,9 @@ test("GUI-130 compiler and runtime diagnostics stay English in German UI", async
   await expect(page.locator(".editor-diagnostics")).toContainText(
     "Expected type is `Int`, but actual type is `String`",
   );
-  await expect(page.locator(".editor-diagnostics")).not.toContainText("TypeMismatchException");
+  await expect(page.locator(".editor-diagnostics")).not.toContainText(
+    "TypeMismatchException",
+  );
 });
 
 test("GUI-130 invalid or unavailable storage falls back to English; switching still works", async ({
@@ -257,7 +257,7 @@ test("GUI-130 complete translated paragraphs and Kotlin class names", async ({
     help.getByRole("heading", { name: "Bearbeiten", exact: true }),
   ).toBeVisible();
   await expect(help.locator(".localized-text strong").first()).toHaveText(
-    "Neues Projekt",
+    "Neu",
   );
   await help
     .getByRole("navigation")
@@ -278,9 +278,7 @@ test("GUI-130 BluePlay reference translates explanations and preserves signature
 }) => {
   await page.goto("/");
   await german(page);
-  await page
-    .getByRole("button", { name: "Neues Projekt", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Neu", exact: true }).click();
   await page.getByRole("button", { name: /^BluePlay-Vorlage/ }).click();
   await page.locator('.classcard[aria-label="World"]').dblclick();
   const api = page.getByRole("dialog", { name: "World API", exact: true });
@@ -299,11 +297,16 @@ test("GUI-130 BluePlay reference translates explanations and preserves signature
   await expect(api.locator("code").first()).toContainText("World(");
   await expect(api).toContainText("fun addObject");
   await api.getByRole("button", { name: "Schließen", exact: true }).click();
-  await page.getByRole("button", { name: "Einstellungen", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Einstellungen", exact: true })
+    .click();
   await page.getByLabel("Sprache", { exact: true }).selectOption("en");
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await page.locator('.classcard[aria-label="World"]').dblclick();
-  const englishApi = page.getByRole("dialog", { name: "World API", exact: true });
+  const englishApi = page.getByRole("dialog", {
+    name: "World API",
+    exact: true,
+  });
   await expect(
     englishApi.getByRole("heading", { name: "Properties", exact: true }),
   ).toBeVisible();

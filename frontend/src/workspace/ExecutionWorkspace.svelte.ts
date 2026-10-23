@@ -224,9 +224,9 @@ export class ExecutionWorkspace {
     this.mainDialog = null;
     if (request?.action === "export")
       await this.host.project().writeHtmlExport(fileName, request.generationId);
-    else if (request?.action === "shareFullProgram" || request?.action === "shareShortProgram")
-      await this.host.project().writeProgramLink(fileName, request.generationId, request.action === "shareShortProgram");
-      else if (request)
+    else if (request?.action === "shareShortProgram")
+      await this.host.project().writeProgramLink(fileName, request.generationId);
+    else if (request)
       await this.executeMain(fileName, request.action, request.generationId);
   };
   executeMain = async (
@@ -468,7 +468,7 @@ export class ExecutionWorkspace {
     if (this.runtime.phase !== "uncompiled") await this.client.stop();
     this.host.play().clearWorld();
   };
-  requestExport = (generationId: string, action: "export" | "shareFullProgram" | "shareShortProgram" = "export") => {
+  requestExport = (generationId: string, action: "export" | "shareShortProgram" = "export") => {
     this.mainDialog = { action, generationId };
   };
   reportCallError = (message: string, exception = false) => {

@@ -1,3 +1,5 @@
+import { legacyContent } from "./legacyContentLinks";
+import { apiErrorText } from "./apiClient";
 import { mount } from "svelte";
 import PlayerApp from "./PlayerApp.svelte";
 import PlayerProblem from "./PlayerProblem.svelte";
@@ -32,7 +34,7 @@ export async function openPlayer(
   // Embedded HTML remains self-contained, regardless of an appended hash.
   const embedded = document.getElementById(PROGRAM_ELEMENT_ID)?.textContent;
   const params = new URLSearchParams(window.location.hash.slice(1));
-  const encoded = params.get("run");
+  const encoded = legacyContent(params, "run");
   const route = shareRoute(developerBaseUrl, window.location.href);
   const code = route?.kind === "run" ? route.code : null;
   const projectUrl = (shared: string) =>
@@ -68,8 +70,8 @@ export async function openPlayer(
       target,
       props: {
         language,
-        message: error instanceof Error ? error.message : String(error),
-        expired: problem === "missing",
+        message: apiErrorText(error, language.t),
+        expired: problem === "expired",
         projectUrl:
           problem === "project" && code ? projectUrl(code) : undefined,
         homeUrl: linked ? developerBaseUrl : undefined,

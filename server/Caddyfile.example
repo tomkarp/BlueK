@@ -1,0 +1,44 @@
+# Production bluek.online/www point directly to GitHub Pages, not this host.
+api.bluek.online {
+    encode gzip zstd
+    handle /api/* {
+        reverse_proxy 127.0.0.1:8787
+    }
+    handle {
+        respond 404
+    }
+}
+
+# Existing beta static delivery; replace this path for the deployment host.
+beta.bluek.online {
+    encode gzip zstd
+    root * /var/www/bluek-beta
+    handle /api/* {
+        reverse_proxy 127.0.0.1:8787
+    }
+    handle {
+        try_files {path} /index.html
+        file_server
+    }
+}
+
+# Compatibility for older downloaded clients and old aliases.
+bluek.de {
+    handle /api/* {
+        reverse_proxy 127.0.0.1:8787
+    }
+    handle {
+        redir https://bluek.online{uri} 308
+    }
+}
+www.bluek.de {
+    redir https://bluek.online{uri} 308
+}
+beta.bluek.de {
+    handle /api/* {
+        reverse_proxy 127.0.0.1:8787
+    }
+    handle {
+        redir https://beta.bluek.online{uri} 308
+    }
+}

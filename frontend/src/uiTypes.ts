@@ -57,7 +57,7 @@ export type ObjectMenu = {
   object?: BenchObject;
 };
 export type CodepadMenu = { x: number; y: number; text?: string };
-export type MainAction = "start" | "reset" | "export" | "shareFullProgram" | "shareShortProgram";
+export type MainAction = "start" | "reset" | "export" | "shareShortProgram";
 export type MainDialog = { action: MainAction; generationId: string };
 export type ShareLinkDialog = { url: string; code: string; copied: boolean; program?: boolean };
 export type NewClassType =

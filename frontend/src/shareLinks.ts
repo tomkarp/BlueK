@@ -18,8 +18,7 @@ export function shortShareUrl(
   basePath: string,
   pageUrl: string,
 ): URL {
-  return new URL(
-    `${kind}/${encodeURIComponent(code)}`,
-    applicationUrl(basePath, pageUrl),
-  );
+  const url = applicationUrl(basePath, pageUrl);
+  url.searchParams.set(kind === "run" ? "run" : "p", code.toLowerCase());
+  return url;
 }

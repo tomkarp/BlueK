@@ -1,3 +1,10 @@
+import {
+  apiErrorText,
+  ApiError,
+  checkServerProject,
+  serverProjectSize,
+} from "../apiClient";
+import { legacyContent } from "../legacyContentLinks";
 import { englishText } from "../i18n/catalog";
 import { projectTemplate } from "../projectTemplates";
 import {
@@ -21,10 +28,7 @@ import {
   sourceDeclarationName,
 } from "../uiParity";
 
-import {
-  bluePlayLibraryNames,
-  bluePlayLibraryFiles,
-} from "../bluePlayCards";
+import { bluePlayLibraryNames, bluePlayLibraryFiles } from "../bluePlayCards";
 import { mainFiles } from "../mainEntries";
 
 import {
@@ -37,13 +41,18 @@ import {
   downloadFile,
   droppedDirectoryEntries,
   copyLink,
-  copyFullProjectLink,
   saveShortProjectLink,
   readSharedProject,
   readProjectFile,
 } from "../projectBrowserIO";
 import { htmlExport } from "../htmlExport";
-import { blueJProjectFromEntries, blueJProjects, entriesFromZip, type BlueJProjectChoice, type ImportEntry } from "../blueJImport";
+import {
+  blueJProjectFromEntries,
+  blueJProjects,
+  entriesFromZip,
+  type BlueJProjectChoice,
+  type ImportEntry,
+} from "../blueJImport";
 import { blueJExportLimits, blueJProjectZip } from "../blueJExport";
 
 import { withStandardResources } from "../standardImages";
@@ -61,7 +70,7 @@ import {
   ShareCodeError,
 } from "../shareApi";
 import { shareRoute } from "../shareRoutes";
-import { programForLink, fullProgramLink, shortProgramLink } from "../programLinks";
+import { programForLink, shortProgramLink } from "../programLinks";
 
 import type {
   ProjectFile,
@@ -71,7 +80,10 @@ import type {
 type Resource = ProjectResource;
 type MessageKey = import("../i18n/Language.svelte").MessageKey;
 
-const MEDIA_PROBLEM_TEXT: Record<MediaKind, Record<MediaProblem, MessageKey>> = {
+const MEDIA_PROBLEM_TEXT: Record<
+  MediaKind,
+  Record<MediaProblem, MessageKey>
+> = {
   sound: {
     format: "ui.media.soundFormatUnsupported",
     size: "ui.media.soundTooLarge",
@@ -87,7 +99,11 @@ const MEDIA_PROBLEM_TEXT: Record<MediaKind, Record<MediaProblem, MessageKey>> = 
 };
 const RENAME_TEXT: Record<
   MediaKind,
-  { prompt: MessageKey; removeConfirm: MessageKey; problems: Record<RenameProblem, MessageKey> }
+  {
+    prompt: MessageKey;
+    removeConfirm: MessageKey;
+    problems: Record<RenameProblem, MessageKey>;
+  }
 > = {
   sound: {
     prompt: "ui.media.renameSoundPrompt",
@@ -155,11 +171,17 @@ export class ProjectWorkspace {
   });
   recentProjects: ProjectDraftSummary[] = $state.raw([]);
   savedProjectsNotice = $state(false);
+  /** Project replacements invalidate cloud associations; source edits keep them. */
+  documentVersion = $state(0);
   /** Why the opened link could not be loaded; cleared when a project loads. */
   linkProblem: { message: string; expired: boolean } | null = $state(null);
   /** What the last BlueJ export could not carry over; stays until closed or the next BlueJ export. */
   blueJExportNotice = $state("");
-  blueJImportChoice = $state.raw<{ entries: ImportEntry[]; projects: BlueJProjectChoice[]; name: string } | null>(null);
+  blueJImportChoice = $state.raw<{
+    entries: ImportEntry[];
+    projects: BlueJProjectChoice[];
+    name: string;
+  } | null>(null);
   /** Why the browser draft is not stored; `session` means it cannot be restored after a reload. */
   autosaveWarning: DraftSaveFailure | { reason: "session" } | null =
     $state(null);
@@ -169,7 +191,11 @@ export class ProjectWorkspace {
     this.autosaveWarningDismissed = this.autosaveWarning?.reason ?? "";
   };
   refreshRecentProjects = () => {
-    this.recentProjects = this.drafts.list();
+    // The current tab restores itself automatically. Only show other-tab or
+    // earlier-session drafts here, where they can actually be recovered.
+    this.recentProjects = this.drafts
+      .list()
+      .filter((project) => project.id !== this.drafts.activeId);
     if (!this.recentProjects.length) this.savedProjectsNotice = false;
   };
   deleteRecentProject = (id: string) => {
@@ -210,12 +236,17 @@ export class ProjectWorkspace {
     }
   };
   openRecentProject = async (id: string) => {
+    if (
+      id !== this.drafts.activeId &&
+      !this.confirmProjectReplacement()
+    )
+      return;
     this.saveAutosave();
     const ready = this.autosaveReady;
     this.autosaveReady = false;
     try {
       const payload = await this.drafts.open(id);
-      await this.loadProject(payload, "Saved project restored.");
+      await this.loadProject(payload, "Saved project restored.", false);
       this.toolbarDialog = null;
       this.savedProjectsNotice = false;
     } catch (reason) {
@@ -268,9 +299,8 @@ export class ProjectWorkspace {
   /** Why the last add or rename in the Images/Audio dialog failed. */
   mediaErrors: Record<MediaKind, string> = $state({ sound: "", image: "" });
   shareNotice = $state("");
-  shareLinkDialog: import("../uiTypes").ShareLinkDialog | null =
-    $state(null);
-  toolbarDialog: "open" | "save" | null = $state(null);
+  shareLinkDialog: import("../uiTypes").ShareLinkDialog | null = $state(null);
+  toolbarDialog: "open" | "save" | "share" | null = $state(null);
   shareCodeInput = $state("");
   shareCodeError = $state("");
   shareWithReadme = $state(false);
@@ -285,11 +315,13 @@ export class ProjectWorkspace {
     allowDownload: this.programAllowDownload,
     allowBlueK: this.programAllowBlueK,
     showProjectName: this.programShowProjectName,
-    ...(this.library?.id === "blueplay" ? {
-      autoRun: this.programAutoRun,
-      showControls: !this.programAutoRun || this.programShowControls,
-      showSpeed: this.programShowSpeed,
-    } : {}),
+    ...(this.library?.id === "blueplay"
+      ? {
+          autoRun: this.programAutoRun,
+          showControls: !this.programAutoRun || this.programShowControls,
+          showSpeed: this.programShowSpeed,
+        }
+      : {}),
   });
   canShareState = $derived.by(
     () =>
@@ -417,6 +449,17 @@ export class ProjectWorkspace {
     if (!this.autosaveReady) return;
     this.persistDraft(this.projectPayload());
   };
+  private hasProjectData = () =>
+    Boolean(
+      this.files.length ||
+        this.resources.length ||
+        this.readme.trim() ||
+        this.projectName.trim() ||
+        this.library,
+    );
+  private confirmProjectReplacement = () =>
+    !this.hasProjectData() ||
+    window.confirm(this.text("ui.transfer.replaceCurrentProjectBeforeLoading"));
   private persistDraft = (
     payload: ReturnType<ProjectWorkspace["projectPayload"]>,
   ) => {
@@ -597,7 +640,11 @@ export class ProjectWorkspace {
     this.host.session().sourceEdited();
   };
   deleteFile = (file: ProjectFile) => {
-    if (!window.confirm(this.text("ui.objects.deleteFileConfirm", [file.fileName])))
+    if (
+      !window.confirm(
+        this.text("ui.objects.deleteFileConfirm", [file.fileName]),
+      )
+    )
       return;
     const attached = this.files.filter(
       (item) => item.testTarget === file.fileName,
@@ -683,7 +730,12 @@ export class ProjectWorkspace {
       "",
     );
     if (entered === null) return false;
-    this.projectName = entered.trim();
+    const name = entered.trim();
+    if (!name) {
+      window.alert(this.text("ui.transfer.projectNameRequired"));
+      return false;
+    }
+    this.projectName = name;
     return true;
   };
   exportProject = () => {
@@ -699,23 +751,40 @@ export class ProjectWorkspace {
   exportBlueJProject = () => {
     if (!this.ensureProjectName()) return;
     const cardPositions = Object.fromEntries(
-      this.displayFiles.map((file, index) => [file.fileName, this.displayCardPositions[index]]),
+      this.displayFiles.map((file, index) => [
+        file.fileName,
+        this.displayCardPositions[index],
+      ]),
     );
     const folderName = exportFileName(this.projectName, "");
     const payload = { ...this.projectPayload(), cardPositions };
-    downloadFile(blueJProjectZip(payload, folderName), "application/zip", `${folderName}.zip`);
+    downloadFile(
+      blueJProjectZip(payload, folderName),
+      "application/zip",
+      `${folderName}.zip`,
+    );
     this.host.ui().status = "Project exported";
     // Only projects that have something BlueJ cannot take over get a note.
     const { testClasses, mp3Sounds } = blueJExportLimits(payload);
     this.blueJExportNotice = [
-      ...(testClasses.length ? [this.text("ui.transfer.blueJExportLeavesOutTestClasses", [testClasses.join(", ")])] : []),
-      ...(mp3Sounds.length ? [this.text("ui.transfer.blueJDoesNotPlayMp3", [mp3Sounds.join(", ")])] : []),
+      ...(testClasses.length
+        ? [
+            this.text("ui.transfer.blueJExportLeavesOutTestClasses", [
+              testClasses.join(", "),
+            ]),
+          ]
+        : []),
+      ...(mp3Sounds.length
+        ? [this.text("ui.transfer.blueJDoesNotPlayMp3", [mp3Sounds.join(", ")])]
+        : []),
     ].join(" ");
   };
+  get serverProjectBytes() {
+    return serverProjectSize(this.projectPayload());
+  }
   exportHtml = () => this.exportProgram("export");
-  shareFullProgram = () => this.exportProgram("shareFullProgram");
   shareShortProgram = () => this.exportProgram("shareShortProgram");
-  exportProgram = async (action: "export" | "shareFullProgram" | "shareShortProgram") => {
+  exportProgram = async (action: "export" | "shareShortProgram") => {
     if (
       !this.files.length ||
       this.htmlExporting ||
@@ -723,6 +792,14 @@ export class ProjectWorkspace {
     )
       return;
     if (!this.ensureProjectName()) return;
+    if (action === "shareShortProgram") {
+      try {
+        checkServerProject(this.projectPayload(), true);
+      } catch (error) {
+        this.showExportNotice(apiErrorText(error, this.text));
+        return;
+      }
+    }
     if (
       this.host.session().runtime.phase === "uncompiled" ||
       this.host.session().runtime.phase === "compiling"
@@ -744,8 +821,9 @@ export class ProjectWorkspace {
       this.host.session().requestExport(snapshot.generationId, action);
       return;
     }
-    if (action === "export") await this.writeHtmlExport(entries[0], snapshot.generationId);
-    else await this.writeProgramLink(entries[0], snapshot.generationId, action === "shareShortProgram");
+    if (action === "export")
+      await this.writeHtmlExport(entries[0], snapshot.generationId);
+    else await this.writeProgramLink(entries[0], snapshot.generationId);
   };
   showExportNotice = (text: string) => {
     this.shareNotice = text;
@@ -782,37 +860,45 @@ export class ProjectWorkspace {
       this.htmlExporting = false;
     }
   };
-  writeProgramLink = async (mainFile: string, generationId: string, short: boolean) => {
-    if (generationId !== this.host.session().runtime.generationId || this.htmlExporting) return;
+  writeProgramLink = async (mainFile: string, generationId: string) => {
+    if (
+      generationId !== this.host.session().runtime.generationId ||
+      this.htmlExporting
+    )
+      return;
     this.htmlExporting = true;
     try {
-      const program = programForLink(this.projectPayload(), mainFile, import.meta.env.BASE_URL, window.location.href, this.programOptions());
-      const saved = short ? await saveProgramToServer(program) : null;
-      const url = saved
-        ? shortProgramLink(saved.code, import.meta.env.BASE_URL, window.location.href)
-        : await fullProgramLink(program, import.meta.env.BASE_URL, window.location.href);
+      const program = programForLink(
+        this.projectPayload(),
+        mainFile,
+        import.meta.env.BASE_URL,
+        window.location.href,
+        this.programOptions(),
+      );
+      const saved = await saveProgramToServer(program);
+      const url = shortProgramLink(
+        saved.code,
+        import.meta.env.BASE_URL,
+        window.location.href,
+      );
       if (generationId !== this.host.session().runtime.generationId) return;
-      const copied = await copyLink(url, this.text("ui.transfer.copyThisProgramLink"));
-      if (saved) this.shareLinkDialog = { url, code: saved.code, copied, program: true };
-      this.showExportNotice(this.text(copied ? "ui.transfer.programLinkCopied" : "ui.transfer.programLinkReady"));
+      const copied = await copyLink(
+        url,
+        this.text("ui.transfer.copyThisProgramLink"),
+      );
+      this.shareLinkDialog = { url, code: saved.code, copied, program: true };
+      this.showExportNotice(
+        this.text(
+          copied
+            ? "ui.transfer.programLinkCopied"
+            : "ui.transfer.programLinkReady",
+        ),
+      );
     } catch (reason) {
-      this.showExportNotice(reason instanceof Error ? reason.message : String(reason));
+      this.showExportNotice(apiErrorText(reason, this.text));
     } finally {
       this.htmlExporting = false;
     }
-  };
-  shareProject = async () => {
-    const copied = await copyFullProjectLink(
-      this.projectPayload(),
-      this.shareWithReadme,
-      this.shareWithState && this.canShareState,
-      this.text("ui.transfer.copyThisProjectLink"),
-    );
-    if (copied) this.host.ui().status = "Project link copied";
-    this.shareNotice = copied
-      ? "Project link copied to clipboard."
-      : "Project link ready to copy.";
-    window.setTimeout(() => (this.shareNotice = ""), copied ? 3000 : 4000);
   };
   saveShortProject = async () => {
     try {
@@ -825,17 +911,23 @@ export class ProjectWorkspace {
       if (this.shareLinkDialog.copied)
         this.host.ui().status = "Short project link copied";
     } catch (reason) {
-      this.shareNotice =
-        reason instanceof Error
-          ? reason.message
-          : "Project could not be saved on the server.";
+      this.shareNotice = apiErrorText(reason, this.text);
       window.setTimeout(() => (this.shareNotice = ""), 5000);
     }
   };
   loadSharedProjectFromCode = async () => {
+    const before = JSON.stringify(this.projectPayload());
+    const version = this.documentVersion;
+    const code = this.shareCodeInput;
     try {
+      const payload = await readSharedProject(code);
+      if (
+        version !== this.documentVersion ||
+        before !== JSON.stringify(this.projectPayload())
+      )
+        throw new ApiError("conflict");
       await this.loadProject(
-        await readSharedProject(this.shareCodeInput),
+        payload,
         "Shared BlueK project loaded. Compile the project.",
       );
       window.history.replaceState(
@@ -847,10 +939,7 @@ export class ProjectWorkspace {
       this.shareCodeError = "";
       this.toolbarDialog = null;
     } catch (reason) {
-      this.shareCodeError =
-        reason instanceof Error
-          ? reason.message
-          : "Project could not be loaded.";
+      this.shareCodeError = apiErrorText(reason, this.text);
     }
   };
   copySharedLink = async () => {
@@ -862,12 +951,18 @@ export class ProjectWorkspace {
     if (copied)
       this.shareLinkDialog = { ...this.shareLinkDialog, copied: true };
   };
-  loadProject = async (payload: unknown, message = "Project loaded.") => {
+  loadProject = async (
+    payload: unknown,
+    message = "Project loaded.",
+    confirmReplacement = true,
+  ): Promise<boolean> => {
     const imported = projectModelFromPayload(
       payload,
       (index) => `project-${Date.now()}-${index}`,
     );
+    if (confirmReplacement && !this.confirmProjectReplacement()) return false;
     this.saveAutosave();
+    this.documentVersion++;
     this.savedProjectsNotice = false;
     this.linkProblem = null;
     const librarySourceFiles = new Set([
@@ -879,7 +974,9 @@ export class ProjectWorkspace {
     ]);
     this.files =
       imported.library?.id === "blueplay"
-        ? imported.files.filter((file) => !librarySourceFiles.has(file.fileName))
+        ? imported.files.filter(
+            (file) => !librarySourceFiles.has(file.fileName),
+          )
         : imported.files;
     this.library = imported.library;
     this.resources = imported.resources;
@@ -898,6 +995,7 @@ export class ProjectWorkspace {
     this.host.editor().resetWindows();
     this.host.session().markUncompiled();
     this.host.ui().status = message;
+    return true;
   };
   importProject = async (event: Event) => {
     const input = event.currentTarget as HTMLInputElement;
@@ -914,7 +1012,10 @@ export class ProjectWorkspace {
         return;
       }
       if (/\.zip$/i.test(file.name)) {
-        await this.openProjectEntries(entriesFromZip(new Uint8Array(await file.arrayBuffer())), file.name);
+        await this.openProjectEntries(
+          entriesFromZip(new Uint8Array(await file.arrayBuffer())),
+          file.name,
+        );
         return;
       }
       await this.loadProject(
@@ -947,12 +1048,16 @@ export class ProjectWorkspace {
   chooseBlueJProject = async (root: string) => {
     const choice = this.blueJImportChoice;
     if (!choice) return;
-    this.blueJImportChoice = null;
     try {
-      await this.loadProject(blueJProjectFromEntries(choice.entries, root), `Loaded ${choice.name}: ${root}`);
+      const loaded = await this.loadProject(
+        blueJProjectFromEntries(choice.entries, root),
+        `Loaded ${choice.name}: ${root}`,
+      );
+      if (loaded) this.blueJImportChoice = null;
     } catch (reason) {
       this.host.ui().status = "Project error";
-      this.host.ui().error = reason instanceof Error ? reason.message : String(reason);
+      this.host.ui().error =
+        reason instanceof Error ? reason.message : String(reason);
     }
   };
   openProjectDrop = async (event: DragEvent) => {
@@ -1008,7 +1113,8 @@ export class ProjectWorkspace {
     for (const file of chosen) {
       const result = await readMediaFile(kind, file);
       if (typeof result !== "string") added.push(result);
-      else problems.push(this.text(MEDIA_PROBLEM_TEXT[kind][result], [file.name]));
+      else
+        problems.push(this.text(MEDIA_PROBLEM_TEXT[kind][result], [file.name]));
     }
     this.mediaErrors[kind] = problems.join(" ");
     if (!added.length) return;
@@ -1059,18 +1165,13 @@ export class ProjectWorkspace {
     this.host.session().markUncompiled();
   };
   chooseTemplate = async (choice: string) => {
-    if (
-      (this.files.length || this.resources.length) &&
-      !window.confirm(
-        this.text("ui.transfer.theCurrentProjectContainsDataReplaceIt"),
-      )
-    )
-      return;
+    if (!this.confirmProjectReplacement()) return;
     await this.host.session().stopForProjectReplacement();
     if (choice === "empty") {
       await this.loadProject(
         { format: "bluek-project", version: 1, files: [] },
         "New project",
+        false,
       );
       this.newProjectOpen = false;
       return;
@@ -1081,7 +1182,7 @@ export class ProjectWorkspace {
         payload.files = payload.files.filter(
           (file) => file.fileName !== "Main.kt",
         );
-      await this.loadProject(payload, "Project template loaded.");
+      await this.loadProject(payload, "Project template loaded.", false);
     } catch {
       this.host.ui().status = "Project error";
       this.host.ui().error = "Could not load project template.";
@@ -1116,9 +1217,9 @@ export class ProjectWorkspace {
     const linkProblem = (reason: unknown, fallback: string): LinkProblem => {
       this.host.ui().status = "Project error";
       return {
-        message: reason instanceof Error ? reason.message : fallback,
+        message: reason ? apiErrorText(reason, this.text) : fallback,
         expired:
-          reason instanceof ShareCodeError && reason.problem === "missing",
+          reason instanceof ShareCodeError && reason.problem === "expired",
       };
     };
     const openShared = async (
@@ -1126,11 +1227,20 @@ export class ProjectWorkspace {
       fallback: string,
       cleanUrl: string,
     ): Promise<LinkProblem | null> => {
+      const before = JSON.stringify(this.projectPayload());
+      const version = this.documentVersion;
       try {
-        await this.loadProject(
-          await load(),
+        const payload = await load();
+        if (
+          version !== this.documentVersion ||
+          before !== JSON.stringify(this.projectPayload())
+        )
+          throw new ApiError("conflict");
+        const loaded = await this.loadProject(
+          payload,
           "Shared BlueK project loaded. Compile the project.",
         );
+        if (!loaded) return null;
       } catch (reason) {
         return linkProblem(reason, fallback);
       } finally {
@@ -1148,7 +1258,8 @@ export class ProjectWorkspace {
           "Could not load the shared BlueK project.",
           route.basePath,
         );
-      const shared = new URLSearchParams(window.location.hash.slice(1)).get(
+      const shared = legacyContent(
+        new URLSearchParams(window.location.hash.slice(1)),
         "bluek",
       );
       if (shared)
@@ -1166,10 +1277,11 @@ export class ProjectWorkspace {
       )
         return null;
       try {
-        await this.loadProject(
+        const loaded = await this.loadProject(
           await projectTemplate("blueplay"),
           "BluePlay example loaded.",
         );
+        if (!loaded) return null;
         return null;
       } catch {
         return linkProblem(null, "Could not load the BluePlay example.");
@@ -1177,7 +1289,8 @@ export class ProjectWorkspace {
     };
     const restoreTab = async () => {
       const saved = await this.drafts.restore();
-      if (saved) await this.loadProject(saved, "Local project restored.");
+      if (saved)
+        await this.loadProject(saved, "Local project restored.", false);
       else {
         this.refreshRecentProjects();
         this.savedProjectsNotice = this.recentProjects.length > 0;
@@ -1186,21 +1299,21 @@ export class ProjectWorkspace {
     this.drafts.migrateLegacy();
     const hasExplicitProject = Boolean(
       route ||
-      new URLSearchParams(window.location.hash.slice(1)).get("bluek") ||
+      legacyContent(
+        new URLSearchParams(window.location.hash.slice(1)),
+        "bluek",
+      ) ||
       new URLSearchParams(window.location.search).get("example") === "blueplay",
     );
-    if (!hasExplicitProject) await restoreTab();
-    else {
-      await this.drafts.resumeTab();
-      const problem = await openLinkedProject();
-      if (problem) {
-        // A failed link must not replace this tab's work with an empty project.
-        await restoreTab();
-        this.linkProblem = problem;
-      }
-    }
+    // Restore and enable local drafts before any optional server request.
+    // A delayed/failed link cannot replace edits made while it is loading.
+    await restoreTab();
     this.autosaveReady = true;
     this.saveAutosave();
+    if (hasExplicitProject) {
+      const problem = await openLinkedProject();
+      if (problem) this.linkProblem = problem;
+    }
   };
   connect = () => {
     $effect(() => {

@@ -380,10 +380,10 @@ Compile; `Image("…")` calls in the source keep their old names.
 ## BlueJ version and compatibility
 
 BluePlay was first developed as a BlueJ project (BlueJ 6 or later with Kotlin
-support). BlueK is now the only maintained version. **Open / Import** accepts
+support). BlueK is now the only maintained version. **Open** accepts
 BlueJ projects written with BluePlay: their BluePlay library files are replaced
 by the built-in library, while your own classes, images and sounds are
-imported. **Save / Export → Export BlueJ Project (.zip)** works the other way:
+imported. **Save → Export BlueJ Project (.zip)** works the other way:
 the ZIP contains the BlueJ version of the library, your classes and all
 standard images and sounds in `images/` and `sounds/`; open the unpacked folder
 in BlueJ. In BlueJ, `playSound` plays WAV files only; if the project has MP3

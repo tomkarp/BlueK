@@ -62,15 +62,15 @@ test('GUI-62 file:// runs Kotlin, input, reset and restores/imports/exports proj
   await expect(await evaluate(page, '2 + 3')).toContainText('5');
   await page.reload();
   await expect(page.getByLabel('Project name')).toHaveValue('Lokal');
-  await page.getByRole('button', { name: 'Save / Export', exact: true }).click();
-  await expect(page.getByRole('button', { name: /^Copy Short Link/ })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByRole('button', { name: /Publish .* Link/ })).toHaveCount(0);
   const [download] = await Promise.all([
-    page.waitForEvent('download'), page.getByRole('button', { name: /^Export Project JSON/ }).click(),
+    page.waitForEvent('download'), page.getByRole('button', { name: /^Download BlueK project file/ }).click(),
   ]);
   const file = info.outputPath(download.suggestedFilename());
   await download.saveAs(file);
   expect(JSON.parse(await readFile(file, 'utf8')).files[0].source).toContain('println("lokal")');
-  await page.getByRole('button', { name: 'Open / Import', exact: true }).click();
+  await page.getByRole('button', { name: 'Open', exact: true }).click();
   await expect(page.getByLabel('Three-word project code')).toHaveCount(0);
   await page.getByLabel('Choose project file').setInputFiles(file);
   await expect(page.getByLabel('Project name')).toHaveValue('Lokal');
@@ -81,7 +81,7 @@ test('GUI-62 all project templates are available locally; BluePlay renders stand
   const verify = await open(page);
   page.on('dialog', dialog => dialog.accept());
   for (const choice of ['BluePlay Template', 'BlueK Demo Project', 'Space Invaders Demo', 'BluePlay Example']) {
-    await page.getByRole('button', { name: 'New Project', exact: true }).click();
+    await page.getByRole('button', { name: 'New', exact: true }).click();
     await page.getByRole('dialog', { name: 'Create New Project' }).getByRole('button', { name: new RegExp('^' + choice) }).click();
     await expect(page.getByRole('dialog', { name: 'Create New Project' })).toBeHidden();
     await expect(page.locator('.classcard').first()).toBeVisible();
@@ -104,8 +104,8 @@ test('GUI-62 local formatter and HTML program export work from the single file',
   await expect(editor.locator('.cm-line')).toHaveCount(4);
   await expect(editor.locator('.cm-line').nth(1)).toHaveText('    println("exportiert")');
   await editor.getByRole('button', { name: 'Close editor' }).click();
-  await page.getByRole('button', { name: 'Save / Export', exact: true }).click();
-  await page.getByRole('button', { name: 'Runnable program', exact: true }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByRole('button', { name: 'Runnable webpage …', exact: true }).click();
   const [download] = await Promise.all([
     page.waitForEvent('download'), page.getByRole('button', { name: /^Export as HTML/ }).click(),
   ]);
@@ -114,7 +114,7 @@ test('GUI-62 local formatter and HTML program export work from the single file',
   const player = await page.context().newPage();
   await player.goto(pathToFileURL(file).href);
   await expect(player.getByRole('region', { name: 'Terminal' }).locator('pre')).toHaveText('exportiert\n');
-  await expect(player.getByRole('link', { name: 'Open in BlueK' })).toHaveAttribute('href', /^https:\/\/bluek.online\/#bluek=/);
+  await expect(player.getByRole('link', { name: 'Open in BlueK' })).toHaveAttribute('href', 'https://bluek.online/');
   verify();
 });
 
@@ -164,7 +164,7 @@ test('GUI-130 GUI-139 offline language, terminal settings and German manual work
     await page.getByLabel('Codepad-Eingabe', {exact: true}).press('Enter');
     await expect(page.locator('.terminal-output pre')).toHaveText(`${output}\n`);
   }
-  await page.getByRole('button', {name: 'Speichern / Exportieren', exact: true}).click();
+  await page.getByRole('button', {name: 'Speichern', exact: true}).click();
   await expect(page.getByRole('button', {name: /Kurzlink kopieren/})).toHaveCount(0);
   verify();
 });

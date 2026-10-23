@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { deflateRawSync } from 'node:zlib';
 import { rolldown } from 'rolldown';
 
 // Test the helpers imported by the actual Svelte component, not a reimplementation.
@@ -146,7 +147,8 @@ assert.equal(generic.parameters[0].type.displayName, 'T');
 
 globalThis.window = globalThis;
 const project = { format: 'bluek-project', version: 1, files: [{ fileName: 'Hund.kt', source: child }] };
-const link = await ui.encodeBlueKLink(project);
+assert.equal(ui.encodeBlueKLink, undefined, 'No content encoder is exported');
+const link = 'd1.' + deflateRawSync(Buffer.from(JSON.stringify(project))).toString('base64url');
 assert.match(link, /^(d1|p1)\./);
 assert.deepEqual(await ui.decodeBlueKLink(link), project);
 const plain = 'p1.' + Buffer.from(JSON.stringify(project)).toString('base64url');
