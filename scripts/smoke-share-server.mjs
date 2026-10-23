@@ -111,7 +111,10 @@ try {
   assert.ok(!db.prepare('SELECT token_hash FROM sessions').all().some(row => cookie.includes(row.token_hash)));
   assert.equal((await post('/api/account/register', credentials)).status, 409);
   assert.equal((await post('/api/account/register', { username: 'short', password: 'tiny' })).status, 400);
-  const second = await post('/api/account/register', { username: 'student_two', password: 'another-unique-password' });
+  assert.equal((await post('/api/account/register', { username: 'nine_chars', password: '123456789' })).status, 400, 'Nine-character passwords are rejected');
+  assert.equal((await post('/api/account/register', { username: 'ten_chars', password: '1234567890' })).status, 200, 'Ten-character passwords are accepted');
+  const second = await post('/api/account/register', { username: 'student.two', password: 'another-unique-password' });
+  assert.equal(second.status, 200, 'Usernames may contain periods');
   const privateSaved = await post('/api/private-projects', { ...project, resources: media }, cookie);
   assert.equal(privateSaved.status, 201, 'Private media permitted');
   const privatePath = `/api/private-projects/${privateSaved.data.id}`;
@@ -150,10 +153,11 @@ try {
 
   const login2 = await post('/api/account/login', credentials);
   assert.equal(login2.status, 200);
-  assert.equal((await post('/api/account/password', { password: credentials.password, newPassword: 'the-new-unique-password' }, cookie)).status, 200);
+  assert.equal((await post('/api/account/password', { password: credentials.password, newPassword: '123456789' }, cookie)).status, 400, 'Nine-character replacement passwords are rejected');
+  assert.equal((await post('/api/account/password', { password: credentials.password, newPassword: '1234567890' }, cookie)).status, 200, 'Ten-character replacement passwords are accepted');
   assert.equal((await request('/api/private-projects', { cookie })).status, 401, 'Password change revokes old session');
   assert.equal((await request('/api/private-projects', { cookie: login2.cookie })).status, 401, 'Password change revokes other sessions');
-  const fresh = await post('/api/account/login', { ...credentials, password: 'the-new-unique-password' });
+  const fresh = await post('/api/account/login', { ...credentials, password: '1234567890' });
   assert.equal(fresh.status, 200);
   assert.equal((await post('/api/account/logout', undefined, fresh.cookie)).status, 200);
   assert.equal((await request('/api/private-projects', { cookie: fresh.cookie })).status, 401);
@@ -162,12 +166,12 @@ try {
   const attempt = db.prepare('SELECT * FROM login_attempts WHERE username = ?').get(credentials.username);
   assert.equal((await post('/api/account/login', credentials)).status, 429);
   assert.equal(db.prepare('SELECT next_at FROM login_attempts WHERE username = ?').get(credentials.username).next_at, attempt.next_at, 'Blocked retries never extend wait');
-  assert.equal((await post('/api/account/login', { username: 'student_two', password: 'another-unique-password' })).status, 200, 'Another account behind same IP can sign in');
+  assert.equal((await post('/api/account/login', { username: 'student.two', password: 'another-unique-password' })).status, 200, 'A dotted username can sign in');
   db.prepare('UPDATE login_attempts SET next_at = 0').run();
   assert.equal((await post('/api/account/login', credentials)).status, 401);
   assert.equal(db.prepare('SELECT failures FROM login_attempts WHERE username = ?').get(credentials.username).failures, 2);
   db.prepare('UPDATE login_attempts SET next_at = 0').run();
-  const session = await post('/api/account/login', { ...credentials, password: 'the-new-unique-password' });
+  const session = await post('/api/account/login', { ...credentials, password: '1234567890' });
   assert.equal(session.status, 200);
   assert.equal(db.prepare('SELECT * FROM login_attempts WHERE username = ?').get(credentials.username), undefined);
   db.prepare('UPDATE sessions SET expires_at = 0 WHERE account_id = ?').run(stored.id);
@@ -180,11 +184,11 @@ try {
   assert.equal((await readProject(playable.data.code)).status, 451, 'Block applies before developer-link policy');
   admin('block', 'green-lamp-river');
   assert.equal((await readProject('green-lamp-river')).status, 451, 'Legacy records are moderatable');
-  admin('block-account', 'student_two');
+  admin('block-account', 'student.two');
   assert.equal((await request('/api/private-projects', { cookie: second.cookie })).status, 401);
-  assert.equal((await post('/api/account/login', { username: 'student_two', password: 'another-unique-password' })).status, 403);
-  admin('unblock-account', 'student_two');
-  assert.equal((await post('/api/account/login', { username: 'student_two', password: 'another-unique-password' })).status, 200);
+  assert.equal((await post('/api/account/login', { username: 'student.two', password: 'another-unique-password' })).status, 403);
+  admin('unblock-account', 'student.two');
+  assert.equal((await post('/api/account/login', { username: 'student.two', password: 'another-unique-password' })).status, 200);
 
   // Deadlines are enforced on every read, independently of physical cleanup.
   db.prepare('UPDATE projects SET expires_at = ? WHERE code = ?').run('2020-01-01T00:00:00.000Z', anonymous.data.code);

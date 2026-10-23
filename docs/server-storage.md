@@ -38,8 +38,8 @@ identities. Registration is open, has no email, approval, role, reset, recovery
 question or manual identity-recovery workflow. The registration UI explains
 irrecoverable password loss and unique BlueK passwords; password-manager
 `username`, `current-password` and `new-password` autocomplete is supported.
-Usernames are case-insensitive ASCII letters/digits/underscore/hyphen, 3–32
-characters. Passwords contain 12–128 JavaScript UTF-16 code units; they are never
+Usernames are case-insensitive ASCII letters/digits/period/underscore/hyphen, 3–32
+characters. Passwords contain 10–128 JavaScript UTF-16 code units; they are never
 trimmed, silently truncated, logged or stored in plaintext.
 
 Passwords use random 16-byte salts and asynchronous Node scrypt (`N=32768`,

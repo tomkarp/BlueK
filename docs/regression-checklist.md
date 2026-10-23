@@ -1595,3 +1595,12 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
   check and beta static deploy. A live browser confirmed `beta.bluek.de`
   redirects to `beta.bluek.online` and exposes the account dialog; the beta API
   health and credentialed CORS preflight pass. `main` was not pushed or deployed.
+- Account password minimum, 2026-10-23: lowered the password minimum from 12 to
+  10 characters in account creation, login and password changes; the server
+  remains authoritative. CLOUD-03 checks the form constraint and passed in
+  English and German (2/2); the API smoke test rejects 9 characters and accepts
+  10 for both registration and password changes. The same API test verifies
+  usernames containing periods can register and sign in. Typecheck (zero errors,
+  six existing warnings), i18n, the real temporary-SQLite API test and Svelte
+  production build passed. Existing Svelte accessibility and bundle-size
+  warnings remain.

@@ -105,7 +105,7 @@
                     autocomplete="new-password"
                     bind:value={newPassword}
                     required
-                    minlength="12"
+                    minlength="10"
                     maxlength="128"
                   /></label
                 >
@@ -162,7 +162,7 @@
               required
               minlength="3"
               maxlength="32"
-              pattern="[A-Za-z0-9_-]+"
+              pattern="[A-Za-z0-9._-]+"
             /></label
           >
           <label
@@ -172,7 +172,7 @@
               autocomplete={register ? "new-password" : "current-password"}
               bind:value={password}
               required
-              minlength="12"
+              minlength="10"
               maxlength="128"
             /></label
           >

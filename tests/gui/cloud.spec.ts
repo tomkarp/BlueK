@@ -179,6 +179,13 @@ for (const locale of ["en", "de"])
     await expect(cloud.locator("input[autocomplete=new-password]")).toHaveCount(
       1,
     );
+    await expect(
+      cloud.locator('input[autocomplete="new-password"]'),
+    ).toHaveAttribute("minlength", "10");
+    await expect(cloud.locator("input[autocomplete=username]")).toHaveAttribute(
+      "pattern",
+      "[A-Za-z0-9._-]+",
+    );
     await cloud.locator("input[autocomplete=username]").fill("learner");
     await cloud
       .locator("input[autocomplete=new-password]")

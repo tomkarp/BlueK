@@ -58,9 +58,9 @@ export function createAccounts(database) {
         ? value.username.trim().toLowerCase()
         : "";
     if (
-      !/^[a-z0-9_-]{3,32}$/.test(username) ||
+      !/^[a-z0-9._-]{3,32}$/.test(username) ||
       typeof value.password !== "string" ||
-      value.password.length < 12 ||
+      value.password.length < 10 ||
       value.password.length > 128
     )
       throw new HttpError(400, "credentials-format");
