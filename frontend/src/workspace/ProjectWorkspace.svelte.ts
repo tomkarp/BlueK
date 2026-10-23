@@ -2,7 +2,6 @@ import {
   apiErrorText,
   ApiError,
   checkServerProject,
-  serverProjectSize,
 } from "../apiClient";
 import { legacyContent } from "../legacyContentLinks";
 import { englishText } from "../i18n/catalog";
@@ -779,9 +778,6 @@ export class ProjectWorkspace {
         : []),
     ].join(" ");
   };
-  get serverProjectBytes() {
-    return serverProjectSize(this.projectPayload());
-  }
   exportHtml = () => this.exportProgram("export");
   shareShortProgram = () => this.exportProgram("shareShortProgram");
   exportProgram = async (action: "export" | "shareShortProgram") => {

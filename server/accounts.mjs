@@ -51,16 +51,19 @@ export function createAccounts(database) {
     }
   }
   const dummy = `scrypt-v1:${randomBytes(16).toString("hex")}:${randomBytes(64).toString("hex")}`;
+  function normalizedUsername(value) {
+    const username =
+      typeof value === "string" ? value.trim().toLowerCase() : "";
+    if (!/^[a-z0-9._-]{3,32}$/.test(username))
+      throw new HttpError(400, "credentials-format");
+    return username;
+  }
   function credentials(value) {
     if (!record(value)) throw new HttpError(400, "credentials-format");
-    const username =
-      typeof value.username === "string"
-        ? value.username.trim().toLowerCase()
-        : "";
+    const username = normalizedUsername(value.username);
     if (
-      !/^[a-z0-9_-]{3,32}$/.test(username) ||
       typeof value.password !== "string" ||
-      value.password.length < 12 ||
+      value.password.length < 10 ||
       value.password.length > 128
     )
       throw new HttpError(400, "credentials-format");
@@ -140,6 +143,58 @@ export function createAccounts(database) {
         .run(tokenHash(request));
       setCookie(response, "", 0);
       return { ok: true };
+    }
+    if (request.method === "DELETE" && path === "/api/account") {
+      const user = session(request);
+      const input = await body(request, 4096);
+      if (!record(input) || typeof input.password !== "string" || input.password.length > 128)
+        throw new HttpError(400, "credentials-format");
+      const attempt = database
+        .prepare("SELECT * FROM login_attempts WHERE username = ?")
+        .get(user.username);
+      if (attempt?.next_at > Date.now())
+        throw new HttpError(429, "login-wait", {
+          retryAfter: Math.ceil((attempt.next_at - Date.now()) / 1000),
+        });
+      if (busy.has(user.username))
+        throw new HttpError(429, "login-wait", { retryAfter: 1 });
+      busy.add(user.username);
+      try {
+        const encoded = await passwordHash(input.password, user.password_hash);
+        if (
+          !timingSafeEqual(
+            Buffer.from(encoded),
+            Buffer.from(user.password_hash),
+          )
+        ) {
+          const failures =
+            attempt && attempt.last_at > Date.now() - 15 * 60000
+              ? attempt.failures + 1
+              : 1;
+          const delay = Math.min(30000, 1000 * 2 ** Math.min(failures - 1, 5));
+          database
+            .prepare("INSERT OR REPLACE INTO login_attempts VALUES (?, ?, ?, ?)")
+            .run(user.username, failures, Date.now() + delay, Date.now());
+          throw new HttpError(401, "current-password");
+        }
+        const current = session(request);
+        if (
+          current.id !== user.id ||
+          current.username !== user.username ||
+          current.password_hash !== user.password_hash
+        )
+          throw new HttpError(401, "authentication");
+        database.transaction(() => {
+          database.prepare("DELETE FROM accounts WHERE id = ?").run(user.id);
+          database
+            .prepare("DELETE FROM login_attempts WHERE username = ?")
+            .run(user.username);
+        })();
+        setCookie(response, "", 0);
+        return { ok: true };
+      } finally {
+        busy.delete(user.username);
+      }
     }
     if (
       request.method === "POST" &&
@@ -284,6 +339,84 @@ export function createAccounts(database) {
         return { ok: true };
       } finally {
         busy.delete(user.username);
+      }
+    }
+    if (request.method === "POST" && path === "/api/account/username") {
+      const user = session(request);
+      const input = await body(request, 4096);
+      if (!record(input)) throw new HttpError(400, "credentials-format");
+      const newUsername = normalizedUsername(input.newUsername);
+      if (typeof input.password !== "string" || input.password.length > 128)
+        throw new HttpError(400, "credentials-format");
+      const attempt = database
+        .prepare("SELECT * FROM login_attempts WHERE username = ?")
+        .get(user.username);
+      if (attempt?.next_at > Date.now())
+        throw new HttpError(429, "login-wait", {
+          retryAfter: Math.ceil((attempt.next_at - Date.now()) / 1000),
+        });
+      if (
+        busy.has(user.username) ||
+        (newUsername !== user.username && busy.has(newUsername))
+      )
+        throw new HttpError(429, "login-wait", { retryAfter: 1 });
+      busy.add(user.username);
+      if (newUsername !== user.username) busy.add(newUsername);
+      try {
+        const encoded = await passwordHash(input.password, user.password_hash);
+        if (
+          !timingSafeEqual(
+            Buffer.from(encoded),
+            Buffer.from(user.password_hash),
+          )
+        ) {
+          const failures =
+            attempt && attempt.last_at > Date.now() - 15 * 60000
+              ? attempt.failures + 1
+              : 1;
+          const delay = Math.min(30000, 1000 * 2 ** Math.min(failures - 1, 5));
+          database
+            .prepare("INSERT OR REPLACE INTO login_attempts VALUES (?, ?, ?, ?)")
+            .run(user.username, failures, Date.now() + delay, Date.now());
+          throw new HttpError(401, "current-password");
+        }
+        const current = session(request);
+        if (
+          current.id !== user.id ||
+          current.username !== user.username ||
+          current.password_hash !== user.password_hash
+        )
+          throw new HttpError(401, "authentication");
+        if (newUsername !== user.username) {
+          if (
+            database
+              .prepare("SELECT id FROM accounts WHERE username = ? AND id <> ?")
+              .get(newUsername, user.id)
+          )
+            throw new HttpError(409, "username-taken");
+          try {
+            database.transaction(() => {
+              database
+                .prepare("DELETE FROM login_attempts WHERE username IN (?, ?)")
+                .run(user.username, newUsername);
+              database
+                .prepare("UPDATE accounts SET username = ? WHERE id = ?")
+                .run(newUsername, user.id);
+            })();
+          } catch (error) {
+            if (error?.code === "SQLITE_CONSTRAINT_UNIQUE")
+              throw new HttpError(409, "username-taken");
+            throw error;
+          }
+        } else {
+          database
+            .prepare("DELETE FROM login_attempts WHERE username = ?")
+            .run(user.username);
+        }
+        return { user: { id: user.id, username: newUsername } };
+      } finally {
+        busy.delete(user.username);
+        if (newUsername !== user.username) busy.delete(newUsername);
       }
     }
     throw new HttpError(404, "not-found");

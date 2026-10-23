@@ -8,6 +8,7 @@
   export let cloudAvailable = false;
   export let openCloud: () => void = () => {};
   export let accountName = "";
+  export let accountReady = true;
   export let newProjectOpen: boolean;
   export let toolbarDialog: "open" | "save" | "share" | null;
   export let files: ProjectFile[];
@@ -182,10 +183,15 @@
   {#if cloudAvailable}<div class="toolbar-account">
       <button
         class="toolbar-main-action toolbar-account-button"
-        aria-label={t(accountName ? "ui.cloud.title" : "ui.cloud.login")}
-        title={accountName
-          ? t("ui.cloud.signedIn", [accountName])
-          : t("ui.cloud.login")}
+        disabled={!accountReady}
+        aria-label={!accountReady
+          ? t("ui.cloud.checkingAccount")
+          : t(accountName ? "ui.cloud.title" : "ui.cloud.login")}
+        title={!accountReady
+          ? t("ui.cloud.checkingAccount")
+          : accountName
+            ? t("ui.cloud.signedIn", [accountName])
+            : t("ui.cloud.login")}
         on:click={openCloud}
         ><span class="toolbar-action-icon" aria-hidden="true"
           ><svg viewBox="0 0 24 24"
@@ -193,7 +199,10 @@
               d="M4 22v-4a8 8 0 0 1 16 0v4"
             /></svg
           ></span
-        ><span>{t(accountName ? "ui.cloud.title" : "ui.cloud.login")}</span
+        ><span
+          >{!accountReady
+            ? t("ui.cloud.checkingAccount")
+            : t(accountName ? "ui.cloud.title" : "ui.cloud.login")}</span
         ></button
       >
     </div>{/if}

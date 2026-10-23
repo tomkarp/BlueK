@@ -160,6 +160,7 @@
     ui.restoreTerminalSettings();
     ui.initializeShortcuts();
     void project.initialize();
+    if (!offlineBuild) void cloud.refresh();
     const vimShortcut = (event: KeyboardEvent) => {
       if (
         (event.key.toLowerCase() !== "v" && event.code !== "KeyV") ||
@@ -444,6 +445,7 @@
       void cloud.show();
     }}
     accountName={cloud.user?.username ?? ""}
+    accountReady={cloud.sessionReady}
     bind:newProjectOpen={project.newProjectOpen}
     bind:toolbarDialog={project.toolbarDialog}
     files={project.files}
@@ -835,8 +837,7 @@
   />
   <ProjectTransferDialogs
     {cloud}
-    bind:projectName={project.projectName}
-    serverProjectBytes={project.serverProjectBytes}
+    showNotice={project.showExportNotice}
     recentProjects={project.recentProjects}
     openRecentProject={project.openRecentProject}
     deleteRecentProject={project.deleteRecentProject}

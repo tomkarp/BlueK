@@ -142,7 +142,7 @@ try {
           const cloud = page.getByRole('dialog', { name: 'Account', exact: true });
           await cloud.getByRole('button', { name: 'Create account', exact: true }).click();
           await expect(cloud).toContainText('there is no password reset', { ignoreCase: true });
-          await cloud.getByLabel('Username (3–32 characters: a–z, 0–9, - or _)').fill(`browser_${engine.name()}`);
+          await cloud.getByLabel('Username (3–32 characters: a–z, 0–9, period, - or _)').fill(`browser_${engine.name()}`);
           await cloud.getByLabel('Password', { exact: true }).fill('browser-unique-password');
           await cloud.getByRole('checkbox').check();
           await cloud.getByRole('button', { name: 'Create account', exact: true }).last().click();
@@ -158,7 +158,7 @@ try {
           await page.getByRole('button', { name: 'Account', exact: true }).click();
           await cloud.getByRole('button', { name: 'Change password', exact: true }).click();
           await cloud.getByLabel('Current password', { exact: true }).fill('browser-unique-password');
-          await cloud.getByLabel('New password (12–128 characters)', { exact: true }).fill('changed-browser-password');
+          await cloud.getByLabel('New password (10–128 characters)', { exact: true }).fill('changed-browser-password');
           await cloud.getByRole('button', { name: 'Change password', exact: true }).last().click();
           await expect(cloud.getByRole('status')).toContainText('Password changed');
           await cloud.getByRole('button', { name: 'Sign out', exact: true }).click();

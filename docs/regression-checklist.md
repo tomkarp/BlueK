@@ -83,10 +83,15 @@ below. No universal performance guarantee is implied.
 | CLOUD-03 | German/English account advice, password-manager fields, failed-save backup advice and mobile layout | Chromium passed, 2026-10-22; agent inspected German mobile screenshot; user acceptance pending |
 | CLOUD-04 | Malformed successful API receipt does not claim a private save succeeded | Chromium passed, 2026-10-22 |
 | CLOUD-05 | Private account save requires a non-empty project name | Chromium passed, 2026-10-23 |
+| CLOUD-09 | Change username with the current password; normalize case, reject taken names, preserve account ID/session/projects | Chromium and temporary-SQLite API checks passed, 2026-10-23 |
+| CLOUD-10 | Account creation and password change require matching passwords; password visibility is a separate eye button outside the inputs; registration requires separate unique-password/security and account-loss acknowledgments; registration-only username hints show unmet criteria; active account mode is clear | Chromium passed in German and English, 2026-10-23; visual acceptance pending |
+| CLOUD-11 | Account save action shows the current project name and whether it will be saved or overwritten; success closes the dialog and shows a transient notice | Chromium passed, 2026-10-23 |
+| CLOUD-12 | Delete an account with current-password confirmation; remove its private projects and sessions while existing public copies remain until expiry | Temporary-SQLite API and German/English Chromium checks passed, 2026-10-23 |
 | GUI-156 | Local save options require a non-empty name for an unnamed project | Chromium passed, including blank-name rejection and JSON download, 2026-10-23 |
 | NAV-01 | Four project actions, separated account/view controls, grouped Save choices, separate Share and stable sidebar in English/German; Restore is the rightmost Open tab | Chromium passed at desktop and 390 px Save width; agent inspected German screenshots, 2026-10-22; human acceptance pending |
 | NAV-02 | Sign-in from Save returns without uploading; explicit save/update remains in Save and account settings remain separate | Chromium passed, 2026-10-22 |
-| NAV-03 | Private projects open/delete through Open; canceling sign-in retains the selected source | Chromium passed, 2026-10-22 |
+| NAV-03 | Open lists account projects for opening only; project management in Account owns rename/delete; canceling sign-in retains the selected source | Chromium passed, 2026-10-23 |
+| NAV-05 | Save reuses the toolbar project name; account project management provides open, rename, delete, individual JSON and all-project ZIP downloads | Chromium passed, 2026-10-23 |
 | RT-02 | Validate all files before initializer side effects | Recorded runtime pass; `test:runtime-state` |
 | RT-03 | One class or top-level declarations per file | Recorded runtime pass; `test:runtime-state` |
 | RT-04 | Suspendable Thread.sleep, cancellation and invalid arguments | Recorded runtime/browser pass |
@@ -211,6 +216,7 @@ below. No universal performance guarantee is implied.
 | EXP-19 | Translated distinct expired/unknown/operator-blocked/developer-disabled link failures; malformed/legacy links; project code opened as player; capitalized codes | Chromium UI and separate-origin Chromium/WebKit routing passed, 2026-10-22; operator/TLS/live acceptance pending |
 | EXP-20 | A short program code opens its project under /bluek/ and in code import with one request; disabled “Open in BlueK” refuses both (403) | Share-server smoke, real-service routing (Chromium/WebKit), GUI-138 and agent end-to-end passed, 2026-10-11; production deployment pending |
 | EXP-21 | BlueJ ZIP export: one folder with Kotlin files (test classes omitted), README.TXT and package.bluej with the displayed card positions; BluePlay adds the JVM library from assets/bluej-blueplay and every standard image/sound, project files win; re-import keeps unchanged standard media as standard resources | `test:bluej-export` passed (2026-10-18); all four bundled examples compiled with kotlinc 2.2.21 after export (`check-bluej-export-kotlinc.mjs`). Not yet opened or run in BlueJ itself. |
+| EXP-22 | HTML export options appear expanded, with the export action below them and no link-specific wording | Chromium passed, 2026-10-23 |
 | RT-37 | Suspendable binary-stdlib lambda replay and canSuspend boundary | Recorded Node/bundle pass; dedicated browser check not performed in original record |
 | RT-38 | Typed native exceptions and non-catchable interpreter faults | Node/bundle pass; linked browser regression coverage |
 | RT-39 | Kotlin substring bound validation | Recorded runtime pass; `smoke-curriculum-kotlin.mjs` |
@@ -338,6 +344,7 @@ below. No universal performance guarantee is implied.
 | GUI-149 | Default ordinary object text uses an object marker instead of a constructor expression; inspector cells omit the repeated type; English/German labels, computed properties and method results preserve custom text | Runtime/reference checks and four affected Chromium cases (GUI-88/148/149, DBG-18) passed (2026-10-21). Built-in-browser German view confirmed Image references, a computed Image property and custom text without a repeated type. User visual acceptance pending. |
 | GUI-154 | Loading a project into non-empty work asks before replacing the project and its browser autosave; cancel preserves current work | Passed in focused draft GUI run, 2026-10-23 |
 | GUI-155 | Browser recovery list shows three newest drafts first and expands/collapses older drafts | Passed in focused draft GUI run, 2026-10-23 |
+| GUI-127/128 | Restore lists expose individual and bulk deletion controls for local browser drafts, each with confirmation | Chromium passed, 2026-10-23 |
 | GUI-150 | Object placeholders, inspection errors, uninitialized properties and pending computed values use Codepad's gray; actual values including null and exception objects keep their normal color | Six affected Chromium cases passed (GUI-89/92/149, DBG-12/18), including light/dark mode and a getter returning null (2026-10-21). Built-in-browser German screenshot confirmed gray object/error text beside normal numbers, strings and null. User visual acceptance pending. |
 | GUI-151 | BluePlay library-card menus offer World/Actor constructors and all three Image overloads through the standard create dialog; busy runtimes disable construction, and source/test actions remain absent | Thirteen affected Chromium cases and the offline language/manual case passed (2026-10-21), including real bench objects, image dimensions/copying, actor/world integration, API help, ordinary class constructors and translations. Built-in-browser German check created World, Actor and Image, inspected width/height and confirmed all Image menu overloads. User visual acceptance pending. |
 | GUI-152 | Inspector property rows retain the edit-pencil height when readonly or when BluePlay Run hides the pencils; Run/Pause does not resize the inspector | Chromium geometry checks and both affected GUI-92 cases passed (2026-10-21): all seven Actor rows measure 34px and the window height stays constant through two Run/Pause cycles. Built-in-browser German Run/Pause visual check confirmed equal editable/readonly row heights. User visual acceptance pending. |
@@ -1466,6 +1473,37 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
   Open updates the loaded project name, while NAV-05 confirms the Save list
   sends the displayed revision and updates in place. Human visual acceptance
   remains pending.
+- Account project rename follow-up, 2026-10-23: removed the transient success
+  notice after renaming. The updated name confirms the change without making
+  the account dialog grow and shift; focused rename checks assert the notice is
+  absent. Typecheck passed with 0 errors and 6 warnings; i18n passed (856
+  German/English messages). GUI verification could not start because the test
+  server was denied permission to bind to 127.0.0.1:5194 (EPERM).
+- Account dialog layout follow-up, 2026-10-23: removed the transient
+  “Working…” paragraph from the account dialog; it appeared during async
+  actions and caused the same temporary height change. The dialog exposes its
+  busy state through `aria-busy`, and busy controls remain disabled. Typecheck
+  and i18n passed; GUI verification remains blocked by the bind permission
+  failure above.
+- Account rename field sizing, 2026-10-23: set the inline project-name input
+  to the same 24 px height as the regular title row and tightened the GUI
+  regression assertion to a 1 px row-height tolerance. Typecheck and i18n
+  passed; GUI verification remains blocked by the bind permission failure.
+- Account project duplication, 2026-10-23: added a per-project duplicate action
+  in account management. It copies the validated saved project payload through
+  the private-project API, assigns a localized “(Copy)”/“(Kopie)” name, and
+  inserts the new independent project at the top of the list. NAV-07 covers the
+  submitted payload and new list item. Typecheck passed (0 errors, 6 existing
+  warnings), i18n passed (858 German/English messages), the workspace
+  controller smoke passed and Vite production build passed. GUI verification
+  could not start because its server port bind is denied (EPERM); the share
+  server smoke was blocked by the same restriction on 127.0.0.1:18787.
+- Private-project JSON download extensions, 2026-10-23: account project
+  downloads and JSON entries in the all-projects ZIP now use `.bluek.json`,
+  matching the regular project download and player export. NAV-05 asserts the
+  individual filename and ZIP entry names. Typecheck, i18n, workspace smoke
+  and Vite build passed; GUI verification could not start because local port
+  binding is denied (EPERM).
 - Content-report removal and Open dialog sizing, 2026-10-23: removed the
   public-project report control from editor/player, the public reporting API,
   operator CLI commands and current documentation. Technical “Problem melden…”
@@ -1507,6 +1545,49 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
   passed in English and German, including geometry checks at 1440 px and 900 px.
   Typecheck passed with zero errors and six existing warnings; `git diff
   --check` passed.
+- Publication confirmation copy, 2026-10-23: Removed the extra publisher
+  withdrawal/operator blocking and visit-extension sentences from the copied-
+  link confirmation in English and German. The seven-day expiry notice remains.
+- Account dialog and password managers, 2026-10-23: Removed automatic focus
+  from the username field so opening the dialog does not summon password-manager
+  suggestions. CLOUD-03 asserts the field is not focused on open; GUI verification
+  checks the account form still works in English and German.
+- Account session startup, 2026-10-23: BlueK checks the existing account session
+  on startup and keeps the toolbar action disabled with a checking label until
+  the response arrives. CLOUD-06 verifies the restored signed-in username and
+  NAV-01 counts the startup check separately from account-tab requests.
+- Open source order, 2026-10-23: The Open tabs are File, Account, Link and
+  Restore, and each newly opened dialog selects File. NAV-01 checks the order
+  and verifies the default both on first open and after reopening.
+- Account project management, 2026-10-23: Open and Save now expose only their
+  direct project actions and link to management inside the Account dialog. The
+  toolbar project name is reused for account saves, including the existing
+  required-name prompt. Management supports open, rename, delete, per-project
+  JSON and all-project ZIP downloads; duplicate status messages were removed.
+  CLOUD-03/04/05 and NAV-03/05 passed in Chromium (6/6); typecheck (zero
+  errors, six existing warnings), i18n and `git diff --check` passed. Visual
+  acceptance remains pending.
+- Account bulk-delete checkboxes, 2026-10-23: Reset project-selection checkbox
+  sizing and label layout that inherited the dialog's full-width text-input
+  styles. CLOUD-08 now checks only projects 1, 4 and 5, verifies compact
+  checkbox geometry, and confirms the other projects remain. Typecheck, i18n
+  and direct Vite production build passed. Playwright could not launch Chromium
+  in this environment (macOS Mach port permission denied); visual acceptance
+  remains pending.
+- Account overview layout, 2026-10-23: Project management now appears directly
+  in the signed-in account view. The project list has its own scroll area,
+  password changes use a separate dialog, and sign-out is compact. The account
+  controls use a bordered card, and project management uses a single underlined
+  heading based on the Settings dialog's section headings. NAV-05 and CLOUD-08
+  were updated for the new layout. Typecheck and i18n passed; Playwright
+  execution is still blocked by Chromium's macOS Mach port permission error.
+  Visual acceptance remains pending.
+- Account project rename interaction, 2026-10-23: Rename now edits the title
+  inline, focuses the field, saves with Enter, and cancels with Escape. The
+  pencil sits beside the project name without a button frame, keeping the row's
+  actions and layout in place. NAV-05 checks focus, stable row height and Enter
+  submission. Typecheck, i18n and direct Vite production build passed; visual
+  acceptance remains pending.
 - Beta account rollout, 2026-10-23: the beta workflow builds and tests the
   account API before deployment, backs up the running service's configured
   SQLite path (or its unchanged legacy default), restarts the shared API, checks
@@ -1520,3 +1601,85 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
   check and beta static deploy. A live browser confirmed `beta.bluek.de`
   redirects to `beta.bluek.online` and exposes the account dialog; the beta API
   health and credentialed CORS preflight pass. `main` was not pushed or deployed.
+- Account password minimum, 2026-10-23: lowered the password minimum from 12 to
+  10 characters in account creation, login and password changes; the server
+  remains authoritative. CLOUD-03 checks the form constraint and passed in
+  English and German (2/2); the API smoke test rejects 9 characters and accepts
+  10 for both registration and password changes. The same API test verifies
+  usernames containing periods can register and sign in. Typecheck (zero errors,
+  six existing warnings), i18n, the real temporary-SQLite API test and Svelte
+  production build passed. Existing Svelte accessibility and bundle-size
+  warnings remain.
+- Account username changes, 2026-10-23: added a current-password-confirmed
+  change action in the account dialog. Names are trimmed, lowercased and checked
+  against the unique account name; collisions return the existing localized
+  “already taken” message. Account ID, projects and current sessions survive.
+  CLOUD-09 passes in Chromium; the temporary-SQLite API test covers collision,
+  wrong password, case normalization, continued session/project access and login
+  under the new name. Typecheck, i18n and `git diff --check` passed.
+- Password confirmation and visibility, 2026-10-23: account creation and
+  password changes require a second matching entry, reject mismatches before
+  calling the API, and provide a separate eye button below the fields so it
+  stays clear of password-manager icons inside inputs. Registration requires
+  independent confirmations that the password is unique to BlueK and that
+  losing it means losing account access. CLOUD-10 covers both flows, both
+  languages, confirmation layout and independent acknowledgment gating in
+  Chromium; CLOUD-03 covers registration with the confirmation field. All 13
+  cloud GUI tests, typecheck, i18n and Svelte production build passed;
+  visual acceptance remains pending.
+- Account form guidance, 2026-10-23: removed the introductory text for
+  account-less use and the password placeholder reminder. The length rule
+  appears in red beside the password label until the minimum is met. The
+  explanatory paragraph and password-manager suggestion are gone. Username
+  criteria appear in red beside the field only while registering and only when
+  violated (including length and the first disallowed character). The selected
+  login/register mode is shown as a blue primary button. CLOUD-03 and CLOUD-10
+  check both languages, mode state and the `hä` username example. Visual
+  acceptance remains pending.
+  Username criteria appear in red beside the field only while registering and
+  only when violated (including length and the first disallowed character).
+  The separate password-loss paragraph was removed because account creation
+  already requires acknowledgment of the consequence. The selected
+  login/register mode is shown as a blue primary button. CLOUD-03 and CLOUD-10
+  check both languages, mode state and the `hä` username example. The full
+  cloud GUI suite (13 tests), typecheck, i18n and `git diff --check` passed;
+  visual acceptance remains pending.
+- Save and export dialogs, 2026-10-23: the account-save action now uses the
+  standard export-choice card, showing the project name and whether it will be
+  saved or overwritten. A successful save closes the dialog and reuses the
+  existing transient notice. The live size note was removed; the server-limit
+  error remains. HTML options are visible immediately with the export choice
+  below, and their copy no longer refers to links. Program-link options now
+  refer only to program links. Typecheck (zero errors, six existing warnings),
+  localization check, Svelte production build and `git diff --check` passed.
+  The focused cloud and program-link GUI suites passed in Chromium (34/34);
+  the API process was not running, and the GUI tests supplied their own API
+  responses. Visual acceptance remains pending.
+- Account deletion and browser draft cleanup, 2026-10-23: users can permanently
+  delete their account after entering the current password. Private projects,
+  sessions and login attempts are removed; published copies remain available
+  until expiry with ownership cleared. CLOUD-12 passed in German and English;
+  the temporary-SQLite API smoke test verifies wrong-password rejection,
+  account/private-project/session deletion, cookie expiry and retained public
+  copies. Account-delete actions use a trash icon and a softer danger style;
+  the German dialog was visually inspected in a local mock-account screenshot.
+  The Open → Restore panel again shows a trash icon for each browser
+  draft and a bulk-delete trash control; both actions retain their existing
+  confirmation and storage behavior. GUI-127/128 passed in Chromium. The focused
+  draft suite also passed GUI-122/123/126/155 after selecting Restore explicitly
+  because Open defaults to File. Typecheck reported zero errors and six existing
+  warnings; i18n, Svelte build and `git diff --check` passed. Visual acceptance
+  remains pending.
+- Share publication hint, 2026-10-23: removed the operator-blocking sentence
+  from the expanded notice in the Share dialog in both languages. Localization
+  check passed.
+- Share publication hint removal, 2026-10-24: removed the full optional
+  publication-details disclosure from the Share dialog because the expiry and
+  access context is already shown above and the upload limit is rarely relevant
+  for built-in media. Removed its unused English and German UI strings. i18n
+  passed (868 messages); typecheck found zero errors and six existing warnings.
+  CLOUD-01 asserts the obsolete disclosure is absent. The focused cloud and
+  browser-draft GUI suites passed in Chromium (27/27), along with the API
+  smoke test, project-draft smoke test, Svelte production build and
+  `git diff --check`. Initial sandboxed test-server attempts hit `EPERM`; the
+  reruns with local server access passed. Visual acceptance remains pending.

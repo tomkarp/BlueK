@@ -87,6 +87,12 @@ async function options(page: Page) {
   await page.getByRole("button", { name: "Share", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Share", exact: true });
   await dialog.locator(".program-settings summary").click();
+  await expect(
+    dialog.getByText("For this program link:", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByText(/These settings apply to the program link\./),
+  ).toBeVisible();
   return dialog;
 }
 async function htmlOptions(page: Page) {
@@ -101,7 +107,26 @@ async function htmlOptions(page: Page) {
   await page.getByRole("button", { name: "Save", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Save", exact: true });
   await dialog.getByRole("button", { name: /^Runnable webpage/ }).click();
-  await dialog.locator(".program-settings summary").click();
+  const options = dialog.locator(".program-export-options");
+  await expect(options).toBeVisible();
+  await expect(
+    dialog.getByText(/For .*HTML:/),
+  ).toHaveCount(0);
+  await expect(
+    dialog.getByText(/These settings apply to .*link/),
+  ).toHaveCount(0);
+  expect(
+    await options.evaluate((element) => {
+      const exportChoice = element.parentElement?.querySelector(
+        ".program-export-choices",
+      );
+      return Boolean(
+        exportChoice &&
+          element.compareDocumentPosition(exportChoice) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+    }),
+  ).toBe(true);
   return dialog;
 }
 async function copied(page: Page) {
@@ -460,7 +485,7 @@ test("EXP-15 BluePlay options force reachable Run, apply to links and HTML, and 
   await dialog
     .getByRole("button", { name: "Ausführbare Webseite …", exact: false })
     .click();
-  await dialog.locator(".program-settings summary").click();
+  await expect(dialog.locator(".program-export-options")).toBeVisible();
   await expect(dialog.getByLabel("Spiel automatisch starten")).toBeVisible();
   const bounds = await dialog.boundingBox();
   expect(bounds!.width).toBeLessThanOrEqual(390);
@@ -578,7 +603,7 @@ for (const locale of ["en", "de"])
               save: "Teilen",
               project: "Projekt bearbeiten",
               program: "Programm ausführen",
-              group: "Für Links und HTML:",
+              group: "Für diesen Programmlink:",
               cancel: "Abbrechen",
               toggles: [
                 "Projektnamen anzeigen",
@@ -593,7 +618,7 @@ for (const locale of ["en", "de"])
               save: "Share",
               project: "Edit project",
               program: "Run program",
-              group: "For links and HTML:",
+              group: "For this program link:",
               cancel: "Cancel",
               toggles: [
                 "Show project name",

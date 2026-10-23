@@ -13,8 +13,7 @@
   import type { ShareLinkDialog } from "../uiTypes";
   import type { ProjectDraftSummary } from "../projectDraftStorage";
   export let cloud: CloudWorkspace;
-  export let projectName: string;
-  export let serverProjectBytes = 0;
+  export let showNotice: (text: string) => void;
   export let recentProjects: ProjectDraftSummary[];
   export let openRecentProject: (id: string) => Promise<void>;
   export let deleteRecentProject: (id: string) => void;
@@ -76,12 +75,16 @@
   }
   $: if (toolbarDialog === null) {
     saveView = "choices";
-    openSource = recentProjects.length ? "browser" : "computer";
+    openSource = "computer";
     showAllRecoveryDrafts = false;
   }
   function showPrivateSave() {
     saveView = "account";
-    void cloud.refresh(true);
+    void cloud.refresh();
+  }
+  function openProjectManagement() {
+    toolbarDialog = null;
+    void cloud.show("manage");
   }
   export let openProjectDrop: (event: DragEvent) => Promise<void>;
   export let blueJImportChoice: {
@@ -121,15 +124,6 @@
           aria-label={t("ui.transfer.openFrom")}
           on:keydown={handleOpenSourceKeydown}
         >
-          {#if serverFeatures}<button
-              id="open-source-account"
-              role="tab"
-              aria-selected={openSource === "account"}
-              tabindex={openSource === "account" ? 0 : -1}
-              aria-controls="open-panel-account"
-              on:click={() => selectOpenSource("account")}
-              >{t("ui.transfer.sourceAccount")}</button
-            >{/if}
           <button
             id="open-source-computer"
             role="tab"
@@ -139,6 +133,15 @@
             on:click={() => selectOpenSource("computer")}
             >{t("ui.transfer.sourceComputer")}</button
           >
+          {#if serverFeatures}<button
+              id="open-source-account"
+              role="tab"
+              aria-selected={openSource === "account"}
+              tabindex={openSource === "account" ? 0 : -1}
+              aria-controls="open-panel-account"
+              on:click={() => selectOpenSource("account")}
+              >{t("ui.transfer.sourceAccount")}</button
+            >{/if}
           {#if serverFeatures}<button
               id="open-source-link"
               role="tab"
@@ -175,20 +178,17 @@
               {#if recentProjects.length}<button
                   class="delete-all-projects"
                   aria-label={t("ui.transfer.deleteAllSavedProjects")}
+                  title={t("ui.transfer.deleteAllSavedProjects")}
                   on:click={deleteAllRecentProjects}
                 >
-                  <svg viewBox="0 0 24 24" aria-hidden="true"
-                    ><path
-                      d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"
-                    /></svg
-                  >
-                  <span>{t("ui.transfer.deleteAll")}</span>
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 7h16M10 11v7m4-7v7M6 7l1 14h10l1-14M9 7V4h6v3" />
+                  </svg>
+                  {t("ui.transfer.deleteAll")}
                 </button>{/if}
             </div>
             {#if recentProjects.length}<div class="recent-project-list">
-                {#each showAllRecoveryDrafts
-                  ? recentProjects
-                  : recentProjects.slice(0, 3) as project (project.id)}
+                {#each showAllRecoveryDrafts ? recentProjects : recentProjects.slice(0, 3) as project (project.id)}
                   <div class="recent-project-row">
                     <button
                       class="recent-project"
@@ -212,19 +212,14 @@
                     </button>
                     <button
                       class="delete-recent-project"
-                      aria-label={t("ui.transfer.deleteSavedProject0", [
-                        project.name,
-                      ])}
-                      title={t("ui.transfer.deleteSavedProject0", [
-                        project.name,
-                      ])}
+                      type="button"
+                      aria-label={t("ui.transfer.deleteSavedProject0", [project.name])}
+                      title={t("ui.transfer.deleteSavedProject0", [project.name])}
                       on:click={() => deleteRecentProject(project.id)}
                     >
-                      <svg viewBox="0 0 24 24" aria-hidden="true"
-                        ><path
-                          d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"
-                        /></svg
-                      >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M4 7h16M10 11v7m4-7v7M6 7l1 14h10l1-14M9 7V4h6v3" />
+                      </svg>
                     </button>
                   </div>
                 {/each}
@@ -232,7 +227,8 @@
               {#if recentProjects.length > 3}<button
                   class="recovery-drafts-toggle"
                   aria-expanded={showAllRecoveryDrafts}
-                  on:click={() => (showAllRecoveryDrafts = !showAllRecoveryDrafts)}
+                  on:click={() =>
+                    (showAllRecoveryDrafts = !showAllRecoveryDrafts)}
                   >{showAllRecoveryDrafts
                     ? t("ui.transfer.showFewerRecoveryDrafts")
                     : t("ui.transfer.showMoreRecoveryDrafts", [
@@ -242,7 +238,7 @@
                 {t("ui.transfer.noBrowserProjects")}
               </p>{/if}
           </section>{:else if openSource === "account"}<section
-            class="open-source-panel"
+            class="open-source-panel open-account-panel"
             role="tabpanel"
             id="open-panel-account"
             aria-labelledby="open-source-account"
@@ -253,6 +249,7 @@
               onLoaded={() => {
                 toolbarDialog = null;
               }}
+              onManage={openProjectManagement}
               {exportProject}
             />
           </section>{:else if openSource === "computer"}<section
@@ -378,7 +375,7 @@
                 aria-label={t("ui.transfer.htmlFile")}
                 disabled={!files.length}
                 on:click={() => {
-                    if (!ensureProjectName()) return;
+                  if (!ensureProjectName()) return;
                   saveView = "html";
                 }}
                 ><strong>{t("ui.transfer.htmlFile")}</strong><span
@@ -391,15 +388,28 @@
             <CloudProjectPanel
               {cloud}
               mode="save"
-              bind:projectName
               onLoaded={() => {
                 toolbarDialog = null;
               }}
+              onSaved={() => {
+                toolbarDialog = null;
+                showNotice(t("ui.cloud.saved"));
+              }}
+              onManage={openProjectManagement}
               {exportProject}
             />
           {:else if saveView === "html"}
             <h4>{t("ui.transfer.htmlFile")}</h4>
             <div class="program-export-layout">
+              <ProgramExportOptions
+                bind:programShowProjectName
+                bind:programAllowDownload
+                bind:programAllowBlueK
+                bind:programAutoRun
+                bind:programShowControls
+                bind:programShowSpeed
+                {bluePlay}
+              />
               <div class="project-choice-list program-export-choices">
                 <button
                   class="file-export-choice"
@@ -419,18 +429,6 @@
                     {t("ui.transfer.programNeedsMain")}
                   </p>{/if}
               </div>
-              <details class="program-settings">
-                <summary>{t("ui.transfer.programSettings")}</summary>
-                <ProgramExportOptions
-                  bind:programShowProjectName
-                  bind:programAllowDownload
-                  bind:programAllowBlueK
-                  bind:programAutoRun
-                  bind:programShowControls
-                  bind:programShowSpeed
-                  {bluePlay}
-                />
-              </details>
             </div>
           {/if}
         {:else if serverFeatures}
@@ -451,21 +449,20 @@
                   <legend id="link-options-label"
                     >{t("ui.transfer.whenOpeningALink")}</legend
                   >
-                  {#if readme.trim()}<label class="share-link-option"
-                      title={t(
-                        "ui.transfer.showREADMEMdRightAwayWhenThisLink",
-                      )}
+                  {#if readme.trim()}<label
+                      class="share-link-option"
+                      title={t("ui.transfer.showREADMEMdRightAwayWhenThisLink")}
                       ><input
                         type="checkbox"
                         aria-label={t("ui.transfer.openREADMEMdWithTheLink")}
                         bind:checked={shareWithReadme}
                       /><span>{t("ui.transfer.openREADME")}</span></label
                     >{/if}
-                  {#if canShareState}<label class="share-link-option"
-                      title={t(
-                        "ui.transfer.loadStateFrom0IntoTheObjectBench",
-                        [defaultTestClass],
-                      )}
+                  {#if canShareState}<label
+                      class="share-link-option"
+                      title={t("ui.transfer.loadStateFrom0IntoTheObjectBench", [
+                        defaultTestClass,
+                      ])}
                       ><input
                         type="checkbox"
                         aria-label={t(
@@ -501,6 +498,7 @@
                   bind:programShowControls
                   bind:programShowSpeed
                   {bluePlay}
+                  forLinks
                 />
               </details>
               {#if htmlExportBlocked}<p class="program-source-note">
@@ -520,15 +518,6 @@
               </div>
             </div>
           </div>
-          <details class="transfer-details">
-            <summary>{t("ui.transfer.publicationDetails")}</summary>
-            <p>{t("ui.cloud.publicationAdvice")}</p>
-            <p>
-              {t("ui.cloud.size", [
-                serverProjectBytes.toLocaleString($language.locale),
-              ])}
-            </p>
-          </details>
         {/if}
       </div>
       <div class="dialog-actions">

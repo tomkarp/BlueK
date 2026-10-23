@@ -9,17 +9,18 @@
   export let programShowControls: boolean;
   export let programShowSpeed: boolean;
   export let bluePlay: boolean;
+  export let forLinks = false;
 </script>
 
 <div class="program-export-options">
   <div
     class="program-shared-options"
-    role="group"
-    aria-labelledby="program-options-label"
+    role={forLinks ? "group" : undefined}
+    aria-labelledby={forLinks ? "program-options-label" : undefined}
   >
-    <span id="program-options-label"
-      >{t("ui.transfer.sharedProgramOptions")}</span
-    >
+    {#if forLinks}<span id="program-options-label"
+        >{t("ui.transfer.sharedProgramOptions")}</span
+      >{/if}
     <label class="share-link-option"
       ><input type="checkbox" bind:checked={programShowProjectName} /><span
         >{t("ui.transfer.showProjectName")}</span
@@ -61,7 +62,7 @@
         </p>{/if}
     </fieldset>
   {/if}
-  <p class="program-source-note">
-    {t("ui.transfer.programSourceNote")}
-  </p>
+  {#if forLinks}<p class="program-source-note">
+      {t("ui.transfer.programSourceNote")}
+    </p>{/if}
 </div>

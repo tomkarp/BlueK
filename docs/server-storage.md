@@ -38,9 +38,18 @@ identities. Registration is open, has no email, approval, role, reset, recovery
 question or manual identity-recovery workflow. The registration UI explains
 irrecoverable password loss and unique BlueK passwords; password-manager
 `username`, `current-password` and `new-password` autocomplete is supported.
-Usernames are case-insensitive ASCII letters/digits/underscore/hyphen, 3–32
-characters. Passwords contain 12–128 JavaScript UTF-16 code units; they are never
-trimmed, silently truncated, logged or stored in plaintext.
+Usernames are case-insensitive ASCII letters/digits/period/underscore/hyphen,
+3–32 characters. An authenticated user can change their username after
+confirming the current password; the normalized name must be unique. The
+account ID, projects and sessions stay the same. Passwords contain 10–128
+JavaScript UTF-16 code units; they are never trimmed, silently truncated,
+logged or stored in plaintext.
+
+An authenticated user can permanently delete their account after confirming
+the current password. This removes the account, its private projects, sessions
+and login-attempt record. Published copies are separate immutable records and
+remain available through their links until their original expiry; deleting the
+account clears their ownership association.
 
 Passwords use random 16-byte salts and asynchronous Node scrypt (`N=32768`,
 `r=8`, `p=3`, 64-byte keys, `scrypt-v1` encoding). This is a documented minimum
