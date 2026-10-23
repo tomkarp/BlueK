@@ -837,7 +837,7 @@
   />
   <ProjectTransferDialogs
     {cloud}
-    serverProjectBytes={project.serverProjectBytes}
+    showNotice={project.showExportNotice}
     recentProjects={project.recentProjects}
     openRecentProject={project.openRecentProject}
     bind:toolbarDialog={project.toolbarDialog}

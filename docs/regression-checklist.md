@@ -84,6 +84,8 @@ below. No universal performance guarantee is implied.
 | CLOUD-04 | Malformed successful API receipt does not claim a private save succeeded | Chromium passed, 2026-10-22 |
 | CLOUD-05 | Private account save requires a non-empty project name | Chromium passed, 2026-10-23 |
 | CLOUD-09 | Change username with the current password; normalize case, reject taken names, preserve account ID/session/projects | Chromium and temporary-SQLite API checks passed, 2026-10-23 |
+| CLOUD-10 | Account creation and password change require matching passwords; password visibility is a separate eye button outside the inputs; registration requires separate unique-password/security and account-loss acknowledgments; registration-only username hints show unmet criteria; active account mode is clear | Chromium passed in German and English, 2026-10-23; visual acceptance pending |
+| CLOUD-11 | Account save action shows the current project name and whether it will be saved or overwritten; success closes the dialog and shows a transient notice | Chromium passed, 2026-10-23 |
 | GUI-156 | Local save options require a non-empty name for an unnamed project | Chromium passed, including blank-name rejection and JSON download, 2026-10-23 |
 | NAV-01 | Four project actions, separated account/view controls, grouped Save choices, separate Share and stable sidebar in English/German; Restore is the rightmost Open tab | Chromium passed at desktop and 390 px Save width; agent inspected German screenshots, 2026-10-22; human acceptance pending |
 | NAV-02 | Sign-in from Save returns without uploading; explicit save/update remains in Save and account settings remain separate | Chromium passed, 2026-10-22 |
@@ -213,6 +215,7 @@ below. No universal performance guarantee is implied.
 | EXP-19 | Translated distinct expired/unknown/operator-blocked/developer-disabled link failures; malformed/legacy links; project code opened as player; capitalized codes | Chromium UI and separate-origin Chromium/WebKit routing passed, 2026-10-22; operator/TLS/live acceptance pending |
 | EXP-20 | A short program code opens its project under /bluek/ and in code import with one request; disabled “Open in BlueK” refuses both (403) | Share-server smoke, real-service routing (Chromium/WebKit), GUI-138 and agent end-to-end passed, 2026-10-11; production deployment pending |
 | EXP-21 | BlueJ ZIP export: one folder with Kotlin files (test classes omitted), README.TXT and package.bluej with the displayed card positions; BluePlay adds the JVM library from assets/bluej-blueplay and every standard image/sound, project files win; re-import keeps unchanged standard media as standard resources | `test:bluej-export` passed (2026-10-18); all four bundled examples compiled with kotlinc 2.2.21 after export (`check-bluej-export-kotlinc.mjs`). Not yet opened or run in BlueJ itself. |
+| EXP-22 | HTML export options appear expanded, with the export action below them and no link-specific wording | Chromium passed, 2026-10-23 |
 | RT-37 | Suspendable binary-stdlib lambda replay and canSuspend boundary | Recorded Node/bundle pass; dedicated browser check not performed in original record |
 | RT-38 | Typed native exceptions and non-catchable interpreter faults | Node/bundle pass; linked browser regression coverage |
 | RT-39 | Kotlin substring bound validation | Recorded runtime pass; `smoke-curriculum-kotlin.mjs` |
@@ -1612,3 +1615,41 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
   CLOUD-09 passes in Chromium; the temporary-SQLite API test covers collision,
   wrong password, case normalization, continued session/project access and login
   under the new name. Typecheck, i18n and `git diff --check` passed.
+- Password confirmation and visibility, 2026-10-23: account creation and
+  password changes require a second matching entry, reject mismatches before
+  calling the API, and provide a separate eye button below the fields so it
+  stays clear of password-manager icons inside inputs. Registration requires
+  independent confirmations that the password is unique to BlueK and that
+  losing it means losing account access. CLOUD-10 covers both flows, both
+  languages, confirmation layout and independent acknowledgment gating in
+  Chromium; CLOUD-03 covers registration with the confirmation field. All 13
+  cloud GUI tests, typecheck, i18n and Svelte production build passed;
+  visual acceptance remains pending.
+- Account form guidance, 2026-10-23: removed the introductory text for
+  account-less use and the password placeholder reminder. The length rule
+  appears in red beside the password label until the minimum is met. The
+  explanatory paragraph and password-manager suggestion are gone. Username
+  criteria appear in red beside the field only while registering and only when
+  violated (including length and the first disallowed character). The selected
+  login/register mode is shown as a blue primary button. CLOUD-03 and CLOUD-10
+  check both languages, mode state and the `hä` username example. Visual
+  acceptance remains pending.
+  Username criteria appear in red beside the field only while registering and
+  only when violated (including length and the first disallowed character).
+  The separate password-loss paragraph was removed because account creation
+  already requires acknowledgment of the consequence. The selected
+  login/register mode is shown as a blue primary button. CLOUD-03 and CLOUD-10
+  check both languages, mode state and the `hä` username example. The full
+  cloud GUI suite (13 tests), typecheck, i18n and `git diff --check` passed;
+  visual acceptance remains pending.
+- Save and export dialogs, 2026-10-23: the account-save action now uses the
+  standard export-choice card, showing the project name and whether it will be
+  saved or overwritten. A successful save closes the dialog and reuses the
+  existing transient notice. The live size note was removed; the server-limit
+  error remains. HTML options are visible immediately with the export choice
+  below, and their copy no longer refers to links. Program-link options now
+  refer only to program links. Typecheck (zero errors, six existing warnings),
+  localization check, Svelte production build and `git diff --check` passed.
+  The focused cloud and program-link GUI suites passed in Chromium (34/34);
+  the API process was not running, and the GUI tests supplied their own API
+  responses. Visual acceptance remains pending.

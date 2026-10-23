@@ -13,7 +13,7 @@
   import type { ShareLinkDialog } from "../uiTypes";
   import type { ProjectDraftSummary } from "../projectDraftStorage";
   export let cloud: CloudWorkspace;
-  export let serverProjectBytes = 0;
+  export let showNotice: (text: string) => void;
   export let recentProjects: ProjectDraftSummary[];
   export let openRecentProject: (id: string) => Promise<void>;
   export let toolbarDialog: "open" | "save" | "share" | null;
@@ -367,12 +367,25 @@
               onLoaded={() => {
                 toolbarDialog = null;
               }}
+              onSaved={() => {
+                toolbarDialog = null;
+                showNotice(t("ui.cloud.saved"));
+              }}
               onManage={openProjectManagement}
               {exportProject}
             />
           {:else if saveView === "html"}
             <h4>{t("ui.transfer.htmlFile")}</h4>
             <div class="program-export-layout">
+              <ProgramExportOptions
+                bind:programShowProjectName
+                bind:programAllowDownload
+                bind:programAllowBlueK
+                bind:programAutoRun
+                bind:programShowControls
+                bind:programShowSpeed
+                {bluePlay}
+              />
               <div class="project-choice-list program-export-choices">
                 <button
                   class="file-export-choice"
@@ -392,18 +405,6 @@
                     {t("ui.transfer.programNeedsMain")}
                   </p>{/if}
               </div>
-              <details class="program-settings">
-                <summary>{t("ui.transfer.programSettings")}</summary>
-                <ProgramExportOptions
-                  bind:programShowProjectName
-                  bind:programAllowDownload
-                  bind:programAllowBlueK
-                  bind:programAutoRun
-                  bind:programShowControls
-                  bind:programShowSpeed
-                  {bluePlay}
-                />
-              </details>
             </div>
           {/if}
         {:else if serverFeatures}
@@ -473,6 +474,7 @@
                   bind:programShowControls
                   bind:programShowSpeed
                   {bluePlay}
+                  forLinks
                 />
               </details>
               {#if htmlExportBlocked}<p class="program-source-note">
@@ -495,11 +497,6 @@
           <details class="transfer-details">
             <summary>{t("ui.transfer.publicationDetails")}</summary>
             <p>{t("ui.cloud.publicationAdvice")}</p>
-            <p>
-              {t("ui.cloud.size", [
-                serverProjectBytes.toLocaleString($language.locale),
-              ])}
-            </p>
           </details>
         {/if}
       </div>

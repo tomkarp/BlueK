@@ -71,10 +71,11 @@ export class CloudWorkspace {
   get attachedProjectId() {
     return this.attached ? (this.binding?.id ?? null) : null;
   }
-  get sizeBytes() {
-    return new TextEncoder().encode(
-      JSON.stringify(this.host.project().projectPayload()),
-    ).byteLength;
+  get currentProjectName() {
+    return (
+      this.host.project().projectName.trim() ||
+      this.text("ui.common.untitledProject")
+    );
   }
   private text = (
     key: import("../i18n/catalog").MessageKey,
@@ -178,14 +179,14 @@ export class CloudWorkspace {
       this.user = result.user;
       this.notice = this.text("ui.cloud.usernameChanged");
     });
-  save = (copy = false) =>
-    this.run(async () => {
-      const project = this.host.project();
-      if (!project.ensureProjectName()) return;
+  save = async () => {
+    const project = this.host.project();
+    if (!project.ensureProjectName()) return false;
+    return this.run(async () => {
       const payload = project.projectPayload();
       checkServerProject(payload);
       const documentVersion = project.documentVersion;
-      const binding = !copy && this.attached ? this.binding : null;
+      const binding = this.attached ? this.binding : null;
       const result = await apiRequest<{ id: string; revision: number }>(
         `/api/private-projects${binding ? `/${binding.id}` : ""}`,
         {
@@ -203,7 +204,6 @@ export class CloudWorkspace {
         throw new ApiError("network");
       if (documentVersion === project.documentVersion)
         this.binding = { ...result, documentVersion };
-      this.notice = this.text("ui.cloud.saved");
       // A list outage after a confirmed save must not turn that save into a failure.
       try {
         await this.list();
@@ -211,6 +211,7 @@ export class CloudWorkspace {
         /* Refresh remains available. */
       }
     });
+  };
   rename = (id: string, value: string) =>
     this.run(async () => {
       const project = this.projects.find((item) => item.id === id);

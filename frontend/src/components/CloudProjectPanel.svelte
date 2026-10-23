@@ -7,21 +7,23 @@
     cloud,
     mode,
     onLoaded,
+    onSaved = () => {},
     onManage = () => {},
     exportProject,
   }: {
     cloud: CloudWorkspace;
     mode: "open" | "save";
     onLoaded: () => void;
+    onSaved?: () => void;
     onManage?: () => void;
     exportProject: () => void;
   } = $props();
 </script>
 
 <div class="cloud-project-panel">
-  <button class="cloud-management-link" onclick={onManage}>
-    {t("ui.cloud.openProjectManagement")}
-  </button>
+  {#if mode === "open"}<button class="cloud-management-link" onclick={onManage}>
+      {t("ui.cloud.openProjectManagement")}
+    </button>{/if}
   {#if cloud.error}<p class="dialog-error" role="alert">
       {cloud.error}
       {mode === "save" ? t("ui.cloud.failureBackup") : ""}
@@ -42,18 +44,18 @@
         </svg>
         <span>{t("ui.cloud.storageAdvice")}</span>
       </div>
-      <div class="cloud-actions">
-        <button disabled={cloud.busy} onclick={() => cloud.save()}
-          >{t(cloud.attached ? "ui.cloud.update" : "ui.cloud.save")}</button
+      <div class="project-choice-list cloud-save-choices">
+        <button
+          class="file-export-choice cloud-save-choice"
+          disabled={cloud.busy}
+          onclick={async () => {
+            if (await cloud.save()) onSaved();
+          }}
+          ><strong>{cloud.currentProjectName}</strong><span
+            >{t(cloud.attached ? "ui.cloud.update" : "ui.cloud.save")}</span
+          ></button
         >
-        {#if cloud.attached}<button
-            disabled={cloud.busy}
-            onclick={() => cloud.save(true)}>{t("ui.cloud.saveCopy")}</button
-          >{/if}
       </div>
-      <p class="program-source-note">
-        {t("ui.cloud.size", [cloud.sizeBytes.toLocaleString($language.locale)])}
-      </p>
     {:else}
       {#if !cloud.projects.length && !cloud.busy && !cloud.error}<p>
           {t("ui.cloud.noProjects")}
@@ -102,11 +104,6 @@
     flex: 1;
     flex-direction: column;
     min-height: 0;
-  }
-  .cloud-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
   }
   .cloud-projects li {
     display: flex;
