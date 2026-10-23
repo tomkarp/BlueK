@@ -1,6 +1,6 @@
 <script lang="ts">
   import { useLanguage } from "../i18n/Language.svelte";
-  import { containClicks, focusOnMount } from "../uiActions";
+  import { containClicks } from "../uiActions";
   import type { CloudWorkspace } from "../workspace/CloudWorkspace.svelte";
   const language = useLanguage();
   const t = $derived($language.t);
@@ -132,7 +132,6 @@
               minlength="3"
               maxlength="32"
               pattern="[A-Za-z0-9_-]+"
-              use:focusOnMount
             /></label
           >
           <label

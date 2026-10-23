@@ -1510,6 +1510,10 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
 - Publication confirmation copy, 2026-10-23: Removed the extra publisher
   withdrawal/operator blocking and visit-extension sentences from the copied-
   link confirmation in English and German. The seven-day expiry notice remains.
+- Account dialog and password managers, 2026-10-23: Removed automatic focus
+  from the username field so opening the dialog does not summon password-manager
+  suggestions. CLOUD-03 asserts the field is not focused on open; GUI verification
+  checks the account form still works in English and German.
 - Beta account rollout, 2026-10-23: the beta workflow builds and tests the
   account API before deployment, backs up the running service's configured
   SQLite path (or its unchanged legacy default), restarts the shared API, checks

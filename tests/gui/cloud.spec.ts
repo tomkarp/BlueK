@@ -136,6 +136,7 @@ for (const locale of ["en", "de"])
       name: de ? "Konto" : "Account",
       exact: true,
     });
+    await expect(cloud.locator("input[autocomplete=username]")).not.toBeFocused();
     await cloud
       .getByRole("button", {
         name: de ? "Konto erstellen" : "Create account",
