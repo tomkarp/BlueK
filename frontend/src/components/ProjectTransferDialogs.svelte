@@ -16,6 +16,8 @@
   export let showNotice: (text: string) => void;
   export let recentProjects: ProjectDraftSummary[];
   export let openRecentProject: (id: string) => Promise<void>;
+  export let deleteRecentProject: (id: string) => void;
+  export let deleteAllRecentProjects: () => void;
   export let toolbarDialog: "open" | "save" | "share" | null;
   export let shareLinkDialog: ShareLinkDialog | null;
   // A compile-time condition also removes server-only controls from offline JS.
@@ -173,6 +175,17 @@
                 <h4>{t("ui.transfer.browserRecovery")}</h4>
                 <p>{t("ui.transfer.savedInThisBrowserChooseAProjectTo")}</p>
               </div>
+              {#if recentProjects.length}<button
+                  class="delete-all-projects"
+                  aria-label={t("ui.transfer.deleteAllSavedProjects")}
+                  title={t("ui.transfer.deleteAllSavedProjects")}
+                  on:click={deleteAllRecentProjects}
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 7h16M10 11v7m4-7v7M6 7l1 14h10l1-14M9 7V4h6v3" />
+                  </svg>
+                  {t("ui.transfer.deleteAll")}
+                </button>{/if}
             </div>
             {#if recentProjects.length}<div class="recent-project-list">
                 {#each showAllRecoveryDrafts ? recentProjects : recentProjects.slice(0, 3) as project (project.id)}
@@ -196,6 +209,17 @@
                           $language.locale,
                         )}</span
                       >
+                    </button>
+                    <button
+                      class="delete-recent-project"
+                      type="button"
+                      aria-label={t("ui.transfer.deleteSavedProject0", [project.name])}
+                      title={t("ui.transfer.deleteSavedProject0", [project.name])}
+                      on:click={() => deleteRecentProject(project.id)}
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M4 7h16M10 11v7m4-7v7M6 7l1 14h10l1-14M9 7V4h6v3" />
+                      </svg>
                     </button>
                   </div>
                 {/each}
@@ -494,10 +518,6 @@
               </div>
             </div>
           </div>
-          <details class="transfer-details">
-            <summary>{t("ui.transfer.publicationDetails")}</summary>
-            <p>{t("ui.cloud.publicationAdvice")}</p>
-          </details>
         {/if}
       </div>
       <div class="dialog-actions">

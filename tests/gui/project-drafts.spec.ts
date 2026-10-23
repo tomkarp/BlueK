@@ -176,6 +176,7 @@ test("GUI-155 restore list starts with the three newest drafts and can expand", 
   await fresh.goto("/");
   await fresh.getByRole("button", { name: "Open", exact: true }).click();
   const open = fresh.getByRole("dialog", { name: "Open", exact: true });
+  await open.getByRole("tab", { name: /^Restore/ }).click();
   await expect(open.locator(".recent-project")).toHaveCount(3);
   const expand = open.getByRole("button", { name: "Show 2 more drafts" });
   await expect(expand).toHaveAttribute("aria-expanded", "false");
@@ -226,6 +227,7 @@ test("GUI-122 closed tabs stay in Recent work; fresh startup shows a dismissible
     .getByRole("button", { name: "Open", exact: true })
     .click();
   const open = fresh.getByRole("dialog", { name: "Open", exact: true });
+  await open.getByRole("tab", { name: /^Restore/ }).click();
   await expect(open.locator(".recent-project")).toHaveCount(2);
   await expect(open.locator(".recent-project").first()).toContainText("Dogs B");
   await fresh.setViewportSize({ width: 700, height: 500 });
@@ -248,10 +250,9 @@ test("GUI-122 closed tabs stay in Recent work; fresh startup shows a dismissible
   const another = await context.newPage();
   await another.goto("/");
   await another.getByRole("button", { name: "Open", exact: true }).click();
-  await another
-    .getByRole("dialog", { name: "Open", exact: true })
-    .getByRole("button", { name: /^Dogs A/ })
-    .click();
+  const anotherOpen = another.getByRole("dialog", { name: "Open", exact: true });
+  await anotherOpen.getByRole("tab", { name: /^Restore/ }).click();
+  await anotherOpen.getByRole("button", { name: /^Dogs A/ }).click();
   await expect(another.getByLabel("Project name")).toHaveValue("Dogs A");
   expect(await draftId(another)).not.toBe(firstId);
 });
@@ -275,6 +276,7 @@ test("GUI-123 migrates the old autosave, ignores corrupt drafts and has no recov
   ).toBeNull();
   await page.getByRole("button", { name: "Open", exact: true }).click();
   const open = page.getByRole("dialog", { name: "Open", exact: true });
+  await open.getByRole("tab", { name: /^Restore/ }).click();
   await expect(open.locator(".recent-project")).toHaveCount(1);
   await open.getByRole("button", { name: /^Old autosave/ }).click();
   await expect(
@@ -409,12 +411,17 @@ test("GUI-126 browser restart keeps multiple projects in the persistent profile"
     await expect(fresh.locator(".classcard")).toHaveCount(0);
     await fresh.getByRole("button", { name: "Open", exact: true }).click();
     const open = fresh.getByRole("dialog", { name: "Open", exact: true });
+    await open.getByRole("tab", { name: /^Restore/ }).click();
     await expect(open.locator(".recent-project")).toHaveCount(2);
     await open.getByRole("button", { name: /^Before closing A/ }).click();
     await expect
       .poll(() => saved(fresh).then((p) => p?.files[0].source))
       .toContain("123");
     await fresh.getByRole("button", { name: "Open", exact: true }).click();
+    await fresh
+      .getByRole("dialog", { name: "Open", exact: true })
+      .getByRole("tab", { name: /^Restore/ })
+      .click();
     // Loading B replaces the currently restored A project.
     fresh.once("dialog", (dialog) => dialog.accept());
     await fresh
@@ -439,9 +446,11 @@ test("GUI-127 saved projects can be deleted individually, with cancel and cross-
   const other = await context.newPage();
   await load(other, project("Keep me"));
   await other.getByRole("button", { name: "Open", exact: true }).click();
+  const otherOpen = other.getByRole("dialog", { name: "Open", exact: true });
+  await otherOpen.getByRole("tab", { name: /^Restore/ }).click();
   await page.getByRole("button", { name: "Open", exact: true }).click();
   const open = page.getByRole("dialog", { name: "Open", exact: true });
-  const otherOpen = other.getByRole("dialog", { name: "Open", exact: true });
+  await open.getByRole("tab", { name: /^Restore/ }).click();
   await expect(open.locator(".recent-project")).toHaveCount(1);
   await expect(otherOpen.locator(".recent-project")).toHaveCount(1);
   const otherRemove = otherOpen.getByRole("button", {
@@ -488,6 +497,7 @@ test("GUI-128 Delete all removes saved projects, keeps settings and requires con
   await expect(fresh.locator(".project-recovery-notice")).toBeVisible();
   await fresh.getByRole("button", { name: "Open", exact: true }).click();
   const open = fresh.getByRole("dialog", { name: "Open", exact: true });
+  await open.getByRole("tab", { name: /^Restore/ }).click();
   const removeAll = open.getByRole("button", {
     name: "Delete all recovery drafts",
   });

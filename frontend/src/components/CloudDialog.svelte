@@ -16,6 +16,8 @@
   let passwordOpen = $state(false);
   let newUsername = $state("");
   let usernameOpen = $state(false);
+  let deleteAccountOpen = $state(false);
+  let deleteAccountPassword = $state("");
   let acknowledgedUniquePassword = $state(false);
   let acknowledgedAccessLoss = $state(false);
   const registrationPasswordMismatch = $derived(
@@ -60,7 +62,7 @@
       use:containClicks
     >
       <h3 id="cloud-title">{t("ui.cloud.title")}</h3>
-      {#if cloud.error && !passwordOpen && !usernameOpen}<p class="dialog-error" role="alert">
+      {#if cloud.error && !passwordOpen && !usernameOpen && !deleteAccountOpen}<p class="dialog-error" role="alert">
           {cloud.error}
         </p>{/if}
       {#if cloud.notice}<p role="status">{cloud.notice}</p>{/if}
@@ -102,6 +104,19 @@
                     passwordOpen = false;
                   }
                 }}>{t("ui.cloud.logout")}</button
+              >
+              <button
+                class="cloud-delete-account-button"
+                disabled={cloud.busy}
+                onclick={() => {
+                  deleteAccountPassword = "";
+                  deleteAccountOpen = true;
+                }}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 7h16M10 11v7m4-7v7M6 7l1 14h10l1-14M9 7V4h6v3" />
+                </svg>
+                {t("ui.cloud.deleteAccount")}
+              </button
               >
             </div>
           </div>
@@ -242,6 +257,55 @@
                 <div class="dialog-actions">
                   <button type="button" disabled={cloud.busy} onclick={() => (usernameOpen = false)}>{t("ui.common.cancel")}</button>
                   <button type="submit" disabled={cloud.busy}>{t("ui.cloud.changeUsername")}</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        {/if}
+        {#if deleteAccountOpen}
+          <div class="modal topmost-modal account-password-modal" role="presentation">
+            <div
+              class="dialog cloud-password-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="cloud-delete-account-title"
+              tabindex="-1"
+              use:containClicks
+            >
+              <h3 id="cloud-delete-account-title">{t("ui.cloud.deleteAccount")}</h3>
+              <p class="cloud-delete-account-warning" role="alert">
+                {t("ui.cloud.deleteAccountWarning")}
+              </p>
+              {#if cloud.error}<p class="dialog-error" role="alert">{cloud.error}</p>{/if}
+              <form
+                onsubmit={async (event) => {
+                  event.preventDefault();
+                  const deleted = await cloud.deleteAccount(deleteAccountPassword);
+                  deleteAccountPassword = "";
+                  if (deleted) deleteAccountOpen = false;
+                }}
+              >
+                <label
+                  >{t("ui.cloud.currentPassword")}<input
+                    type="password"
+                    name="delete-account-current-password"
+                    autocomplete="current-password"
+                    bind:value={deleteAccountPassword}
+                    required
+                    maxlength="128"
+                  /></label
+                >
+                <div class="dialog-actions">
+                  <button type="button" disabled={cloud.busy} onclick={() => {
+                    deleteAccountOpen = false;
+                    deleteAccountPassword = "";
+                  }}>{t("ui.common.cancel")}</button>
+                  <button type="submit" class="cloud-delete-account-button" disabled={cloud.busy}>
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M4 7h16M10 11v7m4-7v7M6 7l1 14h10l1-14M9 7V4h6v3" />
+                    </svg>
+                    {t("ui.cloud.deleteAccountConfirm")}
+                  </button>
                 </div>
               </form>
             </div>
@@ -439,6 +503,38 @@
     padding: 6px 9px;
     font-size: 12px;
   }
+  .cloud-delete-account-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    color: #8c1616;
+    background: #fff5f5;
+    border: 1px solid #e8c4c4;
+    border-radius: 6px;
+    box-shadow: none;
+  }
+  .cloud-delete-account-button:hover:not(:disabled) {
+    background: #ffeaea;
+    border-color: #d7a4a4;
+  }
+  .cloud-delete-account-button svg {
+    flex: 0 0 16px;
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7px;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .cloud-delete-account-warning {
+    padding: 10px 12px;
+    border: 1px solid #d99;
+    border-radius: 4px;
+    background: #fff0f0;
+    color: #8c1616;
+  }
   .account-password-modal {
     z-index: 170;
   }
@@ -531,5 +627,19 @@
   }
   :global(.dark) .cloud-project-management-section h4 {
     color: #bbb;
+  }
+  :global(.dark) .cloud-delete-account-button {
+    color: #ffd0d0;
+    background: #3a2020;
+    border-color: #805050;
+  }
+  :global(.dark) .cloud-delete-account-button:hover:not(:disabled) {
+    background: #482525;
+    border-color: #a06b6b;
+  }
+  :global(.dark) .cloud-delete-account-warning {
+    background: #3a2020;
+    color: #ffd0d0;
+    border-color: #9b5b5b;
   }
 </style>

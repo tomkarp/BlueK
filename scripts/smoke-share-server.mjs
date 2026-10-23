@@ -212,6 +212,31 @@ try {
   admin('unblock-account', 'student.two');
   assert.equal((await post('/api/account/login', { username: 'student.two', password: 'another-unique-password' })).status, 200);
 
+  const deletionCredentials = { username: 'delete.me', password: 'account-delete-password' };
+  const deletionAccount = await post('/api/account/register', deletionCredentials);
+  assert.equal(deletionAccount.status, 200);
+  const deletionPrivate = await post('/api/private-projects', project, deletionAccount.cookie);
+  const deletionPublic = await post('/api/projects', project, deletionAccount.cookie);
+  const rejectedDeletion = await request('/api/account', {
+    method: 'DELETE', cookie: deletionAccount.cookie,
+    value: { password: 'wrong-delete-password' },
+  });
+  assert.equal(rejectedDeletion.status, 401, 'Account deletion requires the correct current password');
+  assert.ok(db.prepare('SELECT id FROM accounts WHERE id = ?').get(deletionAccount.data.user.id));
+  db.prepare('UPDATE login_attempts SET next_at = 0 WHERE username = ?').run(deletionCredentials.username);
+  const deletedAccount = await request('/api/account', {
+    method: 'DELETE', cookie: deletionAccount.cookie,
+    value: { password: deletionCredentials.password },
+  });
+  assert.equal(deletedAccount.status, 200);
+  assert.match(deletedAccount.response.headers.get('set-cookie'), /Max-Age=0/);
+  assert.equal(db.prepare('SELECT id FROM accounts WHERE id = ?').get(deletionAccount.data.user.id), undefined);
+  assert.equal(db.prepare('SELECT id FROM private_projects WHERE id = ?').get(deletionPrivate.data.id), undefined, 'Account deletion cascades private projects');
+  assert.equal(db.prepare('SELECT token_hash FROM sessions WHERE account_id = ?').get(deletionAccount.data.user.id), undefined, 'Account deletion revokes every session');
+  assert.equal(db.prepare('SELECT code FROM public_codes WHERE code = ? AND owner_id IS NULL').get(deletionPublic.data.code)?.code, deletionPublic.data.code, 'Public copy ownership is cleared');
+  assert.equal((await readProject(deletionPublic.data.code)).status, 200, 'Published copy remains available until expiry');
+  assert.equal((await request('/api/private-projects', { cookie: deletionAccount.cookie })).status, 401);
+
   // Deadlines are enforced on every read, independently of physical cleanup.
   db.prepare('UPDATE projects SET expires_at = ? WHERE code = ?').run('2020-01-01T00:00:00.000Z', anonymous.data.code);
   assert.equal((await readProject(anonymous.data.code)).status, 410);

@@ -144,6 +144,58 @@ export function createAccounts(database) {
       setCookie(response, "", 0);
       return { ok: true };
     }
+    if (request.method === "DELETE" && path === "/api/account") {
+      const user = session(request);
+      const input = await body(request, 4096);
+      if (!record(input) || typeof input.password !== "string" || input.password.length > 128)
+        throw new HttpError(400, "credentials-format");
+      const attempt = database
+        .prepare("SELECT * FROM login_attempts WHERE username = ?")
+        .get(user.username);
+      if (attempt?.next_at > Date.now())
+        throw new HttpError(429, "login-wait", {
+          retryAfter: Math.ceil((attempt.next_at - Date.now()) / 1000),
+        });
+      if (busy.has(user.username))
+        throw new HttpError(429, "login-wait", { retryAfter: 1 });
+      busy.add(user.username);
+      try {
+        const encoded = await passwordHash(input.password, user.password_hash);
+        if (
+          !timingSafeEqual(
+            Buffer.from(encoded),
+            Buffer.from(user.password_hash),
+          )
+        ) {
+          const failures =
+            attempt && attempt.last_at > Date.now() - 15 * 60000
+              ? attempt.failures + 1
+              : 1;
+          const delay = Math.min(30000, 1000 * 2 ** Math.min(failures - 1, 5));
+          database
+            .prepare("INSERT OR REPLACE INTO login_attempts VALUES (?, ?, ?, ?)")
+            .run(user.username, failures, Date.now() + delay, Date.now());
+          throw new HttpError(401, "current-password");
+        }
+        const current = session(request);
+        if (
+          current.id !== user.id ||
+          current.username !== user.username ||
+          current.password_hash !== user.password_hash
+        )
+          throw new HttpError(401, "authentication");
+        database.transaction(() => {
+          database.prepare("DELETE FROM accounts WHERE id = ?").run(user.id);
+          database
+            .prepare("DELETE FROM login_attempts WHERE username = ?")
+            .run(user.username);
+        })();
+        setCookie(response, "", 0);
+        return { ok: true };
+      } finally {
+        busy.delete(user.username);
+      }
+    }
     if (
       request.method === "POST" &&
       ["/api/account/register", "/api/account/login"].includes(path)

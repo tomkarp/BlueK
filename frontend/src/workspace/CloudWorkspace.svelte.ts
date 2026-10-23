@@ -179,6 +179,17 @@ export class CloudWorkspace {
       this.user = result.user;
       this.notice = this.text("ui.cloud.usernameChanged");
     });
+  deleteAccount = (password: string) =>
+    this.run(async () => {
+      await apiRequest("/api/account", {
+        method: "DELETE",
+        body: JSON.stringify({ password }),
+      });
+      this.user = null;
+      this.projects = [];
+      this.binding = null;
+      this.notice = this.text("ui.cloud.accountDeleted");
+    });
   save = async () => {
     const project = this.host.project();
     if (!project.ensureProjectName()) return false;

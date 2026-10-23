@@ -86,6 +86,7 @@ below. No universal performance guarantee is implied.
 | CLOUD-09 | Change username with the current password; normalize case, reject taken names, preserve account ID/session/projects | Chromium and temporary-SQLite API checks passed, 2026-10-23 |
 | CLOUD-10 | Account creation and password change require matching passwords; password visibility is a separate eye button outside the inputs; registration requires separate unique-password/security and account-loss acknowledgments; registration-only username hints show unmet criteria; active account mode is clear | Chromium passed in German and English, 2026-10-23; visual acceptance pending |
 | CLOUD-11 | Account save action shows the current project name and whether it will be saved or overwritten; success closes the dialog and shows a transient notice | Chromium passed, 2026-10-23 |
+| CLOUD-12 | Delete an account with current-password confirmation; remove its private projects and sessions while existing public copies remain until expiry | Temporary-SQLite API and German/English Chromium checks passed, 2026-10-23 |
 | GUI-156 | Local save options require a non-empty name for an unnamed project | Chromium passed, including blank-name rejection and JSON download, 2026-10-23 |
 | NAV-01 | Four project actions, separated account/view controls, grouped Save choices, separate Share and stable sidebar in English/German; Restore is the rightmost Open tab | Chromium passed at desktop and 390 px Save width; agent inspected German screenshots, 2026-10-22; human acceptance pending |
 | NAV-02 | Sign-in from Save returns without uploading; explicit save/update remains in Save and account settings remain separate | Chromium passed, 2026-10-22 |
@@ -343,6 +344,7 @@ below. No universal performance guarantee is implied.
 | GUI-149 | Default ordinary object text uses an object marker instead of a constructor expression; inspector cells omit the repeated type; English/German labels, computed properties and method results preserve custom text | Runtime/reference checks and four affected Chromium cases (GUI-88/148/149, DBG-18) passed (2026-10-21). Built-in-browser German view confirmed Image references, a computed Image property and custom text without a repeated type. User visual acceptance pending. |
 | GUI-154 | Loading a project into non-empty work asks before replacing the project and its browser autosave; cancel preserves current work | Passed in focused draft GUI run, 2026-10-23 |
 | GUI-155 | Browser recovery list shows three newest drafts first and expands/collapses older drafts | Passed in focused draft GUI run, 2026-10-23 |
+| GUI-127/128 | Restore lists expose individual and bulk deletion controls for local browser drafts, each with confirmation | Chromium passed, 2026-10-23 |
 | GUI-150 | Object placeholders, inspection errors, uninitialized properties and pending computed values use Codepad's gray; actual values including null and exception objects keep their normal color | Six affected Chromium cases passed (GUI-89/92/149, DBG-12/18), including light/dark mode and a getter returning null (2026-10-21). Built-in-browser German screenshot confirmed gray object/error text beside normal numbers, strings and null. User visual acceptance pending. |
 | GUI-151 | BluePlay library-card menus offer World/Actor constructors and all three Image overloads through the standard create dialog; busy runtimes disable construction, and source/test actions remain absent | Thirteen affected Chromium cases and the offline language/manual case passed (2026-10-21), including real bench objects, image dimensions/copying, actor/world integration, API help, ordinary class constructors and translations. Built-in-browser German check created World, Actor and Image, inspected width/height and confirmed all Image menu overloads. User visual acceptance pending. |
 | GUI-152 | Inspector property rows retain the edit-pencil height when readonly or when BluePlay Run hides the pencils; Run/Pause does not resize the inspector | Chromium geometry checks and both affected GUI-92 cases passed (2026-10-21): all seven Actor rows measure 34px and the window height stays constant through two Run/Pause cycles. Built-in-browser German Run/Pause visual check confirmed equal editable/readonly row heights. User visual acceptance pending. |
@@ -1653,3 +1655,31 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
   The focused cloud and program-link GUI suites passed in Chromium (34/34);
   the API process was not running, and the GUI tests supplied their own API
   responses. Visual acceptance remains pending.
+- Account deletion and browser draft cleanup, 2026-10-23: users can permanently
+  delete their account after entering the current password. Private projects,
+  sessions and login attempts are removed; published copies remain available
+  until expiry with ownership cleared. CLOUD-12 passed in German and English;
+  the temporary-SQLite API smoke test verifies wrong-password rejection,
+  account/private-project/session deletion, cookie expiry and retained public
+  copies. Account-delete actions use a trash icon and a softer danger style;
+  the German dialog was visually inspected in a local mock-account screenshot.
+  The Open → Restore panel again shows a trash icon for each browser
+  draft and a bulk-delete trash control; both actions retain their existing
+  confirmation and storage behavior. GUI-127/128 passed in Chromium. The focused
+  draft suite also passed GUI-122/123/126/155 after selecting Restore explicitly
+  because Open defaults to File. Typecheck reported zero errors and six existing
+  warnings; i18n, Svelte build and `git diff --check` passed. Visual acceptance
+  remains pending.
+- Share publication hint, 2026-10-23: removed the operator-blocking sentence
+  from the expanded notice in the Share dialog in both languages. Localization
+  check passed.
+- Share publication hint removal, 2026-10-24: removed the full optional
+  publication-details disclosure from the Share dialog because the expiry and
+  access context is already shown above and the upload limit is rarely relevant
+  for built-in media. Removed its unused English and German UI strings. i18n
+  passed (868 messages); typecheck found zero errors and six existing warnings.
+  CLOUD-01 asserts the obsolete disclosure is absent. The focused cloud and
+  browser-draft GUI suites passed in Chromium (27/27), along with the API
+  smoke test, project-draft smoke test, Svelte production build and
+  `git diff --check`. Initial sandboxed test-server attempts hit `EPERM`; the
+  reruns with local server access passed. Visual acceptance remains pending.

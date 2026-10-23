@@ -840,6 +840,8 @@
     showNotice={project.showExportNotice}
     recentProjects={project.recentProjects}
     openRecentProject={project.openRecentProject}
+    deleteRecentProject={project.deleteRecentProject}
+    deleteAllRecentProjects={project.deleteAllRecentProjects}
     bind:toolbarDialog={project.toolbarDialog}
     bind:shareLinkDialog={project.shareLinkDialog}
     bind:shareCodeInput={project.shareCodeInput}

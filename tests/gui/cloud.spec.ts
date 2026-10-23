@@ -59,6 +59,9 @@ test("CLOUD-01 custom media cannot be published from either project or program U
   await page.getByRole("button", { name: "Share", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Share", exact: true });
   await expect(
+    dialog.getByText("Publication details", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
     dialog.getByRole("button", { name: /Full .* Link/ }),
   ).toHaveCount(0);
   await dialog.getByRole("button", { name: /^Create editing link/ }).click();
@@ -710,4 +713,77 @@ for (const locale of ["en", "de"])
         : "Password changed. Other sessions have been signed out.",
     );
     expect(passwordChanges).toBe(1);
+  });
+
+for (const locale of ["en", "de"])
+  test(`CLOUD-12 account deletion requires the current password and explains retained public copies (${locale})`, async ({
+    page,
+  }) => {
+    await page.addInitScript(
+      (value) => localStorage.setItem("bluek-language", value),
+      locale,
+    );
+    const de = locale === "de";
+    let deleted = false;
+    await page.route("**/api/account", async (route) => {
+      if (route.request().method() === "GET")
+        return route.fulfill({
+          json: {
+            user: deleted ? null : { id: "account", username: "learner" },
+          },
+        });
+      expect(route.request().method()).toBe("DELETE");
+      expect(route.request().postDataJSON()).toEqual({
+        password: "current-password",
+      });
+      deleted = true;
+      return route.fulfill({ json: { ok: true } });
+    });
+    await page.route("**/api/private-projects", (route) =>
+      route.fulfill({ json: { projects: [] } }),
+    );
+
+    await page.goto(link(project));
+    await page.locator(".toolbar-account button").click();
+    const account = page.getByRole("dialog", {
+      name: de ? "Konto" : "Account",
+      exact: true,
+    });
+    await account
+      .getByRole("button", {
+        name: de ? "Konto löschen" : "Delete account",
+        exact: true,
+      })
+      .click();
+    const deletion = page.getByRole("dialog", {
+      name: de ? "Konto löschen" : "Delete account",
+      exact: true,
+    });
+    await expect(deletion.getByRole("alert")).toContainText(
+      de ? "privaten Projekte" : "private projects",
+    );
+    await expect(deletion.getByRole("alert")).toContainText(
+      de ? "Veröffentlichte Kopien bleiben" : "Published copies will remain",
+    );
+    await expect(deleted).toBe(false);
+    await deletion
+      .getByLabel(de ? "Aktuelles Passwort" : "Current password")
+      .fill("current-password");
+    await deletion
+      .getByRole("button", {
+        name: de
+          ? "Konto und private Projekte löschen"
+          : "Delete account and private projects",
+      })
+      .click();
+    await expect(deletion).toHaveCount(0);
+    await expect(account.getByRole("status")).toHaveText(
+      de
+        ? "Dein Konto und deine privaten Projekte wurden gelöscht."
+        : "Your account and private projects have been deleted.",
+    );
+    await expect(page.locator(".toolbar-account button")).toHaveText(
+      de ? "Anmelden" : "Sign in",
+    );
+    expect(deleted).toBe(true);
   });
