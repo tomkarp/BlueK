@@ -53,7 +53,7 @@ async function provider(
     { claimedSender: options.claimedSender },
   );
   await context.route(
-    /https?:\/\/(inf-schule\.de|www\.inf-schule\.de|inf-schule\.de\.example|localhost:5287)\/handoff-example\//,
+    /https?:\/\/(inf-schule\.de|www\.inf-schule\.de|dev\.inf-schule\.de|inf-schule\.de\.example|dev\.inf-schule\.de\.example|localhost:5287)\/handoff-example\//,
     async (route) => {
       const path = new URL(route.request().url()).pathname;
       if (path.endsWith("bluek-handoff.js"))
@@ -458,6 +458,37 @@ test.describe("inf-schule handoff", () => {
   }) => {
     await provider(context, baseURL!);
     const child = await open(page, "https://inf-schule.de.example");
+    await expect(child.getByRole("alert")).toContainText(
+      "transfer link is invalid",
+    );
+    await send(page, envelope(example));
+    await expect(child.getByLabel("Project name")).toHaveValue("");
+    await expect
+      .poll(() => page.evaluate(() => (window as SourceWindow).readyCount))
+      .toBe(0);
+  });
+  test("HANDOFF-13 the editorial dev.inf-schule.de site can transfer projects without sender changes", async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    await provider(context, baseURL!);
+    const child = await open(page, "https://dev.inf-schule.de");
+    await expect(child.getByLabel("Project name")).toHaveValue(
+      example.projectName,
+    );
+    await expect(page.getByRole("status")).toContainText(
+      "Das Projekt ist in BlueK geöffnet.",
+    );
+  });
+
+  test("HANDOFF-14 a dev-domain lookalike cannot transfer projects", async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    await provider(context, baseURL!);
+    const child = await open(page, "https://dev.inf-schule.de.example");
     await expect(child.getByRole("alert")).toContainText(
       "transfer link is invalid",
     );

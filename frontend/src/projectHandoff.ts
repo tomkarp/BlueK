@@ -9,7 +9,11 @@ export type HandoffProblem =
   | "changed"
   | "sourceFailed";
 
-const trustedOrigins = ["https://inf-schule.de", "https://www.inf-schule.de"];
+const trustedOrigins = [
+  "https://inf-schule.de",
+  "https://www.inf-schule.de",
+  "https://dev.inf-schule.de",
+];
 const enabled = import.meta.env.VITE_BLUEK_OFFLINE !== "1";
 
 function trustedOrigin(origin: string): boolean {

@@ -41,9 +41,11 @@ script include; the script and project links remain identical:
 ```
 
 Keep the sender script and editorial `.bluek.json` files on inf-schule. BlueK
-does not fetch or host these files. This implementation only prepares the
-copyable integration in the BlueK repository; it changes no inf-schule checkout
-and performs no SVN operation. Any normally exported project is supported,
+does not fetch or host these files. The reusable sender is maintained in the BlueK repository. With explicit
+permission, the first Kotlin chapter trial appends it to the chapter’s existing
+`_skripte.js` (temporarily targeting beta), replaces the first KrokoAlarm link
+and stores its former embedded payload as `krokoalarm.bluek.json`. The source
+code is unchanged; only a project name is added. No SVN commands are performed. Any normally exported project is supported,
 including README, BluePlay resources, positions and saved test state.
 
 ## User behavior and browser requirements
@@ -101,8 +103,8 @@ an extra build flag.
 
 The `sender` parameter routes readiness; it grants no trust by itself. BlueK
 accepts only the exact opener window and matching message origin. Allowed
-origins are exactly https://inf-schule.de, https://www.inf-schule.de and HTTP(S)
-loopback hosts localhost, 127.0.0.1 and [::1]. The sender likewise checks the
+origins are exactly https://inf-schule.de, https://www.inf-schule.de,
+https://dev.inf-schule.de and HTTP(S) loopback hosts localhost, 127.0.0.1 and [::1]. The sender likewise checks the
 exact child window and target origin. Synthetic message events are ignored;
 no wildcard target origin is used. This trusts the scripts running on these
 origins and does not offer arbitrary websites an import API.
