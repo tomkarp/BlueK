@@ -78,6 +78,7 @@ below. No universal performance guarantee is implied.
 | GUI-49 | Long method menu signatures stay on one line | Recorded browser pass |
 | GUI-35 | Short-link display, copy, expiry and loading roundtrip | Recorded browser pass |
 | API-01 | Additive legacy migration, permanent identifier reservations, account/session ownership, immutable seven-day copies, UTF-8 limits, media policy, blocks and retention; content reporting removed | Real temporary-SQLite API test passed, 2026-10-23; live migration/deployment/load capacity pending |
+| HANDOFF-01–12 | Main/beta static app imports editorial inf-schule JSON using one central script and plain chapter links; exact opener/origin, normal runtime/drafts, cancellation, pending edits, local origins, popup fallback and keyboard retry | Chromium 12/12 and WebKit 12/12 passed, 2026-10-24; live inf-schule integration and user acceptance pending |
 | CLOUD-01 | Own/counterfeit media rejected by project and program publication UI; local JSON retains every resource | Chromium passed; all 42 actual standards independently checked by client/server helper, 2026-10-22 |
 | CLOUD-02 | Delayed public loads cannot replace edits made while pending; draft survives reload | Chromium passed, 2026-10-22 |
 | CLOUD-03 | German/English account advice, password-manager fields, failed-save backup advice and mobile layout | Chromium passed, 2026-10-22; agent inspected German mobile screenshot; user acceptance pending |
@@ -1692,3 +1693,24 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
   and browser-draft suites passed 29/29; typecheck (zero errors, six existing
   warnings), i18n and the Svelte production build passed. Visual acceptance
   remains pending.
+- Editorial inf-schule handoff, 2026-10-24: normal main/beta static builds
+  accept one project from an exact trusted opener, without API/CORS/server
+  dependencies or a special build flag. A central classic script handles plain
+  HTML chapter links and relative JSON paths; main is the default target and
+  beta is selected once in the central include. Loopback source hosts on any
+  port also work. HANDOFF-01–12 passed 12/12 in Chromium and 12/12 in WebKit,
+  including API outage, lookalike origins/claimed origins, wrong window,
+  malformed messages/projects, replay, delayed edits, replacement cancellation,
+  source failure, timeout, reload, full JSON over 1 MiB, local origins, popup
+  blocking and keyboard retry. Typecheck (zero errors, six existing warnings),
+  i18n (877 messages), architecture smoke and the normal production build passed.
+  The compiled static build also imported successfully on simulated main and
+  beta HTTPS origins in both browsers (4/4), with the API blocked; its German
+  success screenshot was inspected. The first static check used an incorrect
+  fixture-name expectation; reading the name from the fixture fixed the check.
+  Earlier combined draft/program-link/handoff checks passed 43/43 in Chromium.
+  An earlier NAV-05 failure used stale UI expectations; the updated test passes
+  and verifies attached-project renaming through the owner action. No inf-schule
+  checkout/SVN changes were made. Public response headers currently show no
+  incompatible COOP; live chapter publication, deployment and user acceptance
+  remain pending.

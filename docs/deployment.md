@@ -37,6 +37,11 @@ use `--delete`, and never copies databases to Pages. Keep secrets in a root-owne
 service environment/token file outside the repository. The Pages artifact is
 only `frontend/dist`; do not add server data, credentials or symlinks there.
 
+The editorial [inf-schule handoff](inf-schule-handoff.md) is part of the normal
+static app on main and beta, including GitHub Pages. It requires no API or
+special build flag; offline builds disable the receiver. The sender script and
+project files are copied to inf-schule separately, outside these workflows.
+
 ## Cutover order and rollback
 
 1. The beta workflow backs up the SQLite database consistently with SQLite's

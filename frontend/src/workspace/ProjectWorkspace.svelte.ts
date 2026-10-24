@@ -69,6 +69,7 @@ import {
   ShareCodeError,
 } from "../shareApi";
 import { shareRoute } from "../shareRoutes";
+import { receiveProjectHandoff } from "../projectHandoff";
 import { programForLink, shortProgramLink } from "../programLinks";
 
 import type {
@@ -176,6 +177,8 @@ export class ProjectWorkspace {
   private savedPayloadFingerprint = $state("");
   /** Why the opened link could not be loaded; cleared when a project loads. */
   linkProblem: { message: string; expired: boolean } | null = $state(null);
+  handoffPending = $state(false);
+  private disconnectHandoff: () => void = () => {};
   /** What the last BlueJ export could not carry over; stays until closed or the next BlueJ export. */
   blueJExportNotice = $state("");
   blueJImportChoice = $state.raw<{
@@ -436,6 +439,9 @@ export class ProjectWorkspace {
   );
   markProjectSaved = () => {
     this.savedPayloadFingerprint = JSON.stringify(this.projectPayload());
+  };
+  setProjectName = (name: string) => {
+    this.projectName = name;
   };
   commitProjectName = (event: KeyboardEvent) => {
     if (event.key !== "Enter" || event.isComposing) return;
@@ -1210,6 +1216,9 @@ export class ProjectWorkspace {
   endCardDrag = this.diagram.endCardDrag;
   initialize = async (): Promise<void> => {
     this.markProjectSaved();
+    const handoffRequested = new URLSearchParams(window.location.search).has(
+      "import",
+    );
     const route = shareRoute(import.meta.env.BASE_URL, window.location.href);
     const linkOpensReadme =
       (new URLSearchParams(window.location.hash.slice(1)).get("readme") ??
@@ -1318,6 +1327,31 @@ export class ProjectWorkspace {
     await restoreTab();
     this.autosaveReady = true;
     this.saveAutosave();
+    if (handoffRequested) {
+      const before = JSON.stringify(this.projectPayload());
+      const version = this.documentVersion;
+      this.disconnectHandoff = receiveProjectHandoff({
+        waiting: (waiting) => {
+          this.handoffPending = waiting;
+        },
+        failed: (problem) => {
+          this.linkProblem = {
+            message: this.text(`ui.handoff.${problem}`),
+            expired: false,
+          };
+        },
+        load: async (payload) => {
+          if (
+            version !== this.documentVersion ||
+            before !== JSON.stringify(this.projectPayload())
+          )
+            return "changed";
+          return (await this.loadProject(payload)) ? "loaded" : "cancelled";
+        },
+        loaded: () => this.showExportNotice(this.text("ui.handoff.loaded")),
+      });
+      return;
+    }
     if (hasExplicitProject) {
       const problem = await openLinkedProject();
       if (problem) this.linkProblem = problem;
@@ -1370,6 +1404,7 @@ export class ProjectWorkspace {
     window.addEventListener("pageshow", pageshow);
     window.addEventListener("storage", storageChanged);
     return () => {
+      this.disconnectHandoff();
       pagehide();
       window.clearInterval(timer);
       window.removeEventListener("pagehide", pagehide);

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="de">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>inf-schule → BlueK</title>
+  <!-- Global site template only. This separate BlueK preview uses our dev server;
+       inf-schule's central include omits data-bluek-target to use bluek.online. -->
+  <script
+    src="./bluek-handoff.js"
+    data-bluek-target="http://127.0.0.1:5173/"
+    defer
+  ></script>
+  <style>
+    body {
+      max-width: 44rem;
+      margin: 3rem auto;
+      padding: 0 1rem;
+      font:
+        18px/1.5 system-ui,
+        sans-serif;
+      color: #222;
+    }
+    a {
+      font: inherit;
+    }
+  </style>
+  <h1>Projekt in BlueK öffnen</h1>
+  <p>
+    Dieses Beispiel lädt die Projektdatei von dieser Website und übergibt sie an
+    einen neuen BlueK-Tab.
+  </p>
+  <!-- Chapter content: plain HTML only; no script or event handler. -->
+  <a href="./example.bluek.json" data-bluek-project download>In BlueK öffnen</a>
+  <p>
+    <a href="./example.bluek.json" download>Projekt als JSON herunterladen</a>
+  </p>
+</html>

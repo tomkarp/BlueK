@@ -1,0 +1,13 @@
+{
+  "format": "bluek-project",
+  "version": 1,
+  "projectName": "Hallo von inf-schule",
+  "readme": "# Hallo von inf-schule\n\nKompiliere das Projekt und starte `main`.",
+  "files": [
+    {
+      "fileName": "Main.kt",
+      "kind": "functions",
+      "source": "fun main() {\n    println(\"Hallo von inf-schule!\")\n}"
+    }
+  ]
+}

@@ -1,4 +1,15 @@
 {
+  "handoff": {
+    "waiting": "Warte auf das Projekt von inf-schule …",
+    "loaded": "Projekt von inf-schule geöffnet.",
+    "unavailable": "Das direkte Öffnen von Projekten aus inf-schule ist in der Offline-Version nicht verfügbar. Lade stattdessen die JSON-Datei herunter und öffne sie in BlueK.",
+    "invalidRequest": "Dieser Übergabelink ist ungültig. Öffne das Projekt erneut über den Button auf inf-schule.",
+    "noOpener": "Die Verbindung zu inf-schule fehlt. Öffne das Projekt über den Button auf inf-schule oder lade die JSON-Datei herunter und öffne sie in BlueK.",
+    "timeout": "Das Projekt von inf-schule ist nicht angekommen. Versuche es erneut über den dortigen Button oder lade die JSON-Datei herunter und öffne sie in BlueK. Deine aktuelle Arbeit bleibt erhalten.",
+    "invalidProject": "Die von inf-schule empfangene Datei ist kein gültiges BlueK-Projekt. Deine aktuelle Arbeit bleibt erhalten.",
+    "changed": "Du hast während der Übergabe ein Projekt geändert oder geöffnet. Deine Arbeit bleibt erhalten. Öffne das Projekt erneut über den Button auf inf-schule.",
+    "sourceFailed": "inf-schule konnte das Projekt nicht übergeben. Lade stattdessen die JSON-Datei herunter und öffne sie in BlueK. Deine aktuelle Arbeit bleibt erhalten."
+  },
   "sidebar": {
     "newFile": "Neue Datei",
     "saveProject": "Projekt speichern",

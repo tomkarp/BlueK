@@ -150,6 +150,13 @@ Link README/state options belong to transfer. After link import,
 `TestWorkspace.loadDefaultFixture`, using the ordinary compile/state path and
 opening no test panel.
 
+The [inf-schule handoff](inf-schule-handoff.md) uses a one-shot
+`postMessage` import from a trusted opener. `projectHandoff.ts` owns the window
+protocol and delegates validated project data to `ProjectWorkspace.loadProject`.
+It never creates runtime state, fetches a remote project URL or uses the API.
+`ProjectWorkspace` checks that pending imports cannot replace subsequent edits
+and disconnects the receiver with its other browser subscriptions.
+
 ### Worker and contract
 
 `runtime-contract/src/index.ts` defines commands, replies, metadata, snapshots

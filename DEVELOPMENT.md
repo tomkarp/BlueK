@@ -111,6 +111,7 @@ a helper passing does not prove a visible browser interaction.
 | `npm run test:project-drafts` | Draft ownership, migration, locks, storage failure and unchanged saves |
 | `npm run test:offline` | Build/ZIP checks and real Chromium/WebKit file:// execution without HTTP |
 | `npm run test:gui` | Chromium against a dedicated Vite server on port 5194 |
+| `npm run test:handoff` | Editorial inf-schule JSON transfer in Chromium and WebKit; see [integration and local preview](docs/inf-schule-handoff.md) |
 | `npm run test:publication-policy` | Client/server verification of every built-in image/sound, same-name counterfeit rejection and non-mutating normalization |
 | `npm run test:share-server` | Account/publication API, migration, moderation and retention with a temporary SQLite database |
 | `node scripts/smoke-share-routing.mjs` | Root and `/BlueK/` production builds on a static host plus separate-origin API; query/legacy links, real cookie accounts, publications/blocks and API outage execution in Chromium/WebKit |
