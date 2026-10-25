@@ -108,10 +108,12 @@ Server responses do not overwrite local edits made during a pending load. A
 failed save is an error and recommends a JSON backup.
 
 `POST /api/projects` and `/api/programs` publish a separate immutable copy, with
-or without login. There is no publication-frequency or IP limit. No aggregate
+or without login. Anonymous copies expire after seven days; copies published
+with a valid signed-in account expire after 30 days. Reads do not extend either
+deadline. There is no publication-frequency or IP limit. No aggregate
 storage quota has been chosen or silently imposed; disk capacity remains a
 material operational limit. Monitor free space and SQLite size, and agree any
-future aggregate quota separately. Sustained uploads/report spam remain possible.
+future aggregate quota separately. Sustained upload spam remains possible.
 
 Project JSON is limited to **1,048,576 UTF-8 bytes**, including embedded media and
 Base64 overhead. This applies to private saves and public copies, not local
@@ -141,8 +143,7 @@ clears the optional owner association, leaving only the code and block flag. Cod
 never allocated from this table again, including after expiry or administrative
 blocking. The migration reserves all existing codes before cleanup.
 
-All new public copies expire seven days after creation. Reads do not extend
-them. Every public get checks the deadline even before hourly physical cleanup;
+Every public get checks the deadline even before hourly physical cleanup;
 410 means expired, 404 unknown, 451 operator-blocked, 403 developer view disabled,
 409 project code opened as player, 400 invalid code. Both project and program
 routes use the same blocking check. Content is not archived indefinitely. The

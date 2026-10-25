@@ -54,15 +54,18 @@ try {
 
   const anonymous = await post('/api/projects', project);
   assert.equal(anonymous.status, 201);
+  assert.equal(anonymous.data.expiresInDays, 7, 'Anonymous project publications last seven days');
   assert.match(anonymous.data.code, /^[23456789a-hjkmnp-z]{12}$/);
   assert.ok(Math.abs(Date.parse(anonymous.data.expiresAt) - Date.now() - 7 * 86400000) < 5000);
   assert.deepEqual((await readProject(anonymous.data.code)).data.project, project);
   assert.equal((await readProgram(anonymous.data.code)).status, 409);
   assert.equal((await request(`/api/projects/${anonymous.data.code}`, { method: 'DELETE' })).status, 404, 'No anonymous withdrawal endpoint');
-  assert.deepEqual(Object.keys(anonymous.data).sort(), ['code', 'expiresAt']);
+  assert.deepEqual(Object.keys(anonymous.data).sort(), ['code', 'expiresAt', 'expiresInDays']);
   const program = { format: 'bluek-program', version: 1, mainFile: 'Main.kt', blueKUrl: 'https://bluek.online/', project, allowBlueK: false, allowDownload: false, autoRun: true, showProjectName: false, showControls: false, showSpeed: false };
   const playable = await post('/api/programs', program);
   assert.equal(playable.status, 201);
+  assert.equal(playable.data.expiresInDays, 7, 'Anonymous program publications last seven days');
+  assert.ok(Math.abs(Date.parse(playable.data.expiresAt) - Date.now() - 7 * 86400000) < 5000);
   assert.deepEqual((await readProgram(playable.data.code)).data.program, program);
   assert.equal((await readProject(playable.data.code)).status, 403);
 
@@ -105,6 +108,14 @@ try {
   assert.ok(cookie);
   assert.match(register.response.headers.get('set-cookie'), /HttpOnly/);
   assert.match(register.response.headers.get('set-cookie'), /SameSite=Lax/);
+  const accountProject = await post('/api/projects', project, cookie);
+  assert.equal(accountProject.status, 201);
+  assert.equal(accountProject.data.expiresInDays, 30, 'Signed-in project publications last 30 days');
+  assert.ok(Math.abs(Date.parse(accountProject.data.expiresAt) - Date.now() - 30 * 86400000) < 5000);
+  const accountProgram = await post('/api/programs', program, cookie);
+  assert.equal(accountProgram.status, 201);
+  assert.equal(accountProgram.data.expiresInDays, 30, 'Signed-in program publications last 30 days');
+  assert.ok(Math.abs(Date.parse(accountProgram.data.expiresAt) - Date.now() - 30 * 86400000) < 5000);
   const stored = db.prepare('SELECT * FROM accounts WHERE username = ?').get(credentials.username);
   assert.match(stored.password_hash, /^scrypt-v1:/);
   assert.ok(!stored.password_hash.includes(credentials.password));
@@ -260,7 +271,7 @@ try {
   assert.match(secureSession.response.headers.get('set-cookie'), /^__Host-bluek_session=/);
   assert.match(secureSession.response.headers.get('set-cookie'), /; Secure;/);
   assert.doesNotMatch(secureSession.response.headers.get('set-cookie'), /Domain=/i);
-  console.log('Cloud API passed: legacy migration, IDs, seven-day deadlines, media guards, UTF-8 limits, accounts/sessions, owner ACL, revision conflicts, copies, CSRF/CORS, throttling, removed content-report endpoint, admin blocks, retention and restart.');
+  console.log('Cloud API passed: legacy migration, IDs, 7/30-day anonymous/account project and program expiry, media guards, UTF-8 limits, accounts/sessions, owner ACL, revision conflicts, copies, CSRF/CORS, throttling, removed content-report endpoint, admin blocks, retention and restart.');
 } finally {
   await stop(); if (db?.open) db.close(); await rm(directory, { recursive: true, force: true });
 }

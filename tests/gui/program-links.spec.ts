@@ -364,7 +364,7 @@ test("EXP-14 short program link stores options, opens the developer project thro
     name: "Short program link",
     exact: true,
   });
-  await expect(ready).toContainText("seven days");
+  await expect(ready).toContainText("7 days");
   await expect(ready.getByLabel("Public project code")).toHaveText(
     "green-lamp-river",
   );
@@ -396,7 +396,7 @@ test("EXP-14 short program link stores options, opens the developer project thro
   await expect(problem).toContainText("This program cannot be started.");
   await expect(problem).toContainText("This publication has expired.");
   await expect(problem).toContainText(
-    "New publications expire after seven days.",
+    "Anonymous publications expire after seven days; account publications expire after 30 days.",
   );
   await expect(
     player.getByRole("link", { name: "Open BlueK" }),
@@ -405,11 +405,34 @@ test("EXP-14 short program link stores options, opens the developer project thro
   await player.reload();
   await expect(problem).toContainText("Diese Veröffentlichung ist abgelaufen.");
   await expect(problem).toContainText(
-    "Neue Veröffentlichungen laufen nach sieben Tagen ab.",
+    "Anonyme Veröffentlichungen laufen nach sieben Tagen, Veröffentlichungen mit Konto nach 30 Tagen ab.",
   );
   await expect(
     player.getByRole("link", { name: "BlueK öffnen" }),
   ).toBeVisible();
+});
+
+test("EXP-21 publication confirmation displays the 30-day lifetime from the API receipt", async ({
+  page,
+}) => {
+  await page.route("**/api/programs", (route) =>
+    route.fulfill({
+      status: 201,
+      json: {
+        code: "7m4kr9wp3x6d",
+        expiresAt: new Date(Date.now() + 30 * 86400000).toISOString(),
+        expiresInDays: 30,
+      },
+    }),
+  );
+  await editor(page);
+  const dialog = await options(page);
+  await dialog.getByRole("button", { name: /^Create runnable link/ }).click();
+  const ready = page.getByRole("dialog", {
+    name: "Short program link",
+    exact: true,
+  });
+  await expect(ready).toContainText("30 days");
 });
 
 test("EXP-15 BluePlay options force reachable Run, apply to links and HTML, and fit a small German viewport", async ({

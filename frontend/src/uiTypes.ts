@@ -60,7 +60,13 @@ export type ObjectMenu = {
 export type CodepadMenu = { x: number; y: number; text?: string };
 export type MainAction = "start" | "reset" | "export" | "shareShortProgram";
 export type MainDialog = { action: MainAction; generationId: string };
-export type ShareLinkDialog = { url: string; code: string; copied: boolean; program?: boolean };
+export type ShareLinkDialog = {
+  url: string;
+  code: string;
+  copied: boolean;
+  program?: boolean;
+  expiresInDays?: 7 | 30;
+};
 export type NewClassType =
   "class" | "interface" | "open" | "abstract" | "data" | "test" | "functions";
 export type CardPosition = { x: number; y: number };

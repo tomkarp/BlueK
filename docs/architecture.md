@@ -454,7 +454,8 @@ link-error semantics. The editor and hosted player provide no content-report
 action; technical feedback remains a separate service.
 
 The Node/SQLite service enforces owner permissions, session invalidation,
-immutable seven-day public copies, 1 MiB project limits, closed publication
+immutable public copies (seven days anonymously, 30 days with an account),
+1 MiB project limits, closed publication
 schemas and the no-custom-media policy. A separate local operator CLI inspects
 JSON and blocks copies/accounts. The additive migration preserves old
 payloads/deadlines and reserves every code permanently before cleanup. See

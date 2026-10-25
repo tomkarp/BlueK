@@ -2351,7 +2351,7 @@ test("GUI-138 an unavailable share link explains itself and keeps the tab projec
   await page.goto("/bluek/abcd-efgh-ijkl");
   const notice = page.locator(".link-problem-notice");
   await expect(notice).toContainText(
-    "This publication has expired. New publications expire after seven days.",
+    "This publication has expired. Anonymous publications expire after seven days; account publications expire after 30 days.",
   );
   await expect(page.getByLabel("Project name")).toHaveValue("Kept work");
   await expect(page.locator(".classcard")).toContainText("Kept");
@@ -2385,6 +2385,7 @@ test("GUI-138 an unavailable share link explains itself and keeps the tab projec
     "This program does not allow opening in BlueK.",
   );
   await dialog.getByLabel("Public project code").fill("green lamp river");
+  page.once("dialog", (replacement) => replacement.accept());
   await dialog
     .getByRole("button", { name: "Load project", exact: true })
     .click();
@@ -2394,7 +2395,7 @@ test("GUI-138 an unavailable share link explains itself and keeps the tab projec
   await page.evaluate(() => localStorage.setItem("bluek-language", "de"));
   await page.goto("/bluek/abcd-efgh-ijkl");
   await expect(notice).toContainText(
-    "Diese Veröffentlichung ist abgelaufen. Neue Veröffentlichungen laufen nach sieben Tagen ab.",
+    "Diese Veröffentlichung ist abgelaufen. Anonyme Veröffentlichungen laufen nach sieben Tagen, Veröffentlichungen mit Konto nach 30 Tagen ab.",
   );
 });
 

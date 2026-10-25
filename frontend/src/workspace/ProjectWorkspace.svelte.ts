@@ -898,7 +898,13 @@ export class ProjectWorkspace {
         url,
         this.text("ui.transfer.copyThisProgramLink"),
       );
-      this.shareLinkDialog = { url, code: saved.code, copied, program: true };
+      this.shareLinkDialog = {
+        url,
+        code: saved.code,
+        copied,
+        program: true,
+        expiresInDays: saved.expiresInDays,
+      };
       this.showExportNotice(
         this.text(
           copied

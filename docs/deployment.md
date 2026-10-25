@@ -1,7 +1,9 @@
 # Deployment
 
 Target production split: **bluek.online is served directly by GitHub Pages**;
-**api.bluek.online** is the optional Node 22/SQLite service on the existing host.
+**api.bluek.online** is the production Node 22/SQLite service on the existing
+host. Beta uses its own **beta.bluek.online** static host and separate
+**api-beta.bluek.online** API service and SQLite database.
 The static editor never depends on the API host, reverse proxy or a startup
 health request. API requests time out after 15 seconds (feedback keeps its
 separate bounded timeouts). Static resources include the interpreter, BluePlay,
@@ -17,20 +19,29 @@ change is part of the implementation. See [storage contract](server-storage.md).
 | --- | --- | --- |
 | deploy-pages.yml | main push/manual | Full build; root base `/`, dedicated API at `https://api.bluek.online`; independent Pages artifact/deployment |
 | deploy-server.yml | main push/manual | API/migration tests, API source/dependencies only, restart existing bluek-share service; no static build or rsync |
-| deploy-beta.yml | beta push/manual | Full build and API tests; restricted database backup; deploy additive API migration to the shared service, then deploy beta static files |
+| deploy-beta.yml | beta push/manual | Full build and API tests; back up only the beta database; deploy the beta API service, then beta static files |
 
-Pages and API are separate workflows with no job dependency. A failed API
-build/deployment cannot block Pages. Beta remains the existing separate static
-host (`beta.bluek.online`). Its deployment tests and deploys the account API
-first, takes a restricted SQLite backup, then updates the beta static files.
-The API migration keeps the existing database path and data; it does not create
-a beta database. `beta.bluek.de` redirects to `beta.bluek.online`, whose Origin
-is already allowed by the shared API. The beta UI can use accounts while the
-main UI remains unchanged. Later, the main UI can use this same API and database.
-Never deploy untrusted beta code under an allowed account Origin.
+Pages and the production API are separate workflows with no job dependency. A
+failed production API build/deployment cannot block Pages. Beta keeps its own
+static host and now has a separate service, port, database path, origin allowlist
+and host-only session cookies. Beta deployment backs up and restarts only
+`bluek-beta-share`; it never reads or writes `/opt/bluek-share` or the production
+database. `beta.bluek.online/api/*` remains routed to port 8788 for compatibility
+with already-built beta clients; new beta builds call `api-beta.bluek.online`
+directly. Both APIs may run on the same physical machine, so they still share
+host availability and operating-system administration.
+
+The first beta deployment creates a new empty beta database. The workflow does
+not copy the formerly shared database: that database has no reliable field that
+distinguishes records created from beta from any other records. If existing
+beta accounts/projects must carry over, make and review a separate database-copy
+plan before enabling the new service. Copying the old database duplicates its
+contents; it does not separate their history.
 
 Secrets: `BLUEK_DEPLOY_SSH_KEY`, `BLUEK_DEPLOY_KNOWN_HOSTS`, `BLUEK_DEPLOY_HOST`,
 `BLUEK_DEPLOY_USER`, `BLUEK_DEPLOY_PORT`, `BLUEK_BETA_DEPLOY_PATH`.
+The beta static path secret must resolve to `/root/bluek-beta`, matching the
+current Caddy document root; the workflow checks this before uploading files.
 `BLUEK_DEPLOY_PATH` is no longer used for production static files. Existing
 server service paths are retained. API rsync excludes `server/data/`, does not
 use `--delete`, and never copies databases to Pages. Keep secrets in a root-owned
@@ -44,36 +55,46 @@ project files are copied to inf-schule separately, outside these workflows.
 
 ## Cutover order and rollback
 
-1. The beta workflow backs up the SQLite database consistently with SQLite's
-   backup API before restarting the service, keeps backups restricted, and
-   removes backups older than seven days. For manual deployments, make the same
-   backup and test migration on a copy first.
-2. Configure `api.bluek.online` DNS to the existing API host, Caddy HTTPS and the
-   service environment below. Deploy the new API before the static cutover.
-   Existing project/program routes remain available. Confirm old word codes and
-   technical feedback work from their intended Origins.
-3. In GitHub, verify ownership of `bluek.online`, select **Settings → Pages →
+1. Provision the separate beta API service and its environment below. Point
+   `api-beta.bluek.online` DNS to the existing host and add its Caddy HTTPS
+   route. The beta service listens on `127.0.0.1:8788`, uses
+   `/opt/bluek-beta-share/data/projects.sqlite`, and allows only the
+   `https://beta.bluek.online` frontend Origin. The beta workflow verifies these
+   settings before deploying. Configure this service before enabling the
+   workflow.
+2. Decide whether beta starts empty or receives a deliberately prepared copy of
+   existing shared data. The workflow never seeds it automatically. Back up
+   any source database and test a copy first; do not point beta at the
+   production database.
+3. The beta workflow backs up the beta SQLite database consistently with
+   SQLite's backup API before restarting its service, keeps backups restricted,
+   and removes backups older than seven days. It then health-checks port 8788
+   before deploying beta static files. The production database is untouched.
+4. Keep `api.bluek.online` on the production API service and configure its
+   production environment below. Confirm its project/program routes and
+   technical feedback continue to work from the main Origin.
+5. In GitHub, verify ownership of `bluek.online`, select **Settings → Pages →
    Source: GitHub Actions**, and set custom domain **bluek.online**. Do this
    before DNS cutover. Publish the root-base Pages artifact. With an Actions
    publishing source, GitHub's custom-domain setting is authoritative; a CNAME
    file alone does not configure it.
-4. Point the production apex directly at Pages, removing conflicting records to
+6. Point the production apex directly at Pages, removing conflicting records to
    the old host: use ALIAS/ANAME to `tomkarp.github.io`, or the four GitHub Pages
    A records `185.199.108.153`, `185.199.109.153`, `185.199.110.153`,
    `185.199.111.153`. If using IPv6, set all four Pages AAAA records
    `2606:50c0:8000::153` through `2606:50c0:8003::153`, with A records as well.
    `www` may CNAME directly to `tomkarp.github.io`. Do not point the production
    apex to Caddy or put an API-host redirect/proxy in front of it.
-5. Wait for GitHub's DNS/certificate checks and enable **Enforce HTTPS**. Keep
+7. Wait for GitHub's DNS/certificate checks and enable **Enforce HTTPS**. Keep
    the API on HTTPS too. Confirm the actual answers and certificates rather than
    assuming a workflow changed DNS. Follow the current
    [GitHub custom-domain instructions](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site).
-6. Remove the old `bluek.online` static vhost from Caddy after propagation. Keep
+8. Remove the old `bluek.online` static vhost from Caddy after propagation. Keep
    API compatibility on old alias domains only where needed for downloaded old
    clients. Domain fragments survive browser redirects; legacy `/bluek/`,
    `/run/`, `/load/` and former `/BlueK/` paths use the Pages 404 app fallback.
    New query links require no rewrite and return the ordinary root document.
-7. Verify production and beta: account registration/login/logout/password
+9. Verify production and beta independently: account registration/login/logout/password
    change, own/other private projects, publication/player, operator block,
    technical feedback, existing links. Then block the API origin in browser
    developer tools and verify editing/running/BluePlay/examples/help/JSON/BlueJ
@@ -81,10 +102,11 @@ project files are copied to inf-schule separately, outside these workflows.
 
 The API migration is additive and transactional: old `projects` JSON and expiry
 values remain unchanged; every old identifier is permanently reserved before
-cleanup. Old public copies keep their original deadline (up to the existing
-30-day period), including their old media. New copies use seven days and the
-new validation. No bulk deletion or deadline rewrite is needed. Expired content
-continues to be cleaned according to its recorded expiry. Never reset the
+cleanup. Old public copies keep their original deadline, including their old
+media. New anonymous copies use seven days and authenticated-account copies use
+30 days, both with the new validation. No bulk deletion or deadline rewrite is
+needed. Expired content continues to be cleaned according to its recorded
+expiry. Never reset the
 identifier registry, including when restoring a backup.
 
 Rollback: stop new writes, make a consistent backup, and prefer fixing forward.
@@ -99,21 +121,22 @@ expired public payloads. Keep all account/private data restricted during repair.
 
 | Variable | Default / use |
 | --- | --- |
-| BLUEK_SHARE_HOST / PORT | `127.0.0.1` / `8787` |
-| BLUEK_SHARE_DB | repository-relative `server/data/projects.sqlite`; in production, retain the existing configured path when deploying an additive migration |
-| BLUEK_API_ORIGINS | `https://bluek.online,https://beta.bluek.online,http://localhost:5173,http://127.0.0.1:5173`; production set only the two HTTPS origins |
+| BLUEK_SHARE_HOST / PORT | `127.0.0.1` / `8787` production; `127.0.0.1` / `8788` beta |
+| BLUEK_SHARE_DB | Production retains its existing path. Beta uses `/opt/bluek-beta-share/data/projects.sqlite`; never point both services at one database. |
+| BLUEK_API_ORIGINS | Set per service: production `https://bluek.online`; beta `https://beta.bluek.online`. Local API tests use their own explicit Origins. |
 | BLUEK_COOKIE_SECURE | secure by default; `0` only for local HTTP tests/development |
 | BLUEK_COOKIE_SAMESITE | `Lax`; optional `None` requires Secure and explicit cross-site Origin |
-| VITE_BLUEK_API_URL | build-time API origin; beta uses its same-site `/api` proxy on `https://beta.bluek.online`, later Pages builds use `https://api.bluek.online`; localhost uses Vite's `/api` proxy |
+| VITE_BLUEK_API_URL | build-time API origin; main uses `https://api.bluek.online`, beta uses `https://api-beta.bluek.online`; localhost uses Vite's `/api` proxy |
 | VITE_BASE_PATH | `/`; optional static-prefix builds use the same app/configuration |
 | BLUEK_FEEDBACK_* | existing private-feedback configuration, see [feedback](feedback.md) |
 
-The API host-only Secure cookie works across the same-site HTTPS frontend/API
-split with `credentials: include` and exact credentialed CORS. Do not set a
-Domain cookie or wildcard allowlist. An unrelated github.io preview is not an
-account Origin by default. Static/local features work there; cross-site account
-cookies need explicit configuration and may be browser-blocked. Feedback keeps
-its separate anonymous Origin allowlist (including offline `null`).
+Each API uses a host-only Secure cookie across its same-site HTTPS frontend/API
+split with `credentials: include` and exact credentialed CORS. Main cookies are
+hosted by `api.bluek.online`; beta cookies by `api-beta.bluek.online`. Do not set
+a Domain cookie or wildcard allowlist. An unrelated github.io preview is not
+an account Origin by default. Static/local features work there; cross-site
+account cookies need explicit configuration and may be browser-blocked.
+Feedback has a separate anonymous Origin allowlist for each service.
 
 Example `/etc/bluek/api.env`, owned by root and readable only by the service:
 
@@ -122,10 +145,11 @@ NODE_ENV=production
 BLUEK_SHARE_HOST=127.0.0.1
 BLUEK_SHARE_PORT=8787
 BLUEK_SHARE_DB=/opt/bluek-share/data/projects.sqlite
-BLUEK_API_ORIGINS=https://bluek.online,https://beta.bluek.online
+BLUEK_API_ORIGINS=https://bluek.online
 BLUEK_COOKIE_SECURE=1
 BLUEK_COOKIE_SAMESITE=Lax
 BLUEK_FEEDBACK_TOKEN_FILE=/etc/bluek/feedback-token
+BLUEK_FEEDBACK_ORIGINS=https://bluek.online
 ```
 
 Example systemd unit `/etc/systemd/system/bluek-share.service`:
@@ -146,6 +170,58 @@ UMask=0077
 [Install]
 WantedBy=multi-user.target
 ```
+
+For beta, use a separate user, environment file, working directory, service
+unit, port and database path. These files are installed on the host before the
+beta deployment workflow is enabled.
+
+Example `/etc/bluek-beta/api.env`, owned by root and readable only by the
+beta service:
+
+```ini
+NODE_ENV=production
+BLUEK_SHARE_HOST=127.0.0.1
+BLUEK_SHARE_PORT=8788
+BLUEK_SHARE_DB=/opt/bluek-beta-share/data/projects.sqlite
+BLUEK_API_ORIGINS=https://beta.bluek.online
+BLUEK_COOKIE_SECURE=1
+BLUEK_COOKIE_SAMESITE=Lax
+BLUEK_FEEDBACK_TOKEN_FILE=/etc/bluek/feedback-token
+BLUEK_FEEDBACK_ORIGINS=https://beta.bluek.online
+```
+
+Beta technical feedback uses the existing private repository, token file and
+its own SQLite queue. Grant the `bluek-beta-share` service account read access
+to `/etc/bluek/feedback-token` and traversal access to `/etc/bluek` while
+keeping the token restricted from other users. The workflow verifies the
+configured path and that the token file exists. Main and beta reports reach
+the same private repository and use the same credential; their API processes
+and local queues remain separate.
+
+Example `/etc/systemd/system/bluek-beta-share.service`:
+
+```ini
+[Unit]
+Description=BlueK beta account and project API
+After=network.target
+[Service]
+Type=simple
+User=bluek-beta-share
+WorkingDirectory=/opt/bluek-beta-share
+EnvironmentFile=/etc/bluek-beta/api.env
+ExecStart=/usr/bin/node /opt/bluek-beta-share/server/share-server.mjs
+Restart=on-failure
+RestartSec=2
+UMask=0077
+[Install]
+WantedBy=multi-user.target
+```
+
+Create the `bluek-beta-share` system user and `/opt/bluek-beta-share` data and
+backup directories with restricted permissions. The deploy user needs restart
+permission for `bluek-beta-share` separately from `bluek-share`. Run the two
+services with distinct database files and do not copy a production database to
+beta without an explicit data decision.
 
 Create/reuse the dedicated `bluek-share` system user. Give it the database
 directory, protect `/etc/bluek` and database backups, then `daemon-reload` and

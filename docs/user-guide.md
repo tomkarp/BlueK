@@ -120,9 +120,10 @@ projects. Only that explicit action contacts the optional account service.
 shows player options and the **Export as HTML** action. **Back** returns to
 the format choices. The save dialog does not publish public links.
 
-**Share** creates an immutable public copy that expires after seven days;
-no account is needed. **Edit project** creates a link to an editable BlueK
-copy. Its README and saved-state opening options appear only when available.
+**Share** creates an immutable public copy that expires after seven days when
+published anonymously or 30 days from a signed-in account. **Edit project**
+creates a link to an editable BlueK copy. Its README and saved-state opening
+options appear only when available.
 **Run program** creates a direct player link; its optional program settings are
 collapsed until needed. HTML downloads and runnable publications use the same
 program-option values.
@@ -135,7 +136,8 @@ The dialogs retain a stable size when switching options. Their content scrolls
 on smaller screens; Cancel and Back remain available. The offline edition keeps
 local file formats and omits account and public-sharing actions.
 
-Publishing stores a separate immutable public copy for seven days. Only built-in
+Publishing stores a separate immutable public copy for seven days anonymously
+or 30 days from a signed-in account. Only built-in
 BluePlay media are allowed; supplied images and sounds are rejected by name
 without modifying the original. Anyone with a link can open it. Publishers
 cannot withdraw it; the operator can block it. Visits do not extend its lifetime.

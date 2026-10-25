@@ -17,7 +17,7 @@ BlueJ ZIP export is available.
 
 Accounts and publishing require online BlueK and are hidden offline. No new
 project content links are generated. Open online BlueK and import a local JSON
-file to publish a seven-day public copy without custom images or sounds.
+file to publish a short-lived public copy without custom images or sounds.
 Existing full content links remain readable during a transition with no agreed
 end date. A local HTML player's BlueK button opens the online home page;
 download/import its JSON to edit it.

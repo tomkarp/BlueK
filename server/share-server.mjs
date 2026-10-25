@@ -17,7 +17,8 @@ const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const databasePath =
   process.env.BLUEK_SHARE_DB ||
   resolve(projectRoot, "server/data/projects.sqlite");
-const ttlMs = 7 * 86400000;
+const anonymousPublicationDays = 7;
+const accountPublicationDays = 30;
 const alphabet = "23456789abcdefghjkmnpqrstuvwxyz";
 const validCode = (code) =>
   /^[a-z0-9]{12}$/.test(code) || /^(?:[a-z]{4,6}-){2,3}[a-z]{4,6}$/.test(code);
@@ -104,7 +105,12 @@ function storePublic(payload, user) {
       )
         continue;
       const createdAt = new Date();
-      const expiresAt = new Date(createdAt.getTime() + ttlMs).toISOString();
+      const expiresInDays = user
+        ? accountPublicationDays
+        : anonymousPublicationDays;
+      const expiresAt = new Date(
+        createdAt.getTime() + expiresInDays * 86400000,
+      ).toISOString();
       const text = JSON.stringify(payload);
       database
         .prepare("INSERT INTO public_codes(code, owner_id) VALUES (?, ?)")
@@ -118,7 +124,7 @@ function storePublic(payload, user) {
           Buffer.byteLength(text),
           text,
         );
-      return { code, expiresAt };
+      return { code, expiresAt, expiresInDays };
     }
     throw new HttpError(503, "busy");
   })();

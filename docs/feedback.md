@@ -33,12 +33,15 @@ The submission receipt shows its issue number or queued reference and the
 optional email-contact explanation; the storage notice remains available from
 the header's information button.
 
-Production, beta and offline BlueK send technical feedback to
-`https://api.bluek.online/api/feedback`, independently of accounts and project
-sharing. Local Vite uses its `/api/feedback` proxy to that origin;
-`BLUEK_FEEDBACK_PROXY_TARGET` can select a local test backend. Sending requires
-internet. No GitHub credential is bundled in any frontend build. The project
-storage/publication 1 MiB limit does not apply to these 10 MiB reports.
+Main BlueK sends technical feedback to
+`https://api.bluek.online/api/feedback`; beta sends it to
+`https://api-beta.bluek.online/api/feedback`. Offline builds use their
+configured API origin, so they require internet to submit. Local Vite uses its
+`/api/feedback` proxy to the production API by default;
+`BLUEK_FEEDBACK_PROXY_TARGET` can select a local test backend. Feedback remains
+independent of accounts and project sharing. No GitHub credential is bundled in
+any frontend build. The project storage/publication 1 MiB limit does not apply
+to these 10 MiB reports.
 
 ## Delivery and limits
 
@@ -97,7 +100,13 @@ errors never return credentials or GitHub response bodies.
 | BLUEK_FEEDBACK_REPOSITORY | `tomkarp/BlueK-Feedback`, private with Issues enabled |
 | BLUEK_FEEDBACK_TOKEN_FILE | Preferred protected token file outside source/deployment directories |
 | BLUEK_FEEDBACK_TOKEN | Alternative environment token for local development |
-| BLUEK_FEEDBACK_ORIGINS | Comma-separated origins; defaults: main, beta, Pages, localhost/127.0.0.1:5173, `null` for offline files |
+| BLUEK_FEEDBACK_ORIGINS | Comma-separated allowed origins; set explicitly for each service: production `https://bluek.online`, beta `https://beta.bluek.online` |
+
+Production and beta have separate SQLite feedback queues. Both use the same
+token file and private `tomkarp/BlueK-Feedback` repository, so reports from
+both environments arrive there. Offline feedback uses the API origin
+configured in that offline build and is accepted only if that origin is
+explicitly allowed by the service.
 
 Use a fine-grained token limited to **BlueK-Feedback**, with **Issues: read/write**,
 **Contents: read/write** (private attachments) and automatic **Metadata: read**.
@@ -105,8 +114,11 @@ It must remain server-only: never use a `VITE_*` variable or browser build
 definition. The public repository's Actions token/deploy key cannot access this
 separate private repository. Create `app-report`, `bug`, `kotlin-support` labels.
 
-Production token: `/etc/bluek/feedback-token`, owner `bluek-share`, mode 600.
-Systemd drop-in `/etc/systemd/system/bluek-share.service.d/feedback.conf`:
+Shared production/beta token: `/etc/bluek/feedback-token`, restricted to the
+service accounts. Grant `bluek-beta-share` read access to the file and execute
+access to its parent directory without making the credential readable by
+other users. Systemd drop-in
+`/etc/systemd/system/bluek-share.service.d/feedback.conf`:
 
 ```ini
 [Service]

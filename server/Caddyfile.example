@@ -9,12 +9,23 @@ api.bluek.online {
     }
 }
 
+# Beta has its own API process and SQLite database; main API data is not routed here.
+api-beta.bluek.online {
+    encode gzip zstd
+    handle /api/* {
+        reverse_proxy 127.0.0.1:8788
+    }
+    handle {
+        respond 404
+    }
+}
+
 # Existing beta static delivery; replace this path for the deployment host.
 beta.bluek.online {
     encode gzip zstd
     root * /var/www/bluek-beta
     handle /api/* {
-        reverse_proxy 127.0.0.1:8787
+        reverse_proxy 127.0.0.1:8788
     }
     handle {
         try_files {path} /index.html
@@ -36,7 +47,7 @@ www.bluek.de {
 }
 beta.bluek.de {
     handle /api/* {
-        reverse_proxy 127.0.0.1:8787
+        reverse_proxy 127.0.0.1:8788
     }
     handle {
         redir https://beta.bluek.online{uri} 308

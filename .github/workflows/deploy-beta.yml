@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VITE_BASE_PATH: /
-      VITE_BLUEK_API_URL: https://beta.bluek.online
+      VITE_BLUEK_API_URL: https://api-beta.bluek.online
 
     steps:
       - name: Check out repository
@@ -59,41 +59,46 @@ jobs:
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
-      - name: Deploy API before enabling beta accounts
+      - name: Deploy isolated beta API
         env:
           HOST: ${{ secrets.BLUEK_DEPLOY_HOST }}
           USER: ${{ secrets.BLUEK_DEPLOY_USER }}
           PORT: ${{ secrets.BLUEK_DEPLOY_PORT }}
         run: |
           ssh -i ~/.ssh/bluek_deploy -p "$PORT" "$USER@$HOST" \
-            'install -d -o bluek-share -g bluek-share /opt/bluek-share/server /opt/bluek-share/data'
+            'install -d -o bluek-beta-share -g bluek-beta-share /opt/bluek-beta-share/server /opt/bluek-beta-share/data /opt/bluek-beta-share/backups'
           rsync -az \
             -e "ssh -i ~/.ssh/bluek_deploy -p $PORT" \
-            --exclude=/data/ server/ "$USER@$HOST:/opt/bluek-share/server/"
+            --exclude=/data/ server/ "$USER@$HOST:/opt/bluek-beta-share/server/"
           rsync -az \
             -e "ssh -i ~/.ssh/bluek_deploy -p $PORT" \
-            package.json package-lock.json "$USER@$HOST:/opt/bluek-share/"
+            package.json package-lock.json "$USER@$HOST:/opt/bluek-beta-share/"
           ssh -i ~/.ssh/bluek_deploy -p "$PORT" "$USER@$HOST" "bash -s" <<'REMOTE'
           set -eu
-          cd /opt/bluek-share
+          cd /opt/bluek-beta-share
+          test -f /etc/bluek-beta/api.env
+          grep -Fxq 'BLUEK_SHARE_PORT=8788' /etc/bluek-beta/api.env
+          grep -Fxq 'BLUEK_SHARE_DB=/opt/bluek-beta-share/data/projects.sqlite' /etc/bluek-beta/api.env
+          grep -Fxq 'BLUEK_API_ORIGINS=https://beta.bluek.online' /etc/bluek-beta/api.env
+          grep -Fxq 'BLUEK_FEEDBACK_ORIGINS=https://beta.bluek.online' /etc/bluek-beta/api.env
+          grep -Fxq 'BLUEK_FEEDBACK_TOKEN_FILE=/etc/bluek/feedback-token' /etc/bluek-beta/api.env
+          test -s /etc/bluek/feedback-token
           npm ci --omit=dev
-          chown -R bluek-share:bluek-share /opt/bluek-share
-          install -d -m 700 /opt/bluek-share/backups
-          PID="$(systemctl show --property=MainPID --value bluek-share)"
-          test "$PID" -gt 0
-          DB_PATH="$(tr '\000' '\n' <"/proc/$PID/environ" | sed -n 's/^BLUEK_SHARE_DB=//p' | head -n 1)"
-          DB_PATH="${DB_PATH:-/opt/bluek-share/server/data/projects.sqlite}"
-          test -f "$DB_PATH"
-          node server/backup-database.mjs "$DB_PATH" /opt/bluek-share/backups
-          systemctl restart bluek-share
+          chown -R bluek-beta-share:bluek-beta-share /opt/bluek-beta-share
+          install -d -o bluek-beta-share -g bluek-beta-share -m 700 /opt/bluek-beta-share/backups
+          DB_PATH=/opt/bluek-beta-share/data/projects.sqlite
+          if test -f "$DB_PATH"; then
+            node server/backup-database.mjs "$DB_PATH" /opt/bluek-beta-share/backups
+          fi
+          systemctl restart bluek-beta-share
           REMOTE
 
-      - name: Confirm shared API is healthy
+      - name: Confirm isolated beta API is healthy
         env:
           HOST: ${{ secrets.BLUEK_DEPLOY_HOST }}
           USER: ${{ secrets.BLUEK_DEPLOY_USER }}
           PORT: ${{ secrets.BLUEK_DEPLOY_PORT }}
-        run: ssh -i ~/.ssh/bluek_deploy -p "$PORT" "$USER@$HOST" 'curl --fail --retry 10 --retry-delay 2 --retry-all-errors http://127.0.0.1:8787/api/health'
+        run: ssh -i ~/.ssh/bluek_deploy -p "$PORT" "$USER@$HOST" 'curl --fail --retry 10 --retry-delay 2 --retry-all-errors http://127.0.0.1:8788/api/health'
 
       - name: Deploy beta static files
         env:
@@ -103,6 +108,7 @@ jobs:
           TARGET: ${{ secrets.BLUEK_BETA_DEPLOY_PATH }}
         run: |
           test -n "$TARGET"
+          test "${TARGET%/}" = "/root/bluek-beta"
           ssh -i ~/.ssh/bluek_deploy -p "$PORT" "$USER@$HOST" "install -d '$TARGET'"
           rsync -az --delete \
             -e "ssh -i ~/.ssh/bluek_deploy -p $PORT" \

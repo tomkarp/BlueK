@@ -69,7 +69,7 @@ export async function saveShortProjectLink(
   state: boolean,
   promptLabel = "Copy this project link:",
 ): Promise<ShareLinkDialog> {
-  const { code } = await saveProjectToServer(payload);
+  const { code, expiresInDays } = await saveProjectToServer(payload);
   const url = shortShareUrl(
     "bluek",
     code,
@@ -78,7 +78,12 @@ export async function saveShortProjectLink(
   );
   if (readme) url.searchParams.set("readme", "1");
   if (state) url.searchParams.set("state", "1");
-  return { url: url.href, code, copied: await copyLink(url.href, promptLabel) };
+  return {
+    url: url.href,
+    code,
+    copied: await copyLink(url.href, promptLabel),
+    expiresInDays,
+  };
 }
 
 export function normalizeSharedProjectCode(input: string): string {

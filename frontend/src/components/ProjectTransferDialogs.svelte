@@ -575,7 +575,9 @@
         }}>{shareLinkDialog.url}</button
       >
       <p class="share-link-expiry">
-        {t("ui.transfer.thisProjectWillBeDeletedAfter30Days")}
+        {t("ui.transfer.publicCopyExpiry", [
+          String(shareLinkDialog.expiresInDays ?? 7),
+        ])}
       </p>
       <div class="dialog-actions">
         <button on:click={() => (shareLinkDialog = null)}

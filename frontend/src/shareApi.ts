@@ -1,7 +1,11 @@
 import type { SavedProject } from "./projectFormat";
 import { parseExportedProgram, type ExportedProgram } from "./programExport";
 import { apiRequest, ApiError, publicationProject } from "./apiClient";
-type ShareResponse = { code: string; expiresAt: string };
+type ShareResponse = {
+  code: string;
+  expiresAt: string;
+  expiresInDays?: 7 | 30;
+};
 async function publish(path: string, payload: unknown): Promise<ShareResponse> {
   const receipt = await apiRequest<ShareResponse>(path, {
     method: "POST",
@@ -11,7 +15,10 @@ async function publish(path: string, payload: unknown): Promise<ShareResponse> {
     typeof receipt.code !== "string" ||
     !/^(?:[a-z0-9]{12}|(?:[a-z]{4,6}-){2,3}[a-z]{4,6})$/.test(receipt.code) ||
     typeof receipt.expiresAt !== "string" ||
-    !Number.isFinite(Date.parse(receipt.expiresAt))
+    !Number.isFinite(Date.parse(receipt.expiresAt)) ||
+    (receipt.expiresInDays !== undefined &&
+      receipt.expiresInDays !== 7 &&
+      receipt.expiresInDays !== 30)
   )
     throw new ApiError("network");
   return receipt;

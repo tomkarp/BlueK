@@ -77,7 +77,7 @@ below. No universal performance guarantee is implied.
 | GUI-48 | Private-property styling and read-only private-set controls | Recorded inspector checks; current private-row visual/CSS acceptance pending |
 | GUI-49 | Long method menu signatures stay on one line | Recorded browser pass |
 | GUI-35 | Short-link display, copy, expiry and loading roundtrip | Recorded browser pass |
-| API-01 | Additive legacy migration, permanent identifier reservations, account/session ownership, immutable seven-day copies, UTF-8 limits, media policy, blocks and retention; content reporting removed | Real temporary-SQLite API test passed, 2026-10-23; live migration/deployment/load capacity pending |
+| API-01 | Additive legacy migration, permanent identifier reservations, account/session ownership, immutable publications (7 days anonymous, 30 days signed-in), UTF-8 limits, media policy, blocks and retention; content reporting deferred | Real temporary-SQLite API test passed for anonymous/account project and program deadlines, 2026-10-25; live migration/deployment/load capacity pending |
 | HANDOFF-01–14 | Main/beta static app imports editorial inf-schule JSON using one central script and plain chapter links; exact opener/origin, normal runtime/drafts, cancellation, pending edits, local origins, popup fallback and keyboard retry | Chromium 14/14 and WebKit 14/14 passed, 2026-10-24; includes dev.inf-schule.de and domain lookalikes; live inf-schule acceptance pending |
 | CLOUD-01 | Own/counterfeit media rejected by project and program publication UI; local JSON retains every resource | Chromium passed; all 42 actual standards independently checked by client/server helper, 2026-10-22 |
 | CLOUD-02 | Delayed public loads cannot replace edits made while pending; draft survives reload | Chromium passed, 2026-10-22 |
@@ -1407,6 +1407,23 @@ DNS change, deployment, commit or push was performed.
   retains its existing static host. Daily report review, finite backups, capacity
   monitoring and live acceptance are operator responsibilities documented in
   [deployment](deployment.md). No aggregate disk quota was invented.
+
+### Publication lifetime by authentication — 2026-10-25
+
+Anonymous project and program publications retain the seven-day lifetime.
+Publications created with a valid signed-in account now expire after 30 days.
+The API includes the selected lifetime in its receipt so the confirmation UI can
+show the server's decision. Existing publications keep their stored deadlines;
+reads still do not extend them. `test:share-server` passed against temporary
+SQLite, verifying seven- and 30-day project and program deadlines within five
+seconds. `test:i18n` passed (882 messages); typecheck reported zero errors and
+six warnings. The Svelte production build passed with the existing accessibility,
+runtime-asset and chunk-size warnings. Focused GUI-138 and EXP-14 passed 2/2;
+EXP-21 confirmed the UI shows the server-reported 30 days (1/1). The first GUI
+run exposed a stale number-word assertion and a missing replacement confirmation
+in GUI-138; both were corrected before the passing rerun. Content reporting
+remains deferred at the user's request. Full regression and live deployment were
+not run.
 
 ### New, Open, Save and Share navigation — 2026-10-22
 
