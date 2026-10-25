@@ -44,6 +44,13 @@ for a backup or submission; browser storage is not a reliable backup.
 
 Use **Report a problem…** in BlueK to tell the developer about bugs or missing
 Kotlin support. Project attachments are optional.
+
+## License
+
+BlueK's original code and documentation are licensed under the MIT License; see
+[`LICENSE`](LICENSE). Third-party components and content retain their own
+licenses and notices.
+
 For offline use, test your own projects and browser first; the offline version
 has not yet been widely tested in practice.
 
