@@ -30,7 +30,7 @@ below. No universal performance guarantee is implied.
 | GUI-02 | Parameterless creation still asks for an object name | Recorded automated pass |
 | GUI-03 | Inspector computed property values | Recorded browser pass; user confirmation recorded |
 | GUI-04 | Inspector getter refresh after property/codepad changes | Recorded browser pass |
-| GUI-05 | Codepad Enter/history/focus after output | Recorded browser pass |
+| GUI-05 | Codepad Enter/history/focus after output; command recall survives compilation, source edits and runtime reset; explicit Clear history clears recall | Four cases passed in Chromium and WebKit (8/8), 2026-10-25; built-in-browser German compile/Arrow Up/Down/re-execution verified; user acceptance pending |
 | GUI-06 | Terminal splitter geometry, icons and full height | Recorded browser pass |
 | GUI-07 | Codepad result handles for primitives, Strings and objects | Recorded browser pass |
 | GUI-08 | Editor initial focus, rename and shared close control | Recorded browser pass |
@@ -89,6 +89,7 @@ below. No universal performance guarantee is implied.
 | CLOUD-11 | Account save action shows the current project name and whether it will be saved or overwritten; success closes the dialog and shows a transient notice | Chromium passed, 2026-10-23 |
 | CLOUD-12 | Delete an account with current-password confirmation; remove its private projects and sessions while existing public copies remain until expiry | Temporary-SQLite API and German/English Chromium checks passed, 2026-10-23 |
 | GUI-156 | Local save options require a non-empty name for an unnamed project | Chromium passed, including blank-name rejection and JSON download, 2026-10-23 |
+| GUI-157 | Half-maximized editor fills the class-diagram canvas with matching frame styling, follows its vertical splitter, temporarily tabs every open editor and stays above other workspace layers; leaving restores the prior individual/grouped layout. Split-view arrows hide the opposite pane, single-pane arrows restore the split, and bench status/actions follow visibility and narrow widths | Built-in-browser German interaction and screenshot review passed, 2026-10-25: exact canvas bounds, tab switching, grouped/individual restoration, close/ungroup/full-maximize paths, splitters, mirrored single-pane views and narrow status actions. Four focused cases pass in Chromium and WebKit; user visual acceptance pending. |
 | NAV-01 | Four project actions, separated account/view controls, grouped Save choices, separate Share and stable sidebar in English/German; Restore is the rightmost Open tab | Chromium passed at desktop and 390 px Save width; agent inspected German screenshots, 2026-10-22; human acceptance pending |
 | NAV-02 | Sign-in from Save returns without uploading; explicit save/update remains in Save and account settings remain separate | Chromium passed, 2026-10-22 |
 | NAV-03 | Open lists account projects for opening only; project management in Account owns rename/delete; canceling sign-in retains the selected source | Chromium passed, 2026-10-23 |
@@ -341,6 +342,7 @@ below. No universal performance guarantee is implied.
 | GUI-144 | BluePlay information in New Project links to the BluePlay documentation in BlueK | Chromium test passed with GUI-01 (2026-10-18); German panel inspected by the agent at 800×600. User visual acceptance pending. |
 | GUI-145 | Save / Export → Export BlueJ Project downloads `<name>.zip` with the BlueJ library and all standard media; importing it restores the BluePlay project | Chromium pass (2026-10-18); German dialog inspected by the agent at 800×600. User acceptance in BlueJ pending. |
 | GUI-146 | After a BlueJ export, a notice names left-out test classes and MP3 sounds (BluePlay in BlueJ plays WAV only), but only if the project has them; it stays until closed; no MP3 conversion | Chromium pass with GUI-145 and EXP-17 (2026-10-18), including two simulated minutes without hiding and closing with ×; German test-class notice inspected by the agent in the dev server. |
+| GUI-147 | In the IDE, program input grows with the text and shows a visible blinking caret at about the activity bar's pace only while the program waits; submitted input stays inline after prompts and remains in the transcript | Chromium and WebKit passed (2026-10-25), including growing/shrinking width; user confirmed functionality, caret appearance follow-up pending |
 | GUI-148 | Every inspector property shows text plus a compact inspection arrow at the right edge, with the edit pencil immediately to its left; scalars, objects and collections use the same layout | Runtime and Chromium pass (2026-10-21), including custom toString, scalar/captured-getter navigation, disabled null/error arrows, inspectable formatting failures, nested edits and readonly debugger inspection. Agent inspected German light/dark views and opened an Int inspector. User accepted the overall layout and requested the final pencil/arrow ordering; acceptance of that final ordering is pending. |
 | GUI-149 | Default ordinary object text uses an object marker instead of a constructor expression; inspector cells omit the repeated type; English/German labels, computed properties and method results preserve custom text | Runtime/reference checks and four affected Chromium cases (GUI-88/148/149, DBG-18) passed (2026-10-21). Built-in-browser German view confirmed Image references, a computed Image property and custom text without a repeated type. User visual acceptance pending. |
 | GUI-154 | Loading a project into non-empty work asks before replacing the project and its browser autosave; cancel preserves current work | Passed in focused draft GUI run, 2026-10-23 |
@@ -370,6 +372,8 @@ below. No universal performance guarantee is implied.
 | DBG-18 | The debugger embeds the shared readonly object inspector for its receiver and automatically refreshes getters at each pause | Chromium pass (2026-10-21): computed values follow two property updates, String delimiters and reference arrows match floating inspectors, a failing getter shows its details without blocking Step, and returning to main removes the receiver view. |
 | DBG-19 | Completing a debugged BluePlay tick with Step resumes a previously running game; Act once remains paused | Chromium and built-in-browser pass (2026-10-21): final Step resumes a Run tick; a manually started Act tick ends paused with no subsequent tick output. |
 | DBG-20 | BluePlay is above editors on show/start; a debugger pause reveals source above it; the next changed drawing restores the world and keyboard focus | Chromium and built-in-browser pass (2026-10-21): status/getter snapshots and a variable-only step keep the editor in front; a drawing change restores the world. The browser regression also confirms a subsequent Right key reaches the running world. User visual acceptance pending. |
+| DBG-21 | Debugger separates file-level project globals from locals, preserves both shadowed names, refreshes globals after Step and supports readonly global-object inspection without passive getter/formatting calls | Runtime regression passes; English/German cases pass in Chromium and WebKit (4/4), 2026-10-25. Built-in browser shows input = "l" and global a = 5 at Main.kt:9. Full Chromium debugger suite passes 17/17; user acceptance pending. |
+| DBG-22 | Automatic Codepad compilation registers all breakpoints before execution, including after source edits; input and global/local debugger values work through this start path | Three DBG-21/22 cases passed in Chromium and WebKit (6/6), 2026-10-25. Built-in-browser German first execution stops at Main.kt:8 and :10; editing source and recalling the command automatically recompiles and stops again. User acceptance pending. |
 
 ## Recorded verification
 
@@ -1733,3 +1737,96 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
   HANDOFF-14 covers a dev-domain lookalike. All 14 cases passed in Chromium and
   WebKit (28/28); typecheck passed with zero errors/six existing warnings, and
   the production frontend build passed. Live dev.inf-schule acceptance pending.
+- Workspace panes and editor layouts, 2026-10-25 (feedback issue 18): the
+  built-in browser reproduced an implicit extra grid column beside the
+  half-maximized editor and invisible editor resize handles blocking the
+  horizontal pane splitter. Explicit grid columns and rendering resize handles
+  only for floating windows fix both. Temporary editor grouping now restores
+  the previous layout through full maximization, ungrouping and tab closure,
+  including the original group geometry when one editor remains.
+  German built-in-browser clicks, frame measurements and screenshots verified
+  these paths, both pane-collapse/restore directions, the 120-pixel bench status
+  and editor stacking above the lower panes. Four GUI-157 cases and existing
+  GUI-29–33 passed in Chromium and WebKit (18 checks). The first GUI-32 run
+  expected the old button order; its semantic control assertions now include
+  the half-maximize button. An initial sandboxed server start hit `EPERM`;
+  the permitted rerun passed. Typecheck reports zero errors/six existing
+  warnings; i18n (881 messages) and `git diff --check` passed. User visual
+  acceptance remains pending.
+- Codepad command recall, 2026-10-25: reproduced Compile clearing the only
+  history list, so Arrow Up could not repeat a previous command. Submitted
+  command text now has its own app-lifetime presentation history. Compilation,
+  source invalidation and runtime reset clear old result handles and reset the
+  navigation index while preserving recall; explicit Clear history clears both.
+  GUI-05 passed four cases in Chromium and WebKit (8/8), covering repeated
+  compilation, Arrow Up/Down, fresh object results, runtime reset, source edits,
+  failed compilation and explicit clearing. The built-in browser reproduced
+  the original failure and verified recall plus re-execution after the fix.
+  Typecheck (zero errors, six existing warnings), Codepad flow helpers, Svelte
+  architecture and `git diff --check` passed. User acceptance remains pending.
+- Debugger globals, 2026-10-25 (DBG-21): the pre-change bundle fails the new
+  runtime assertion for file-level `a = 5`. The rebuilt interpreter supplies
+  passive global storage separately from current-frame locals; the binding
+  filters project declarations through the AST, and both localized sections
+  share the same value/inspection presentation. Runtime checks cover input,
+  shadowed names, changed global values, object handles and zero getter or
+  `toString` calls during capture. The first fixture used unsupported top-level
+  custom accessors; a class getter/formatter counter now checks passivity.
+  The initial GUI setup explicitly compiled before registering breakpoints;
+  the DBG-22 follow-up now covers automatic Codepad compilation as well.
+  German built-in-browser review reproduces the screenshot's readln/Step path
+  and shows `input = "l"` alongside `a = 5`. English/German DBG-21 passed in
+  Chromium and WebKit (4/4); the full Chromium debugger suite passed 17/17.
+  An initial DBG-14 breakpoint-removal failure passed in isolation and in the
+  full rerun. DBG-20 now uses the visible editor gutter because the larger
+  debugger can cover the editor's bottom breakpoint button. Kotlin/JS and
+  production frontend builds, typecheck (zero errors, six existing warnings),
+  i18n (882 messages), debugger/reference/UI helpers, Svelte architecture and
+  `git diff --check` passed. User acceptance remains pending.
+- Codepad automatic compilation and breakpoints, 2026-10-25 (DBG-22): both
+  localized DBG-21 cases failed without an explicit Compile before the fix.
+  The automatic compile capability now awaits the editor's sequential
+  breakpoint registration before returning control to Codepad evaluation;
+  only successful compilations register breakpoints and run the command.
+  Three DBG-21/22 cases passed in Chromium and WebKit (6/6), including all
+  three breakpoints across two functions and recompilation after an edit.
+  All four existing GUI-05 cases passed in Chromium. The first DBG-22 attempt
+  reached every breakpoint but its edit click was covered by the terminal;
+  the test now hides that window before editing. The built-in browser verified
+  first execution without Compile, both readln/body breakpoints and an edited
+  source rerun recalled with Arrow Up. Typecheck (zero errors, six existing
+  warnings), Codepad flow/stale-generation helpers, Svelte architecture and
+  `git diff --check` passed. User acceptance remains pending.
+- Inline IDE terminal input, 2026-10-25 (GUI-147): replaced the fixed bottom
+  input row with a focused, highlighted field at the end of terminal output;
+  the response stays inline after prompts and the field returns for later
+  `readln()` calls, then disappears when execution finishes. The existing
+  GUI-12/13/15 case now covers two input requests and output order; it passed
+  Chromium and WebKit (2/2). The built-in browser showed `Name?` beside the
+  field and the submitted `Ada` inline in blue. The first typecheck found a
+  player-only translation key used by the IDE; adding a shared terminal label
+  fixed it. Final typecheck had zero errors and six existing warnings; i18n
+  (884 messages), Svelte architecture and `git diff --check` passed. The GUI
+  web server logged the optional `/api/account` proxy as unavailable at
+  `127.0.0.1:8787`; the terminal case passed. User acceptance remains pending.
+- Terminal input appearance follow-up, 2026-10-25 (GUI-147): the user confirmed
+  the input behavior and requested a less prominent field with no fixed width.
+  The input now inherits the terminal font and baseline, uses a transparent
+  background and a thin underline, and grows/shrinks with the entered text up
+  to the terminal width. The expanded GUI case passed in Chromium and WebKit
+  (2/2), including width changes and both input requests. The built-in browser
+  was visually inspected. Typecheck passed with zero errors and six existing
+  warnings; `git diff --check` passed. The user then asked to remove the
+  underline and strengthen the blinking caret; that appearance update is
+  recorded in the follow-up below.
+- Terminal caret refinement, 2026-10-25 (GUI-147): removed the underline and
+  placeholder, reduced the empty field to the caret width, and increased caret
+  contrast in light and dark themes. The built-in browser shows the blue caret
+  directly after the prompt. `git diff --check` passed. User acceptance
+  pending.
+- Terminal cursor timing, 2026-10-25 (GUI-147): the first `steps(1,end)` cursor
+  animation stayed at constant opacity in the live browser. Replaced it with
+  explicit keyframes: one second visible and one second hidden, using the
+  activity indicator's one-second segment duration. Browser sampling confirmed
+  opacity changes from 1 to 0 and back. Svelte typecheck passed with zero
+  errors and six existing warnings; user visual confirmation pending.

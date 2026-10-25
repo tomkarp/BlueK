@@ -134,8 +134,12 @@ properties through the suspended coroutine, including getters and `toString`,
 without advancing the paused statement or honoring inspection-only breakpoints.
 Both floating and integrated inspectors show text and an inspection arrow for
 every non-null value, including scalars. Arrow navigation uses the captured
-value rather than rerunning its getter. The current implementation shows
-locals for the innermost project call frame. The synthetic call used to
+value rather than rerunning its getter. The snapshot separates locals for the
+innermost project call frame from file-level project properties. Globals are
+read passively from the interpreter's global scope and filtered by top-level
+project AST declarations, excluding library and host bindings. Local shadowing
+does not hide the global entry; both sections refresh at each pause.
+The synthetic call used to
 give an `init` block its own lexical scope does not add debugger Step depth,
 so Step pauses at each statement in the block. Inspector fields remain read-only
 while debugging; getters and value text refresh automatically at each pause.

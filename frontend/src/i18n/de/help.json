@@ -27,7 +27,7 @@
     "firstObject": "Erzeuge einen Counter, rufe <code>increment()</code> über das Kontextmenü auf und doppelklicke das Objekt, um den Wert zu prüfen: <code>value</code>.",
     "diagram": "<strong>Diagramm:</strong> Dateien und Klassen. Ziehe Karten zum Anordnen; wähle mit dem Vererbungswerkzeug erst die Unterklasse, dann ihre Oberklasse.",
     "objectBench": "<strong>Objektbereich:</strong> benannte Live-Objekte.",
-    "codepad": "<strong>Codepad:</strong> Kotlin-Ausdrücke und -Anweisungen. Der Pfeil neben dem Objektbereich blendet es ein oder aus.",
+    "codepad": "<strong>Objektbereich und Codepad:</strong> In der geteilten Ansicht blendet der linke Pfeil das Codepad aus, der rechte den Objektbereich. In jeder Einzelansicht führt ein Pfeil zurück zur geteilten Ansicht.",
     "terminal": "<strong>Terminal:</strong> Programmausgabe und -eingabe. Sein Symbol oben rechts wechselt zwischen geschlossen, Fenster und geteilter Ansicht.",
     "viewIcons": "<strong>Ansichtssymbole:</strong> Terminal, Vererbungspfeile und Sichtbarkeit der Testklassen.",
     "utilities": "<strong>Symbole unten links:</strong> Offline-Download, Hilfe und Einstellungen. Einstellungen steuert dunkles Design, Editorschriftgröße und Vim-Modus.",

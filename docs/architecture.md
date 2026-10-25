@@ -351,8 +351,11 @@ Editing a property refreshes every open inspector so a parent object's formatted
 value also reflects changes made through a child's inspector.
 
 The debugger embeds the same `InspectorFields` presentation as floating object
-inspectors. A pause exposes its receiver through a pinned object handle;
-runtime snapshots supply the receiver's inspection through the existing
+inspectors. A pause publishes file-level project values separately from
+current-frame locals, so local shadowing preserves both visible values. These
+passive snapshots read stored values and never invoke getters or student
+formatting. A pinned object handle exposes the receiver;
+runtime snapshots supply its inspection through the existing
 inspection map. `ObjectWorkspace` refreshes the integrated receiver and open
 inspectors once per pause, deduplicating shared handles. Computed getters run
 automatically through the paused coroutine's inspection path; properties remain
@@ -372,9 +375,17 @@ explicit activation restores the world and canvas keyboard focus.
 ## Codepad and main
 
 `codepadFlow.ts` compiles on demand, executes eval and discards stale-generation
-results. Every non-Unit result can receive a handle, including primitive values.
+results. `ExecutionWorkspace` awaits registration of all editor breakpoints in
+the fresh worker after a successful automatic compile, before dispatching the
+Codepad expression. Manual and automatic compilation therefore honor the same
+breakpoints, including after source edits; compile errors prevent execution.
+Every non-Unit result can receive a handle, including primitive values.
 Get uses `bind`; removing a persistent name's bench view does not erase its
 codepad variable.
+`ExecutionWorkspace` keeps submitted command text separately from the current
+session's displayed results and object handles. Arrow Up/Down recall survives
+source invalidation, compilation and runtime reset for the app lifetime;
+explicitly clearing Codepad history clears both lists and resets navigation.
 For a direct variable read, the session derives `RuntimeValue.name` from the
 analyzed final AST node and its namespace symbol. Codepad history forwards this
 name to Get as the dialog suggestion. Calls and other

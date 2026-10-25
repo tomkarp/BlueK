@@ -32,6 +32,7 @@
     object?: BenchObject,
   ) => void;
   export let beginBenchResize: (event: PointerEvent) => void;
+  export let benchOpen: boolean;
   export let requestObjectOnBench: (value: RuntimeValue) => void;
   export let submitCodepad: (event: KeyboardEvent) => void;
   export let openFeedback: (
@@ -39,7 +40,11 @@
   ) => void;
 </script>
 
-<div class:codepad-collapsed={!codepadOpen} class="lower">
+<div
+  class:codepad-collapsed={!codepadOpen}
+  class:bench-collapsed={!benchOpen}
+  class="lower"
+>
   <section class="bench" class:bench-picking={Boolean(fieldInput)}>
     <div class="bench-items">
       {#each bench as object (object.name)}
@@ -70,6 +75,17 @@
       {/each}
     </div>
   </section>
+  <button
+    class="pane-toggle-left"
+    aria-label={benchOpen
+      ? t("ui.codepad.collapseCodepad")
+      : t("ui.codepad.expandObjectBench")}
+    on:click={() => {
+      if (benchOpen) codepadOpen = !codepadOpen;
+      else benchOpen = true;
+    }}
+    >›</button
+  >
   <div
     class="bench-codepad-splitter"
     role="separator"
@@ -77,12 +93,15 @@
     on:pointerdown={beginBenchResize}
   ></div>
   <button
-    class="codepad-toggle"
+    class="pane-toggle-right"
     aria-label={codepadOpen
-      ? t("ui.codepad.collapseCodepad")
+      ? t("ui.codepad.collapseObjectBench")
       : t("ui.codepad.expandCodepad")}
-    on:click={() => (codepadOpen = !codepadOpen)}
-    >{codepadOpen ? "›" : "‹"}</button
+    on:click={() => {
+      if (codepadOpen) benchOpen = !benchOpen;
+      else codepadOpen = true;
+    }}
+    >‹</button
   >
   {#if codepadOpen}
     <section class="codepad">

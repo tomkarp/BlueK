@@ -1,5 +1,6 @@
 <script lang="ts">
   import InspectorFields from "./InspectorFields.svelte";
+  import DebuggerVariables from "./DebuggerVariables.svelte";
   import type { InspectionView, InspectorField } from "../inspectorModel";
   import type {
     RuntimeValue,
@@ -60,12 +61,6 @@
     );
   }
 
-  function valueText(variable: DebugPause["variables"][number]) {
-    if (variable.computed) return t("ui.debug.computedProperty");
-    return variable.initialized
-      ? (variable.display ?? `(${variable.type})`)
-      : t("ui.debug.notInitialized");
-  }
 </script>
 
 {#if visible}
@@ -117,39 +112,10 @@
           >
         </div>
 
-        <section class="debugger-values" aria-label={t("ui.debug.variables")}>
-          <h3>{t("ui.debug.variables")}</h3>
-          {#if debug.variables.length}
-            <dl class="debug-variables">
-              {#each debug.variables as variable (variable.name)}
-                <div>
-                  <dt>{variable.name}</dt>
-                  <dd title={variable.type}>
-                    {#if variable.objectId}
-                      <button
-                        class="debug-object-value"
-                        aria-label={t("ui.inspector.open0", [variable.name])}
-                        on:click={() =>
-                          void inspectObject({
-                            objectId: variable.objectId!,
-                            className: variable.type,
-                            name: variable.name,
-                          })}
-                      >
-                        <span class="codepad-object-icon" aria-hidden="true"
-                        ></span><span><span class="value-placeholder">{t("ui.codepad.object")}</span> : {variable.type}</span>
-                      </button>
-                    {:else}
-                      <span class:value-placeholder={!variable.initialized || variable.computed || variable.display === null}>{valueText(variable)}</span>
-                    {/if}
-                  </dd>
-                </div>
-              {/each}
-            </dl>
-          {:else}
-            <p>{t("ui.debug.noVariables")}</p>
-          {/if}
-        </section>
+        <DebuggerVariables variables={debug.variables} label={t("ui.debug.variables")} emptyMessage={t("ui.debug.noVariables")} {inspectObject} />
+        {#if debug.globals?.length}
+          <DebuggerVariables variables={debug.globals} label={t("ui.debug.globalVariables")} scope="global" {inspectObject} />
+        {/if}
 
         {#if inspection}
           <section

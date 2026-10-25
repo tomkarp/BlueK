@@ -7,6 +7,7 @@
   import type { BenchObject, ActiveWindow } from "../uiTypes";
   export let selectedObjectId: string;
   export let bench: BenchObject[];
+  export let benchOpen = true;
   export let terminalOpen: boolean;
   export let terminal: string;
   export let inputReady: boolean;
@@ -25,6 +26,7 @@
 </script>
 
 <footer class="status-bar">
+  <div class:bench-hidden={!benchOpen} class="object-bench-status">
   <span class="current-element"
     >{selectedObjectId &&
     bench.find((object) => object.objectId === selectedObjectId)
@@ -70,6 +72,7 @@
         <path d="M17 8h4v13h-9v-1" />
       </svg></button
     >
+  </div>
   </div>
   {#if !terminalOpen && (terminal || inputReady)}<button
       class="terminal-reopen"

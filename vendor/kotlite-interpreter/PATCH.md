@@ -1326,3 +1326,12 @@ Expose a debugger-only `ClassInstance` query for the declaring class of a
 property. BlueK uses this to omit only BluePlay `Actor`'s cached world
 dimensions from debugger attributes. Other private student properties remain
 visible, and stored values and computed-property metadata are unchanged.
+
+## 2026-10-25: passive global values in the debugger (DBG-21)
+
+Expose `Interpreter.debugGlobalProperties()` beside the existing call-frame
+snapshot. It reads the global symbol table through `debugStoredProperties()`
+without invoking property accessors or student code. The browser binding uses
+project AST declarations to select file-level globals and publishes them
+separately from current-frame locals, preserving both values when a local
+shadows a global. Receiver lookup, call depth and execution scopes are unchanged.

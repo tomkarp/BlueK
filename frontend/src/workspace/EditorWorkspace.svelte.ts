@@ -21,12 +21,20 @@ interface EditorWorkspaceHost {
   session: () => Pick<ExecutionWorkspace, "setBreakpoint" | "runtime">;
 }
 
+interface EditorLayoutSnapshot {
+  activeEditorId: string;
+  editorTabbed: boolean;
+  editorGroup: EditorWindowState | null;
+  editorWindows: EditorWindowState[];
+}
+
 export class EditorWorkspace {
   constructor(private readonly host: EditorWorkspaceHost) {}
   editorWindows: EditorWindowState[] = $state([]);
   activeEditorId = $state("");
   editorTabbed = $state(false);
   editorGroup: EditorWindowState | null = $state(null);
+  private workspaceMaxRestore: EditorLayoutSnapshot | null = null;
   editorFormatters = new Map<string, () => boolean>();
   editorCommenters = new Map<string, () => boolean>();
   breakpointTogglers = new Map<string, () => void>();
@@ -117,6 +125,7 @@ export class EditorWorkspace {
         id: `editor-${file.id}`,
         fileId: file.id,
         maximized: currentFrame?.maximized || false,
+        workspaceMaximized: currentFrame?.workspaceMaximized || false,
         position: currentFrame?.position ? { ...currentFrame.position } : null,
         size: currentFrame
           ? { ...currentFrame.size }
@@ -135,6 +144,7 @@ export class EditorWorkspace {
           ...(currentFrame
             ? {
                 maximized: currentFrame.maximized,
+                workspaceMaximized: currentFrame.workspaceMaximized,
                 position: currentFrame.position
                   ? { ...currentFrame.position }
                   : null,
@@ -162,6 +172,7 @@ export class EditorWorkspace {
     this.host.ui().activeWindow = "editor";
   };
   ungroupEditors = () => {
+    if (this.workspaceMaxRestore) this.restoreEditorLayout();
     if (!this.editorTabbed || !this.editorGroup) return;
     const baseLeft =
       this.editorGroup.position?.left ??
@@ -172,6 +183,7 @@ export class EditorWorkspace {
     this.editorWindows = this.editorWindows.map((item, index) => ({
       ...item,
       maximized: false,
+      workspaceMaximized: false,
       size: { ...this.editorGroup!.size },
       position: item.position || {
         left: Math.max(
@@ -204,9 +216,106 @@ export class EditorWorkspace {
   };
   toggleEditorMaximized = (id: string) => {
     const frame = this.editorFrame(id);
-    if (frame) this.updateEditorFrame(id, { maximized: !frame.maximized });
+    if (frame?.maximized && this.workspaceMaxRestore) {
+      this.restoreEditorLayout();
+      this.host.ui().activeWindow = "editor";
+      return;
+    }
+    if (frame)
+      this.updateEditorFrame(id, {
+        maximized: !frame.maximized,
+        workspaceMaximized: false,
+      });
     this.activeEditorId = id;
     this.host.ui().activeWindow = "editor";
+  };
+  toggleEditorWorkspaceMaximized = (id: string) => {
+    const frame = this.editorFrame(id);
+    const maximize = Boolean(frame && !frame.workspaceMaximized);
+    if (maximize && !this.workspaceMaxRestore) {
+      this.workspaceMaxRestore = {
+        activeEditorId: this.activeEditorId,
+        editorTabbed: this.editorTabbed,
+        editorGroup: this.editorGroup
+          ? {
+              ...this.editorGroup,
+              position: this.editorGroup.position
+                ? { ...this.editorGroup.position }
+                : null,
+              size: { ...this.editorGroup.size },
+            }
+          : null,
+        editorWindows: this.editorWindows.map((item) => ({
+          ...item,
+          position: item.position ? { ...item.position } : null,
+          size: { ...item.size },
+        })),
+      };
+    }
+    if (frame)
+      this.updateEditorFrame(id, {
+        maximized: false,
+        workspaceMaximized: maximize,
+      });
+    if (maximize && !this.editorTabbed && this.editorWindows.length > 1)
+      this.collectEditors();
+    if (!maximize && this.workspaceMaxRestore) {
+      this.restoreEditorLayout();
+    }
+    if (maximize) this.activeEditorId = id;
+    this.host.ui().activeWindow = "editor";
+  };
+  private restoreEditorLayout = () => {
+    const snapshot = this.workspaceMaxRestore;
+    if (!snapshot) return;
+    const savedById = new Map(
+      snapshot.editorWindows.map((item) => [item.id, item]),
+    );
+    const base =
+      snapshot.editorGroup ||
+      savedById.get(snapshot.activeEditorId) ||
+      snapshot.editorWindows[0];
+    const liveEditors = this.editorWindows;
+    this.editorWindows = liveEditors.map((item, index) => {
+      const saved = savedById.get(item.id);
+      if (saved) {
+        const frame = snapshot.editorTabbed && liveEditors.length === 1 && snapshot.editorGroup
+          ? snapshot.editorGroup
+          : saved;
+        return {
+          ...saved,
+          maximized: frame.maximized,
+          position: frame.position ? { ...frame.position } : null,
+          size: { ...frame.size },
+        };
+      }
+      const position = base?.position
+        ? { left: base.position.left + index * 32, top: base.position.top + index * 32 }
+        : null;
+      return {
+        ...item,
+        maximized: base?.maximized || false,
+        workspaceMaximized: false,
+        position,
+        size: base ? { ...base.size } : { ...item.size },
+      };
+    });
+    this.editorTabbed = snapshot.editorTabbed && this.editorWindows.length > 1;
+    this.editorGroup =
+      this.editorTabbed && snapshot.editorGroup
+        ? {
+            ...snapshot.editorGroup,
+            workspaceMaximized: false,
+            position: snapshot.editorGroup.position
+              ? { ...snapshot.editorGroup.position }
+              : null,
+            size: { ...snapshot.editorGroup.size },
+          }
+        : null;
+    this.activeEditorId = this.editorWindows.some((item) => item.id === snapshot.activeEditorId)
+      ? snapshot.activeEditorId
+      : this.editorWindows.at(-1)?.id || "";
+    this.workspaceMaxRestore = null;
   };
   closeEditor = (id = this.activeEditorId) => {
     this.editorWindows = this.editorWindows.filter((item) => item.id !== id);
@@ -216,6 +325,7 @@ export class EditorWorkspace {
       this.editorWindows = this.editorWindows.map((item) => ({
         ...item,
         maximized: this.editorGroup?.maximized || false,
+        workspaceMaximized: this.editorGroup?.workspaceMaximized || false,
         position: this.editorGroup?.position || item.position,
         size: this.editorGroup?.size || item.size,
       }));
@@ -225,6 +335,7 @@ export class EditorWorkspace {
     if (!this.editorWindows.length) {
       this.editorGroup = null;
       this.editorTabbed = false;
+      this.workspaceMaxRestore = null;
       if (this.host.ui().activeWindow === "editor")
         this.host.ui().activeWindow = this.host.terminal().terminalOpen
           ? "terminal"
@@ -236,6 +347,7 @@ export class EditorWorkspace {
     this.editorGroup = null;
     this.editorTabbed = false;
     this.activeEditorId = "";
+    this.workspaceMaxRestore = null;
     if (this.host.ui().activeWindow === "editor")
       this.host.ui().activeWindow = this.host.terminal().terminalOpen
         ? "terminal"
@@ -256,14 +368,14 @@ export class EditorWorkspace {
   };
   beginEditorDrag = (event: PointerEvent, id: string) => {
     const frame = this.editorFrame(id);
-    if (frame && !frame.maximized)
+    if (frame && !frame.maximized && !frame.workspaceMaximized)
       beginWindowDrag(event, ".editor-dialog", (position) =>
         this.updateEditorFrame(id, { position }),
       );
   };
   beginEditorResize = (event: PointerEvent, id: string, direction: string) => {
     const frame = this.editorFrame(id);
-    if (frame && !frame.maximized)
+    if (frame && !frame.maximized && !frame.workspaceMaximized)
       beginWindowResize(event, ".editor-dialog", direction, (update) =>
         this.updateEditorFrame(id, update),
       );
@@ -302,6 +414,7 @@ export class EditorWorkspace {
     this.activeEditorId = "";
     this.editorGroup = null;
     this.editorTabbed = false;
+    this.workspaceMaxRestore = null;
   };
   removeFile = (fileId: string) => {
     this.breakpoints = this.breakpoints.filter((item) => item.fileId !== fileId);
@@ -316,6 +429,7 @@ export class EditorWorkspace {
     if (!this.editorWindows.length) {
       this.editorGroup = null;
       this.editorTabbed = false;
+      this.workspaceMaxRestore = null;
     }
   };
   clearDiagnostics = () => {

@@ -14,6 +14,7 @@ export class WorkspaceUi {
   error = $state("");
   paneSplit = $state(66);
   benchWidth: number | null = $state(null);
+  benchOpen = $state(true);
   settingsNotice = $state(false);
   editorFontSize = $state(16);
   terminalFontSize = $state(14);

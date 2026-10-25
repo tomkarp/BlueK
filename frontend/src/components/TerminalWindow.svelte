@@ -28,6 +28,45 @@
   export let clearTerminal: () => void;
   export let resetRuntime: () => Promise<void>;
   export let sendInput: (event: KeyboardEvent) => Promise<void>;
+
+  let inputLength = 0;
+  let inputCaretLeft = 0;
+  let inputFocused = false;
+  const inputMeasureContext =
+    typeof document === "undefined"
+      ? null
+      : document.createElement("canvas").getContext("2d");
+  $: if (!inputReady) inputLength = 0;
+  $: if (!inputReady) {
+    inputCaretLeft = 0;
+    inputFocused = false;
+  }
+
+  function updateInput(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    inputLength = Array.from(input.value).length;
+    updateCaretPosition(input);
+  }
+
+  function updateCaretPosition(input: HTMLInputElement) {
+    if (!inputMeasureContext) return;
+    inputMeasureContext.font = getComputedStyle(input).font;
+    const position = input.selectionStart ?? input.value.length;
+    inputCaretLeft = Math.max(
+      0,
+      inputMeasureContext.measureText(input.value.slice(0, position)).width -
+        input.scrollLeft,
+    );
+  }
+
+  function handleInputKey(event: KeyboardEvent) {
+    const result = sendInput(event);
+    if (event.key === "Enter") {
+      inputLength = 0;
+      inputCaretLeft = 0;
+    }
+    return result;
+  }
 </script>
 
 {#if terminalOpen}<div
@@ -107,7 +146,7 @@
         </div>
       </div>
       <div class="terminal-output">
-        {#key terminal}<pre>{#each terminalParts(terminal) as part}{#if part.box}<span
+        <pre><span class="terminal-transcript">{#key terminal}{#each terminalParts(terminal) as part}{#if part.box}<span
                   class="terminal-sized"
                   style={part.box}
                   ><span
@@ -117,7 +156,28 @@
                 >{:else}<span
                   class:terminal-input-echo={part.input}
                   style={part.style}>{part.text}</span
-                >{/if}{/each}</pre>{/key}
+                >{/if}{/each}{/key}</span>{#if inputReady}<span
+            class:focused={inputFocused}
+            class="terminal-inline-input-shell"
+            style={`--terminal-caret-left:${inputCaretLeft}px`}
+            ><input
+              bind:this={inputElement}
+              class="terminal-inline-input"
+              aria-label={t("ui.common.terminalInputLabel")}
+              size={inputLength + 1}
+              on:input={updateInput}
+              on:keydown={handleInputKey}
+              on:keyup={(event) => updateCaretPosition(event.currentTarget)}
+              on:select={(event) => updateCaretPosition(event.currentTarget)}
+              on:click={(event) => updateCaretPosition(event.currentTarget)}
+              on:scroll={(event) => updateCaretPosition(event.currentTarget)}
+              on:focus={(event) => {
+                inputFocused = true;
+                updateCaretPosition(event.currentTarget);
+              }}
+              on:blur={() => (inputFocused = false)}
+            /><span class="terminal-inline-caret" aria-hidden="true"></span></span
+          >{/if}</pre>
         <button
           class="terminal-clear"
           on:click|stopPropagation={clearTerminal}
@@ -130,12 +190,7 @@
           )}<button on:click={resetRuntime}
             >{t("ui.common.resetRuntime")}</button
           >
-        </div>{/if}<input
-        bind:this={inputElement}
-        placeholder={inputReady ? t("ui.common.enterALinePressReturn") : ""}
-        disabled={!inputReady}
-        on:keydown={sendInput}
-      />{#each ["n", "ne", "e", "se", "s", "sw", "w", "nw"] as direction}<div
+        </div>{/if}{#each ["n", "ne", "e", "se", "s", "sw", "w", "nw"] as direction}<div
           role="separator"
           class={`terminal-resize-handle terminal-resize-${direction}`}
           on:pointerdown={(event) => beginTerminalResize(event, direction)}

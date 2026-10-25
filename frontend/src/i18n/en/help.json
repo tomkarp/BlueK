@@ -27,7 +27,7 @@
     "firstObject": "Create a Counter, call <code>increment()</code> from its context menu and double-click the object to inspect <code>value</code>.",
     "diagram": "<strong>Diagram:</strong> files and classes. Drag cards to arrange them; use the inheritance tool to select a subclass, then its superclass.",
     "objectBench": "<strong>Object bench:</strong> named live objects.",
-    "codepad": "<strong>Codepad:</strong> Kotlin expressions and statements. The arrow beside the bench shows or hides it.",
+    "codepad": "<strong>Object bench and Codepad:</strong> In the split view, the left arrow hides the Codepad and the right arrow hides the object bench. Each single-pane view has one arrow to restore the split view.",
     "terminal": "<strong>Terminal:</strong> program output and input. Its top-right icon cycles between closed, window and split views.",
     "viewIcons": "<strong>View icons:</strong> terminal, inheritance arrows and test-class visibility.",
     "utilities": "<strong>Bottom-left icons:</strong> offline download, Help and Settings. Settings controls dark mode, editor font size and Vim mode.",

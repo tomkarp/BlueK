@@ -7,6 +7,7 @@
   import type { HistoryEntry, CodepadMenu } from "../uiTypes";
   export let codepadMenu: CodepadMenu | null;
   export let history: HistoryEntry[];
+  export let clearHistory: () => void;
 
   function copyCodepadText(value: string) {
     navigator.clipboard?.writeText(value).catch(() => undefined);
@@ -37,7 +38,7 @@
         )}>{t("ui.codepad.copy")}</button
     ><button
       on:click={() => {
-        history = [];
+        clearHistory();
         codepadMenu = null;
       }}>{t("ui.codepad.clearHistory")}</button
     ><button on:click={selectAllCodepadHistory}

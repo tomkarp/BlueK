@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
+import assert from 'node:assert/strict';
 
 const bundle = await readFile(new URL('../frontend/public/kotlite/bluek-kotlite-browser.js', import.meta.url), 'utf8');
 vm.runInThisContext(bundle, { filename: 'bluek-kotlite-browser.js' });
@@ -308,3 +309,51 @@ while (!thirdAct.complete) await new Promise(resolve => setTimeout(resolve, 0));
 if (bluePlaySession.takeOutput() !== 'tick 3\nactor 3\n') throw new Error('Removing the Actor.act breakpoint changed third-tick output.');
 if (bluePlayPauses.length) throw new Error('BluePlay produced an unexpected extra debugger pause.');
 console.log('debugger: BluePlay simulation hit World.act and Actor.act breakpoints on successive ticks, stepped through state updates, and resumed after removing each breakpoint');
+
+// DBG-21: file-level values remain visible alongside the current frame after readln().
+const globalSession = globalThis['bluek-kotlite-browser'].bluekCreateKotliteSession();
+const globalSource = `val a = 5
+var globalCounter = 1
+var getterReads = 0
+val globalBox = GlobalBox()
+fun tuwas() {
+    val input = readln()
+    val a = 7
+    globalCounter += 1
+    for (i in 1..2) println(input)
+}
+fun main() {
+    val callerOnly = 42
+    tuwas()
+}`;
+let globalLoaded;
+expectOk(globalSession.startLoadProject(['Main.kt', 'GlobalBox.kt'], [globalSource, 'class GlobalBox { val value: Int get() { getterReads += 1; return 9 }; override fun toString(): String { getterReads += 1; return "box" } }'], null, 0, () => {}, value => { globalLoaded = expectOk(value, 'global debugger compile'); }), 'global debugger compile start');
+while (!globalLoaded) await new Promise(resolve => setTimeout(resolve, 0));
+expectOk(globalSession.setDebugBreakpoint('Main.kt', 8, true), 'global debugger breakpoint');
+const globalPauses = [];
+globalSession.setDebugPauseCallback(value => globalPauses.push(JSON.parse(value)));
+expectOk(globalSession.enqueueInput('l'), 'buffer debugger input');
+let globalComplete;
+expectOk(globalSession.startMain('Main.kt', () => {}, value => { globalComplete = expectOk(value, 'global debugger main'); }), 'global debugger main start');
+const nextGlobalPause = label => wait(callback => {
+  const timer = setInterval(() => {
+    if (globalPauses.length) { clearInterval(timer); callback(globalPauses.shift()); }
+  }, 0);
+}, label);
+const globalPause = await nextGlobalPause('global debugger pause');
+assert.equal(globalPause.variables.find(value => value.name === 'input')?.display, '"l"');
+assert.equal(globalPause.variables.find(value => value.name === 'a')?.display, '7');
+assert.equal(globalPause.globals?.find(value => value.name === 'a')?.display, '5', 'The debugger must also expose the file-level a = 5');
+assert.equal(globalPause.globals.find(value => value.name === 'globalCounter')?.display, '1');
+assert.equal(globalPause.globals.find(value => value.name === 'getterReads')?.display, '0');
+assert.ok(globalPause.globals.find(value => value.name === 'globalBox')?.objectId);
+assert.deepEqual(globalPause.globals.map(value => value.name).sort(), ['a', 'getterReads', 'globalBox', 'globalCounter'].sort());
+assert.ok(!globalPause.variables.some(value => value.name === 'callerOnly'), 'Caller locals must stay outside the current frame');
+expectOk(globalSession.resumeDebug('step'), 'step global assignment');
+const changedGlobalPause = await nextGlobalPause('updated globals pause');
+assert.equal(changedGlobalPause.globals.find(value => value.name === 'globalCounter')?.display, '2');
+assert.equal(changedGlobalPause.globals.find(value => value.name === 'getterReads')?.display, '0', 'Passive snapshots must not run getters or toString');
+expectOk(globalSession.resumeDebug('continue'), 'continue global debugger main');
+while (!globalComplete) await new Promise(resolve => setTimeout(resolve, 0));
+assert.equal(globalSession.takeOutput(), 'l\nl\n');
+console.log('debugger: file-level values survive input, stay separate from shadowing locals, refresh after Step and never invoke getters or toString');

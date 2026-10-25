@@ -1479,16 +1479,17 @@ test("GUI-32 editor and terminal share controls, minimum size and full frame han
 
   const editor = page.locator(".editor-dialog");
   const terminal = page.locator(".terminal-window");
-  const editorButtons = editor.locator(".editor-header button");
   const terminalButtons = terminal.locator(".terminal-header button");
-  await expect(editorButtons.nth(0)).toHaveAccessibleName(
-    "Maximize editor window",
-  );
   await expect(
-    editorButtons.nth(0).locator("svg.window-control-icon"),
+    editor.getByRole("button", { name: "Maximize editor above the object bench and Codepad", exact: true }).locator("svg.window-icon"),
   ).toHaveCount(1);
-  await expect(editorButtons.nth(1).locator("svg.window-icon")).toHaveCount(1);
-  await expect(editorButtons.nth(2)).toHaveText("×");
+  await expect(
+    editor.getByRole("button", { name: "Maximize editor window", exact: true }).locator("svg.window-control-icon"),
+  ).toHaveCount(1);
+  await expect(
+    editor.getByRole("button", { name: "Collect editor windows into tabs", exact: true }).locator("svg.window-icon"),
+  ).toHaveCount(1);
+  await expect(editor.getByRole("button", { name: "Close editor", exact: true })).toHaveText("×");
   await expect(terminalButtons.nth(0)).toHaveAccessibleName(
     "Maximize terminal window",
   );
@@ -2410,6 +2411,75 @@ test("GUI-05 history works immediately after execution and terminal output", asy
   }
 });
 
+test("GUI-05 command recall survives compilation and runtime reset", async ({ page }) => {
+  await project(page, "class Hund {}");
+  await evaluate(page, "Hund()");
+  await evaluate(page, "5");
+  await evaluate(page, 'println("repeat")');
+  const input = page.getByLabel("Codepad input");
+  // Recompilation must reset navigation to the newest command, even mid-history.
+  await input.press("ArrowUp");
+  await input.press("ArrowUp");
+  await expect(input).toHaveValue("5");
+  for (let i = 0; i < 2; i++) {
+    await page.getByRole("button", { name: "Compile", exact: true }).click();
+    await expect(input).toBeEnabled();
+    await expect(page.locator(".codepad-entry")).toHaveCount(0);
+  }
+  await input.press("ArrowUp");
+  await expect(input).toHaveValue('println("repeat")');
+  await input.press("ArrowDown");
+  await expect(input).toHaveValue("");
+  await input.press("ArrowUp");
+  await input.press("ArrowUp");
+  await expect(input).toHaveValue("5");
+  await input.press("ArrowUp");
+  await expect(input).toHaveValue("Hund()");
+  await input.press("Enter");
+  await expect(page.locator(".codepad-entry")).toHaveCount(1);
+  await expect(page.locator(".codepad-object-result")).toBeEnabled();
+  await page.getByLabel("Reset runtime", { exact: true }).click();
+  await expect(input).toBeEnabled();
+  await expect(page.locator(".codepad-entry")).toHaveCount(0);
+  await input.press("ArrowUp");
+  await expect(input).toHaveValue("Hund()");
+});
+
+test("GUI-05 source edits and failed compilation preserve command recall", async ({ page }) => {
+  await project(page, "class Hund {}");
+  await evaluate(page, "Hund()");
+  await page.getByRole("button", { name: "Hund", exact: true }).dblclick();
+  const editor = page.locator(".editor-dialog .cm-content");
+  await editor.fill('class Hund { val value: Int = "wrong" }');
+  await expect(page.locator(".codepad-entry")).toHaveCount(0);
+  const input = page.getByLabel("Codepad input");
+  await input.press("ArrowUp");
+  await expect(input).toHaveValue("Hund()");
+  await input.press("Enter");
+  await expect(page.locator(".editor-diagnostic")).toBeVisible();
+  await expect(input).toBeEnabled();
+  await input.press("ArrowUp");
+  await expect(input).toHaveValue("Hund()");
+  await editor.fill("class Hund { val value: Int = 2 }");
+  await input.press("Enter");
+  await expect(page.locator(".codepad-entry")).toHaveCount(1);
+  await expect(page.locator(".codepad-object-result")).toBeEnabled();
+});
+
+test("GUI-05 explicitly clearing history also clears command recall", async ({ page }) => {
+  await project(page);
+  await evaluate(page, "5");
+  const input = page.getByLabel("Codepad input");
+  await page.getByRole("log", { name: "Codepad history" }).click({ button: "right" });
+  await page.getByRole("button", { name: "Clear history", exact: true }).click();
+  await expect(page.locator(".codepad-entry")).toHaveCount(0);
+  await input.press("ArrowUp");
+  await expect(input).toHaveValue("");
+  await evaluate(page, "6");
+  await input.press("ArrowUp");
+  await expect(input).toHaveValue("6");
+});
+
 test("GUI-01 new project offers all templates and can be cancelled", async ({
   page,
 }) => {
@@ -2735,22 +2805,43 @@ test("GUI-08 GUI-10 editor renames files even after empty content", async ({
   await evaluate(page, "Katze()");
 });
 
-test("GUI-12 GUI-13 GUI-15 input echo order and clearing preserve the app", async ({
+test("GUI-12 GUI-13 GUI-15 GUI-147 inline input echo order and clearing preserve the app", async ({
   page,
 }) => {
   await project(page);
-  const code = 'println("A"); val x = readln(); println("B"); println(x)';
+  const code = [
+    'print("Name? ");',
+    "val name = readln();",
+    'print("Age? ");',
+    "val age = readln();",
+    'println("Hello $name, $age")',
+  ].join(" ");
   await page.getByLabel("Codepad input").fill(code);
   await page.getByLabel("Codepad input").press("Enter");
   const terminal = page.locator(".terminal-window");
-  const input = terminal.locator("input");
+  const input = terminal.getByLabel("Program input", { exact: true });
   await expect(input).toBeEnabled();
-  await expect(terminal.locator("pre")).toHaveText("A\n");
+  await expect(input).toBeFocused();
+  await expect(terminal.locator("pre")).toHaveText("Name? ");
+  await expect(input).not.toHaveAttribute("placeholder");
+  const emptyInputWidth = (await input.boundingBox())!.width;
+  await input.fill("A longer answer that grows with the entered text");
+  expect((await input.boundingBox())!.width).toBeGreaterThan(emptyInputWidth + 100);
   await input.fill("Test");
+  expect((await input.boundingBox())!.width).toBeLessThanOrEqual(emptyInputWidth + 1);
   await input.press("Enter");
-  await expect(terminal.locator("pre")).toHaveText("A\nTest\nB\nTest\n");
-  await expect(terminal.locator(".terminal-input-echo")).toHaveText("Test");
-  await expect(input).toBeDisabled();
+  await expect(input).toBeEnabled();
+  await expect(terminal.locator("pre")).toHaveText("Name? Test\nAge? ");
+  await input.fill("12");
+  await input.press("Enter");
+  await expect(terminal.locator("pre")).toHaveText(
+    "Name? Test\nAge? 12\nHello Test, 12\n",
+  );
+  await expect(terminal.locator(".terminal-input-echo")).toHaveText([
+    "Test",
+    "12",
+  ]);
+  await expect(input).toHaveCount(0);
   await expect(terminal.locator(".terminal-notice")).toHaveCount(0);
   await terminal.getByLabel("Split terminal to the right").click();
   await terminal.getByLabel("Clear terminal").click();

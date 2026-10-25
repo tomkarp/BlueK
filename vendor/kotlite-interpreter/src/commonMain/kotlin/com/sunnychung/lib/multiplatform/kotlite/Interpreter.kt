@@ -296,6 +296,9 @@ open class Interpreter(val rootNode: ASTNode, val executionEnvironment: Executio
     /** Passive interpreter-owned view of active project call scopes for debugging. */
     fun debugCallFrames() = callStack.debugFrames()
 
+    /** Passive file-level values, independent of the currently active call frame. */
+    fun debugGlobalProperties() = globalScope.debugStoredProperties()
+
     suspend fun ASTNode.eval(): Any {
         return when (this) {
             is AssignmentNode -> this.eval()

@@ -1,5 +1,105 @@
 import { test, expect } from '@playwright/test';
 
+for (const locale of ['en', 'de'] as const) {
+  test(`DBG-21 ${locale} file-level values remain visible after input and refresh on Step`, async ({ page }) => {
+    await page.addInitScript(language => localStorage.setItem('bluek-language', language), locale);
+    const labels = locale === 'de'
+      ? { input: 'Codepad-Eingabe', globals: 'Globale Variablen', locals: 'Lokale Variablen', step: 'Schritt', next: 'Als Nächstes: Main.kt, Zeile 8', open: 'globalBox öffnen', inspector: 'Objektinspektor', close: 'Schließen', continue: 'Weiter' }
+      : { input: 'Codepad input', globals: 'Global variables', locals: 'Local variables', step: 'Step', next: 'Next: Main.kt, line 8', open: 'Open globalBox', inspector: 'Object inspector', close: 'Close', continue: 'Continue' };
+    const payload = {
+      format: 'bluek-project', version: 1,
+      files: [
+        { fileName: 'Main.kt', kind: 'functions', source: `val a = 5
+var globalCounter = 1
+val globalBox = Box()
+fun tuwas() {
+    val input = readln()
+    val a = 7
+    globalCounter += 1
+    for (i in 1..2)
+        println(input)
+}` },
+        { fileName: 'Box.kt', kind: 'class', source: 'class Box { val value = 9 }' },
+      ],
+    };
+    await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+    await expect(page.getByLabel(labels.input)).toBeEnabled();
+    await page.getByRole('button', { name: 'Main', exact: true }).dblclick();
+    await page.locator('.cm-breakpoint-gutter .cm-gutterElement').nth(7).click();
+    await expect(page.locator('.cm-breakpoint-marker')).toHaveCount(1);
+    await page.getByLabel(labels.input).fill('tuwas()');
+    await page.getByLabel(labels.input).press('Enter');
+    const terminalInput = page.locator('.terminal-window input');
+    await expect(terminalInput).toBeEnabled();
+    await terminalInput.fill('l');
+    await terminalInput.press('Enter');
+    const debug = page.locator('.debugger-window');
+    const globals = debug.getByRole('region', { name: labels.globals, exact: true });
+    const locals = debug.getByRole('region', { name: labels.locals, exact: true });
+    const value = (section: typeof globals, name: string) => section.locator('dl>div')
+      .filter({ has: page.locator('dt').filter({ hasText: new RegExp(`^${name}$`) }) }).locator('dd');
+    await expect(value(globals, 'a')).toHaveText('5');
+    await expect(value(locals, 'a')).toHaveText('7');
+    await expect(value(locals, 'input')).toHaveText('"l"');
+    await expect(value(globals, 'globalCounter')).toHaveText('1');
+    await expect(globals.locator('dt')).toHaveText(['a', 'globalCounter', 'globalBox']);
+    await debug.getByRole('button', { name: labels.step, exact: true }).click();
+    await expect(debug).toContainText(labels.next);
+    await expect(value(globals, 'globalCounter')).toHaveText('2');
+    await globals.getByRole('button', { name: labels.open, exact: true }).click();
+    const inspector = page.getByRole('dialog', { name: labels.inspector, exact: true });
+    await expect(inspector.locator('.inspect-row').filter({ hasText: 'value : Int' }).locator('output')).toHaveText('9');
+    await expect(inspector.locator('input,.inspect-edit')).toHaveCount(0);
+    await inspector.getByRole('button', { name: labels.close, exact: true }).click();
+    await debug.getByRole('button', { name: labels.continue, exact: true }).click();
+    await expect(debug).toHaveCount(0);
+    await expect(page.locator('.terminal-output pre')).toHaveText('l\nl\nl\n');
+  });
+}
+
+test('DBG-22 automatic Codepad compilation registers every breakpoint before execution and after edits', async ({ page }) => {
+  const payload = {
+    format: 'bluek-project', version: 1,
+    files: [{ fileName: 'Main.kt', kind: 'functions', source: `fun go() {
+    val first = 1
+    println(first)
+}
+fun second() {
+    println(2)
+}` }],
+  };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  const input = page.getByLabel('Codepad input');
+  await expect(input).toBeEnabled();
+  await page.getByRole('button', { name: 'Main', exact: true }).dblclick();
+  const editor = page.getByRole('dialog', { name: 'Editor: Main.kt' });
+  for (const line of [2, 3, 6]) {
+    await editor.locator('.cm-breakpoint-gutter .cm-gutterElement').nth(line).click();
+  }
+  await expect(editor.locator('.cm-breakpoint-marker')).toHaveCount(3);
+  const debug = page.locator('.debugger-window');
+  for (let run = 0; run < 2; run++) {
+    if (run) {
+      await page.getByRole('button', { name: 'Hide terminal', exact: true }).click();
+      await editor.locator('.cm-content').click();
+      const mod = await page.evaluate(() => /Mac/.test(navigator.platform) ? 'Meta' : 'Control');
+      await page.keyboard.press(mod + '+End');
+      await page.keyboard.insertText('\n// changed source');
+      await expect(editor.locator('.cm-content')).toContainText('// changed source');
+      await expect(editor.locator('.cm-breakpoint-marker')).toHaveCount(3);
+    }
+    await input.fill('go(); second()');
+    await input.press('Enter');
+    for (const line of [2, 3, 6]) {
+      await expect(debug).toContainText(`Next: Main.kt, line ${line}`);
+      if (line === 3) await expect(debug.locator('.debug-variables')).toContainText('first');
+      await debug.getByRole('button', { name: 'Continue', exact: true }).click();
+    }
+    await expect(debug).toHaveCount(0);
+    await expect(page.locator('.terminal-output pre')).toHaveText('1\n2\n'.repeat(run + 1));
+  }
+});
+
 test('DBG-01 a breakpoint starts debugging main and stepping follows a call', async ({ page }) => {
   const payload = {
     format: 'bluek-project',
@@ -778,7 +878,10 @@ test('DBG-20 BluePlay yields to breakpoint source and regains front and keyboard
   // Automatic getter snapshots and a non-graphical step must not raise the world.
   await expect(debug.locator('.inspect-row').filter({ hasText: 'isClicked : Boolean' }).locator('output')).toHaveText('false');
   await expect.poll(worldAboveEditor).toBe(false);
-  await editor.getByRole('button', { name: 'Toggle breakpoint on current line', exact: true }).click();
+  // The globals/receiver window can cover the editor's bottom action buttons.
+  // Its gutter remains visible and offers the same breakpoint action.
+  await editor.locator('.cm-breakpoint-gutter .cm-gutterElement').nth(5).click();
+  await expect(editor.locator('.cm-breakpoint-marker')).toHaveCount(0);
   await debug.getByRole('button', { name: 'Step', exact: true }).click();
   await expect(debug).toContainText('Next: TestWorld.kt, line 6');
   await expect.poll(worldAboveEditor).toBe(false);

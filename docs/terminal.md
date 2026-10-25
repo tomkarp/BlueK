@@ -22,6 +22,17 @@ option. Automatic inspector reads, nested program calls and BluePlay ticks
 never trigger these preferences. Reset retains its existing clearing behavior.
 The terminal window geometry, input and Codepad history are unaffected.
 
+## Interactive input in the IDE
+
+When a program reaches `readln()`, BlueK places an input field with a visible
+blinking caret at the end of the terminal output. The caret blinks at about the
+same pace as the status bar's activity indicator. This keeps a prompt printed
+with `print()` next to the answer. The field uses the terminal font and grows
+with the entered text, up to the terminal width. Press Enter to submit the line;
+the submitted text stays in the transcript in blue. The field appears again
+when the program asks for another line. Programs that are not waiting for
+input have no terminal input field.
+
 Code can clear the console explicitly at any time, independently of Settings:
 
 ```kotlin

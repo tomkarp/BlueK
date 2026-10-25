@@ -65,6 +65,8 @@ export class ExecutionWorkspace {
   });
   codepad = $state("");
   history: HistoryEntry[] = $state([]);
+  // Command recall outlives the result handles of an individual runtime session.
+  private codepadCommands: string[] = [];
   codepadHistoryIndex = $state(-1);
   codepadOpen = $state(true);
   codepadMenu: { x: number; y: number; text?: string } | null = $state(null);
@@ -110,6 +112,7 @@ export class ExecutionWorkspace {
     this.host.objects().closeCalls();
     this.host.objects().resetInspectors();
     this.history = [];
+    this.codepadHistoryIndex = -1;
     this.host.ui().status = "Uncompiled";
     this.host.ui().error = "";
   };
@@ -120,6 +123,7 @@ export class ExecutionWorkspace {
     this.compilerDialog = false;
     this.host.editor().markDiagnostics([]);
     this.history = [];
+    this.codepadHistoryIndex = -1;
     this.host.objects().resetInspectors();
     const result = await compileProject(
       this.client,
@@ -270,12 +274,21 @@ export class ExecutionWorkspace {
   };
   executeCode = async (code = this.codepad.trim()) => {
     if (!this.client || !code) return;
+    this.codepadCommands.push(code);
     this.codepad = "";
     this.codepadHistoryIndex = -1;
     const result = await executeCodepad(
       {
         getSnapshot: () => this.client.getSnapshot(),
-        compile: (...args) => this.client.compile(...args),
+        compile: async (...args) => {
+          const compiled = await this.client.compile(...args);
+          if (!compiled.diagnostics.some(isCompileError)) {
+            // A fresh worker has no breakpoints. Install them before the
+            // Codepad expression can enter any project function or constructor.
+            await this.host.editor().syncBreakpoints();
+          }
+          return compiled;
+        },
         execute: (command) => this.executeUserCommand(command, "codepad"),
       },
       this.host.project().files,
@@ -334,25 +347,25 @@ export class ExecutionWorkspace {
       document.querySelector<HTMLTextAreaElement>(".codepad textarea")?.focus();
   };
   submitCodepad = (event: KeyboardEvent) => {
-    if (event.key === "ArrowUp" && this.history.length) {
+    if (event.key === "ArrowUp" && this.codepadCommands.length) {
       event.preventDefault();
       this.codepadHistoryIndex =
         this.codepadHistoryIndex < 0
-          ? this.history.length - 1
+          ? this.codepadCommands.length - 1
           : Math.max(0, this.codepadHistoryIndex - 1);
-      this.codepad = this.history[this.codepadHistoryIndex].code;
+      this.codepad = this.codepadCommands[this.codepadHistoryIndex];
       return;
     }
-    if (event.key === "ArrowDown" && this.history.length) {
+    if (event.key === "ArrowDown" && this.codepadCommands.length) {
       event.preventDefault();
       this.codepadHistoryIndex =
         this.codepadHistoryIndex < 0
           ? -1
-          : Math.min(this.history.length, this.codepadHistoryIndex + 1);
+          : Math.min(this.codepadCommands.length, this.codepadHistoryIndex + 1);
       this.codepad =
         this.codepadHistoryIndex >= 0 &&
-        this.codepadHistoryIndex < this.history.length
-          ? this.history[this.codepadHistoryIndex].code
+        this.codepadHistoryIndex < this.codepadCommands.length
+          ? this.codepadCommands[this.codepadHistoryIndex]
           : "";
       return;
     }
@@ -360,6 +373,11 @@ export class ExecutionWorkspace {
       event.preventDefault();
       this.executeCode();
     }
+  };
+  clearCodepadHistory = () => {
+    this.history = [];
+    this.codepadCommands = [];
+    this.codepadHistoryIndex = -1;
   };
   resetRuntime = async () => {
     if (this.host.project().library?.id === "blueplay") {
@@ -375,6 +393,7 @@ export class ExecutionWorkspace {
     // Reset replaces the world, while the window keeps its presentation state.
     this.host.objects().resetInspectors();
     this.history = [];
+    this.codepadHistoryIndex = -1;
     this.host.ui().error = "";
     this.host.ui().status = "Resetting…";
     try {
@@ -461,6 +480,7 @@ export class ExecutionWorkspace {
     this.host.editor().clearDiagnostics();
     this.host.objects().resetInspectors();
     this.history = [];
+    this.codepadHistoryIndex = -1;
     this.host.ui().status = "Uncompiled";
     this.host.ui().error = "";
   };

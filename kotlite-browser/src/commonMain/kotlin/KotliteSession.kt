@@ -455,27 +455,23 @@ class KotliteSession {
                 .flatMap { it.debugStoredProperties().asSequence() }
                 .firstOrNull { it.name == "this" }
                 ?.value as? ClassInstance
-            val variables = visible.values.filterNot { it.name == "this" }.joinToString(",", "[", "]") { item ->
-                val value = item.value
-                val display = debugValueDisplay(value)
-                val objectId = value?.let(::debugObjectHandle)
-                "{\"name\":${JSON.stringify(item.name)},\"type\":${JSON.stringify(item.type)},\"display\":${display?.let { JSON.stringify(it) } ?: "null"},\"initialized\":${value != null}${objectId?.let { ",\"objectId\":${JSON.stringify(it)}" } ?: ""}}"
-            }
-            val attributes = receiver?.debugStoredProperties().orEmpty()
+            val variables = debugVariablesJson(visible.values.filterNot { it.name == "this" })
+            val globalDeclarations = analyzedScript?.nodes.orEmpty()
+                .filterIsInstance<PropertyDeclarationNode>()
+                .filter { declaration -> projectFunctionRanges.any { declaration.position.lineNum in it.second..it.third } }
+                .associateBy { it.name }
+            val globals = debugVariablesJson(interpreter.debugGlobalProperties()
+                .filter { it.name in globalDeclarations }
+                .map { it.copy(computed = globalDeclarations.getValue(it.name).accessors?.getter != null) })
+            val attributes = debugVariablesJson(receiver?.debugStoredProperties().orEmpty()
                 .filterNot {
                     bluePlayEnabled
                         && it.name in bluePlayInternalActorProperties
                         && receiver?.debugPropertyOwnerName(it.name) == "Actor"
-                }
-                .joinToString(",", "[", "]") { item ->
-                val display = debugValueDisplay(item.value)
-                val computed = if (item.computed) ",\"computed\":true" else ""
-                val objectId = item.value?.let(::debugObjectHandle)
-                "{\"name\":${JSON.stringify(item.name)},\"type\":${JSON.stringify(item.type)},\"display\":${display?.let { JSON.stringify(it) } ?: "null"},\"initialized\":${item.value != null}$computed${objectId?.let { ",\"objectId\":${JSON.stringify(it)}" } ?: ""}}"
-            }
+                })
             val stepInAvailable = debugStepInAvailable(position)
             val receiverObjectId = receiver?.let(::debugObjectHandle)?.let { ",\"receiverObjectId\":${JSON.stringify(it)}" } ?: ""
-            val payload = "{\"fileName\":${JSON.stringify(source.first)},\"line\":$line,\"column\":${position.col},\"depth\":$depth,\"stepInAvailable\":$stepInAvailable$receiverObjectId,\"variables\":$variables,\"attributes\":$attributes}"
+            val payload = "{\"fileName\":${JSON.stringify(source.first)},\"line\":$line,\"column\":${position.col},\"depth\":$depth,\"stepInAvailable\":$stepInAvailable$receiverObjectId,\"variables\":$variables,\"globals\":$globals,\"attributes\":$attributes}"
             suspendCoroutine<Unit> { continuation ->
                 debugContinuation = continuation
                 if (notifyPause) debugPauseCallback?.invoke(payload)
@@ -508,6 +504,13 @@ class KotliteSession {
     }
 
     fun setDebugPauseCallback(callback: ((String) -> Unit)?) { debugPauseCallback = callback }
+
+    private fun debugVariablesJson(properties: Collection<DebugStoredProperty>): String = properties.joinToString(",", "[", "]") { item ->
+        val display = debugValueDisplay(item.value)
+        val computed = if (item.computed) ",\"computed\":true" else ""
+        val objectId = item.value?.let(::debugObjectHandle)
+        "{\"name\":${JSON.stringify(item.name)},\"type\":${JSON.stringify(item.type)},\"display\":${display?.let { JSON.stringify(it) } ?: "null"},\"initialized\":${item.value != null}$computed${objectId?.let { ",\"objectId\":${JSON.stringify(it)}" } ?: ""}}"
+    }
 
     /** Ask the active interactive execution to pause at its next safe project statement. */
     fun requestDebugPause(): String {

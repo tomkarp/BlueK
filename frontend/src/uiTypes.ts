@@ -22,6 +22,7 @@ export type EditorWindowState = {
   id: string;
   fileId: string;
   maximized: boolean;
+  workspaceMaximized: boolean;
   position: WindowPosition | null;
   size: WindowSize;
 };

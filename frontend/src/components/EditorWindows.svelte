@@ -37,6 +37,7 @@
   export let closeAllEditors: () => void;
   export let selectEditorTab: (id: string) => void;
   export let toggleEditorMaximized: (id: string) => void;
+  export let toggleEditorWorkspaceMaximized: (id: string) => void;
   export let ungroupEditors: () => void;
   export let collectEditors: () => void;
   export let beginEditorDrag: (event: PointerEvent, id: string) => void;
@@ -62,6 +63,9 @@
 
 {#if editorWindows.length}<div
     class:window-active={activeWindow === "editor"}
+    class:workspace-bound={editorTabbed
+      ? Boolean(editorGroup?.workspaceMaximized)
+      : editorWindows.some((item) => item.workspaceMaximized)}
     class="modal editor-modal"
   >
     {#if editorTabbed && editorGroup}
@@ -71,13 +75,14 @@
         ) || files.find((file) => file.id === editorGroup?.fileId)}
       {#if editorFile}<div
           class:maximized={editorGroup.maximized}
+          class:workspace-maximized={editorGroup.workspaceMaximized}
           class:floating={Boolean(editorGroup.position) &&
-            !editorGroup.maximized}
+            !editorGroup.maximized && !editorGroup.workspaceMaximized}
           class="dialog editor-dialog editor-tabbed-dialog"
           role="dialog"
           aria-label={t("ui.editor.editor0", [editorFile.fileName])}
           tabindex="-1"
-          style={`${editorGroup.maximized ? "" : `width:${editorGroup.size.width}px;height:${editorGroup.size.height}px;`} ${editorGroup.position && !editorGroup.maximized ? `left:${editorGroup.position.left}px;top:${editorGroup.position.top}px;` : ""}`}
+          style={`${editorGroup.maximized || editorGroup.workspaceMaximized ? "" : `width:${editorGroup.size.width}px;height:${editorGroup.size.height}px;`} ${editorGroup.position && !editorGroup.maximized && !editorGroup.workspaceMaximized ? `left:${editorGroup.position.left}px;top:${editorGroup.position.top}px;` : ""}`}
           on:pointerdown={() => {
             activeWindow = "editor";
           }}
@@ -122,6 +127,18 @@
               {/each}
             </div>
             <div class="editor-window-controls">
+              <button
+                on:click={() => toggleEditorWorkspaceMaximized(activeEditorId)}
+                aria-label={editorGroup.workspaceMaximized
+                  ? t("ui.editor.restoreEditorWorkspace")
+                  : t("ui.editor.maximizeEditorWorkspace")}
+                title={editorGroup.workspaceMaximized
+                  ? t("ui.editor.restoreEditorWorkspace")
+                  : t("ui.editor.maximizeEditorWorkspace")}
+                ><svg class="window-icon" viewBox="0 0 24 24" aria-hidden="true"
+                  ><path d="M4 19h16M4 5h16M4 5v12M20 5v12" /></svg
+                ></button
+              >
               <button
                 on:click={() => toggleEditorMaximized(activeEditorId)}
                 aria-label={editorGroup.maximized
@@ -276,6 +293,7 @@
                 on:click={closeFormatError}>×</button
               >
             </div>{/if}
+          {#if !editorGroup.maximized && !editorGroup.workspaceMaximized}
           {#each ["n", "ne", "e", "se", "s", "sw", "w", "nw"] as direction}<div
               role="separator"
               aria-label={t("ui.editor.resizeEditor0", [direction])}
@@ -285,6 +303,7 @@
                 beginEditorResize(event, activeEditorId, direction);
               }}
             ></div>{/each}
+          {/if}
         </div>{/if}
     {:else}{#each editorWindows as editorWindow (editorWindow.id)}
         {@const editorFile = files.find(
@@ -292,14 +311,15 @@
         )}
         {#if editorFile}<div
             class:maximized={editorWindow.maximized}
+            class:workspace-maximized={editorWindow.workspaceMaximized}
             class:floating={Boolean(editorWindow.position) &&
-              !editorWindow.maximized}
+              !editorWindow.maximized && !editorWindow.workspaceMaximized}
             class:editor-window-active={activeEditorId === editorWindow.id}
             class="dialog editor-dialog"
             role="dialog"
             aria-label={t("ui.editor.editor0", [editorFile.fileName])}
             tabindex="-1"
-            style={`${editorWindow.maximized ? "" : `width:${editorWindow.size.width}px;height:${editorWindow.size.height}px;`} ${editorWindow.position && !editorWindow.maximized ? `left:${editorWindow.position.left}px;top:${editorWindow.position.top}px;` : ""} z-index:${activeEditorId === editorWindow.id ? 2 : 1};`}
+            style={`${editorWindow.maximized || editorWindow.workspaceMaximized ? "" : `width:${editorWindow.size.width}px;height:${editorWindow.size.height}px;`} ${editorWindow.position && !editorWindow.maximized && !editorWindow.workspaceMaximized ? `left:${editorWindow.position.left}px;top:${editorWindow.position.top}px;` : ""} z-index:${activeEditorId === editorWindow.id ? 2 : 1};`}
             on:pointerdown={() => {
               activeWindow = "editor";
               activeEditorId = editorWindow.id;
@@ -317,6 +337,18 @@
             >
               <h3>{editorFile.fileName}</h3>
               <div class="editor-window-controls">
+                <button
+                  on:click={() => toggleEditorWorkspaceMaximized(editorWindow.id)}
+                  aria-label={editorWindow.workspaceMaximized
+                    ? t("ui.editor.restoreEditorWorkspace")
+                    : t("ui.editor.maximizeEditorWorkspace")}
+                  title={editorWindow.workspaceMaximized
+                    ? t("ui.editor.restoreEditorWorkspace")
+                    : t("ui.editor.maximizeEditorWorkspace")}
+                  ><svg class="window-icon" viewBox="0 0 24 24" aria-hidden="true"
+                    ><path d="M4 19h16M4 5h16M4 5v12M20 5v12" /></svg
+                  ></button
+                >
                 <button
                   on:click={() => toggleEditorMaximized(editorWindow.id)}
                   aria-label={editorWindow.maximized
@@ -479,6 +511,7 @@
                   on:click={closeFormatError}>×</button
                 >
               </div>{/if}
+            {#if !editorWindow.maximized && !editorWindow.workspaceMaximized}
             {#each ["n", "ne", "e", "se", "s", "sw", "w", "nw"] as direction}<div
                 role="separator"
                 aria-label={t("ui.editor.resizeEditor0", [direction])}
@@ -489,6 +522,7 @@
                   beginEditorResize(event, editorWindow.id, direction);
                 }}
               ></div>{/each}
+            {/if}
           </div>{/if}
       {/each}{/if}
   </div>{/if}

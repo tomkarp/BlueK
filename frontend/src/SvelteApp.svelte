@@ -535,6 +535,7 @@
       ></div>
       <ObjectBenchCodepad
         bind:codepadOpen={session.codepadOpen}
+        bind:benchOpen={ui.benchOpen}
         bench={objects.bench}
         fieldInput={objects.fieldInput}
         bind:selectedObjectId={ui.selectedObjectId}
@@ -555,6 +556,7 @@
       <AppStatusBar
         selectedObjectId={ui.selectedObjectId}
         bench={objects.bench}
+        benchOpen={ui.benchOpen}
         bind:terminalOpen={terminal.terminalOpen}
         terminal={terminal.terminal}
         inputReady={session.inputReady}
@@ -573,6 +575,44 @@
         saveFixture={tests.saveBench}
         loadFixture={tests.loadDefaultFixture}
         chooseTestClass={tests.openDefaultClassPicker}
+      />
+      <EditorWindows
+        editorWindows={editor.editorWindows}
+        editorTabbed={editor.editorTabbed}
+        editorGroup={editor.editorGroup}
+        files={project.files}
+        bind:activeWindow={ui.activeWindow}
+        bind:activeEditorId={editor.activeEditorId}
+        diagnosticsByFile={editor.diagnosticsByFile}
+        diagnosticsRun={editor.diagnosticsRun}
+        dialogError={ui.dialogError}
+        editorFontSize={ui.editorFontSize}
+        vimMode={ui.vimMode}
+        darkMode={ui.darkMode}
+        commentShortcutLabel={ui.commentShortcutLabel}
+        formatShortcutLabel={ui.formatShortcutLabel}
+        codeMirror={editor.codeMirror}
+        breakpointLines={editor.linesFor}
+        toggleBreakpointAt={editor.toggleBreakpointAt}
+        updateBreakpoints={editor.updateBreakpoints}
+        toggleBreakpoint={editor.toggleBreakpoint}
+        debug={session.runtime.debug}
+        editable={!session.programActive}
+        closeEditor={editor.closeEditor}
+        closeAllEditors={editor.closeAllEditors}
+        selectEditorTab={editor.selectEditorTab}
+        toggleEditorMaximized={editor.toggleEditorMaximized}
+        toggleEditorWorkspaceMaximized={editor.toggleEditorWorkspaceMaximized}
+        ungroupEditors={editor.ungroupEditors}
+        collectEditors={editor.collectEditors}
+        beginEditorDrag={editor.beginEditorDrag}
+        beginEditorResize={editor.beginEditorResize}
+        updateSource={project.updateSource}
+        toggleEditorComments={editor.toggleEditorComments}
+        formatEditor={editor.formatEditor}
+        markDiagnostics={editor.markDiagnostics}
+        closeFormatError={editor.closeFormatError}
+        openFeedback={feedback.show}
       />
     </section>
   </div>
@@ -659,43 +699,6 @@
     clearTerminal={terminal.clearTerminal}
     resetRuntime={session.resetRuntime}
     sendInput={terminal.sendInput}
-  />
-  <EditorWindows
-    editorWindows={editor.editorWindows}
-    editorTabbed={editor.editorTabbed}
-    editorGroup={editor.editorGroup}
-    files={project.files}
-    bind:activeWindow={ui.activeWindow}
-    bind:activeEditorId={editor.activeEditorId}
-    diagnosticsByFile={editor.diagnosticsByFile}
-    diagnosticsRun={editor.diagnosticsRun}
-    dialogError={ui.dialogError}
-    editorFontSize={ui.editorFontSize}
-    vimMode={ui.vimMode}
-    darkMode={ui.darkMode}
-    commentShortcutLabel={ui.commentShortcutLabel}
-    formatShortcutLabel={ui.formatShortcutLabel}
-    codeMirror={editor.codeMirror}
-    breakpointLines={editor.linesFor}
-    toggleBreakpointAt={editor.toggleBreakpointAt}
-    updateBreakpoints={editor.updateBreakpoints}
-    toggleBreakpoint={editor.toggleBreakpoint}
-    debug={session.runtime.debug}
-    editable={!session.programActive}
-    closeEditor={editor.closeEditor}
-    closeAllEditors={editor.closeAllEditors}
-    selectEditorTab={editor.selectEditorTab}
-    toggleEditorMaximized={editor.toggleEditorMaximized}
-    ungroupEditors={editor.ungroupEditors}
-    collectEditors={editor.collectEditors}
-    beginEditorDrag={editor.beginEditorDrag}
-    beginEditorResize={editor.beginEditorResize}
-    updateSource={project.updateSource}
-    toggleEditorComments={editor.toggleEditorComments}
-    formatEditor={editor.formatEditor}
-    markDiagnostics={editor.markDiagnostics}
-    closeFormatError={editor.closeFormatError}
-    openFeedback={feedback.show}
   />
   <CompilerDialog
     bind:compilerDialog={session.compilerDialog}
@@ -926,7 +929,8 @@
   />
   <CodepadContextMenu
     bind:codepadMenu={session.codepadMenu}
-    bind:history={session.history}
+    history={session.history}
+    clearHistory={session.clearCodepadHistory}
   />
   <FeedbackDialog {feedback} />
 </div>
