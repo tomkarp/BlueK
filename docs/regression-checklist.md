@@ -10,7 +10,7 @@ interpreter after Kotlin changes. Record failures/blockers and distinguish
 written tests from executed tests. Browser artifacts: playwright-report/ and
 test-results/. Full Kotlin conformance is not implied by any passing suite.
 
-Latest storage/account/publication verification: [2026-10-22 results](#accounts-private-storage-and-staticapi-split--2026-10-22).
+Latest storage/account/publication verification: [2026-10-25 results](#publication-lifetime-by-authentication--2026-10-25).
 Latest project navigation verification: [2026-10-22 results](#new-open-save-and-share-navigation--2026-10-22).
 
 ## Coverage register
@@ -60,7 +60,7 @@ below. No universal performance guarantee is implied.
 | GUI-31 | Subsequent files open as tabs in the first editor | Recorded browser pass |
 | GUI-32 | Shared window buttons, resize zones and minimum sizes | Recorded browser pass |
 | GUI-33 | Split/recombine editor tabs, selection and close behavior | Recorded browser pass |
-| GUI-34 | Dismiss/retry formatting errors without package noise | Recorded browser pass |
+| GUI-34 | Dismiss/retry formatting errors without package noise; compiling clears an earlier formatter error | Chromium regression passes 2/2 (2026-10-26), including correction followed by compile. |
 | GUI-36 | Terminal splitter stays centered and resizes both panes | Recorded browser pass |
 | GUI-37 | Terminal splitter sits below active editors | Recorded browser pass |
 | GUI-38 | Default editor font size is 16 px | Recorded browser pass |
@@ -77,8 +77,8 @@ below. No universal performance guarantee is implied.
 | GUI-48 | Private-property styling and read-only private-set controls | Recorded inspector checks; current private-row visual/CSS acceptance pending |
 | GUI-49 | Long method menu signatures stay on one line | Recorded browser pass |
 | GUI-35 | Short-link display, copy, expiry and loading roundtrip | Recorded browser pass |
-| API-01 | Additive legacy migration, permanent identifier reservations, account/session ownership, immutable publications (7 days anonymous, 30 days signed-in), UTF-8 limits, media policy, blocks and retention; content reporting deferred | Real temporary-SQLite API test passed for anonymous/account project and program deadlines, 2026-10-25; live migration/deployment/load capacity pending |
-| HANDOFF-01–14 | Main/beta static app imports editorial inf-schule JSON using one central script and plain chapter links; exact opener/origin, normal runtime/drafts, cancellation, pending edits, local origins, popup fallback and keyboard retry | Chromium 14/14 and WebKit 14/14 passed, 2026-10-24; includes dev.inf-schule.de and domain lookalikes; live inf-schule acceptance pending |
+| API-01 | Additive legacy migration, permanent identifier reservations, account/session ownership, immutable publications (7 days anonymous, 30 days signed-in), UTF-8 limits, media policy, blocks and retention; content reporting deferred | Real temporary-SQLite API test passed for anonymous/account project and program deadlines, 2026-10-25; migration/deployment completed, production load/capacity measurement not recorded |
+| HANDOFF-01–14 | Main/beta static app imports editorial inf-schule JSON using one central script and plain chapter links; exact opener/origin, normal runtime/drafts, cancellation, pending edits, local origins, popup fallback and keyboard retry | Chromium 14/14 and WebKit 14/14 passed, 2026-10-24; includes dev.inf-schule.de and domain lookalikes. User confirmed the published chapter handoff to main was tested, 2026-10-26. |
 | CLOUD-01 | Own/counterfeit media rejected by project and program publication UI; local JSON retains every resource | Chromium passed; all 42 actual standards independently checked by client/server helper, 2026-10-22 |
 | CLOUD-02 | Delayed public loads cannot replace edits made while pending; draft survives reload | Chromium passed, 2026-10-22 |
 | CLOUD-03 | German/English account advice, password-manager fields, failed-save backup advice and mobile layout | Chromium passed, 2026-10-22; agent inspected German mobile screenshot; user acceptance pending |
@@ -210,13 +210,13 @@ below. No universal performance guarantee is implied.
 | EXP-11 | IDE-to-player world/output transfer | Recorded automated pass |
 | EXP-12 | Shared ANSI/text-sizing terminal parser in player | Recorded browser pass; `npm run build:player` |
 | EXP-13 | Published runnable link, explicit main/cancel, console input, project download and developer view | Chromium passed, 2026-10-22; full content links are read-only legacy fixtures |
-| EXP-14 | Seven-day program publication, stored options, same-copy developer link, distinct expiry/unknown/blocked responses | Chromium UI and real SQLite API passed, 2026-10-22; live deployment pending |
+| EXP-14 | Seven-day anonymous / 30-day signed-in program publication, stored options, same-copy developer link, distinct expiry/unknown/blocked responses | UI and real SQLite API passed, 2026-10-22/25; production deployment completed 2026-10-25 |
 | EXP-15 | BluePlay autostart/buttons/speed combinations, required Run button, reset and HTML options | Six valid combinations and IDE/HTML flow passed in Chromium, 2026-10-10; agent inspected desktop/mobile screenshots; user acceptance pending |
 | EXP-16 | Optional project heading/tab title for full/short links and HTML; no status label or empty header | Format/server checks and Chromium browser cases passed, 2026-10-10; agent inspected mobile options; user acceptance pending |
 | EXP-17 | Stable Share window across project/program options, persistent Cancel and shared program settings with Save → HTML | Seven Chromium cases passed, 2026-10-22; agent inspected desktop/mobile; user acceptance pending |
-| EXP-18 | New ?p/?run query links, read-only legacy fragments/paths, player/IDE navigation, deployment prefixes and /load | Separate-origin real API plus static root/prefix builds passed in Chromium/WebKit, 2026-10-22; live Pages acceptance pending |
-| EXP-19 | Translated distinct expired/unknown/operator-blocked/developer-disabled link failures; malformed/legacy links; project code opened as player; capitalized codes | Chromium UI and separate-origin Chromium/WebKit routing passed, 2026-10-22; operator/TLS/live acceptance pending |
-| EXP-20 | A short program code opens its project under /bluek/ and in code import with one request; disabled “Open in BlueK” refuses both (403) | Share-server smoke, real-service routing (Chromium/WebKit), GUI-138 and agent end-to-end passed, 2026-10-11; production deployment pending |
+| EXP-18 | New ?p/?run query links, read-only legacy fragments/paths, player/IDE navigation, deployment prefixes and /load | Separate-origin real API plus static root/prefix builds passed in Chromium/WebKit, 2026-10-22; Pages deployment completed 2026-10-25 |
+| EXP-19 | Translated distinct expired/unknown/operator-blocked/developer-disabled link failures; malformed/legacy links; project code opened as player; capitalized codes | Chromium UI and separate-origin Chromium/WebKit routing passed, 2026-10-22; production TLS and deployment completed; no separate live operator-block acceptance recorded |
+| EXP-20 | A short program code opens its project under /bluek/ and in code import with one request; disabled “Open in BlueK” refuses both (403) | Share-server smoke, real-service routing (Chromium/WebKit), GUI-138 and agent end-to-end passed, 2026-10-11; production deployment completed 2026-10-25 |
 | EXP-21 | BlueJ ZIP export: one folder with Kotlin files (test classes omitted), README.TXT and package.bluej with the displayed card positions; BluePlay adds the JVM library from assets/bluej-blueplay and every standard image/sound, project files win; re-import keeps unchanged standard media as standard resources | `test:bluej-export` passed (2026-10-18); all four bundled examples compiled with kotlinc 2.2.21 after export (`check-bluej-export-kotlinc.mjs`). Not yet opened or run in BlueJ itself. |
 | EXP-22 | HTML export options appear expanded, with the export action below them and no link-specific wording | Chromium passed, 2026-10-23 |
 | RT-37 | Suspendable binary-stdlib lambda replay and canSuspend boundary | Recorded Node/bundle pass; dedicated browser check not performed in original record |
@@ -1425,6 +1425,29 @@ in GUI-138; both were corrected before the passing rerun. Content reporting
 remains deferred at the user's request. Full regression and live deployment were
 not run.
 
+### Production deployment and inf-schule handoff — 2026-10-26
+
+Main and beta are synchronized at commit `3236b673`. Main static files are
+served directly by GitHub Pages at `bluek.online`; the production API remains
+on `api.bluek.online`. Beta static files, API and SQLite database are separate
+on the existing host, with beta starting from its own empty database. Beta
+technical feedback is enabled with the existing shared feedback credential.
+The Pages, production API and beta deployment workflows completed successfully
+for the cutover. DNS, HTTPS and live health checks for Pages and the production
+API returned successfully; prior cutover checks also confirmed the beta site,
+beta API and feedback configuration. The old Main static Caddy host was removed;
+the user subsequently removed the `www.bluek.online` Caddy redirect so GitHub
+Pages can handle the canonical-domain redirect.
+
+Inf-schule chapter links and the sender target now open `bluek.online`; the
+changes were published and tested on the live inf-schule pages (user confirmed,
+2026-10-26; browser/device and detailed manual outcomes not supplied). The
+automated handoff suites remain the separate Chromium 14/14 and WebKit 14/14
+results recorded above. No load/capacity measurement is recorded. Inappropriate
+content reporting remains out of scope at the user's request. Retirement of
+legacy full-content links is tracked by the user as a separate issue, with no
+shutdown date assumed here.
+
 ### New, Open, Save and Share navigation — 2026-10-22
 
 The classic workspace and sidebar remain in place. New groups templates and
@@ -1754,6 +1777,12 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
   HANDOFF-14 covers a dev-domain lookalike. All 14 cases passed in Chromium and
   WebKit (28/28); typecheck passed with zero errors/six existing warnings, and
   the production frontend build passed. Live dev.inf-schule acceptance pending.
+- Editorial inf-schule production handoff, 2026-10-26: user confirms the
+  chapter links and sender target were changed from beta to `bluek.online`,
+  published, and tested on the live inf-schule pages. Browser/device and
+  detailed manual-check results were not supplied. This closes the previously
+  pending production publication and acceptance; no automated checks were run
+  for this documentation follow-up.
 - Workspace panes and editor layouts, 2026-10-25 (feedback issue 18): the
   built-in browser reproduced an implicit extra grid column beside the
   half-maximized editor and invisible editor resize handles blocking the

@@ -334,6 +334,22 @@ test("GUI-34 failed formatting shows a dismissible error and clears it on retry"
   await expect(error).toBeVisible();
 });
 
+test("GUI-34 compiling clears a previous formatter parse error", async ({ page }) => {
+  await project(page, "class Hund { fun broken( }");
+  await page.locator(".classcard").dblclick();
+  const dialog = page.locator(".editor-dialog");
+  await dialog.getByRole("button", { name: "Format Kotlin file" }).click();
+  await expect(dialog.getByRole("alert").filter({ hasText: "ParseError" })).toBeVisible();
+  const editor = dialog.locator(".cm-content");
+  await editor.click();
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.insertText("class Hund {}");
+  await page.getByRole("button", { name: "Compile", exact: true }).click();
+  await expect(dialog.getByRole("button", { name: "Close format error" })).toHaveCount(0);
+  await expect(dialog.locator(".cm-bluek-error-line")).toHaveCount(0);
+  await expect(page.getByLabel("Codepad input")).toBeEnabled();
+});
+
 test("GUI-28 editor window can be moved and resized", async ({ page }) => {
   await project(page, "class Hund {}");
   await page.locator(".classcard").dblclick();

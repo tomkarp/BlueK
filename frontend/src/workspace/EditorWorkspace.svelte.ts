@@ -403,6 +403,7 @@ export class EditorWorkspace {
     commenters: this.editorCommenters,
     breakpointTogglers: this.breakpointTogglers,
     debugNavigators: this.debugNavigators,
+    diagnosticsRun: () => this.diagnosticsRun,
     setFormatError: (message) => {
       this.host.ui().dialogError = message;
     },

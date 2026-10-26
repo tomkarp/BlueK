@@ -9,9 +9,11 @@ health request. API requests time out after 15 seconds (feedback keeps its
 separate bounded timeouts). Static resources include the interpreter, BluePlay,
 standard media, formatter, examples, help, player and offline download.
 
-The repository prepares this split; DNS, GitHub settings, live migration and
-deployment must still be performed by the operator. No live infrastructure
-change is part of the implementation. See [storage contract](server-storage.md).
+The production split was deployed on 2026-10-25. GitHub Pages serves the main
+site directly at `bluek.online`; the existing host serves the production API
+and the isolated beta frontend/API. DNS, HTTPS, API health and the deployed
+workflows were checked during cutover. The steps below remain the provisioning,
+verification and rollback runbook. See [storage contract](server-storage.md).
 
 ## Independent workflows
 
@@ -94,11 +96,12 @@ project files are copied to inf-schule separately, outside these workflows.
    clients. Domain fragments survive browser redirects; legacy `/bluek/`,
    `/run/`, `/load/` and former `/BlueK/` paths use the Pages 404 app fallback.
    New query links require no rewrite and return the ordinary root document.
-9. Verify production and beta independently: account registration/login/logout/password
+9. For a new cutover, verify production and beta independently: account registration/login/logout/password
    change, own/other private projects, publication/player, operator block,
    technical feedback, existing links. Then block the API origin in browser
    developer tools and verify editing/running/BluePlay/examples/help/JSON/BlueJ
-   and HTML export from the Pages origin. This live acceptance is still required.
+   and HTML export from the Pages origin. Treat these as acceptance checks for
+   future deployments; the initial production cutover is complete.
 
 The API migration is additive and transactional: old `projects` JSON and expiry
 values remain unchanged; every old identifier is permanently reserved before
@@ -263,5 +266,5 @@ cannot clean files until restart, but it never serves expired copies on restart.
 There is no chosen global disk quota or publication rate limit. Monitor capacity,
 backup expiry and service errors. When disk fills, saves fail;
 local work remains available and users must download JSON backups. Provisioning,
-load/capacity measurement, DNS/TLS behavior, live migration and final production
-acceptance have not been performed by this repository change.
+DNS/TLS configuration, migration and deployment were completed during the
+2026-10-25 cutover. No production load/capacity measurement is recorded here.

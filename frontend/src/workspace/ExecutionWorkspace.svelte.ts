@@ -36,7 +36,7 @@ interface ExecutionWorkspaceHost {
     | "synchronize"
   >;
   ui: () => Pick<WorkspaceUi, "status" | "error" | "terminalAutoClear" | "activeWindow">;
-  editor: () => Pick<EditorWorkspace, "markDiagnostics" | "clearDiagnostics" | "syncBreakpoints" | "revealPosition">;
+  editor: () => Pick<EditorWorkspace, "markDiagnostics" | "clearDiagnostics" | "closeFormatError" | "syncBreakpoints" | "revealPosition">;
   project: () => Readonly<
     Pick<
       ProjectWorkspace,
@@ -121,6 +121,7 @@ export class ExecutionWorkspace {
     this.host.ui().status = "Compiling…";
     this.host.ui().error = "";
     this.compilerDialog = false;
+    this.host.editor().closeFormatError();
     this.host.editor().markDiagnostics([]);
     this.history = [];
     this.codepadHistoryIndex = -1;

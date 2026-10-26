@@ -42,6 +42,7 @@ export interface EditorActionHost {
   breakpointTogglers: Map<string, () => void>;
   debugNavigators: Map<string, (line: number, column: number) => void>;
   setFormatError: (message: string) => void;
+  diagnosticsRun: () => number;
 }
 // defaultHighlightStyle picks colors for a light background; a dark
 // background needs its own palette or keywords/strings turn unreadable.
@@ -203,11 +204,14 @@ export function createEditorActions(host: EditorActionHost) {
       host.setFormatError("");
       const request = ++formatRequest;
       const source = view.state.doc.toString();
+      const diagnosticsRun = host.diagnosticsRun();
+      const isCurrent = () => request === formatRequest &&
+        diagnosticsRun === host.diagnosticsRun() && source === view.state.doc.toString();
       void formatter
         .format(source)
         .then((formatted) => {
           if (
-            request !== formatRequest ||
+            !isCurrent() ||
             formatted === view.state.doc.toString()
           )
             return;
@@ -217,7 +221,7 @@ export function createEditorActions(host: EditorActionHost) {
           });
         })
         .catch((error: unknown) => {
-          if (request === formatRequest) {
+          if (isCurrent()) {
             const message =
               error instanceof Error ? error.message : String(error);
             const formatError = message.replaceAll(
