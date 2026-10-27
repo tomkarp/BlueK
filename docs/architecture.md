@@ -82,6 +82,11 @@ Supporting modules:
   `projectTemplates.ts`: HTTP templates online, fresh embedded copies offline.
   `projectMedia.ts`: accepted image/sound formats, limits, decoding checks and
   rename rules for the Images/Audio dialogs; owns no project state.
+- Card positions are concrete project data for every independent project and
+  library card. Missing positions in older projects receive their initial
+  layout when loaded; exports and drafts include each independent position.
+  Attached test cards follow their target without storing a separate position;
+  detaching one preserves its last displayed position.
 - `blueJImport.ts`: discovers independent project roots in a ZIP/folder and
   imports one explicitly selected project with its Kotlin/resources/positions and substitutes the built-in library for
   historical BluePlay library source files. In BluePlay projects, images and
@@ -164,6 +169,18 @@ and project types. Presentation details do not belong in this protocol.
 `runtimeWorker.ts` initializes the interpreter bundle once and dispatches to
 `RuntimeHost`. Hosted, player and offline worker factories differ only in how
 they supply the bundle. Client, protocol and runtime ownership stay identical.
+
+Project file presentation also uses a separate syntax-only worker through
+`projectSourceAnalysis.ts`. It invokes the same Kotlite parser without loading
+or executing the project. Results are applied only to the matching source and
+filename; incomplete or mixed files retain the last known presentation. A file
+loaded without a reliable classification starts with a neutral presentation.
+This worker does not own runtime state. The saved `kind` field is ignored and
+new project payloads omit it. When a functions file becomes a single-class file,
+the parsed class name becomes its filename if that name is available. Class
+renames from a card use analyzer-resolved type and constructor references;
+renames in source ask about those references only on compile, editor focus loss
+or editor close. Attached test targets follow class filename changes.
 
 `RuntimeHost` owns phases, execution IDs, output collection, passive inspection
 and the sole BluePlay scheduler. `KotliteSession` owns source history, interpreter,

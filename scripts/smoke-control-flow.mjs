@@ -47,5 +47,5 @@ for (const entry of controlFlowCases) {
 const format = await load(projectFormatCase.files);
 assert.equal(format.result.kind, 'error');
 assert.equal(format.result.phase, 'analysis');
-assert.equal(format.result.diagnostics[0].message, 'A BlueK project file may contain one class or top-level functions and properties, but not both.');
+assert.equal(format.result.diagnostics[0].message, 'BlueK requires separate files for a class and top-level functions or properties, and allows only one class per file. Kotlin itself allows these declarations in the same file.');
 console.log(`BlueK control-flow regression passed: ${passed} semantic cases plus project-format boundary.`);

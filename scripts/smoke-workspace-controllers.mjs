@@ -166,8 +166,12 @@ try {
   assert.equal(invalidations, invalidationsBefore, 'Cancelling deletion keeps the runtime session');
   assert.deepEqual(deletedFiles, [], 'Cancelling deletion keeps editor windows');
   allowDelete = true;
+  const attachedFile = project.files.find(file => file.id === attached.id);
+  const attachedPosition = project.cardPosition(attachedFile, project.displayFiles.indexOf(attachedFile));
   project.deleteFile(project.files[0]);
   assert.equal(project.files.find(file => file.id === attached.id).testTarget, undefined, 'Deleting the parent frees its attached test card');
+  assert.deepEqual(project.cardPositions[attached.id], attachedPosition, 'Detaching preserves the displayed position');
+  assert.deepEqual(project.projectPayload().cardPositions['RenamedTest.kt'], attachedPosition, 'A detached test saves its position');
   project.deleteFile(project.files.find(file => file.id === attached.id));
   assert.equal(project.defaultTestClass, '', 'Deleting the default test clears the setting');
   assert.equal(project.canShareState, false, 'A deleted default class disables the link option');

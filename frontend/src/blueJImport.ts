@@ -12,7 +12,6 @@ const MEDIA_TYPES: Record<string, string> = {
   png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp",
   wav: "audio/wav", mp3: "audio/mpeg", ogg: "audio/ogg",
 };
-const CLASS_DECLARATION = /^\s*(?:(?:open|abstract|data|sealed|enum|private|internal)\s+)*(?:class|interface|object)\s/m;
 
 export function entriesFromZip(bytes: Uint8Array): ImportEntry[] {
   return Object.entries(unzipSync(bytes))
@@ -88,8 +87,7 @@ export function blueJProjectFromEntries(entries: ImportEntry[], selectedRoot?: s
     .filter((entry) => !(blueplay && BLUEPLAY_LIBRARY_SOURCES.has(entry.path)))
     .map((entry) => {
       const source = decoder.decode(entry.bytes);
-      const kind: SavedProjectFile["kind"] = CLASS_DECLARATION.test(source) ? "class" : "functions";
-      return { fileName: entry.path, kind, source };
+      return { fileName: entry.path, source };
     })
     .sort((a, b) => a.fileName.localeCompare(b.fileName));
   if (!files.length && !blueplay) throw new Error("The BlueJ project contains no Kotlin files.");

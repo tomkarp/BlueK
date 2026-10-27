@@ -272,6 +272,13 @@
     "imageNameTaken": "Das Projekt hat bereits ein Bild namens {0}."
   },
   "files": {
+    "renameFile": "Umbenennen",
+    "renameClass": "Klasse umbenennen",
+    "renameFilePrompt": "Gib einen neuen Namen für diese Kotlin-Datei ein:",
+    "renameClassPrompt": "Gib einen neuen Namen für diese Klasse ein:",
+    "renameClassReferencesConfirm": "Sollen alle Verwendungen von {0} und Aufrufe der Konstruktoren in {1} umbenannt werden?",
+    "renameClassFailed": "Die Klassendeklaration in dieser Datei konnte nicht erkannt werden.",
+    "renameFileInvalid": "Wähle einen gültigen, eindeutigen Kotlin-Dateinamen.",
     "createNewKotlinFile": "Neue Kotlin-Datei erstellen",
     "name": "Name",
     "eGAnimal": "z. B. Tier",

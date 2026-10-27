@@ -6,10 +6,13 @@ export function manifestClasses(manifest: SymbolManifest, files: ProjectFile[]):
     throw new Error('Kotlite returned an invalid manifest.');
   }
   const cards = files.flatMap(file => {
-    if (file.kind !== 'functions') return [];
+    // The compiled declarations, rather than the creation template, decide
+    // whether a file provides top-level functions.
+    const methods = manifest.functions.filter(m => m.sourceFile === file.fileName || (!m.sourceFile && m.sourceLine >= 0 && !m.builtin));
+    if (!methods.length) return [];
     return [{ id: file.fileName, name: file.fileName.replace(/\.kt$/, ''), kind: 'functions',
       constructors: [], properties: [], supertypes: [], typeParameters: [],
-      methods: manifest.functions.filter(m => m.sourceFile === file.fileName || (!m.sourceFile && m.sourceLine >= 0 && !m.builtin)),
+      methods,
     }];
   });
   const all: ClassMeta[] = [...manifest.classes.map(item => ({ ...item, builtin: item.builtin || false })), ...cards];

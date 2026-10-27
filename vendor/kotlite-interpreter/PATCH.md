@@ -24,6 +24,11 @@ browser-session fixes without replacing Kotlite with a separate interpreter.
 
 ## Changes
 
+Expose analyzer-resolved class targets and the source position of each class
+name token on AST nodes. BlueK uses these positions for a class rename that
+updates type references and constructor calls without rewriting same-named
+locals, comments or strings.
+
 Default ordinary object text uses `<object> : ClassName` instead of the
 constructor-like `ClassName()`, which incorrectly suggested an available empty
 constructor. `ClassInstance.usesDefaultObjectToString` exposes this distinction

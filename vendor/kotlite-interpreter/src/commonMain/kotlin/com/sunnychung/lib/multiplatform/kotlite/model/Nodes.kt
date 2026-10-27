@@ -91,6 +91,8 @@ data class ScriptNode(override val position: SourcePosition, val nodes: List<AST
  * Most of the time it can be set to `SourcePosition.NONE`.
  */
 open class TypeNode(override val position: SourcePosition, val name: String, val arguments: List<TypeNode>?, val isNullable: Boolean, @ModifyByAnalyzer var transformedRefName: String? = null) : ASTNode {
+    /** The declared class selected by semantic analysis, for source refactorings. */
+    @ModifyByAnalyzer var resolvedClassName: String? = null
     init {
         if (arguments?.isEmpty() == true) {
             throw IllegalArgumentException("empty argument")
@@ -226,6 +228,8 @@ data class AssignmentNode(val subject: ASTNode, val operator: String, val value:
 class SuperReferenceNode(position: SourcePosition, val qualifier: TypeNode) : VariableReferenceNode(position, "super")
 
 open class VariableReferenceNode(override val position: SourcePosition, val variableName: String, @ModifyByAnalyzer var transformedRefName: String? = null, @ModifyByAnalyzer var ownerRef: PropertyOwnerInfo? = null, @ModifyByAnalyzer var type: TypeNode? = null) : ASTNode {
+    /** A class name used as a value, distinct from a same-named local variable. */
+    @ModifyByAnalyzer var resolvedClassName: String? = null
     // A top-level property is initialized in source order and may not be yet when this runs.
     @ModifyByAnalyzer var isTopLevelProperty: Boolean = false
 
@@ -432,6 +436,8 @@ data class FunctionCallNode(
     @ModifyByAnalyzer var resolvedInvoke: FunctionCallNode? = null,
     @ModifyByAnalyzer var secondaryConstructorIndex: Int? = null,
 ) : ASTNode {
+    /** Class selected by semantic resolution when this call constructs an instance. */
+    @ModifyByAnalyzer var resolvedClassName: String? = null
     /** Private member calls bind to their declaring class, independently of virtual overrides. */
     @ModifyByAnalyzer var privateDispatchTypeName: String? = null
 
@@ -594,6 +600,7 @@ data class ClassDeclarationNode(
     val outerClassName: String? = null,
     /** An inner class: its objects belong to an object of [outerClassName], kept as constructor property `this/<Outer>` (RT-92). */
     val isInner: Boolean = false,
+    val namePosition: SourcePosition = position,
 ) : ASTNode {
     var annotations: Set<String> = emptySet()
     var sourceEnd: Int = 0

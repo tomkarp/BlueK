@@ -39,10 +39,13 @@
   import { BluePlayWorkspace } from "./workspace/BluePlayWorkspace.svelte";
   import { TerminalWorkspace } from "./workspace/TerminalWorkspace.svelte";
   import { onMount, untrack } from "svelte";
+  import { ProjectSourceAnalysis } from "./projectSourceAnalysis";
   import { CloudWorkspace } from "./workspace/CloudWorkspace.svelte";
   import CloudDialog from "./components/CloudDialog.svelte";
   const ui: WorkspaceUi = new WorkspaceUi();
+  const sourceAnalysis = new ProjectSourceAnalysis();
   const project: ProjectWorkspace = new ProjectWorkspace({
+    sourceAnalysis: () => sourceAnalysis,
     language: () => language,
     tests: () => tests,
     objects: () => objects,
@@ -154,6 +157,19 @@
       };
     }),
   );
+  $effect(() => {
+    const analyzer = sourceAnalysis;
+    let alive = true;
+    const stop = $effect.root(() => {
+      $effect(() => {
+        const files = project.files.map(file => ({ ...file }));
+        if (files.length) void analyzer.classify(files).then(results => {
+          if (alive) project.applyClassifications(files, results);
+        }).catch(() => {});
+      });
+    });
+    return () => { alive = false; stop(); analyzer.close(); };
+  });
   onMount(() => {
     language.restore();
     ui.restoreUiSettings();
@@ -619,6 +635,7 @@
         beginEditorDrag={editor.beginEditorDrag}
         beginEditorResize={editor.beginEditorResize}
         updateSource={project.updateSource}
+        resolvePendingClassRenames={project.resolvePendingClassRenames}
         toggleEditorComments={editor.toggleEditorComments}
         formatEditor={editor.formatEditor}
         markDiagnostics={editor.markDiagnostics}
@@ -841,6 +858,8 @@
     openEditor={editor.openEditor}
     compile={session.compile}
     deleteFile={project.deleteFile}
+    renameFunctionsFile={project.renameFunctionsFile}
+    renameClassFile={project.renameClassFile}
     duplicateFile={project.duplicateFile}
     invokeObject={objects.invokeObject}
     inspectObject={objects.inspectObject}

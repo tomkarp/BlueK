@@ -40,7 +40,7 @@ interface ExecutionWorkspaceHost {
   project: () => Readonly<
     Pick<
       ProjectWorkspace,
-      "files" | "library" | "runtimeResources" | "writeHtmlExport" | "writeProgramLink"
+      "files" | "library" | "runtimeResources" | "writeHtmlExport" | "writeProgramLink" | "resolvePendingClassRenames"
     >
   >;
   terminal: () => Pick<
@@ -118,6 +118,7 @@ export class ExecutionWorkspace {
   };
   compile = async (): Promise<boolean> => {
     if (!this.client || this.runtime.phase === "compiling") return false;
+    await this.host.project().resolvePendingClassRenames();
     this.host.ui().status = "Compiling…";
     this.host.ui().error = "";
     this.compilerDialog = false;

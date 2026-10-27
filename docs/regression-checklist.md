@@ -13,6 +13,43 @@ test-results/. Full Kotlin conformance is not implied by any passing suite.
 Latest storage/account/publication verification: [2026-10-25 results](#publication-lifetime-by-authentication--2026-10-25).
 Latest project navigation verification: [2026-10-22 results](#new-open-save-and-share-navigation--2026-10-22).
 
+2026-10-27: `build:kotlite`, `typecheck`, `test:runtime-state`,
+`test:control-flow` and `test:ui` passed for the project-file diagnostic and
+compiled top-level function discovery. The runtime test covers a file whose
+stored kind is class but whose source contains main. Browser and visual
+acceptance for this change have not been performed. A subsequent `build:kotlite`
+and `test:runtime-state` passed for the syntax-only classifier (including
+comments, mixed declarations, empty and incomplete source). Chromium passed
+both file-classification and functions-file context-menu rename tests, and six
+file-deletion cases passed. GUI-08/10
+initially failed when an unclassified class was edited immediately after load;
+after correction it passed on rerun in Chromium. The
+localization suite had two passes and one failure: its expected project-replace
+confirmation text differs from the current catalog. Class rename support was
+subsequently implemented through Kotlite-resolved references, including
+compile/focus-loss/close prompting for source edits and automatic naming when a
+functions file becomes a class file. `build:kotlite`, `build:svelte` and
+`typecheck` pass for that implementation; browser and visual acceptance have
+not been performed.
+
+2026-10-27: BluePlay layout on renaming Main was checked in Chromium with
+initially unpositioned cards, renaming in both directions, stored positions
+for independent cards, and draft reload; all positions stayed fixed.
+`test:workspace`, `test:project-drafts`, `test:project-format` and `typecheck`
+passed. Visual user acceptance is pending.
+
+2026-10-27: Chromium passed the attached-test position check: legacy stored
+positions are ignored, drafts omit an attached card's position, and deleting
+its target saves the displayed position for the now-independent test across
+reload. The focused file-deletion and file-classification suites passed 10/10;
+`test:project-format`, `test:workspace`, `test:project-drafts` and `typecheck`
+also passed. Visual user acceptance is pending.
+
+2026-10-27: Chromium passed the class-card rename regression: constructor
+references update once, and changing focus or compiling afterward does not
+repeat the confirmation. The complete `tests/gui/file-classification.spec.ts`
+suite passed 4/4; `typecheck` passed. Visual user acceptance is pending.
+
 ## Coverage register
 
 GUI-74 and GUI-80 each have two historical meanings, also in test titles.
@@ -35,7 +72,7 @@ below. No universal performance guarantee is implied.
 | GUI-07 | Codepad result handles for primitives, Strings and objects | Recorded browser pass |
 | GUI-08 | Editor initial focus, rename and shared close control | Recorded browser pass |
 | GUI-09 | Bench/codepad splitter does not jump on initial drag | Recorded browser pass; user confirmation recorded |
-| GUI-10 | Class/file rename, including temporarily empty source | Recorded browser pass |
+| GUI-10 | Class/file rename, including temporarily empty source and a blocked filename collision followed by a later successful rename | Recorded browser pass; collision recovery added 2026-10-27, browser acceptance pending |
 | GUI-11 | Codepad compile-on-demand in empty/class projects | Recorded browser pass |
 | GUI-12 | Terminal input echo between surrounding output | Recorded browser pass |
 | GUI-13 | Clear/form-feed and later output in split terminal | Recorded browser pass |

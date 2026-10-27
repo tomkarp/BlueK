@@ -964,6 +964,142 @@ class KotliteSession {
     private fun parse(filename: String, source: String): ScriptNode =
         Parser(Lexer(filename = filename, code = source)).script()
 
+    /** Syntax-only file classification for project presentation and editing.
+     * An incomplete source is deliberately unknown, not guessed from text. */
+    fun classifyProjectFile(filename: String, source: String): String {
+        val script = try { parse(filename, source) } catch (_: Throwable) {
+            return "{\"kind\":\"unknown\"}"
+        }
+        val classes = script.nodes.filterIsInstance<ClassDeclarationNode>().filter { it.outerClassName == null }
+        val functions = script.nodes.filterIsInstance<FunctionDeclarationNode>()
+        val properties = script.nodes.filterIsInstance<PropertyDeclarationNode>()
+        val kind = when {
+            classes.size > 1 || (classes.isNotEmpty() && (functions.isNotEmpty() || properties.isNotEmpty())) -> "mixed"
+            classes.size == 1 -> "class"
+            functions.isNotEmpty() || properties.isNotEmpty() -> "functions"
+            else -> "unknown"
+        }
+        val name = classes.singleOrNull()?.name
+        val nameFrom = classes.singleOrNull()?.namePosition?.index
+        return "{\"kind\":\"$kind\"" + (name?.let { ",\"className\":${JSON.stringify(it)}" } ?: "") + (nameFrom?.let { ",\"classNameFrom\":$it" } ?: "") + "}"
+    }
+
+    /** Resolve class and constructor references without executing any project code. */
+    fun classRenameReferences(filenames: Array<String>, sources: Array<String>, className: String, withBluePlay: Boolean): String {
+        if (filenames.size != sources.size) return "{\"error\":\"Project filenames and sources must match.\"}"
+        val analysis = KotliteSession()
+        analysis.configureBluePlay(withBluePlay)
+        val prefix = if (withBluePlay) BluePlayLibrary.source + "\n\n" else ""
+        val combined = buildString {
+            append(prefix)
+            filenames.indices.forEach { index ->
+                if (index > 0) append("\n\n")
+                append("// BlueK file: ${filenames[index]}\n")
+                append(sources[index])
+            }
+        }
+        val regions = mutableListOf<Triple<String, Int, Int>>()
+        var cursor = prefix.length
+        filenames.indices.forEach { index ->
+            if (index > 0) cursor += 2
+            cursor += "// BlueK file: ${filenames[index]}\n".length
+            regions += Triple(filenames[index], cursor, cursor + sources[index].length)
+            cursor += sources[index].length
+        }
+        return try {
+            val units = regions.drop(1).map { it.second }
+            val script = ReplAnalyzer.analyze("<BlueK class rename>", combined, analysis.environment, emptyMap(), units)
+            analysis.analyzedScript = script
+            val target = script.nodes.filterIsInstance<ClassDeclarationNode>()
+                .firstOrNull { it.outerClassName == null && it.name == className }
+                ?: return "{\"error\":${JSON.stringify("Class `$className` could not be resolved.")}}"
+            val positions = linkedSetOf<Int>()
+            fun collect(node: ASTNode?) {
+                if (node == null) return
+                when (node) {
+                    is TypeNode -> {
+                        if (node.resolvedClassName == target.fullQualifiedName) positions += node.position.index
+                        node.arguments.orEmpty().forEach(::collect)
+                    }
+                    is VariableReferenceNode -> {
+                        if (node.resolvedClassName == target.fullQualifiedName) positions += node.position.index
+                    }
+                    is ClassMemberReferenceNode -> Unit
+                    is FunctionCallNode -> {
+                        if (node.resolvedClassName == target.fullQualifiedName) positions += node.function.position.index
+                        collect(node.function)
+                        node.arguments.forEach(::collect)
+                        node.declaredTypeArguments.forEach(::collect)
+                        collect(node.resolvedInvoke)
+                    }
+                    is ScriptNode -> node.nodes.forEach(::collect)
+                    is ClassDeclarationNode -> {
+                        node.typeParameters.forEach(::collect)
+                        node.primaryConstructor?.let(::collect)
+                        node.superInvocations.orEmpty().forEach(::collect)
+                        node.declarations.forEach(::collect)
+                        node.enumEntries.forEach(::collect)
+                        collect(node.companionObject)
+                        node.nestedClasses.forEach(::collect)
+                    }
+                    is FunctionDeclarationNode -> {
+                        node.receiver?.let(::collect); node.valueParameters.forEach(::collect)
+                        node.typeParameters.forEach(::collect); node.extraTypeParameters.forEach(::collect)
+                        node.declaredReturnType?.let(::collect); collect(node.body)
+                    }
+                    is PropertyDeclarationNode -> {
+                        node.receiver?.let(::collect); node.declaredType?.let(::collect)
+                        collect(node.initialValue); collect(node.accessors)
+                    }
+                    is FunctionValueParameterNode -> { node.declaredType?.let(::collect); node.defaultValue?.let(::collect) }
+                    is TypeParameterNode -> node.typeUpperBound?.let(::collect)
+                    is ClassPrimaryConstructorNode -> node.parameters.forEach(::collect)
+                    is ClassParameterNode -> collect(node.parameter)
+                    is BlockNode -> node.statements.forEach(::collect)
+                    is ClassSecondaryConstructorNode -> { node.delegationArguments.orEmpty().forEach(::collect); collect(node.body) }
+                    is ClassInstanceInitializerNode -> collect(node.block)
+                    is PropertyAccessorsNode -> { collect(node.getter); collect(node.setter) }
+                    is IfNode -> { collect(node.condition); collect(node.trueBlock); collect(node.falseBlock) }
+                    is WhileNode -> { collect(node.condition); collect(node.body) }
+                    is DoWhileNode -> { collect(node.body); collect(node.condition) }
+                    is ForNode -> { collect(node.subject); collect(node.body) }
+                    is TryNode -> { collect(node.mainBlock); node.catchBlocks.forEach(::collect); collect(node.finallyBlock) }
+                    is CatchNode -> collect(node.block)
+                    is WhenNode -> { collect(node.subject); node.entries.forEach(::collect) }
+                    is WhenEntryNode -> { node.conditions.forEach(::collect); collect(node.body) }
+                    is WhenConditionNode -> collect(node.expression)
+                    is WhenSubjectNode -> collect(node.value)
+                    is LambdaLiteralNode -> collect(node.body)
+                    is FunctionCallArgumentNode -> collect(node.value)
+                    is AssignmentNode -> { collect(node.subject); collect(node.value) }
+                    is BinaryOpNode -> { collect(node.node1); collect(node.node2) }
+                    is UnaryOpNode -> collect(node.node)
+                    is NavigationNode -> { collect(node.subject); collect(node.member) }
+                    is IndexOpNode -> { collect(node.subject); node.arguments.forEach(::collect) }
+                    is ReturnNode -> collect(node.value)
+                    is ThrowNode -> collect(node.value)
+                    is AsOpNode -> { collect(node.expression); collect(node.type) }
+                    is InfixFunctionCallNode -> { collect(node.node1); collect(node.node2) }
+                    is ElvisOpNode -> { collect(node.primaryNode); collect(node.fallbackNode) }
+                    is StringNode -> node.nodes.forEach(::collect)
+                    is EnumEntryNode -> node.arguments.forEach(::collect)
+                    is DestructuringDeclarationNode -> node.statements.forEach(::collect)
+                    is ValueParameterDeclarationNode, is IntegerNode, is LongNode, is DoubleNode,
+                    is BooleanNode, is NullNode, is ValueNode, is StringLiteralNode, is CharNode,
+                    is LabelNode, is BreakNode, is ContinueNode -> Unit
+                }
+            }
+            collect(script)
+            val edits = positions.mapNotNull { position ->
+                val region = regions.firstOrNull { position >= it.second && position + className.length <= it.third } ?: return@mapNotNull null
+                "{\"fileName\":${JSON.stringify(region.first)},\"from\":${position - region.second},\"to\":${position - region.second + className.length}}"
+            }
+            "{\"references\":${edits.joinToString(",", "[", "]")}}"
+        } catch (error: Throwable) {
+            "{\"error\":${JSON.stringify(error.message ?: "Could not resolve class references.")}}"
+        }
+    }
+
     fun load(filename: String, source: String): String = evaluate(filename, source)
 
     /** Project files explicitly marked as test classes can also store object-bench states before they contain tests. */
@@ -1018,7 +1154,7 @@ class KotliteSession {
                 if (conflictingNode != null) {
                     val position = statementPosition(conflictingNode)
                     return projectError(filename, position.lineNum, position.col,
-                        "A BlueK project file may contain one class or top-level functions and properties, but not both.")
+                        "BlueK requires separate files for a class and top-level functions or properties, and allows only one class per file. Kotlin itself allows these declarations in the same file.")
                 }
             }
             val main = script.nodes.firstOrNull { it is FunctionDeclarationNode && it.name == "main" } as FunctionDeclarationNode?

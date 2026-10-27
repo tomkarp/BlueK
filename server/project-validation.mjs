@@ -44,8 +44,6 @@ function validProject(value) {
         fileName(file.fileName) &&
         typeof file.source === "string" &&
         optionalText(file, "path") &&
-        (file.kind === undefined ||
-          ["class", "functions"].includes(file.kind)) &&
         (file.testTarget === undefined || fileName(file.testTarget)) &&
         (file.isTestClass === undefined ||
           typeof file.isTestClass === "boolean"),

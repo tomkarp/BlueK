@@ -41,6 +41,8 @@
   export let openEditor: (file?: ProjectFile) => void;
   export let compile: () => Promise<boolean>;
   export let deleteFile: (file: ProjectFile) => void;
+  export let renameFunctionsFile: (file: ProjectFile) => void;
+  export let renameClassFile: (file: ProjectFile) => void;
   export let duplicateFile: (file: ProjectFile) => void;
   export let invokeObject: (object: BenchObject, method: CallableMeta) => void;
   export let inspectObject: (
@@ -157,6 +159,9 @@
       <button on:click={() => deleteFile(menu!.file!)}
         >{t("ui.objects.delete")}</button
       >
+      {#if menu.file.kind === "functions"}<button on:click={() => renameFunctionsFile(menu!.file!)}
+        >{t("ui.files.renameFile")}</button>{:else if menu.file.kind === "class" && !isTestFile(menu.file)}<button on:click={() => renameClassFile(menu!.file!)}
+        >{t("ui.files.renameClass")}</button>{/if}
       <button on:click={() => duplicateFile(menu!.file!)}
         >{t("ui.objects.duplicate")}</button
       >

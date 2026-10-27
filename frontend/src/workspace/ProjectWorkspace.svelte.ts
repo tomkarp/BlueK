@@ -24,7 +24,6 @@ import {
   decodeBlueKLink as decodeProjectLink,
   sourceSuperclass,
   addSuperclass,
-  sourceDeclarationName,
 } from "../uiParity";
 
 import { bluePlayLibraryNames, bluePlayLibraryFiles } from "../bluePlayCards";
@@ -69,6 +68,7 @@ import {
   ShareCodeError,
 } from "../shareApi";
 import { shareRoute } from "../shareRoutes";
+import type { ProjectSourceAnalysis } from "../projectSourceAnalysis";
 import { receiveProjectHandoff } from "../projectHandoff";
 import { programForLink, shortProgramLink } from "../programLinks";
 
@@ -134,6 +134,7 @@ import type { EditorWorkspace } from "./EditorWorkspace.svelte";
 import type { TestWorkspace } from "./TestWorkspace.svelte";
 
 interface ProjectWorkspaceHost {
+  sourceAnalysis: () => ProjectSourceAnalysis;
   language?: () => Pick<import("../i18n/Language.svelte").Language, "t">;
   tests: () => Pick<TestWorkspace, "loadDefaultFixture">;
   objects: () => Pick<ObjectWorkspace, "dismissMenu">;
@@ -158,6 +159,12 @@ interface ProjectWorkspaceHost {
 
 export class ProjectWorkspace {
   constructor(private readonly host: ProjectWorkspaceHost) {}
+  private pendingClassRenames = new Map<string, { oldName: string; baseline: ProjectFile[] }>();
+  private classRenameResolution: Promise<void> | null = null;
+  private knownClassifications = new Map<string, import("../projectSourceAnalysis").FileClassification>();
+  private classRenameBaselineCandidates = new Map<string, { className: string; files: ProjectFile[] }>();
+  /** Remembers that a file name was derived from its class, even while a collision blocks renaming. */
+  private classFileNamesFollowClass = new Set<string>();
   private text = (
     key: import("../i18n/Language.svelte").MessageKey,
     values: (string | number)[] = [],
@@ -370,6 +377,17 @@ export class ProjectWorkspace {
     };
     return [...projectFiles].sort((a, b) => rank(a) - rank(b));
   };
+  /** Freeze the current layout before a source/name change changes card order. */
+  private preserveLayoutForReordering = (nextFiles: ProjectFile[]) => {
+    if (this.library?.id !== "blueplay") return;
+    const before = this.displayFiles;
+    const after = [...bluePlayLibraryFiles, ...this.orderedBluePlayFiles(nextFiles)];
+    if (before.length === after.length && before.every((file, index) => file.id === after[index].id)) return;
+    this.cardPositions = {
+      ...this.cardPositions,
+      ...Object.fromEntries(before.flatMap((file, index) => file.testTarget ? [] : [[file.id, this.cardPosition(file, index)]])),
+    };
+  };
   isBluePlayLibraryFile = (file: ProjectFile) => {
     return (
       this.library?.id === "blueplay" &&
@@ -393,6 +411,25 @@ export class ProjectWorkspace {
       }
     }
     return this.cardPositions[file.id] || this.defaultCardPosition(index);
+  };
+  /** Independent cards have concrete positions; attached tests follow their target. */
+  ensureCardPositions = () => {
+    let next = this.cardPositions;
+    this.displayFiles.forEach((file, index) => {
+      if (file.testTarget) {
+        if (next[file.id]) {
+          if (next === this.cardPositions) next = { ...next };
+          delete next[file.id];
+        }
+        return;
+      }
+      const position = this.cardPosition(file, index);
+      const existing = next[file.id];
+      if (existing && existing.x === position.x && existing.y === position.y) return;
+      if (next === this.cardPositions) next = { ...next };
+      next[file.id] = position;
+    });
+    if (next !== this.cardPositions) this.cardPositions = next;
   };
   cardLayer = (file: ProjectFile, index: number) => {
     if (file.testTarget) {
@@ -423,10 +460,11 @@ export class ProjectWorkspace {
     this.host.objects().dismissMenu();
   };
   projectPayload = () => {
+    const positions = Object.fromEntries(this.displayFiles.map((file, index) => [file.id, this.cardPosition(file, index)]));
     return createProjectPayload(
       this.files,
       this.resources,
-      this.cardPositions,
+      positions,
       this.library,
       this.library?.id === "blueplay" ? bluePlayLibraryFiles : [],
       this.readme,
@@ -622,35 +660,170 @@ export class ProjectWorkspace {
     if (!this.currentFile) return;
     const file = this.files.find((item) => item.id === fileId);
     if (!file || file.source === value) return;
-    const oldName = sourceDeclarationName(file.source);
-    const newName = sourceDeclarationName(value);
-    const fileStem = file.fileName.replace(/\.kt$/, "");
-    const renamedFileName =
-      file.kind === "class" &&
-      newName &&
-      newName !== oldName &&
-      (oldName === fileStem || !oldName) &&
-      !this.files.some(
-        (item) => item.id !== file.id && item.fileName === `${newName}.kt`,
-      )
-        ? `${newName}.kt`
-        : file.fileName;
-    this.files = this.files.map((file) =>
+    const known = this.knownClassifications.get(fileId);
+    if (file.kind === "class" && !this.pendingClassRenames.has(fileId) &&
+        !this.classRenameBaselineCandidates.has(fileId))
+      this.classRenameBaselineCandidates.set(fileId, {
+        className: known?.kind === "class" ? known.className || "" : "",
+        files: this.files.map(item => ({ ...item })),
+      });
+    const updatedFiles = this.files.map((file) =>
       file.id === fileId
         ? {
             ...file,
-            fileName: renamedFileName,
             source: value,
             revision: file.revision + 1,
           }
-        : file.testTarget ===
-            this.files.find((item) => item.id === fileId)?.fileName
-          ? { ...file, testTarget: renamedFileName }
-          : file,
+        : file,
     );
-    if (this.defaultTestClass === fileStem)
-      this.defaultTestClass = renamedFileName.replace(/\.kt$/, "");
+    this.files = updatedFiles;
     this.host.session().sourceEdited();
+  };
+  resolvePendingClassRenames = (): Promise<void> => {
+    if (this.classRenameResolution) return this.classRenameResolution;
+    const resolution = this.resolvePendingClassRenamesNow();
+    this.classRenameResolution = resolution;
+    void resolution.then(
+      () => { if (this.classRenameResolution === resolution) this.classRenameResolution = null; },
+      () => { if (this.classRenameResolution === resolution) this.classRenameResolution = null; },
+    );
+    return resolution;
+  };
+  private resolvePendingClassRenamesNow = async () => {
+    if (this.classRenameBaselineCandidates.size) {
+      const snapshot = this.files.map(item => ({ ...item }));
+      const classifications = await this.host.sourceAnalysis().classify(snapshot);
+      for (let index = 0; index < snapshot.length; index++) {
+        const current = snapshot[index];
+        const candidate = this.classRenameBaselineCandidates.get(current.id);
+        const result = classifications[index];
+        if (!candidate || result?.kind !== "class" || !result.className ||
+            this.files.find(item => item.id === current.id)?.source !== current.source) continue;
+        let oldName = candidate.className;
+        if (!oldName) {
+          const baselineFile = candidate.files.find(item => item.id === current.id);
+          if (baselineFile) {
+            const [baselineClass] = await this.host.sourceAnalysis().classify([baselineFile]);
+            oldName = baselineClass?.kind === "class" ? baselineClass.className || "" : "";
+          }
+        }
+        if (oldName && oldName !== result.className)
+          this.pendingClassRenames.set(current.id, { oldName, baseline: candidate.files });
+      }
+      this.applyClassifications(snapshot, classifications);
+    }
+    for (const [fileId, pending] of [...this.pendingClassRenames]) {
+      const file = this.files.find(item => item.id === fileId);
+      if (!file) { this.pendingClassRenames.delete(fileId); continue; }
+      this.pendingClassRenames.delete(fileId);
+      const [classification] = await this.host.sourceAnalysis().classify([file]);
+      if (this.files.find(item => item.id === fileId)?.source !== file.source) {
+        if (!this.pendingClassRenames.has(fileId)) this.pendingClassRenames.set(fileId, pending);
+        continue;
+      }
+      const newName = classification?.kind === "class" ? classification.className : undefined;
+      if (!newName) continue;
+      if (newName === pending.oldName) continue;
+      if (!window.confirm(this.text("ui.files.renameClassReferencesConfirm", [pending.oldName, newName]))) continue;
+      try {
+        const references = await this.host.sourceAnalysis().classReferences(pending.baseline, pending.oldName, this.library?.id === "blueplay");
+        const editsByName = new Map<string, import("../projectSourceAnalysis").ClassReferenceEdit[]>();
+        for (const edit of references) editsByName.set(edit.fileName, [...(editsByName.get(edit.fileName) || []), edit]);
+        const baselineById = new Map(pending.baseline.map(item => [item.id, item]));
+        const classIndex = pending.baseline.findIndex(item => item.id === fileId);
+        const classifications = await this.host.sourceAnalysis().classify(pending.baseline);
+        const declarationFrom = classifications[classIndex]?.className === pending.oldName
+          ? classifications[classIndex]?.classNameFrom : undefined;
+        let changed = false;
+        const updated = this.files.map(current => {
+          const baseline = baselineById.get(current.id);
+          const edits = baseline && editsByName.get(baseline.fileName);
+          if (!baseline || !edits?.length) return current;
+          let adjusted = edits;
+          if (current.id === fileId) {
+            if (declarationFrom === undefined) return current;
+            const expected = `${baseline.source.slice(0, declarationFrom)}${newName}${baseline.source.slice(declarationFrom + pending.oldName.length)}`;
+            if (current.source !== expected) return current;
+            const delta = newName.length - pending.oldName.length;
+            adjusted = edits.map(edit => edit.from >= declarationFrom + pending.oldName.length
+              ? { ...edit, from: edit.from + delta, to: edit.to + delta } : edit);
+          } else if (baseline.source !== current.source) return current;
+          let source = current.source;
+          for (const edit of [...adjusted].sort((a, b) => b.from - a.from))
+            source = `${source.slice(0, edit.from)}${newName}${source.slice(edit.to)}`;
+          changed = true;
+          return { ...current, source, revision: current.revision + 1 };
+        });
+        if (changed) {
+          this.files = updated;
+          this.host.session().sourceEdited();
+        }
+      } catch (error) {
+        this.host.ui().error = error instanceof Error ? error.message : String(error);
+      }
+    }
+  };
+  applyClassifications = (files: readonly ProjectFile[], results: readonly import("../projectSourceAnalysis").FileClassification[]) => {
+    const byId = new Map(files.map((file, index) => [file.id, { file, result: results[index] }]));
+    let changed = false;
+    const next = this.files.map(file => {
+      const entry = byId.get(file.id);
+      if (!entry || entry.file.source !== file.source || entry.file.fileName !== file.fileName) return file;
+      const kind = entry.result?.kind;
+      if (kind !== "class" && kind !== "functions") return file;
+      const previous = this.knownClassifications.get(file.id);
+      const className = kind === "class" ? entry.result?.className : undefined;
+      if (kind === "class" && className && previous?.kind === "class" && previous.className &&
+          className !== previous.className && !this.pendingClassRenames.has(file.id)) {
+        const baseline = this.classRenameBaselineCandidates.get(file.id);
+        if (baseline?.className === previous.className)
+          this.pendingClassRenames.set(file.id, { oldName: previous.className, baseline: baseline.files });
+      }
+      if (kind === "class" && className && previous?.kind === "class" &&
+          className === previous.className && !this.pendingClassRenames.has(file.id))
+        this.classRenameBaselineCandidates.set(file.id, { className, files: this.files.map(item => ({ ...item })) });
+      else this.classRenameBaselineCandidates.delete(file.id);
+      this.knownClassifications.set(file.id, entry.result!);
+      if (kind === "functions") {
+        this.knownClassifications.delete(file.id);
+        this.pendingClassRenames.delete(file.id);
+        this.classFileNamesFollowClass.delete(file.id);
+      }
+      const kindChanged = kind !== file.kind;
+      // A file created for top-level functions has no declaration name to
+      // follow while the user edits. Once parsing identifies a class, adopt
+      // that class name just as we do for an in-place class rename.
+      const fileStem = file.fileName.replace(/\.kt$/, "");
+      if (className && (this.classFileNamesFollowClass.has(file.id) || file.kind === "functions" ||
+          (previous?.kind === "class" && previous.className === fileStem) ||
+          (!previous && fileStem === className)))
+        this.classFileNamesFollowClass.add(file.id);
+      const shouldRenameFile = Boolean(className) && this.classFileNamesFollowClass.has(file.id);
+      const fileName = shouldRenameFile && className &&
+        !this.files.some(item => item.id !== file.id && item.fileName === `${className}.kt`)
+        ? `${className}.kt` : file.fileName;
+      if (!kindChanged && fileName === file.fileName) return file;
+      changed = true;
+      return { ...file, fileName, kind };
+    });
+    if (changed) {
+      const renamed = new Map<string, string>();
+      for (const file of this.files) {
+        const replacement = next.find(item => item.id === file.id);
+        if (replacement && replacement.fileName !== file.fileName)
+          renamed.set(file.fileName, replacement.fileName);
+      }
+      const updated = next.map(file => {
+        const previousTarget = [...renamed].find(([oldName]) => file.testTarget === oldName);
+        return previousTarget ? { ...file, testTarget: previousTarget[1] } : file;
+      });
+      this.preserveLayoutForReordering(updated);
+      this.files = updated;
+      for (const [oldName, newName] of renamed) {
+        if (this.defaultTestClass === oldName.replace(/\.kt$/, ""))
+          this.defaultTestClass = newName.replace(/\.kt$/, "");
+      }
+    }
   };
   deleteFile = (file: ProjectFile) => {
     if (
@@ -680,6 +853,84 @@ export class ProjectWorkspace {
     this.host.objects().dismissMenu();
     this.host.editor().removeFile(file.id);
     this.host.session().markUncompiled();
+  };
+  renameFunctionsFile = (file: ProjectFile) => {
+    if (file.kind !== "functions") return;
+    this.host.objects().dismissMenu();
+    const value = window.prompt(this.text("ui.files.renameFilePrompt"), file.fileName.replace(/\.kt$/, ""));
+    if (value === null) return;
+    const name = value.trim().replace(/\.kt$/, "");
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || this.files.some(item => item.id !== file.id && item.fileName === `${name}.kt`)) {
+      this.host.ui().error = this.text("ui.files.renameFileInvalid");
+      return;
+    }
+    const renamed = `${name}.kt`;
+    if (renamed === file.fileName) return;
+    const updatedFiles = this.files.map(item => item.id === file.id ? { ...item, fileName: renamed } :
+      item.testTarget === file.fileName ? { ...item, testTarget: renamed } : item);
+    this.preserveLayoutForReordering(updatedFiles);
+    this.files = updatedFiles;
+    this.host.session().sourceEdited();
+  };
+  renameClassFile = async (file: ProjectFile) => {
+    if (file.kind !== "class" || file.testTarget || this.isBluePlayLibraryFile(file)) return;
+    this.host.objects().dismissMenu();
+    const [classification] = await this.host.sourceAnalysis().classify([file]);
+    if (classification?.kind !== "class" || !classification.className || classification.classNameFrom === undefined) {
+      this.host.ui().error = this.text("ui.files.renameClassFailed");
+      return;
+    }
+    const oldName = classification.className;
+    const classNameFrom = classification.classNameFrom;
+    const value = window.prompt(this.text("ui.files.renameClassPrompt"), oldName);
+    if (value === null) return;
+    const newName = value.trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(newName) || this.files.some(item => item.id !== file.id && item.fileName === `${newName}.kt`)) {
+      this.host.ui().error = this.text("ui.files.renameFileInvalid");
+      return;
+    }
+    if (newName === oldName) return;
+    const renameReferences = window.confirm(this.text("ui.files.renameClassReferencesConfirm", [oldName, newName]));
+    let edits: import("../projectSourceAnalysis").ClassReferenceEdit[] = [];
+    if (renameReferences) {
+      try {
+        edits = await this.host.sourceAnalysis().classReferences(this.files, oldName, this.library?.id === "blueplay");
+      } catch (error) {
+        this.host.ui().error = error instanceof Error ? error.message : String(error);
+        return;
+      }
+    }
+    const updatedFileName = `${newName}.kt`;
+    const editsByFile = new Map<string, typeof edits>();
+    for (const edit of edits) editsByFile.set(edit.fileName, [...(editsByFile.get(edit.fileName) || []), edit]);
+    const updatedFiles = this.files.map(item => {
+      let source = item.source;
+      if (item.id === file.id || editsByFile.has(item.fileName)) {
+        const replacements = [...(editsByFile.get(item.fileName) || [])];
+        if (item.id === file.id) replacements.push({ fileName: item.fileName, from: classNameFrom, to: classNameFrom + oldName.length });
+        for (const edit of replacements.sort((a, b) => b.from - a.from))
+          source = `${source.slice(0, edit.from)}${newName}${source.slice(edit.to)}`;
+      }
+      return {
+        ...item,
+        ...(item.id === file.id ? { fileName: updatedFileName, kind: "class" as const } : {}),
+        ...(item.id === file.id || editsByFile.has(item.fileName) ? { source, revision: item.revision + 1 } : {}),
+        ...(item.testTarget === file.fileName ? { testTarget: updatedFileName } : {}),
+      };
+    });
+    this.preserveLayoutForReordering(updatedFiles);
+    this.files = updatedFiles;
+    this.classFileNamesFollowClass.add(file.id);
+    // This rename already handled its references (or the user explicitly
+    // declined). Keep the syntax baseline aligned so the next analysis does
+    // not treat the same declaration change as a second, editor-originated
+    // rename and ask again on focus loss.
+    this.knownClassifications.set(file.id, { ...classification, className: newName });
+    this.classRenameBaselineCandidates.delete(file.id);
+    this.pendingClassRenames.delete(file.id);
+    if (this.defaultTestClass === oldName) this.defaultTestClass = newName;
+    this.host.session().sourceEdited();
+    this.host.ui().error = "";
   };
   duplicateFile = (file: ProjectFile) => {
     const stem = file.fileName.replace(/\.kt$/, "");
@@ -772,7 +1023,8 @@ export class ProjectWorkspace {
       ]),
     );
     const folderName = exportFileName(this.projectName, "");
-    const payload = { ...this.projectPayload(), cardPositions };
+    const payload = { ...this.projectPayload(), cardPositions,
+      files: this.files.map(({ fileName, path, source, kind, testTarget, isTestClass }) => ({ fileName, path, source, kind, testTarget, isTestClass })) };
     downloadFile(
       blueJProjectZip(payload, folderName),
       "application/zip",
@@ -1104,9 +1356,7 @@ export class ProjectWorkspace {
           return {
             id: `import-${Date.now()}-${file.name}`,
             fileName: file.name,
-            kind: /\bclass\s+\w+|\binterface\s+\w+|\bobject\s+\w+/.test(source)
-              ? "class"
-              : "functions",
+            kind: "unknown",
             source,
             revision: 1,
           } as ProjectFile;
@@ -1364,6 +1614,11 @@ export class ProjectWorkspace {
     }
   };
   connect = () => {
+    $effect(() => {
+      void this.displayFiles;
+      void this.cardPositions;
+      untrack(this.ensureCardPositions);
+    });
     $effect(() => {
       if (!this.readme.trim()) this.shareWithReadme = false;
       if (!this.canShareState) this.shareWithState = false;

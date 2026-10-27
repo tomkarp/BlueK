@@ -77,8 +77,8 @@ with concrete acceptance and diagnostic expectations checked against Kotlin
 ## Project-format boundary
 
 Kotlin accepts a class and main together in one source file. BlueK deliberately
-rejects that arrangement with “A BlueK project file may contain one class or
-top-level functions and properties, but not both.” Splitting the same valid
+rejects that arrangement with a diagnostic explaining that BlueK requires
+separate files even though Kotlin allows those declarations together. Splitting the same valid
 program into class and functions files works. This is tested separately and
 is not treated as a language bug or silently normalized by the comparison.
 

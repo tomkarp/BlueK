@@ -2680,11 +2680,12 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
         // Like Kotlin, a sealed class is abstract; its subclasses are known to `when` (RT-86).
         if (ClassModifier.sealed in modifiers && !isInterface) modifiers = modifiers + ClassModifier.abstract
         repeatedNL()
+        val namePosition = currentToken.position
         val simpleName = userDefinedIdentifier()
         val outerClassName = if (isMember) enclosingClasses.last() else null
         val name = outerClassName?.let { "$it.$simpleName" } ?: simpleName
         if (outerClassName != null) foundNestedClasses[name] = NestedClassInfo(isPrivate = isPrivate, isInner = isInner)
-        return inClass(name) { classDeclarationAfterName(t, isInterface, modifiers, name, simpleName, outerClassName, isInner) }.also { it.annotations = annotations; it.sourceEnd = currentToken.position.index }
+        return inClass(name) { classDeclarationAfterName(t, isInterface, modifiers, name, simpleName, outerClassName, isInner, namePosition) }.also { it.annotations = annotations; it.sourceEnd = currentToken.position.index }
     }
 
     private inline fun <T> inClass(name: String, block: () -> T): T {
@@ -2696,7 +2697,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
         }
     }
 
-    private fun classDeclarationAfterName(t: Token, isInterface: Boolean, modifiers: Set<ClassModifier>, name: String, simpleName: String, outerClassName: String?, isInner: Boolean): ClassDeclarationNode {
+    private fun classDeclarationAfterName(t: Token, isInterface: Boolean, modifiers: Set<ClassModifier>, name: String, simpleName: String, outerClassName: String?, isInner: Boolean, namePosition: SourcePosition): ClassDeclarationNode {
         var token = currentTokenExcludingNL()
         val typeParameters = if (token.`is`(TokenType.Operator, "<")) {
             repeatedNL()
@@ -2799,6 +2800,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
             nestedClasses = nestedClasses,
             outerClassName = outerClassName,
             isInner = isInner,
+            namePosition = namePosition,
         )
     }
 

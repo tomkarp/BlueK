@@ -16,6 +16,14 @@ const { InspectorModel } = await loadModule('frontend/src/inspectorModel.ts');
 const { stepInterval } = await loadModule('frontend/src/simulationTimer.ts');
 vm.runInThisContext(await readFile('frontend/public/kotlite/bluek-kotlite-browser.js', 'utf8'));
 const createSession = globalThis['bluek-kotlite-browser'].bluekCreateKotliteSession;
+const classificationSession = createSession();
+const classify = source => JSON.parse(classificationSession.classifyProjectFile('Example.kt', source));
+assert.deepEqual(classify('class Example {}'), { kind: 'class', className: 'Example' });
+assert.deepEqual(classify('fun main() {}'), { kind: 'functions' });
+assert.deepEqual(classify('class Example {}\nfun main() {}'), { kind: 'mixed', className: 'Example' });
+assert.deepEqual(classify('// class Fake {}\nfun main() {}'), { kind: 'functions' });
+assert.deepEqual(classify('fun incomplete('), { kind: 'unknown' });
+assert.deepEqual(classify('// empty'), { kind: 'unknown' });
 const workers = [];
 class TestWorker {
   host = new RuntimeHost(createSession);
@@ -245,7 +253,8 @@ const mixedClass = await projectClient.compile([
 assert.equal(mixedClass.diagnostics.length, 1);
 assert.equal(mixedClass.diagnostics[0].fileName, 'Mixed.kt');
 assert.equal(mixedClass.diagnostics[0].line, 2);
-assert.match(mixedClass.diagnostics[0].message, /one class|top-level functions/i);
+assert.match(mixedClass.diagnostics[0].message, /BlueK requires separate files/);
+assert.match(mixedClass.diagnostics[0].message, /Kotlin itself allows/);
 assert.equal(mixedClass.generationId, '');
 assert.equal(projectClient.getSnapshot().phase, 'uncompiled');
 const multipleClasses = await projectClient.compile([
@@ -273,6 +282,16 @@ assert.equal(projectOutputs.splice(0).join(''), 'Codepad\n1\n2\n');
 assert.equal((await projectClient.execute({ op: 'eval', code: 'count' })).display, '2');
 assert.notEqual((await projectClient.execute({ op: 'main', fileName: 'Actions.kt' })).kind, 'error');
 assert.equal(projectOutputs.splice(0).join(''), 'Hallo\n');
+// A file created from a class template can later contain top-level functions.
+const converted = await projectClient.compile([
+  { ...file('Hauptprogramm.kt', 'fun main() { println("converted") }'), kind: 'class' },
+], 7);
+assert.deepEqual(converted.diagnostics, []);
+const convertedCard = projectClient.getSnapshot().classes.find(item => item.id === 'Hauptprogramm.kt');
+assert.equal(convertedCard?.kind, 'functions');
+assert.ok(convertedCard.methods.some(method => method.name === 'main'));
+assert.notEqual((await projectClient.execute({ op: 'main', fileName: 'Hauptprogramm.kt' })).kind, 'error');
+assert.equal(projectOutputs.splice(0).join(''), 'converted\n');
 for (const template of ['kotlin-example', 'blueplay-empty', 'blueplay']) {
   const payload = JSON.parse(await readFile(`frontend/public/examples/${template}.bluek.json`, 'utf8'));
   const builtinFiles = new Set(['World.kt', 'Actor.kt', 'Image.kt', 'BluePlayFunctions.kt', 'BluePlayHelpers.kt']);

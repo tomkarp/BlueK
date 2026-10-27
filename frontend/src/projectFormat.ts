@@ -51,8 +51,6 @@ function validateFiles(value: unknown): SavedProjectFile[] {
       (item.path !== undefined && (typeof item.path !== "string" || !item.path)) ||
       typeof item.source !== "string")
       throw new Error("Invalid Kotlin file in project.");
-    if (item.kind !== undefined && item.kind !== "class" && item.kind !== "functions")
-      throw new Error("Invalid Kotlin file kind in project.");
     if (item.testTarget !== undefined && !isKotlinFileName(item.testTarget)) throw new Error("Invalid test attachment.");
     if (item.isTestClass !== undefined && typeof item.isTestClass !== "boolean") throw new Error("Invalid test class marker.");
     return {
@@ -61,7 +59,6 @@ function validateFiles(value: unknown): SavedProjectFile[] {
       fileName: item.fileName,
       path: typeof item.path === "string" ? item.path : undefined,
       source: item.source,
-      kind: item.kind as ProjectFile["kind"] | undefined,
     };
   });
   if (new Set(files.map((file) => file.fileName)).size !== files.length)
@@ -159,7 +156,6 @@ export function createProjectPayload(
     files: files.map((file) => ({
       ...(file.path ? { path: file.path } : {}),
       fileName: file.fileName,
-      kind: file.kind,
       source: file.source,
       ...(file.testTarget ? { testTarget: file.testTarget } : {}),
       ...(file.isTestClass ? { isTestClass: true } : {}),
@@ -167,7 +163,7 @@ export function createProjectPayload(
     resources: resources.map(({ path, data }) => ({ path, data })),
     cardPositions: Object.fromEntries(
       positionedFiles
-        .filter((file) => cardPositions[file.id])
+        .filter((file) => !file.testTarget && cardPositions[file.id])
         .map((file) => [file.fileName, cardPositions[file.id]]),
     ),
   };
@@ -182,7 +178,7 @@ export function projectModelFromPayload(
     id: createId(index, file),
     ...(file.path ? { path: file.path } : {}),
     fileName: file.fileName,
-    kind: file.kind === "functions" ? "functions" : "class",
+    kind: "unknown",
     source: file.source,
     revision: 1,
     ...(file.testTarget ? { testTarget: file.testTarget } : {}),
@@ -204,7 +200,7 @@ export function projectModelFromPayload(
     defaultTestClass: payload.defaultTestClass,
     cardPositions: Object.fromEntries(
       files
-        .filter((file) => positions[file.fileName])
+        .filter((file) => !file.testTarget && positions[file.fileName])
         .map((file) => [
           payload.library?.id === "blueplay" && bluePlayLibraryNames.has(file.fileName)
             ? `blueplay-library-${file.fileName}`

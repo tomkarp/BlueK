@@ -49,7 +49,7 @@ for (const locale of ['en', 'de'] as const) {
     await dialog.locator('details summary').click();
     const preview = JSON.parse(await dialog.locator('details pre').innerText());
     expect(preview.project.files.map((file: any) => file.fileName)).toEqual(['Tier.kt', 'TierTest.kt', 'Main.kt']);
-    expect(preview.project.files[2].kind).toBe('functions');
+    expect(preview.project.files[2]).not.toHaveProperty('kind');
     expect(preview.project.files[2].source).toContain('fun main');
     expect(preview.project.readme).toBe(payload.readme);
     await dialog.getByRole('button', { name: locale === 'de' ? 'Meldung senden' : 'Send report', exact: true }).click();

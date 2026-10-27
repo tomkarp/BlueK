@@ -48,8 +48,8 @@ const targetsOf = properties => Array.from({ length: Number(properties.get('pack
   const imported = blueJProjectFromEntries(asEntries(files));
   assert.equal(imported.library, undefined);
   assert.deepEqual(imported.files, [
-    { fileName: 'Dog.kt', kind: 'class', source: project.files[0].source },
-    { fileName: 'Main.kt', kind: 'functions', source: project.files[1].source },
+    { fileName: 'Dog.kt', source: project.files[0].source },
+    { fileName: 'Main.kt', source: project.files[1].source },
   ]);
   assert.equal(imported.readme, project.readme);
   assert.deepEqual(imported.resources, []);

@@ -1,4 +1,4 @@
-export type FileKind='class'|'functions';
+export type FileKind='class'|'functions'|'unknown';
 export interface ProjectFile{id:string;path?:string;fileName:string;kind:FileKind;source:string;revision:number;testTarget?:string;isTestClass?:boolean}
 export interface ProjectLibrary { id: 'blueplay'; version: 1 }
 export interface ProjectResource {

@@ -12,15 +12,16 @@ const files = [{ id: 'f1', path: 'animals', fileName: 'Hund.kt', kind: 'class', 
 const resources = [{ path: 'images/hund.png', data: 'data:image/png;base64,AAAA' }];
 const positions = { f1: { x: 42, y: 84 } };
 const payload = createProjectPayload(files, resources, positions);
-assert.deepEqual(payload.files, [{ path: 'animals', fileName: 'Hund.kt', kind: 'class', source: 'class Hund' }]);
+assert.deepEqual(payload.files, [{ path: 'animals', fileName: 'Hund.kt', source: 'class Hund' }]);
 const parsed = parseProject(payload);
-assert.deepEqual(parsed.files, [{ path: files[0].path, fileName: files[0].fileName, kind: files[0].kind, source: files[0].source }]);
+assert.deepEqual(parsed.files, [{ path: files[0].path, fileName: files[0].fileName, source: files[0].source }]);
 const legacy = parseProject({ format: 'bluek-project', version: 1, files: [{ id: 'legacy', revision: 7, fileName: 'Alt.kt', source: 'class Alt {}' }] });
-assert.deepEqual(legacy.files, [{ path: undefined, fileName: 'Alt.kt', source: 'class Alt {}', kind: undefined }]);
+assert.deepEqual(legacy.files, [{ path: undefined, fileName: 'Alt.kt', source: 'class Alt {}' }]);
+assert.deepEqual(parseProject({ format: 'bluek-project', version: 1, files: [{ fileName: 'A.kt', source: '', kind: { obsolete: true } }] }).files, [{ path: undefined, fileName: 'A.kt', source: '' }]);
 assert.deepEqual(parsed.resources, resources);
 assert.deepEqual(parsed.cardPositions, { 'Hund.kt': positions.f1 });
 const model = projectModelFromPayload(parsed, index => `loaded-${index}`);
-assert.deepEqual(model.files, [{ id: 'loaded-0', path: files[0].path, fileName: files[0].fileName, kind: files[0].kind, source: files[0].source, revision: 1 }]);
+assert.deepEqual(model.files, [{ id: 'loaded-0', path: files[0].path, fileName: files[0].fileName, kind: 'unknown', source: files[0].source, revision: 1 }]);
 assert.deepEqual(model.resources, resources);
 assert.deepEqual(model.cardPositions, { 'loaded-0': positions.f1 });
 const named = createProjectPayload(files, [], {}, undefined, [], '', '  Mein Projekt  ');
@@ -37,7 +38,10 @@ const attached = createProjectPayload([...files, { id:'test',fileName:'HundTest.
 assert.equal(attached.files[1].testTarget,'Hund.kt');
 const attachedModel = projectModelFromPayload(attached,index=>`attached-${index}`);
 assert.equal(attachedModel.files[1].testTarget,'Hund.kt');
-assert.deepEqual(attachedModel.cardPositions['attached-1'],{x:70,y:210});
+assert.equal('HundTest.kt' in attached.cardPositions, false);
+assert.equal('attached-1' in attachedModel.cardPositions, false);
+const legacyAttached = projectModelFromPayload({ ...attached, cardPositions: { 'HundTest.kt': { x: 70, y: 210 } } }, index => `legacy-${index}`);
+assert.equal('legacy-1' in legacyAttached.cardPositions, false, 'legacy positions for attached tests are ignored');
 assert.throws(()=>parseProject({format:'bluek-project',version:1,files:[{fileName:'T.kt',source:'',testTarget:42}]}),/Invalid test attachment/);
 
 // Independent test classes retain their marker without an attached production class.

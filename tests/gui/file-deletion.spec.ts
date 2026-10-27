@@ -51,3 +51,30 @@ for (const locale of ['en', 'de']) {
     });
   }
 }
+
+test('an attached test saves no position until its class is deleted', async ({ page }) => {
+  const project = { format: 'bluek-project', version: 1, files: [
+    { fileName: 'Hund.kt', source: 'class Hund {}' },
+    { fileName: 'HundTest.kt', source: 'class HundTest {}', isTestClass: true, testTarget: 'Hund.kt' },
+  ], cardPositions: { 'Hund.kt': { x: 180, y: 130 }, 'HundTest.kt': { x: 700, y: 700 } } };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(project)).toString('base64url'));
+  const parent = page.getByRole('button', { name: 'Hund', exact: true });
+  const child = page.getByRole('button', { name: 'HundTest', exact: true });
+  await expect(child).toHaveClass(/attached-test/);
+  const position = await child.evaluate(el => ({ x: parseFloat((el as HTMLElement).style.left), y: parseFloat((el as HTMLElement).style.top) }));
+  expect(position).toEqual({ x: 210, y: 100 });
+  const savedProject = () => page.evaluate(() => Object.values(localStorage).flatMap(value => {
+    try { const item = JSON.parse(value); return item?.project?.files ? [item.project] : item?.files ? [item] : []; }
+    catch { return []; }
+  }).find(item => item.files.some((file: { fileName: string }) => file.fileName === 'HundTest.kt')));
+  await expect.poll(async () => (await savedProject())?.cardPositions?.['Hund.kt']).toEqual({ x: 180, y: 130 });
+  expect((await savedProject()).cardPositions).not.toHaveProperty('HundTest.kt');
+  await parent.click({ button: 'right', position: { x: 15, y: 60 } });
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('.popup').getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(child).not.toHaveClass(/attached-test/);
+  await expect.poll(async () => (await savedProject())?.cardPositions?.['HundTest.kt']).toEqual(position);
+  await page.reload();
+  await expect(child).toBeVisible();
+  expect(await child.evaluate(el => ({ x: parseFloat((el as HTMLElement).style.left), y: parseFloat((el as HTMLElement).style.top) }))).toEqual(position);
+});

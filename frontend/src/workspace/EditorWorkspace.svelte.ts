@@ -13,7 +13,7 @@ import type { TerminalWorkspace } from "./TerminalWorkspace.svelte";
 import type { ExecutionWorkspace } from "./ExecutionWorkspace.svelte";
 interface EditorWorkspaceHost {
   project: () => Readonly<
-    Pick<ProjectWorkspace, "currentFile" | "files" | "selectFile">
+    Pick<ProjectWorkspace, "currentFile" | "files" | "selectFile" | "resolvePendingClassRenames">
   >;
   ui: () => Pick<WorkspaceUi, "activeWindow" | "dialogError">;
   objects: () => Pick<ObjectWorkspace, "dismissMenu">;
@@ -318,6 +318,7 @@ export class EditorWorkspace {
     this.workspaceMaxRestore = null;
   };
   closeEditor = (id = this.activeEditorId) => {
+    void this.host.project().resolvePendingClassRenames();
     this.editorWindows = this.editorWindows.filter((item) => item.id !== id);
     if (this.activeEditorId === id)
       this.activeEditorId = this.editorWindows.at(-1)?.id || "";
@@ -343,6 +344,7 @@ export class EditorWorkspace {
     }
   };
   closeAllEditors = () => {
+    void this.host.project().resolvePendingClassRenames();
     this.editorWindows = [];
     this.editorGroup = null;
     this.editorTabbed = false;

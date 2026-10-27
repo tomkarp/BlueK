@@ -312,6 +312,7 @@ open class SymbolTable(
         }
         type.toPrimitiveDataType(rootScope)?.let { return it }
         val clazz = findClass(type.name)?.first ?: return null
+        type.resolvedClassName = clazz.fullQualifiedName
         if (clazz.typeParameters.isNotEmpty()) return null
         return resolveObjectType(clazz, null, type.isNullable)
     }

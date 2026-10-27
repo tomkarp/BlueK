@@ -1789,6 +1789,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     return
                 }
             currentScope.findClass(variableName)?.let { (clazz, _) ->
+                resolvedClassName = clazz.fullQualifiedName
                 // The name of an object is its single instance (RT-67).
                 if (clazz.isObjectDeclaration) {
                     transformedRefName = OBJECT_REF_PREFIX + clazz.fullQualifiedName
@@ -2509,6 +2510,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
                 if (callableType == CallableType.Constructor) {
                     val clazz = resolution.definition as ClassDefinition
+                    resolvedClassName = clazz.fullQualifiedName
                     if (!isSkipConstructionSecurityCheck) {
                         if (clazz.isObjectDeclaration) {
                             throw SemanticException(position, "`${clazz.name}` is an object: it has exactly one instance, which you use by its name `${clazz.name}`, without a constructor call")

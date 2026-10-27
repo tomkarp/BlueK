@@ -47,6 +47,7 @@
     direction: string,
   ) => void;
   export let updateSource: (id: string, value: string) => void;
+  export let resolvePendingClassRenames: () => Promise<void>;
   export let toggleEditorComments: (id: string) => void;
   export let formatEditor: (id: string) => void;
   export let markDiagnostics: (
@@ -59,8 +60,14 @@
   ) => void;
   const onlyWarnings = (diagnostics: Diagnostic[] = []) =>
     diagnostics.length > 0 && !diagnostics.some(isCompileError);
+  const resolveWhenClickLeavesEditor = (event: PointerEvent) => {
+    const target = event.target;
+    if (!(target instanceof Element) || !target.closest(".editor-dialog"))
+      void resolvePendingClassRenames();
+  };
 </script>
 
+<svelte:window on:pointerdown={resolveWhenClickLeavesEditor} />
 {#if editorWindows.length}<div
     class:window-active={activeWindow === "editor"}
     class:workspace-bound={editorTabbed
@@ -85,6 +92,10 @@
           style={`${editorGroup.maximized || editorGroup.workspaceMaximized ? "" : `width:${editorGroup.size.width}px;height:${editorGroup.size.height}px;`} ${editorGroup.position && !editorGroup.maximized && !editorGroup.workspaceMaximized ? `left:${editorGroup.position.left}px;top:${editorGroup.position.top}px;` : ""}`}
           on:pointerdown={() => {
             activeWindow = "editor";
+          }}
+          on:focusout={(event) => {
+            if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node | null))
+              void resolvePendingClassRenames();
           }}
         >
           <div
@@ -191,6 +202,10 @@
             aria-label={t("ui.editor.codeEditorContent")}
             on:pointerdown={() => {
               activeWindow = "editor";
+            }}
+            on:focusout={(event) => {
+              if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node | null))
+                void resolvePendingClassRenames();
             }}
             use:codeMirror={{
               phrases: $language.editorPhrases,
@@ -406,6 +421,10 @@
               on:pointerdown={() => {
                 activeWindow = "editor";
                 activeEditorId = editorWindow.id;
+              }}
+              on:focusout={(event) => {
+                if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node | null))
+                  void resolvePendingClassRenames();
               }}
               use:codeMirror={{
                 phrases: $language.editorPhrases,
