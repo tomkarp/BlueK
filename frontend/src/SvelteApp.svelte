@@ -173,8 +173,19 @@
       ui.setVimMode(!ui.vimMode);
     };
     const captureShortcut = (event: KeyboardEvent) => {
-      if (feedback.open) return;
       const mod = (event.metaKey || event.ctrlKey) && !event.altKey;
+      if (
+        mod && !event.shiftKey &&
+        (event.key.toLowerCase() === "i" || event.code === "KeyI") &&
+        editor.editorWindows.length > 0 &&
+        !(document.activeElement instanceof Element && document.activeElement.closest(".cm-editor"))
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        editor.formatEditor(editor.activeEditorId);
+        return;
+      }
+      if (feedback.open) return;
       if (mod && !event.shiftKey && event.key === "Enter") {
         event.preventDefault();
         event.stopPropagation();

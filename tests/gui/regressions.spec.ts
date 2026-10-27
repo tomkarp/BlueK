@@ -243,6 +243,20 @@ test("GUI-26 Cmd-Shift-I also formats the complete file", async ({ page }) => {
   );
 });
 
+test("GUI-26 Cmd-I formats the active editor when focus is outside its text", async ({ page }) => {
+  await project(page, 'class Hund {\nfun bellen() {\nprintln("Wuff")\n}\n}');
+  await page.locator(".classcard").dblclick();
+  const dialog = page.locator(".editor-dialog");
+  await dialog.getByRole("button", { name: "Format Kotlin file" }).focus();
+  const prevented = await page.evaluate(() => {
+    const event = new KeyboardEvent("keydown", { key: "i", code: "KeyI", metaKey: true, bubbles: true, cancelable: true });
+    document.activeElement!.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  expect(prevented).toBe(true);
+  await expect(dialog.locator(".cm-line").nth(1)).toHaveText("    fun bellen() {");
+});
+
 test("GUI-27 editor window has maximize, close and format controls", async ({
   page,
 }) => {

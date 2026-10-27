@@ -52,7 +52,7 @@ below. No universal performance guarantee is implied.
 | RT-01 | Identity, setters/getters, main/reset/input and stale replies | Existing runtime-state integration coverage; no new run claimed |
 | GUI-24 | Invalid project statements prevent initializer/codepad effects | Recorded browser pass |
 | GUI-25 | No automatic completion; four-space manual indentation | Recorded browser pass |
-| GUI-26 | Kotlin formatting with bundled WASM and Cmd/Ctrl+Shift+I | Recorded browser pass |
+| GUI-26 | Kotlin formatting with bundled WASM and keyboard shortcuts; Cmd/Ctrl+I targets the active editor when focus is outside the text | WebKit regression 3/3 (2026-10-27); real Safari menu behavior has not been manually verified. |
 | GUI-27 | Editor accessible dialog/group names and window actions | Recorded browser pass |
 | GUI-28 | Editor drag/resize while codepad remains usable | Recorded browser pass |
 | GUI-29 | Consistent editor/terminal window styling and spacing | Recorded browser pass |
