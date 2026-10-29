@@ -23,6 +23,10 @@ export function createDiagramInteraction(host: DiagramInteractionHost) {
       return;
     const canvas = (event.currentTarget as HTMLElement).closest(".canvas");
     if (!canvas) return;
+    // Prevent the browser from starting a text selection when a drag begins
+    // on a card and the pointer later crosses other cards or leaves the canvas.
+    event.preventDefault();
+    window.getSelection()?.removeAllRanges();
     const bounds = canvas.getBoundingClientRect();
     const position = host.position(file, host.files().indexOf(file));
     host.raise(file);

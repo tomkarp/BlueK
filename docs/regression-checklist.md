@@ -1937,3 +1937,11 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
   Issue 28 test (2026-10-29, since deleted) confirmed the report contained its
   PNG while the then-live server left the inline token literal. The renderer
   now maps the token to the uploaded image; the focused renderer test passes.
+- GUI text selection, 2026-10-29 (issue 27): generic BlueK interface text is
+  non-selectable. CodeMirror source, codepad and terminal content, inspector
+  values, and actionable diagnostics remain selectable. Class diagram cards,
+  object-bench instance names and class labels, editor file tabs, and generic UI
+  text are not selectable. The empty object-bench status is generic; a selected
+  object's status remains selectable. Card dragging prevents browser text
+  selection, including when the pointer leaves the canvas. Automated/browser
+  verification has not been performed.

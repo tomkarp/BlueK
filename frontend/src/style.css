@@ -1,6 +1,10 @@
 *{box-sizing:border-box}
 body{color:#222;background:#eee;margin:0;font:14px Arial,sans-serif}
-.bluek{background:#e5e6e7;width:100vw;height:100vh;overflow:hidden}
+.bluek{background:#e5e6e7;width:100vw;height:100vh;overflow:hidden;user-select:none}
+.bluek input,.bluek textarea,.bluek [contenteditable="true"],.bluek .cm-content{user-select:text}
+.bluek .classcard,.bluek .editor-tabs,.bluek .bench .object{user-select:none}
+.bluek .codepad-history,.bluek .terminal-transcript,.bluek .inspect-row,.bluek .inspect-scalar-value,.bluek .result-method,.bluek .result-value,.bluek .editor-diagnostics{user-select:text}
+.bluek .status-bar .current-element.project-specific{user-select:text}
 .menubar{color:#555;background:#d7d9da;border-bottom:1px solid #aaa;align-items:center;gap:22px;height:32px;padding:0 16px;font-size:12px;display:flex}
 .status{margin-left:auto}
 .body{height:calc(100% - 32px);display:flex}

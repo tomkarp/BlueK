@@ -70,7 +70,9 @@
             openMenu(event, undefined, object);
           }}
         >
-          {object.name}:<br /><span>{object.className}</span>
+          <span>{object.name}:</span><br /><span class="bench-object-class-name"
+            >{object.className}</span
+          >
         </div>
       {/each}
     </div>

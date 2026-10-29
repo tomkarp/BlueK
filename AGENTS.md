@@ -9,6 +9,21 @@ Shared instructions for coding agents. Do not add tool-specific files such as
 - [Development](DEVELOPMENT.md): setup, build pipeline and test commands.
 - [Kotlin support](docs/kotlin-support.md): current user-facing limitations.
 
+## GitHub repository access
+
+- Use the authenticated GitHub CLI (`gh`) to inspect GitHub repositories and
+  issues. The public source repository is `tomkarp/BlueK`; the private feedback
+  repository is `tomkarp/BlueK-Feedback`.
+- In this restricted workspace, GitHub network requests may fail in the normal
+  sandbox even when the CLI credentials work. If a `gh` or `git` request fails
+  with a network/DNS error, rerun that same read-only request with the approved
+  network-enabled command execution (`require_escalated`) before concluding
+  that access is unavailable. For example:
+  `gh issue view 27 --repo tomkarp/BlueK-Feedback --json number,title,body,state,labels,createdAt,updatedAt,comments`.
+- Do not run `gh auth login`, replace credentials, or expose tokens as a
+  workaround for a sandbox network failure. Never print or store credentials
+  in project files.
+
 ## Documentation
 
 - Write maintained project documentation in **English**.

@@ -27,7 +27,11 @@
 
 <footer class="status-bar">
   <div class:bench-hidden={!benchOpen} class="object-bench-status">
-  <span class="current-element"
+  <span
+    class:project-specific={Boolean(
+      selectedObjectId && bench.some((object) => object.objectId === selectedObjectId)
+    )}
+    class="current-element"
     >{selectedObjectId &&
     bench.find((object) => object.objectId === selectedObjectId)
       ? `${bench.find((object) => object.objectId === selectedObjectId)?.name} : ${bench.find((object) => object.objectId === selectedObjectId)?.className}`
