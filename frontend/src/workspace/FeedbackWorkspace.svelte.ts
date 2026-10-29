@@ -4,6 +4,9 @@ import {
   sendFeedback,
   FeedbackRequestError,
   maxFeedbackBytes,
+  maxFeedbackAttachmentBytes,
+  maxFeedbackAttachments,
+  type FeedbackAttachment,
   type FeedbackReport,
   type FeedbackCategory,
   type FeedbackContext,
@@ -27,6 +30,8 @@ export class FeedbackWorkspace {
   description = $state("");
   expected = $state("");
   contact = $state("");
+  attachments = $state<FeedbackAttachment[]>([]);
+  attachmentError = $state("");
   includeProject = $state(false);
   context = $state<FeedbackContext>({});
   environment: FeedbackReport["environment"] = $state({
@@ -54,6 +59,8 @@ export class FeedbackWorkspace {
       this.description = "";
       this.expected = "";
       this.contact = "";
+      this.attachments = [];
+      this.attachmentError = "";
       this.includeProject = false;
       this.category = "bug";
       this.error = "";
@@ -98,6 +105,75 @@ export class FeedbackWorkspace {
   close = () => {
     if (!this.sending) this.open = false;
   };
+  addAttachments = async (files: FileList | File[]): Promise<string[]> => {
+    this.attachmentError = "";
+    const incoming = Array.from(files);
+    if (this.attachments.length + incoming.length > maxFeedbackAttachments) {
+      this.attachmentError = "count";
+      return [];
+    }
+    const additions: FeedbackAttachment[] = [];
+    for (const file of incoming) {
+      if (file.size > maxFeedbackAttachmentBytes) {
+        this.attachmentError = "size";
+        return [];
+      }
+      const data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(",", 2)[1] || "");
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      }).catch(() => "");
+      if (!data) {
+        this.attachmentError = "read";
+        return [];
+      }
+      additions.push({
+        id: crypto.randomUUID(),
+        name: file.name.slice(0, 200) || "attachment",
+        type: file.type.slice(0, 200) || "application/octet-stream",
+        data,
+      });
+    }
+    this.attachments = [...this.attachments, ...additions];
+    if (additions.length && this.tooLarge) {
+      this.attachments = this.attachments.slice(0, -additions.length);
+      this.attachmentError = "total";
+      return [];
+    }
+    return additions.map(({ id }) => id);
+  };
+  removeAttachment = (index: number) => {
+    const attachment = this.attachments[index];
+    if (attachment) {
+      const marker = `[[bluek-image:${attachment.id}]]`;
+      this.description = this.description.split(marker).join("");
+      this.expected = this.expected.split(marker).join("");
+    }
+    this.attachments = this.attachments.filter((_, i) => i !== index);
+    this.attachmentError = "";
+  };
+  addInlineAttachments = async (files: FileList | File[]) => {
+    const ids = await this.addAttachments(files);
+    if (ids.length) {
+      const inserted = new Set(ids);
+      this.attachments = this.attachments.map((attachment) =>
+        inserted.has(attachment.id) ? { ...attachment, pasted: true } : attachment,
+      );
+    }
+    return ids;
+  };
+  removeUnplacedPastedImages = () => {
+    const content = `${this.description}\n${this.expected}`;
+    this.attachments = this.attachments.filter((attachment) =>
+      !attachment.pasted || content.includes(`[[bluek-image:${attachment.id}]]`),
+    );
+  };
+  setAttachmentSize = (id: string, displaySize: "original" | "large" | "medium" | "small") => {
+    this.attachments = this.attachments.map((attachment) =>
+      attachment.id === id ? { ...attachment, displaySize } : attachment,
+    );
+  };
   checkAvailability = async () => {
     this.checking = true;
     this.available = await feedbackAvailable();
@@ -112,6 +188,7 @@ export class FeedbackWorkspace {
     description: this.description.trim(),
     expected: this.expected.trim(),
     contact: this.contact.trim(),
+    attachments: this.attachments,
     build: this.build,
     environment: this.environment,
     context: this.context,

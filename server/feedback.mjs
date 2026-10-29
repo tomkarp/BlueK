@@ -5,8 +5,9 @@ import { gzipSync } from 'node:zlib';
 const maxBytes = 10 * 1024 * 1024;
 const maxAge = 30 * 24 * 60 * 60 * 1000;
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
-const categories = new Set(['bug', 'kotlin-support']);
-const labelFor = { bug: 'bug', 'kotlin-support': 'kotlin-support' };
+const inlineImageTypes = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+const categories = new Set(['bug', 'kotlin-support', 'suggestion']);
+const labelFor = { bug: 'bug', 'kotlin-support': 'kotlin-support', suggestion: null };
 const record = value => value && typeof value === 'object' && !Array.isArray(value);
 const text = (value, max, required = false) => typeof value === 'string' && value.length <= max && (!required || value.trim().length > 0);
 
@@ -15,6 +16,11 @@ function validReport(value) {
     typeof value.id === 'string' && uuid.test(value.id) && categories.has(value.category) &&
     text(value.summary, 160, true) && text(value.description, 10000, true) &&
     text(value.expected, 4000) && text(value.contact, 254) && record(value.build) &&
+    (value.attachments === undefined || (Array.isArray(value.attachments) && value.attachments.length <= 5 &&
+      value.attachments.every(file => record(file) && (file.id === undefined || (typeof file.id === 'string' && uuid.test(file.id))) && text(file.name, 200, true) &&
+        text(file.type, 200, true) && (file.displaySize === undefined || ['original', 'large', 'medium', 'small'].includes(file.displaySize)) && typeof file.data === 'string' &&
+        file.data.length <= 5_600_000 && /^[A-Za-z0-9+/]*={0,2}$/.test(file.data))) &&
+      value.attachments.reduce((sum, file) => sum + Math.floor(file.data.length * 3 / 4), 0) <= 8 * 1024 * 1024) &&
     ['version', 'revision', 'channel', 'builtAt'].every(key => text(value.build[key], 100)) &&
     record(value.environment) && text(value.environment.browser, 1000) &&
     text(value.environment.language, 100) && text(value.environment.origin, 300) &&
@@ -35,17 +41,22 @@ function fence(value, language = '') {
   const ticks = '`'.repeat(longest + 1);
   return `${ticks}${language}\n${value}\n${ticks}`;
 }
-function issueBody(report, attachmentUrl) {
+export function renderFeedbackIssueBody(report, attachmentUrl, inlineImages = new Map()) {
   const metadata = { build: report.build, environment: report.environment };
   const parts = [
     `<!-- bluek-feedback:${report.id} -->`,
-    '## Description', fence(report.description),
-    ...(report.expected ? ['## Expected behavior', fence(report.expected)] : []),
+    '## Description', renderText(report.description, inlineImages),
+    ...(report.expected ? ['## Expected behavior', renderText(report.expected, inlineImages)] : []),
     ...(report.contact ? ['## Contact (private)', fence(report.contact)] : []),
     '## BlueK version and environment', fence(JSON.stringify(metadata, null, 2), 'json'),
     ...(report.context.code ? ['## Codepad input', fence(report.context.code, 'kotlin')] : []),
     ...(report.context.error ? ['## Error', fence(report.context.error)] : []),
     ...(report.context.diagnostics?.length ? ['## Diagnostics', fence(JSON.stringify(report.context.diagnostics, null, 2), 'json')] : []),
+    ...(report.attachments?.length ? ['## Files', report.attachments.map(file => {
+      const name = file.name.replace(/[\r\n\x00-\x1f\x7f]/g, ' ').replace(/[\[\]()`]/g, '\\$&');
+      const image = inlineImages.get(file.id);
+      return image ? `- [${name}](${image})` : `- ${name} (${file.type.replace(/[\r\n\x00-\x1f\x7f]/g, ' ')})`;
+    }).join('\n')] : []),
     '## Private attachment',
     `[Complete report${report.project ? ' and BlueK project' : ''} (JSON, gzip)](${attachmentUrl})`,
     report.project ? 'The reporter explicitly chose to include the project, including its resources.' : 'No project was attached.',
@@ -54,9 +65,26 @@ function issueBody(report, attachmentUrl) {
   if (body.length <= 60000) return body;
   // GitHub issue bodies have a bounded length; the complete, unabridged
   // diagnostics remain in the private attachment.
-  return [parts[0], '## Description', fence(report.description),
+  return [parts[0], '## Description', renderText(report.description, inlineImages),
     '## BlueK version and environment', fence(JSON.stringify(metadata, null, 2), 'json'),
     '## Complete report', `[All details and diagnostics (JSON, gzip)](${attachmentUrl})`].join('\n\n');
+}
+function renderText(value, inlineImages) {
+  const parts = [];
+  const marker = /\[\[bluek-image:([a-f0-9-]+)\]\]/g;
+  let offset = 0;
+  for (const match of value.matchAll(marker)) {
+    const index = match.index ?? 0;
+    if (index > offset) parts.push(fence(value.slice(offset, index)));
+    const image = inlineImages.get(match[1]);
+    if (image) {
+      const width = { small: 240, medium: 480, large: 800 }[image.size || 'medium'];
+      parts.push(`<img src="${image.url}"${width ? ` width="${width}"` : ''} alt="Pasted image">`);
+    }
+    offset = index + match[0].length;
+  }
+  if (offset < value.length || parts.length === 0) parts.push(fence(value.slice(offset)));
+  return parts.join('\n\n');
 }
 
 /** Same process/database as project sharing; credentials remain server-only.
@@ -130,10 +158,8 @@ export async function createFeedbackService(database) {
       // If an upload succeeded but its HTTP response was lost, recover its
       // existing URL rather than attempting to overwrite the file.
       let uploaded;
-      if (row.attempts) {
-        try { uploaded = { content: await github(filePath) }; }
-        catch { /* The upload may not have happened yet. */ }
-      }
+      try { uploaded = { content: await github(filePath) }; }
+      catch { /* The upload may not have happened yet. */ }
       uploaded ||= await github(filePath, 'PUT', {
         message: `Store private BlueK report ${id}`,
         content: gzipSync(JSON.stringify(report, null, 2)).toString('base64'),
@@ -141,12 +167,30 @@ export async function createFeedbackService(database) {
       attachmentUrl = uploaded.content.html_url;
       attach.run(attachmentUrl, id);
     }
+    const inlineImages = new Map();
+    const imageExtensions = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' };
+    for (const file of report.attachments || []) {
+      const extension = imageExtensions[file.type];
+      if (!extension || !uuid.test(file.id || '')) continue;
+      const imagePath = `/contents/reports/${id}-${file.id}.${extension}`;
+      let uploaded;
+      try { uploaded = await github(imagePath); }
+      catch { /* The upload may not have happened yet. */ }
+      uploaded ||= await github(imagePath, 'PUT', {
+        message: `Store inline image for BlueK report ${id}`,
+        content: file.data,
+      });
+      inlineImages.set(file.id, {
+        url: `../blob/main/reports/${id}-${file.id}.${extension}?raw=true`,
+        size: file.displaySize || 'medium',
+      });
+    }
     // Mark the attempt before sending: a process crash can happen after GitHub
     // creates the issue, but before SQLite receives its number.
     defer.run(Date.now() + 60000, id);
     const issue = await github('/issues', 'POST', {
-      title: `[${report.category === 'bug' ? 'Bug' : 'Kotlin'}] ${report.summary.replace(/[\r\n\x00-\x1f\x7f]/g, ' ').trim()}`,
-      body: issueBody(report, attachmentUrl), labels: ['app-report', labelFor[report.category]],
+      title: `[${{ bug: 'Bug', 'kotlin-support': 'Kotlin', suggestion: 'Feedback' }[report.category]}] ${report.summary.replace(/[\r\n\x00-\x1f\x7f]/g, ' ').trim()}`,
+      body: renderFeedbackIssueBody(report, attachmentUrl, inlineImages), labels: ['app-report', ...(labelFor[report.category] ? [labelFor[report.category]] : [])],
     });
     finish.run(issue.number, id);
   }

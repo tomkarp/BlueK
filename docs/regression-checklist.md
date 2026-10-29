@@ -1913,3 +1913,27 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
   activity indicator's one-second segment duration. Browser sampling confirmed
   opacity changes from 1 to 0 and back. Svelte typecheck passed with zero
   errors and six existing warnings; user visual confirmation pending.
+- Feedback form updates, 2026-10-29 (issues 24/25): added a general suggestion
+  category, equalized the Safari select height, and added optional file picker
+  and pasted-image attachments (five files, 4 MiB each, within the existing
+  10 MiB report limit). Follow-up lets users paste PNG/JPEG/GIF/WebP directly
+  into either description field, shows images inline, and embeds them in the
+  private issue using relative links to uploaded repository files. Images
+  default to medium and offer original, large, medium and small display sizes;
+  the chosen width is carried into the issue. Removal from the attachment list
+  now removes its inline image from either field; deleting a pasted image with
+  Backspace also removes the orphaned attachment. Built-in browser checks
+  covered list removal, direct keyboard deletion and clearing the remaining
+  attachment. German size options follow language changes; changing Medium to
+  Small updates the image to 240 px. Chromium feedback GUI passed 7/7,
+  including both deletion paths; issue-body renderer, typecheck, i18n, server
+  syntax and `git diff --check` passed.
+  Typecheck has zero errors and six existing warnings. The local Vite server is
+  running at `http://127.0.0.1:5173/`. Safari visual acceptance remains pending;
+  the optional account proxy was unavailable. Follow-up added immediate image
+  sizing on both `input` and `change`; Chromium passed 7/7 and the focused
+  WebKit size/language case passed 1/1. Full WebKit feedback run was 6/7: its
+  Backspace deletion case still leaves the image in the editor. A temporary
+  Issue 28 test (2026-10-29, since deleted) confirmed the report contained its
+  PNG while the then-live server left the inline token literal. The renderer
+  now maps the token to the uploaded image; the focused renderer test passes.

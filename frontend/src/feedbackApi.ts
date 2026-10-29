@@ -3,7 +3,15 @@ import type { Diagnostic } from "../../runtime-contract/src/index";
 import type { BuildInfo } from "./buildInfo";
 import type { SavedProject } from "./projectFormat";
 
-export type FeedbackCategory = "bug" | "kotlin-support";
+export type FeedbackCategory = "bug" | "kotlin-support" | "suggestion";
+export type FeedbackAttachment = {
+  id: string;
+  name: string;
+  type: string;
+  data: string;
+  displaySize?: "original" | "large" | "medium" | "small";
+  pasted?: boolean;
+};
 export type FeedbackContext = {
   diagnostics?: Diagnostic[];
   error?: string;
@@ -18,6 +26,7 @@ export type FeedbackReport = {
   description: string;
   expected: string;
   contact: string;
+  attachments: FeedbackAttachment[];
   build: BuildInfo;
   environment: {
     browser: string;
@@ -41,6 +50,8 @@ export class FeedbackRequestError extends Error {
   }
 }
 export const maxFeedbackBytes = 10 * 1024 * 1024;
+export const maxFeedbackAttachmentBytes = 4 * 1024 * 1024;
+export const maxFeedbackAttachments = 5;
 
 const feedbackUrl = apiUrl;
 export async function feedbackAvailable(): Promise<boolean> {

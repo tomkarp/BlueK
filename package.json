@@ -41,6 +41,7 @@
     "test:codepad-flow": "node scripts/smoke-codepad-flow.mjs",
     "share:server": "node server/share-server.mjs",
     "test:share-server": "node scripts/smoke-share-server.mjs",
+    "test:feedback-issue-body": "node tests/feedback-issue-body.mjs",
     "test:database-backup": "node scripts/smoke-database-backup.mjs",
     "test:regression": "npm run typecheck && npm run test:i18n && npm run test:ui && npm run test:publication-policy && npm run test:share-server && npm run test:window-interaction && npm run test:workspace && npm run test:runtime-state && npm run test:references && npm run test:testing && npm run test:kotlin-surface && npm run test:argument-diagnostics && npm run test:control-flow && npm run test:flow-state && npm run test:interfaces && npm run test:performance && npm run test:inspector && npm run test:blueplay-api && npm run test:blueplay-stage && npm run test:project-format && npm run test:bluej-export && npm run test:bluej-selection && npm run test:project-drafts && npm run test:program-export && npm run test:player-worker && npm run test:codepad-flow && npm run test:offline && npm run test:gui",
     "test:blueplay-api": "node scripts/smoke-blueplay-api.mjs",

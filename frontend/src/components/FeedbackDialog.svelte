@@ -2,6 +2,7 @@
   import { useLanguage } from "../i18n/Language.svelte";
   import { containClicks, focusOnMount } from "../uiActions";
   import type { FeedbackWorkspace } from "../workspace/FeedbackWorkspace.svelte";
+  import FeedbackRichText from "./FeedbackRichText.svelte";
   const language = useLanguage();
   const { t } = language;
   let { feedback }: { feedback: FeedbackWorkspace } = $props();
@@ -21,6 +22,27 @@
   const errorText = $derived(
     feedback.error ? t(`ui.feedback.errors.${feedback.error}`) : "",
   );
+  const attachmentErrorText = $derived(
+    feedback.attachmentError === "count"
+      ? t("ui.feedback.attachmentErrors.count")
+      : feedback.attachmentError === "size"
+        ? t("ui.feedback.attachmentErrors.size")
+        : feedback.attachmentError === "read"
+          ? t("ui.feedback.attachmentErrors.read")
+          : feedback.attachmentError === "total"
+            ? t("ui.feedback.attachmentErrors.total")
+            : "",
+  );
+  const imageSizes = $derived({
+    original: t("ui.feedback.imageSizes.original"),
+    large: t("ui.feedback.imageSizes.large"),
+    medium: t("ui.feedback.imageSizes.medium"),
+    small: t("ui.feedback.imageSizes.small"),
+  });
+  const imageSizeLabel = (name: string) => t("ui.feedback.imageSize", [name]);
+  const isInlineImage = (id: string) =>
+    feedback.description.includes(`[[bluek-image:${id}]]`) ||
+    feedback.expected.includes(`[[bluek-image:${id}]]`);
 </script>
 
 {#if feedback.open}
@@ -103,6 +125,7 @@
                     <option value="kotlin-support"
                       >{t("ui.feedback.kotlinSupport")}</option
                     >
+                    <option value="suggestion">{t("ui.feedback.suggestion")}</option>
                   </select>
                 </label>
                 <label
@@ -115,24 +138,41 @@
                   />
                 </label>
               </div>
-              <label
-                >{t("ui.feedback.description")}
-                <textarea
-                  bind:value={feedback.description}
-                  maxlength="10000"
-                  rows="4"
-                  required
+              <div class="feedback-rich-field">
+                <span>{t("ui.feedback.description")}</span>
+                <FeedbackRichText
+                  value={feedback.description}
+                  label={t("ui.feedback.description")}
                   placeholder={t("ui.feedback.descriptionHint")}
-                ></textarea>
-              </label>
-              <label
-                >{t("ui.feedback.expected")}
-                <textarea
-                  bind:value={feedback.expected}
-                  maxlength="4000"
-                  rows="2"
-                ></textarea>
-              </label>
+                  attachments={feedback.attachments}
+                  addAttachments={feedback.addInlineAttachments}
+                  {imageSizeLabel}
+                  {imageSizes}
+                  setAttachmentSize={feedback.setAttachmentSize}
+                  onChange={(value) => {
+                    feedback.description = value;
+                    feedback.removeUnplacedPastedImages();
+                  }}
+                />
+              </div>
+              <div class="feedback-rich-field">
+                <span>{t("ui.feedback.expected")}</span>
+                <FeedbackRichText
+                  value={feedback.expected}
+                  label={t("ui.feedback.expected")}
+                  placeholder=""
+                  rows={2}
+                  attachments={feedback.attachments}
+                  addAttachments={feedback.addInlineAttachments}
+                  {imageSizeLabel}
+                  {imageSizes}
+                  setAttachmentSize={feedback.setAttachmentSize}
+                  onChange={(value) => {
+                    feedback.expected = value;
+                    feedback.removeUnplacedPastedImages();
+                  }}
+                />
+              </div>
               <label
                 >{t("ui.feedback.contact")}
                 <input
@@ -142,6 +182,37 @@
                 />
               </label>
               <div class="feedback-attachments">
+                <label>{t("ui.feedback.attachments")}
+                  <input type="file" multiple onchange={(event) => {
+                    const input = event.currentTarget;
+                    if (input.files) void feedback.addAttachments(input.files);
+                    input.value = "";
+                  }} />
+                </label>
+                <p class="feedback-hint">{t("ui.feedback.attachmentHint")}</p>
+                {#if feedback.attachments.length}
+                  <ul class="feedback-attachment-list">
+                    {#each feedback.attachments as attachment, index}
+                      <li>
+                        {#if attachment.type.startsWith("image/") && !isInlineImage(attachment.id)}
+                          <label class="feedback-unplaced-image">{attachment.name}
+                            <span class="feedback-image-preview-wrap">
+                              <img src={`data:${attachment.type};base64,${attachment.data}`} alt={attachment.name} />
+                              <select aria-label={t("ui.feedback.imageSize", [attachment.name])} value={attachment.displaySize ?? "medium"} onchange={(event) => feedback.setAttachmentSize(attachment.id, event.currentTarget.value as "original" | "large" | "medium" | "small")}>
+                                <option value="original">{t("ui.feedback.imageSizes.original")}</option>
+                                <option value="large">{t("ui.feedback.imageSizes.large")}</option>
+                                <option value="medium">{t("ui.feedback.imageSizes.medium")}</option>
+                                <option value="small">{t("ui.feedback.imageSizes.small")}</option>
+                              </select>
+                            </span>
+                          </label>
+                        {:else}{attachment.name}{/if}
+                        <button type="button" onclick={() => feedback.removeAttachment(index)}>{t("ui.feedback.removeAttachment")}</button>
+                      </li>
+                    {/each}
+                  </ul>
+                {/if}
+                {#if attachmentErrorText}<p class="dialog-error" role="alert">{attachmentErrorText}</p>{/if}
                 <label class="feedback-project-toggle">
                   <input
                     type="checkbox"

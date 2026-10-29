@@ -13,12 +13,18 @@ brief; the complete report is available in the expandable data preview.
 
 ## Report contents
 
-The form contains a category, title, description, optional expected behavior
-and optional contact email. Build revision/channel/time, browser, interface
+The form contains a category (bug, missing Kotlin support, or suggestion), title,
+description, optional expected behavior, optional files/screenshots and optional contact email. Build revision/channel/time, browser, interface
 language, web/offline mode and available diagnostics are included automatically.
 A codepad error shortcut also includes its input. Diagnostic context is bounded
 to 100 messages of 10,000 characters, and 20,000 characters each for error text
-and codepad input. **Included data** shows the complete transmitted JSON.
+and codepad input. Up to five files of 4 MiB each can be attached by file picker
+or by pasting an image directly into either description field, where it remains
+visible inline; the total report remains limited to 10 MiB. Pasted PNG, JPEG,
+GIF and WebP images are also uploaded as private repository files and embedded
+at their position in the GitHub issue. They default to medium display size and
+can be set to small (240 px), medium (480 px), large (800 px) or original
+dimensions. **Included data** shows the complete transmitted JSON.
 
 Project inclusion is unchecked by default. Opting in adds the project snapshot
 captured when opening the report, using the normal project export format:
