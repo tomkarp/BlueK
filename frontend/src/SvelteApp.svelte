@@ -191,6 +191,24 @@
     const captureShortcut = (event: KeyboardEvent) => {
       const mod = (event.metaKey || event.ctrlKey) && !event.altKey;
       if (
+        mod &&
+        !event.shiftKey &&
+        (event.key.toLowerCase() === "a" || event.code === "KeyA") &&
+        ui.activeWindow === "terminal" &&
+        terminal.terminalOpen &&
+        !(document.activeElement instanceof HTMLInputElement &&
+          document.activeElement.classList.contains("terminal-inline-input"))
+      ) {
+        const transcript = document.querySelector(".terminal-transcript");
+        if (transcript) {
+          transcript.closest("pre")?.focus();
+          event.preventDefault();
+          event.stopPropagation();
+          document.getSelection()?.selectAllChildren(transcript);
+          return;
+        }
+      }
+      if (
         mod && !event.shiftKey &&
         (event.key.toLowerCase() === "i" || event.code === "KeyI") &&
         editor.editorWindows.length > 0 &&

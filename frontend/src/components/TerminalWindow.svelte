@@ -146,7 +146,7 @@
         </div>
       </div>
       <div class="terminal-output">
-        <pre><span class="terminal-transcript">{#key terminal}{#each terminalParts(terminal) as part}{#if part.box}<span
+        <pre tabindex="0"><span class="terminal-transcript">{#key terminal}{#each terminalParts(terminal) as part}{#if part.box}<span
                   class="terminal-sized"
                   style={part.box}
                   ><span
