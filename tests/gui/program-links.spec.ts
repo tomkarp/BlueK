@@ -396,7 +396,7 @@ test("EXP-14 short program link stores options, opens the developer project thro
   await expect(problem).toContainText("This program cannot be started.");
   await expect(problem).toContainText("This publication has expired.");
   await expect(problem).toContainText(
-    "Anonymous publications expire after seven days; account publications expire after 30 days.",
+    "This publication has expired or was deleted.",
   );
   await expect(
     player.getByRole("link", { name: "Open BlueK" }),
@@ -405,7 +405,7 @@ test("EXP-14 short program link stores options, opens the developer project thro
   await player.reload();
   await expect(problem).toContainText("Diese Veröffentlichung ist abgelaufen.");
   await expect(problem).toContainText(
-    "Anonyme Veröffentlichungen laufen nach sieben Tagen, Veröffentlichungen mit Konto nach 30 Tagen ab.",
+    "Diese Veröffentlichung ist abgelaufen oder wurde gelöscht.",
   );
   await expect(
     player.getByRole("link", { name: "BlueK öffnen" }),

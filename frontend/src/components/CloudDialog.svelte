@@ -120,7 +120,32 @@
               >
             </div>
           </div>
+          {#if cloud.storage}
+            <div class="cloud-storage-info">
+              <p>{t("ui.cloud.storageUsage", [(cloud.storage.used / 1048576).toFixed(2), (cloud.storage.limit / 1048576).toFixed(0)])}</p>
+              {#if cloud.storage.trusted}<p>{t("ui.cloud.trustedAccount")}</p>{/if}
+            </div>
+          {/if}
         </section>
+        {#if cloud.storage?.publications.length}
+          <section class="cloud-publication-section" aria-label={t("ui.cloud.publications")}>
+            <details>
+              <summary>{t("ui.cloud.publications")} <span>({cloud.storage.publications.length})</span></summary>
+              <ul class="cloud-publication-list">
+                {#each cloud.storage.publications as publication (publication.code)}
+                  <li>
+                    <div class="cloud-publication-info">
+                      <strong>{publication.name || t("ui.common.untitledProject")}</strong>
+                      <span>{t(publication.program ? "ui.cloud.publicationProgram" : "ui.cloud.publicationProject")} · <code>{publication.code}</code></span>
+                      <span>{t("ui.cloud.publicationExpires", [new Date(publication.expiresAt).toLocaleDateString($language.locale)])} · {(publication.size / 1024).toFixed(1)} KiB</span>
+                    </div>
+                    <button disabled={cloud.busy} onclick={() => cloud.removePublication(publication.code)}>{t("ui.cloud.deletePublication")}</button>
+                  </li>
+                {/each}
+              </ul>
+            </details>
+          </section>
+        {/if}
         <section class="cloud-project-management-section" aria-labelledby="cloud-project-management-title">
           <h4 id="cloud-project-management-title">{t("ui.cloud.projectManagement")}</h4>
           <CloudProjectManagement {cloud} />
@@ -482,6 +507,43 @@
     margin-bottom: 16px;
     padding: 12px 14px;
   }
+  .cloud-storage-info {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 18px;
+    margin-top: 10px;
+    color: #555;
+    font-size: 0.9em;
+  }
+  .cloud-storage-info p { margin: 0; }
+  .cloud-publication-section { margin: 0 0 4px; }
+  .cloud-publication-section summary {
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 8px 0;
+  }
+  .cloud-publication-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+  .cloud-publication-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    margin-bottom: 6px;
+  }
+  .cloud-publication-info { display: flex; flex-direction: column; min-width: 0; gap: 4px; }
+  .cloud-publication-info strong { overflow-wrap: anywhere; }
+  .cloud-publication-info span { color: #555; font-size: 0.85em; overflow-wrap: anywhere; }
+  .cloud-publication-list button { flex-shrink: 0; }
   .cloud-project-management-section {
     padding-top: 12px;
   }
@@ -498,6 +560,22 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
+  }
+  .cloud-account-actions button {
+    appearance: none;
+    box-sizing: border-box;
+    height: 34px;
+    border: 1px solid #fff;
+    border-radius: 6px;
+    background: #eee;
+    box-shadow: none;
+  }
+  .cloud-account-actions button:hover:not(:disabled) {
+    background: #dedede;
+    border-color: #aaa;
+  }
+  .cloud-account-actions .cloud-delete-account-button {
+    color: #8c1616;
   }
   .cloud-logout-button {
     padding: 6px 9px;
@@ -613,10 +691,27 @@
     padding: 0;
   }
   @media (max-width: 600px) {
+    .cloud-publication-list li { align-items: flex-start; flex-direction: column; }
     .cloud-account-heading {
       align-items: flex-start;
       flex-direction: column;
     }
+  }
+  :global(.dark) .cloud-storage-info, :global(.dark) .cloud-publication-info span { color: #bbb; }
+  :global(.dark) .cloud-publication-list li { border-color: #555; }
+  :global(.dark) .cloud-account-actions button {
+    color: #d4d4d4;
+    background: #303034;
+    border-color: #55555c;
+  }
+  :global(.dark) .cloud-account-actions button:hover:not(:disabled) {
+    color: #f3f3f3;
+    background: #45454a;
+    border-color: #707077;
+  }
+  :global(.dark) .cloud-account-actions .cloud-delete-account-button,
+  :global(.dark) .cloud-account-actions .cloud-delete-account-button:hover:not(:disabled) {
+    color: #ffd0d0;
   }
   :global(.dark) .cloud-account-section {
     background: #29292c;

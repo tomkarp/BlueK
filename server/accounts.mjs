@@ -31,6 +31,8 @@ export function createAccounts(database) {
   );`);
   const busy = new Set();
   let hashing = 0;
+  if (!database.prepare("PRAGMA table_info(accounts)").all().some((column) => column.name === "trusted"))
+    database.exec("ALTER TABLE accounts ADD COLUMN trusted INTEGER NOT NULL DEFAULT 0");
   async function passwordHash(password, encoded) {
     if (hashing >= 4) throw new HttpError(503, "busy");
     hashing++;

@@ -19,6 +19,8 @@ const databasePath =
   resolve(projectRoot, "server/data/projects.sqlite");
 const anonymousPublicationDays = 7;
 const accountPublicationDays = 30;
+const trustedPublicationDays = 365;
+const accountQuota = 5 * 1024 * 1024;
 const alphabet = "23456789abcdefghjkmnpqrstuvwxyz";
 const validCode = (code) =>
   /^[a-z0-9]{12}$/.test(code) || /^(?:[a-z]{4,6}-){2,3}[a-z]{4,6}$/.test(code);
@@ -55,6 +57,9 @@ database.transaction(() => {
     project_json TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS private_owner ON private_projects(owner_id);
+  CREATE TRIGGER IF NOT EXISTS delete_account_publications BEFORE DELETE ON accounts BEGIN
+    DELETE FROM projects WHERE code IN (SELECT code FROM public_codes WHERE owner_id = OLD.id);
+  END;
   `);
 })();
 const feedback = await createFeedbackService(database);
@@ -93,8 +98,19 @@ function publicRecord(code) {
     throw new HttpError(410, "expired");
   return row;
 }
+function usage(id) {
+  return database.prepare(`SELECT
+    COALESCE((SELECT SUM(length(CAST(project_json AS BLOB))) FROM private_projects WHERE owner_id = ?), 0) +
+    COALESCE((SELECT SUM(size_bytes) FROM projects JOIN public_codes USING (code) WHERE owner_id = ? AND expires_at > ?), 0) AS bytes`).get(id, id, new Date().toISOString()).bytes;
+}
+function checkQuota(id, delta) {
+  const used = usage(id);
+  if (delta > 0 && used + delta > accountQuota) throw new HttpError(413, "quota", { used, limit: accountQuota });
+}
 function storePublic(payload, user) {
   return database.transaction(() => {
+    const text = JSON.stringify(payload);
+    if (user) checkQuota(user.id, Buffer.byteLength(text));
     for (let attempt = 0; attempt < 30; attempt++) {
       const code = Array.from(
         { length: 12 },
@@ -106,12 +122,11 @@ function storePublic(payload, user) {
         continue;
       const createdAt = new Date();
       const expiresInDays = user
-        ? accountPublicationDays
+        ? (user.trusted ? trustedPublicationDays : accountPublicationDays)
         : anonymousPublicationDays;
       const expiresAt = new Date(
         createdAt.getTime() + expiresInDays * 86400000,
       ).toISOString();
-      const text = JSON.stringify(payload);
       database
         .prepare("INSERT INTO public_codes(code, owner_id) VALUES (?, ?)")
         .run(code, user?.id || null);
@@ -154,6 +169,27 @@ async function handle(request, response) {
   const account = await accounts.handle(request, response, path);
   if (account !== null) return json(response, 200, account);
 
+  if (path === "/api/storage" && request.method === "GET") {
+    const user = accounts.session(request);
+    return json(response, 200, { used: usage(user.id), limit: accountQuota, trusted: !!user.trusted,
+      publications: database.prepare("SELECT projects.code, projects.expires_at AS expiresAt, projects.size_bytes AS size, projects.project_json AS payload FROM projects JOIN public_codes USING (code) WHERE owner_id = ? AND expires_at > ? ORDER BY created_at DESC").all(user.id, new Date().toISOString()).map(({ payload, ...row }) => {
+        const value = JSON.parse(payload);
+        const program = value.format === "bluek-program";
+        return { ...row, name: (program ? value.project : value).projectName || "", program };
+      }) });
+  }
+  const ownedPublication = path.match(/^\/api\/owned-publications\/([a-z0-9-]+)$/);
+  if (ownedPublication && request.method === "DELETE") {
+    const user = accounts.session(request);
+    accounts.requireWrite(request);
+    database.transaction(() => {
+      const code = ownedPublication[1].toLowerCase();
+      if (!database.prepare("SELECT 1 FROM public_codes WHERE code = ? AND owner_id = ?").get(code, user.id)) throw new HttpError(404, "missing");
+      database.prepare("DELETE FROM projects WHERE code = ?").run(code);
+      database.prepare("UPDATE public_codes SET owner_id = NULL WHERE code = ?").run(code);
+    })();
+    return json(response, 200, { ok: true });
+  }
   const privateMatch = path.match(
     /^\/api\/private-projects(?:\/([a-f0-9-]+))?$/,
   );
@@ -197,11 +233,15 @@ async function handle(request, response) {
       const now = Date.now();
       const project = JSON.parse(existing.project_json);
       project.projectName = name;
-      const changed = database
+      const serialized = JSON.stringify(project);
+      const changed = database.transaction(() => {
+        checkQuota(user.id, Buffer.byteLength(serialized) - Buffer.byteLength(existing.project_json));
+        return database
         .prepare(
           "UPDATE private_projects SET name = ?, updated_at = ?, revision = revision + 1, project_json = ? WHERE id = ? AND owner_id = ? AND revision = ?",
         )
-        .run(name, now, JSON.stringify(project), id, user.id, revision);
+        .run(name, now, serialized, id, user.id, revision);
+      })();
       if (!changed.changes) throw new HttpError(409, "conflict");
       return json(response, 200, {
         id,
@@ -218,20 +258,26 @@ async function handle(request, response) {
       accounts.session(request); // Awaited upload may outlive session/logout/block.
       const name = (project.projectName || "").slice(0, 200);
       const now = Date.now();
+      const serialized = JSON.stringify(project);
       if (existing) {
         const revision = Number(request.headers["if-match"]);
-        const changed = database
+        const changed = database.transaction(() => {
+          checkQuota(user.id, Buffer.byteLength(serialized) - Buffer.byteLength(existing.project_json));
+          return database
           .prepare(
             "UPDATE private_projects SET name = ?, updated_at = ?, revision = revision + 1, project_json = ? WHERE id = ? AND owner_id = ? AND revision = ?",
           )
-          .run(name, now, JSON.stringify(project), id, user.id, revision);
+          .run(name, now, serialized, id, user.id, revision);
+        })();
         if (!changed.changes) throw new HttpError(409, "conflict");
         return json(response, 200, { id, revision: revision + 1 });
       }
       const newId = randomUUID();
-      database
-        .prepare("INSERT INTO private_projects VALUES (?, ?, ?, ?, 1, ?)")
-        .run(newId, user.id, name, now, JSON.stringify(project));
+      database.transaction(() => {
+        checkQuota(user.id, Buffer.byteLength(serialized));
+        database.prepare("INSERT INTO private_projects VALUES (?, ?, ?, ?, 1, ?)")
+          .run(newId, user.id, name, now, serialized);
+      })();
       return json(response, 201, { id: newId, revision: 1 });
     }
     throw new HttpError(405, "method");
@@ -245,10 +291,10 @@ async function handle(request, response) {
       request,
       maxProjectBytes + (program ? 16384 : 0),
     );
-    const publication = program
-      ? validateProgram(payload)
-      : validateProject(payload, true);
     const user = accounts.session(request, false);
+    const publication = program
+      ? validateProgram(payload, !!user?.trusted)
+      : validateProject(payload, true, !!user?.trusted);
     // Expired/revoked optional cookies do not disable anonymous publication.
     // An account block protects authenticated/private access, not anonymous identity.
     return json(response, 201, storePublic(publication, user));

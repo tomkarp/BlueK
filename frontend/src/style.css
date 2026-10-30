@@ -1,5 +1,8 @@
 *{box-sizing:border-box}
 body{color:#222;background:#eee;margin:0;font:14px Arial,sans-serif}
+button{-webkit-appearance:none;appearance:none;color:inherit;background:#eee;border:1px solid #fff;border-radius:6px}
+button:hover:not(:disabled){background:#dedede;border-color:#aaa}
+button:disabled{opacity:.48}
 .bluek{background:#e5e6e7;width:100vw;height:100vh;overflow:hidden;user-select:none}
 .bluek input,.bluek textarea,.bluek [contenteditable="true"],.bluek .cm-content{user-select:text}
 .bluek .classcard,.bluek .editor-tabs,.bluek .bench .object{user-select:none}
@@ -1208,7 +1211,6 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 .transfer-section-toggle{text-align:left;justify-content:space-between;align-items:center;width:100%;display:flex}
 .transfer-details{color:#555;margin-top:20px;font-size:12px}
 .transfer-details summary{cursor:pointer}
-.transfer-publication-summary{margin:0 0 12px;line-height:1.5}
 .share-action-section+.share-action-section{border-top:1px solid #ccc;margin-top:16px;padding-top:14px}
 .share-action-section>h4{margin:0 0 5px}
 .share-action-section>.export-mode-description{min-height:0;margin:0 0 10px}

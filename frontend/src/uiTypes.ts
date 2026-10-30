@@ -65,7 +65,7 @@ export type ShareLinkDialog = {
   code: string;
   copied: boolean;
   program?: boolean;
-  expiresInDays?: 7 | 30;
+  expiresInDays?: 7 | 30 | 365;
 };
 export type NewClassType =
   "class" | "interface" | "open" | "abstract" | "data" | "test" | "functions";

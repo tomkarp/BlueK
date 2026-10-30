@@ -106,8 +106,8 @@ project files are copied to inf-schule separately, outside these workflows.
 The API migration is additive and transactional: old `projects` JSON and expiry
 values remain unchanged; every old identifier is permanently reserved before
 cleanup. Old public copies keep their original deadline, including their old
-media. New anonymous copies use seven days and authenticated-account copies use
-30 days, both with the new validation. No bulk deletion or deadline rewrite is
+media. New anonymous copies use seven days, regular account copies 30 days, and
+trusted account copies 365 days. Only trusted accounts may publish custom media. No bulk deletion or deadline rewrite is
 needed. Expired content continues to be cleaned according to its recorded
 expiry. Never reset the
 identifier registry, including when restoring a backup.
@@ -248,14 +248,16 @@ curl -i -X OPTIONS https://api.bluek.online/api/private-projects \
 
 ## Moderation and retention operations
 
-Run the protected [operator CLI](server-storage.md#operator-actions) via SSH as
-the service user with `BLUEK_SHARE_DB` set to the production database. Inspect
+Run the protected [operator CLI](server-storage.md#operator-actions) via SSH
+with permission to read the running service's process environment and access the
+database. In the installed service directory it reads `BLUEK_SHARE_DB` from that
+process; an explicit environment variable overrides it. Inspect
 JSON without running it and block inappropriate copies promptly. No automated
 notification or external message delivery was introduced. Arrange operator
 responsibility before opening publication.
 
 Hourly/startup cleanup removes expired public content, expired sessions, and
-accounts inactive for twelve calendar months with
+accounts inactive for twelve calendar months with their owned public copies and
 their private projects. SQLite secure deletion and WAL checkpointing reduce
 residual deleted data; this is not forensic erasure on every filesystem.
 Backups must have an explicit finite rotation (recommended at most seven days)

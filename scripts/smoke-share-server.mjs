@@ -1,3 +1,4 @@
+import { adminDatabasePath } from '../server/admin-database.mjs';
 import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
 import { spawn, spawnSync } from 'node:child_process';
@@ -18,6 +19,13 @@ const legacyExpiry = new Date(Date.now() + 29 * 86400000).toISOString();
 db.prepare('INSERT INTO projects VALUES (?, ?, ?, ?, ?)').run('green-lamp-river', new Date().toISOString(), legacyExpiry, 100, JSON.stringify(legacy));
 db.prepare('INSERT INTO projects VALUES (?, ?, ?, ?, ?)').run('past-past-past', '2020', '2020-01-01', 100, JSON.stringify(legacy));
 db.close();
+const serviceProbe = { getPid: name => name === 'bluek-share' ? '123' : '456', readFile: path => path === '/proc/123/environ' ? 'OTHER=ignored\0BLUEK_SHARE_DB=/var/lib/bluek/projects.sqlite\0' : 'BLUEK_SHARE_DB=/opt/bluek-beta-share/data/projects.sqlite\0' };
+assert.equal(adminDatabasePath('/opt/bluek-share', undefined, serviceProbe), '/var/lib/bluek/projects.sqlite');
+assert.equal(adminDatabasePath('/opt/bluek-beta-share', undefined, serviceProbe), '/opt/bluek-beta-share/data/projects.sqlite');
+assert.equal(adminDatabasePath('/opt/bluek-share', '/explicit.sqlite', { getPid: () => { throw new Error('must not query'); } }), '/explicit.sqlite');
+assert.equal(adminDatabasePath('/tmp/bluek-dev', undefined, { cwd: '/tmp/bluek-dev' }), '/tmp/bluek-dev/server/data/projects.sqlite');
+assert.throws(() => adminDatabasePath('/opt/bluek-share', undefined, { getPid: () => '0' }), /Cannot read/);
+assert.throws(() => adminDatabasePath('/opt/bluek-share', undefined, { getPid: () => '123', readFile: () => 'OTHER=ignored' }), /not set/);
 const env = { ...process.env, BLUEK_SHARE_PORT: String(port), BLUEK_SHARE_DB: databasePath, BLUEK_COOKIE_SECURE: '0', BLUEK_FEEDBACK_TOKEN: '', BLUEK_FEEDBACK_TOKEN_FILE: '' };
 let child;
 async function start() {
@@ -176,6 +184,31 @@ try {
   assert.equal((await post('/api/projects', { ...project, resources: media }, cookie)).status, 422);
   assert.equal((await post('/api/programs', { ...program, project: { ...project, resources: media } }, cookie)).status, 422);
 
+  // Trust is server-controlled; existing and new copies have separate deadlines.
+  admin('trust-account', credentials.username);
+  const trustedCopy = await post('/api/projects', { ...project, resources: media }, cookie);
+  assert.equal(trustedCopy.status, 201);
+  assert.equal(trustedCopy.data.expiresInDays, 365);
+  assert.deepEqual((await readProject(trustedCopy.data.code)).data.project.resources, media);
+  const trustedProgram = await post('/api/programs', { ...program, project: { ...project, resources: media } }, cookie);
+  assert.equal(trustedProgram.status, 201);
+  assert.equal(trustedProgram.data.expiresInDays, 365);
+  const storage = await request('/api/storage', { cookie });
+  assert.equal(storage.data.limit, 5 * 1024 * 1024);
+  assert.ok(storage.data.publications.some(item => item.code === trustedCopy.data.code && item.name === (project.projectName || '') && item.program === false));
+  assert.ok(storage.data.publications.some(item => item.code === trustedProgram.data.code && item.program === true));
+  assert.equal((await request(`/api/owned-publications/${trustedCopy.data.code}`, { method: 'DELETE', cookie: second.cookie })).status, 404);
+  assert.equal((await request(`/api/owned-publications/${trustedCopy.data.code}`, { method: 'DELETE', cookie })).status, 200);
+  assert.equal((await readProject(trustedCopy.data.code)).status, 410);
+  assert.ok((await request('/api/storage', { cookie })).data.used < storage.data.used);
+  admin('untrust-account', credentials.username);
+  assert.equal((await post('/api/projects', { ...project, resources: media }, cookie)).status, 422);
+  assert.equal((await readProgram(trustedProgram.data.code)).status, 200, 'Revocation leaves existing copies available');
+  const large = { ...project, readme: 'x'.repeat(900000) };
+  for (let i = 0; i < 5; i++) assert.equal((await post('/api/private-projects', large, cookie)).status, 201);
+  assert.equal((await post('/api/private-projects', large, cookie)).data.error, 'quota');
+  assert.equal((await post('/api/projects', large, cookie)).data.error, 'quota');
+
   // CSRF and exact credentialed CORS. No wildcard or school-IP throttling.
   const preflight = await fetch(`${base}/api/private-projects`, { method: 'OPTIONS', headers: { Origin: origin } });
   assert.equal(preflight.headers.get('access-control-allow-origin'), origin);
@@ -245,7 +278,7 @@ try {
   assert.equal(db.prepare('SELECT id FROM private_projects WHERE id = ?').get(deletionPrivate.data.id), undefined, 'Account deletion cascades private projects');
   assert.equal(db.prepare('SELECT token_hash FROM sessions WHERE account_id = ?').get(deletionAccount.data.user.id), undefined, 'Account deletion revokes every session');
   assert.equal(db.prepare('SELECT code FROM public_codes WHERE code = ? AND owner_id IS NULL').get(deletionPublic.data.code)?.code, deletionPublic.data.code, 'Public copy ownership is cleared');
-  assert.equal((await readProject(deletionPublic.data.code)).status, 200, 'Published copy remains available until expiry');
+  assert.equal((await readProject(deletionPublic.data.code)).status, 410, 'Account deletion removes its published copy');
   assert.equal((await request('/api/private-projects', { cookie: deletionAccount.cookie })).status, 401);
 
   // Deadlines are enforced on every read, independently of physical cleanup.
@@ -263,7 +296,7 @@ try {
   assert.equal((await readProject(anonymous.data.code)).status, 410);
   assert.equal(db.prepare('SELECT id FROM accounts WHERE id = ?').get(stored.id), undefined);
   assert.equal(db.prepare('SELECT id FROM private_projects WHERE owner_id = ?').get(stored.id), undefined);
-  assert.equal((await readProject(publicSaved.data.code)).status, 200, 'Account cleanup does not delete immutable public copy early');
+  assert.equal((await readProject(publicSaved.data.code)).status, 410, 'Account cleanup deletes its published copies');
   assert.equal((await request('/api/feedback/config')).status, 200, 'Technical feedback endpoint preserved');
   await stop(); env.BLUEK_COOKIE_SECURE = '1'; await start();
   const secureSession = await post('/api/account/register', { username: 'secure_cookie_test', password: 'a-secure-cookie-password' });

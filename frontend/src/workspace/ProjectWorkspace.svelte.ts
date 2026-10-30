@@ -1058,7 +1058,7 @@ export class ProjectWorkspace {
     if (!this.ensureProjectName()) return;
     if (action === "shareShortProgram") {
       try {
-        checkServerProject(this.projectPayload(), true);
+        checkServerProject(this.projectPayload());
       } catch (error) {
         this.showExportNotice(apiErrorText(error, this.text));
         return;

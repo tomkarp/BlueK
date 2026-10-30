@@ -434,9 +434,6 @@
             </div>
           {/if}
         {:else if serverFeatures}
-          <p class="transfer-publication-summary">
-            {t("ui.transfer.publicCopy")}
-          </p>
           <div class="share-action-section">
             <h4>{t("ui.transfer.shareForEditing")}</h4>
             <p class="export-mode-description">

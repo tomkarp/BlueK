@@ -1,4 +1,7 @@
 import { test, expect } from "@playwright/test";
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/storage", route => route.fulfill({ json: { used: 0, limit: 5242880, publications: [] } }));
+});
 const project = {
   format: "bluek-project",
   version: 1,
@@ -42,11 +45,11 @@ test("CLOUD-01 custom media cannot be published from either project or program U
   let uploads = 0;
   await page.route("**/api/projects", (route) => {
     uploads++;
-    return route.fulfill({ status: 500, json: { error: "server" } });
+    return route.fulfill({ status: 422, json: { error: "custom-media", resources: ["images/apple.png", "sounds/own.wav"] } });
   });
   await page.route("**/api/programs", (route) => {
     uploads++;
-    return route.fulfill({ status: 500, json: { error: "server" } });
+    return route.fulfill({ status: 422, json: { error: "custom-media", resources: ["images/apple.png", "sounds/own.wav"] } });
   });
   const resources = [
     { path: "images/apple.png", data: "data:image/png;base64,AAAA" },
@@ -70,10 +73,8 @@ test("CLOUD-01 custom media cannot be published from either project or program U
   );
   await page.getByRole("button", { name: "Share", exact: true }).click();
   await dialog.getByRole("button", { name: /^Create runnable link/ }).click();
-  await expect(page.locator(".share-notice")).toContainText(
-    "Publication refused",
-  );
-  expect(uploads).toBe(0);
+  await expect.poll(() => uploads).toBe(2);
+  await expect(page.locator(".share-notice")).toContainText("Publication refused");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   const [download] = await Promise.all([
     page.waitForEvent("download"),
@@ -716,7 +717,7 @@ for (const locale of ["en", "de"])
   });
 
 for (const locale of ["en", "de"])
-  test(`CLOUD-12 account deletion requires the current password and explains retained public copies (${locale})`, async ({
+  test(`CLOUD-12 account deletion requires the current password and explains deletion of public copies (${locale})`, async ({
     page,
   }) => {
     await page.addInitScript(
@@ -763,7 +764,7 @@ for (const locale of ["en", "de"])
       de ? "privaten Projekte" : "private projects",
     );
     await expect(deletion.getByRole("alert")).toContainText(
-      de ? "Veröffentlichte Kopien bleiben" : "Published copies will remain",
+      de ? "geteilten Kopien" : "shared copies",
     );
     await expect(deleted).toBe(false);
     await deletion
@@ -772,15 +773,15 @@ for (const locale of ["en", "de"])
     await deletion
       .getByRole("button", {
         name: de
-          ? "Konto und private Projekte löschen"
-          : "Delete account and private projects",
+          ? "Konto und alle Projekte löschen"
+          : "Delete account and all projects",
       })
       .click();
     await expect(deletion).toHaveCount(0);
     await expect(account.getByRole("status")).toHaveText(
       de
-        ? "Dein Konto und deine privaten Projekte wurden gelöscht."
-        : "Your account and private projects have been deleted.",
+        ? "Dein Konto, deine privaten Projekte und geteilten Kopien wurden gelöscht."
+        : "Your account, private projects and shared copies have been deleted.",
     );
     await expect(page.locator(".toolbar-account button")).toHaveText(
       de ? "Anmelden" : "Sign in",
@@ -821,4 +822,80 @@ test("CLOUD-13 a successful account save clears the unsaved-project warning", as
   await expect(dialog).toHaveCount(0);
   expect(saved).toBe(true);
   expect(await dispatchBeforeUnload()).toBe(false);
+});
+
+
+test("CLOUD-14 account storage shows and deletes an owned publication", async ({ page }) => {
+  let deleted = false;
+  await page.route("**/api/account", route => route.fulfill({ json: { user: { id: "account", username: "learner" } } }));
+  await page.route("**/api/private-projects", route => route.fulfill({ json: { projects: [] } }));
+  await page.route("**/api/storage", route => route.fulfill({ json: { used: deleted ? 0 : 1048576, limit: 5242880, publications: deleted ? [] : [{ code: "abcd2345efgh", expiresAt: "2027-10-30T00:00:00Z", size: 1048576, name: "Example project", program: true }] } }));
+  await page.route("**/api/owned-publications/abcd2345efgh", route => { deleted = true; return route.fulfill({ json: { ok: true } }); });
+  page.on("dialog", dialog => dialog.accept());
+  await page.goto(link(project));
+  await page.locator(".toolbar-account button").click();
+  const account = page.getByRole("dialog", { name: "Account", exact: true });
+  await expect(account).toContainText("1.00 of 5 MiB");
+  await account.getByText("Manage shared copies").click();
+  await expect(account).toContainText("Example project");
+  await expect(account).toContainText("Runnable link");
+  await expect(account).toContainText("abcd2345efgh");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(account.getByRole("button", { name: "Delete link" })).toBeVisible();
+  expect(await account.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await account.getByRole("button", { name: "Delete link" }).click();
+  await expect(account).toContainText("0.00 of 5 MiB");
+  await expect(account.getByText("abcd2345efgh")).toHaveCount(0);
+});
+
+test("CLOUD-15 trusted publication sends custom media and displays a one-year receipt", async ({ page }) => {
+  const resources = [{ path: "images/own.png", data: "data:image/png;base64,AAAA" }];
+  let sent: unknown;
+  await page.route("**/api/account", route => route.fulfill({ json: { user: { id: "account", username: "learner" } } }));
+  await page.route("**/api/projects", route => {
+    sent = route.request().postDataJSON();
+    return route.fulfill({ status: 201, json: { code: "abcd2345efgh", expiresAt: "2027-10-30T00:00:00Z", expiresInDays: 365 } });
+  });
+  await page.goto(link({ ...project, resources }));
+  await page.getByRole("button", { name: "Share", exact: true }).click();
+  const sharing = page.getByRole("dialog", { name: "Share", exact: true });
+  await expect(sharing).not.toContainText("Immutable copy:");
+  await sharing.getByRole("button", { name: /^Create editing link/ }).click();
+  await expect(page.locator(".share-link-dialog")).toContainText("365 days");
+  expect((sent as { resources: unknown }).resources).toEqual(resources);
+});
+
+test("CLOUD-16 ordinary account and project buttons share rounded hover styling in both themes", async ({ page }) => {
+  await page.route("**/api/account", route => route.fulfill({ json: { user: { id: "account", username: "learner" } } }));
+  await page.route("**/api/private-projects", route => route.fulfill({ json: { projects: [{ id: "project", name: "Example", updatedAt: 1, revision: 1 }] } }));
+  await page.goto(link(project));
+  await page.locator(".toolbar-account button").click();
+  const actions = page.locator(".cloud-account-actions button");
+  await expect(actions).toHaveCount(4);
+  for (const dark of [false, true]) {
+    await page.locator(".bluek").evaluate((element, enabled) => element.classList.toggle("dark", enabled), dark);
+    for (let index = 0; index < 4; index++) {
+      const button = actions.nth(index);
+      await page.mouse.move(0, 0);
+      const before = await button.evaluate(element => getComputedStyle(element).backgroundColor);
+      await button.hover();
+      const after = await button.evaluate(element => getComputedStyle(element).backgroundColor);
+      expect(after).toBe(dark ? "rgb(69, 69, 74)" : "rgb(222, 222, 222)");
+      expect(after).not.toBe(before);
+    }
+    const projectButton = page.locator(".cloud-management-actions button").first();
+    await projectButton.hover();
+    const projectStyle = await projectButton.evaluate(element => {
+      const style = getComputedStyle(element);
+      return { background: style.backgroundColor, border: style.borderColor, radius: style.borderRadius, appearance: style.appearance };
+    });
+    await actions.first().hover();
+    const accountStyle = await actions.first().evaluate(element => {
+      const style = getComputedStyle(element);
+      return { background: style.backgroundColor, border: style.borderColor, radius: style.borderRadius, appearance: style.appearance };
+    });
+    expect(projectStyle).toEqual(accountStyle);
+    expect(projectStyle.radius).toBe("6px");
+    expect(projectStyle.appearance).toBe("none");
+  }
 });

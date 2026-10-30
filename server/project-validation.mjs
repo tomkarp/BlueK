@@ -82,7 +82,7 @@ function validProject(value) {
       /^[A-Za-z_]\w*$/.test(value.defaultTestClass))
   );
 }
-export function validateProject(value, publishing = false) {
+export function validateProject(value, publishing = false, trusted = false) {
   if (!validProject(value)) throw new HttpError(400, "invalid-project");
   if (Buffer.byteLength(JSON.stringify(value)) > maxProjectBytes)
     throw new HttpError(413, "too-large");
@@ -96,15 +96,15 @@ export function validateProject(value, publishing = false) {
         createHash("sha256").update(resource.data).digest("hex") !==
           standardMedia[resource.path],
     );
-    if (custom.length)
+    if (custom.length && !trusted)
       throw new HttpError(422, "custom-media", {
         resources: custom.map((resource) => resource.path),
       });
-    return { ...value, resources: [] };
+    return { ...value, resources: trusted ? custom : [] };
   }
   return value;
 }
-export function validateProgram(value) {
+export function validateProgram(value, trusted = false) {
   const booleans = [
     "allowDownload",
     "allowBlueK",
@@ -129,7 +129,7 @@ export function validateProgram(value) {
     )
   )
     throw new HttpError(400, "invalid-program");
-  const project = validateProject(value.project, true);
+  const project = validateProject(value.project, true, trusted);
   if (
     !value.project.files.some((file) => file.fileName === value.mainFile) ||
     typeof value.blueKUrl !== "string" ||

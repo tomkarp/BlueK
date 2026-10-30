@@ -1946,3 +1946,90 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
   object's status remains selectable. Card dragging prevents browser text
   selection, including when the pointer leaves the canvas. Automated/browser
   verification has not been performed.
+
+
+### Trusted accounts, quotas and publication deletion — 2026-10-30
+
+- API: temporary-SQLite `npm run test:share-server` passed, covering trusted
+  and regular media rules, 365-day project/program receipts, trust revocation,
+  owner-only publication deletion, 5 MiB quota, account deletion and inactive
+  account cleanup. The initial sandbox run failed because localhost listen was
+  denied; the network-enabled rerun passed.
+- `npm run test:publication-policy` and `npm run test:i18n` passed. Typecheck
+  passed with zero errors and seven warnings in two files.
+- Chromium: CLOUD-01, CLOUD-10 (en/de), CLOUD-12 (en/de), CLOUD-14 and
+  CLOUD-15 passed in focused runs using mocked account/publication endpoints.
+  This does not substitute for a live server or visual acceptance. An initial
+  broader run was stopped after old expectations and missing storage mocks
+  failed; affected cases were updated and rerun.
+- `npm run test:workspace` failed at the unrelated test-class rename assertion
+  (HundTest.kt versus RenamedTest.kt); no diagnosis or successful rerun recorded.
+  GUI-130: 5/6 Chromium cases passed; diagnostics case failed because the
+  `.editor-diagnostics` element did not appear. Offline: 5/6 cases passed,
+  including the language case; the input case failed because the terminal
+  prompt did not appear. EXP-14 passed after updating both translated expiry
+  expectations; its initial rerun failed on the outdated German expectation.
+  Full GUI/regression suites and operator acceptance not performed.
+
+### Share dialog duration notice — 2026-10-30
+
+- Removed the duration summary before publication; the resulting link dialog
+  retains the server-reported duration. Chromium CLOUD-15 and EXP-14 passed
+  for editing and program links; the i18n catalog check passed. Visual user
+  acceptance remains pending.
+
+### Shared-link management layout — 2026-10-30
+
+- CLOUD-14: Chromium verifies the account storage display, publication name and
+  type, deletion and a 390 px viewport without horizontal overflow. CLOUD-10
+  and CLOUD-12 passed in English and German. The account API smoke test,
+  translation check and typecheck passed (seven existing Svelte warnings).
+  Agent inspected a German desktop screenshot with an expanded publication;
+  human visual acceptance remains pending.
+
+### Account button height — 2026-10-30
+
+- Local Chromium and WebKit measurement: all four account action buttons are
+  34 px high. Human visual acceptance remains pending.
+
+- Follow-up: local Chromium and WebKit checks measured the same 34 px height,
+  1 px border and hover background for all four account actions; the delete
+  action retains red text. Human visual acceptance remains pending.
+- User requested no hover effect: Chromium and WebKit checks confirm equal
+  heights and unchanged hover colors in light and dark themes.
+
+### Consistent button hover — 2026-10-30
+
+- Added a shared light-theme hover for ordinary buttons, retained the existing
+  dark-theme counterpart and aligned the account actions with both. Chromium
+  CLOUD-14/16 passed; separate Chromium/WebKit checks verified all four account
+  actions in both themes. Typecheck passed with seven Svelte warnings. Special
+  control styles remain; full visual acceptance and full GUI suite pending.
+
+### Rounded ordinary button hover — 2026-10-30
+
+- Standardized ordinary button appearance and rounded borders to avoid the
+  native WebKit square hover. CLOUD-16 compares account and project buttons
+  in both themes and passed in Chromium and WebKit; CLOUD-14 passed in Chromium.
+  Agent inspected the WebKit account screenshot. Typecheck passed with seven
+  Svelte warnings; wider visual acceptance remains pending.
+- Light borders restored on ordinary buttons at the user's request; CLOUD-16
+  passed in WebKit in both themes, including matching rounded hover styles.
+
+### Deployment preparation — 2026-10-30
+
+- Full `npm run build` passed after rerunning outside the sandbox for Gradle
+  cache access; the first attempt failed to open the Gradle lock file.
+  `test:publication-policy`, `test:share-server` and `test:database-backup`
+  passed locally. Earlier unrelated regression failures are recorded above.
+- Baseline comparison: the same workspace rename assertion, GUI-130 diagnostic
+  timeout and offline GUI-62 input timeout also failed against an archived,
+  unchanged `origin/beta` checkout on this machine. Their causes remain open.
+
+### Operator CLI service database discovery — 2026-10-30
+
+- API/CLI smoke passed for separate main/beta service environments, explicit
+  override, development default and missing/stopped service. A read-only SSH
+  check against the running services resolved `/var/lib/bluek/projects.sqlite`
+  for main and `/opt/bluek-beta-share/data/projects.sqlite` for beta. The prior
+  implementation incorrectly assumed an example production env-file path.

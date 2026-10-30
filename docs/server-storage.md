@@ -35,9 +35,11 @@ the document level even though its browser application opens successfully.
 
 ## Accounts and sessions
 
-All accounts have the same abilities; usernames are pseudonyms, not verified
-identities. Registration is open, has no email, approval, role, reset, recovery
-question or manual identity-recovery workflow. The registration UI explains
+Registration is open and usernames are pseudonyms. The operator may manually mark an
+account as trusted after personal review; this is not a formal identity verification.
+To request trusted access, users may contact karp@fmsg-speyer.de with their
+username and background. Accounts have no email, password reset, recovery question
+or manual identity-recovery workflow. The registration UI explains
 irrecoverable password loss and unique BlueK passwords; password-manager
 `username`, `current-password` and `new-password` autocomplete is supported.
 Usernames are case-insensitive ASCII letters/digits/period/underscore/hyphen,
@@ -49,9 +51,8 @@ logged or stored in plaintext.
 
 An authenticated user can permanently delete their account after confirming
 the current password. This removes the account, its private projects, sessions
-and login-attempt record. Published copies are separate immutable records and
-remain available through their links until their original expiry; deleting the
-account clears their ownership association.
+and login-attempt record. Deleting an account also deletes its published copies and clears their ownership
+association; reserved identifiers remain unavailable for reuse.
 
 Passwords use random 16-byte salts and asynchronous Node scrypt (`N=32768`,
 `r=8`, `p=3`, 64-byte keys, `scrypt-v1` encoding). This is a documented minimum
@@ -95,7 +96,7 @@ Do not allow `null` or arbitrary sibling origins for accounts.
 
 Authenticated use updates account activity. Public reads never do. On startup
 and hourly, accounts last used over twelve calendar months ago may be deleted
-with private projects/sessions. Their public copies retain their own deadlines.
+with private projects, sessions and owned public copies.
 
 ## Storage and publication
 
@@ -109,11 +110,14 @@ failed save is an error and recommends a JSON backup.
 
 `POST /api/projects` and `/api/programs` publish a separate immutable copy, with
 or without login. Anonymous copies expire after seven days; copies published
-with a valid signed-in account expire after 30 days. Reads do not extend either
-deadline. There is no publication-frequency or IP limit. No aggregate
-storage quota has been chosen or silently imposed; disk capacity remains a
-material operational limit. Monitor free space and SQLite size, and agree any
-future aggregate quota separately. Sustained upload spam remains possible.
+with a regular signed-in account expire after 30 days; trusted-account copies
+expire after 365 days. Reads do not extend deadlines. An account has a 5 MiB
+quota across serialized private projects and unexpired owned public copies,
+including program metadata and Base64 overhead. Each copy counts separately.
+Quota checks and writes are transactional; accounts already over quota may
+reduce usage or delete content. The account dialog shows usage and lets owners
+delete their published copies. Anonymous uploads remain outside this quota;
+there is no global quota or publication-frequency limit. Monitor disk capacity.
 
 Project JSON is limited to **1,048,576 UTF-8 bytes**, including embedded media and
 Base64 overhead. This applies to private saves and public copies, not local
@@ -123,7 +127,7 @@ of additional bounded metadata. The UI checks and explains project size before
 upload. Unknown fields are rejected in project/program/file/library/resource
 records, closing alternative media and external-resource fields.
 
-New public copies accept no custom media resources. BluePlay's versioned
+New public copies from anonymous and regular accounts accept no custom media resources. Trusted accounts can publish embedded custom media. BluePlay's versioned
 built-in images/sounds come from the static library, without re-uploading them.
 If a project carries exact standard copies, the UI verifies their full data
 and sends library references; direct API uploads are independently checked
@@ -148,24 +152,43 @@ Every public get checks the deadline even before hourly physical cleanup;
 409 project code opened as player, 400 invalid code. Both project and program
 routes use the same blocking check. Content is not archived indefinitely. The
 API uses `no-store` and cannot retract a copy someone already downloaded/opened.
-There is no anonymous secret deletion key and no publisher withdrawal endpoint.
+There is no anonymous secret deletion key; authenticated owners may delete their own copies.
 Anonymous authorship cannot prove who posted a copy.
 
 ## Operator actions
 
 The small operator interface is a **local CLI protected by the API host's OS
 and SSH permissions**, not public registration or an admin token bundled in the
-frontend. Run it with the service database environment and the service user:
+frontend. In `/opt/bluek-share` or `/opt/bluek-beta-share`, the CLI reads
+`BLUEK_SHARE_DB` from the corresponding running systemd service. An explicit
+environment variable takes precedence. A local checkout defaults to
+`server/data/projects.sqlite`. The operator needs OS access to the service's
+process environment and read/write access to its database and SQLite WAL files.
+If the service is stopped or access is denied, start it and use an appropriately
+privileged account, or explicitly set the database path while running as the
+service user. The CLI never creates a missing database. The production database
+is `/var/lib/bluek/projects.sqlite`; beta uses its separate database under
+`/opt/bluek-beta-share/data/`.
+
+For example, on the server:
 
 ```sh
+cd /opt/bluek-share
 node server/admin.mjs inspect 7m4kr9wp3x6d
 node server/admin.mjs block 7m4kr9wp3x6d
 node server/admin.mjs accounts
 node server/admin.mjs block-account username
+node server/admin.mjs trust-account username
+node server/admin.mjs untrust-account username
+node server/admin.mjs list-publications username
+node server/admin.mjs delete-account username
 ```
 
 `unblock` and `unblock-account` reverse administrative blocks. Inspect outputs
 JSON for review without executing student code; it refuses expired payloads.
+`inspect` includes the associated username while the account exists. Account deletion
+removes its private projects, sessions and published payloads; it cannot recall
+copies already downloaded. Revoking trust affects new publications only.
 Account blocks prevent private access and authenticated use; they do
 not automatically block every public copy or prevent a person publishing
 anonymously. No public gallery or registration approval exists. Expiry and

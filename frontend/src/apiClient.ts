@@ -77,14 +77,17 @@ export function checkServerProject(
     });
 }
 export function publicationProject(project: SavedProject): SavedProject {
-  checkServerProject(project, true);
-  return project.resources?.length ? { ...project, resources: [] } : project;
+  checkServerProject(project);
+  if (!project.resources?.length) return project;
+  return { ...project, resources: project.resources.filter(item =>
+    project.library?.id !== "blueplay" || standardMedia.get(item.path) !== item.data) };
 }
 const errors: Record<string, MessageKey> = {
   network: "ui.cloud.network",
   server: "ui.cloud.network",
   busy: "ui.cloud.busy",
   "too-large": "ui.cloud.tooLarge",
+  quota: "ui.cloud.quota",
   "custom-media": "ui.cloud.customMedia",
   authentication: "ui.cloud.authentication",
   "account-blocked": "ui.cloud.accountBlocked",

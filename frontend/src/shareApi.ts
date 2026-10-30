@@ -4,7 +4,7 @@ import { apiRequest, ApiError, publicationProject } from "./apiClient";
 type ShareResponse = {
   code: string;
   expiresAt: string;
-  expiresInDays?: 7 | 30;
+  expiresInDays?: 7 | 30 | 365;
 };
 async function publish(path: string, payload: unknown): Promise<ShareResponse> {
   const receipt = await apiRequest<ShareResponse>(path, {
@@ -18,7 +18,8 @@ async function publish(path: string, payload: unknown): Promise<ShareResponse> {
     !Number.isFinite(Date.parse(receipt.expiresAt)) ||
     (receipt.expiresInDays !== undefined &&
       receipt.expiresInDays !== 7 &&
-      receipt.expiresInDays !== 30)
+      receipt.expiresInDays !== 30 &&
+      receipt.expiresInDays !== 365)
   )
     throw new ApiError("network");
   return receipt;

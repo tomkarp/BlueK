@@ -21,10 +21,11 @@ for (const standard of standardResources) {
   assert.equal(JSON.stringify(payload), original, 'Public normalization leaves local/private source intact');
   const fake = { ...payload, resources: [{ ...resource, data: resource.data + 'AAAA' }] };
   assert.throws(() => validateProject(fake, true), error => error.status === 422 && error.details.resources[0] === resource.path);
-  assert.throws(() => publicationProject(fake), error => error.reason === 'custom-media' && error.details.resources[0] === resource.path);
+  assert.deepEqual(publicationProject(fake).resources, fake.resources, 'Client preserves custom media for server authorization');
+  assert.deepEqual(validateProject(fake, true, true).resources, fake.resources, 'Trusted publication keeps custom media');
   assert.doesNotThrow(() => validateProject(fake), 'Own resources remain private');
   assert.doesNotThrow(() => checkServerProject(fake), 'Private client save still permits own resources');
 }
 assert.throws(() => validateProject({ ...project, resources: [{ path: 'images/apple.png', data: 'https://example.org/apple.png' }] }, true));
 assert.throws(() => checkServerProject({ ...project, readme: '😀'.repeat(270000) }), error => error.reason === 'too-large');
-console.log(`Publication media policy passed: all ${standardResources.length} shipped images/sounds accepted by verified content and referenced from the library, same-name counterfeits rejected on client/server, private originals intact, UTF-8 limit.`);
+console.log(`Publication media policy passed: all ${standardResources.length} shipped images/sounds accepted by verified content and referenced from the library, same-name counterfeits rejected by server for ordinary accounts, private originals intact, UTF-8 limit.`);
