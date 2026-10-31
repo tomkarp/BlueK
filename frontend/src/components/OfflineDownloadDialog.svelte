@@ -21,16 +21,13 @@
     >
       <h3 id="offline-download-title">{t("ui.offline.blueKOffline")}</h3>
       <p>
-        {t("ui.offline.youCanUseBlueKOnlineWithoutDownloadingAnything")}
+        {t("ui.offline.intro")}
       </p>
       <ol>
         <li>{t("ui.offline.downloadAndExtractTheZIPFile")}</li>
         <li><TranslatedText message="ui.offline.openHtml" /></li>
         <li><TranslatedText message="ui.offline.saveProjects" /></li>
       </ol>
-      <p class="offline-download-note">
-        {t("ui.offline.autosaveDependsOnYourBrowserAndTheLocation")}
-      </p>
       <div class="offline-download-caution">
         <p>
           {t("ui.offline.theOfflineVersionHasNotYetBeenWidely")}

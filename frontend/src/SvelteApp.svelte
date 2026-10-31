@@ -328,6 +328,10 @@
         project.mediaErrors.sound = "";
         project.soundLibraryOpen = false;
       };
+    if (cloud.open && cloud.adminOpen)
+      return () => {
+        cloud.adminOpen = false;
+      };
     if (cloud.open)
       return () => {
         cloud.open = false;

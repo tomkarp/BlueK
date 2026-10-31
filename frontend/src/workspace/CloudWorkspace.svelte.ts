@@ -51,12 +51,13 @@ interface CloudHost {
 export class CloudWorkspace {
   constructor(private readonly host: CloudHost) {}
   open = $state(false);
+  adminOpen = $state(false);
   private intent: "account" | "open" | "save" | "manage" = "account";
   busy = $state(false);
   sessionReady = $state(false);
   user: User | null = $state(null);
   projects: CloudProject[] = $state.raw([]);
-  storage = $state.raw<{ used: number; limit: number; trusted?: boolean; publications: { code: string; expiresAt: string; size: number; name: string; program: boolean }[] } | null>(null);
+  storage = $state.raw<{ used: number; limit: number; trusted?: boolean; admin?: boolean } | null>(null);
   error = $state("");
   notice = $state("");
   private binding: {
@@ -135,6 +136,7 @@ export class CloudWorkspace {
   };
   show = (intent: "account" | "open" | "save" | "manage" = "account") => {
     this.intent = intent;
+    this.adminOpen = false;
     this.open = true;
     return this.refresh(
       intent === "account" || intent === "open" || intent === "manage",
@@ -193,13 +195,6 @@ export class CloudWorkspace {
       this.binding = null;
       this.notice = this.text("ui.cloud.accountDeleted");
     });
-  removePublication = (code: string) => {
-    if (!window.confirm(this.text("ui.cloud.deletePublicationConfirm"))) return Promise.resolve(false);
-    return this.run(async () => {
-      await apiRequest(`/api/owned-publications/${encodeURIComponent(code)}`, { method: "DELETE" });
-      await this.list();
-    });
-  };
   save = async () => {
     const project = this.host.project();
     if (!project.ensureProjectName()) return false;

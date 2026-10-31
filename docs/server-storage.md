@@ -112,12 +112,15 @@ failed save is an error and recommends a JSON backup.
 or without login. Anonymous copies expire after seven days; copies published
 with a regular signed-in account expire after 30 days; trusted-account copies
 expire after 365 days. Reads do not extend deadlines. An account has a 5 MiB
-quota across serialized private projects and unexpired owned public copies,
-including program metadata and Base64 overhead. Each copy counts separately.
-Quota checks and writes are transactional; accounts already over quota may
-reduce usage or delete content. The account dialog shows usage and lets owners
-delete their published copies. Anonymous uploads remain outside this quota;
-there is no global quota or publication-frequency limit. Monitor disk capacity.
+quota for serialized private projects, including embedded media and Base64
+overhead. Published copies do not count toward account quota and cannot be
+managed by regular users. Administrators can inspect, block, unblock, or delete
+active copies in the admin interface. Ownership remains attached to publication
+records for admin search, including after expiry or administrative deletion;
+expired/deleted payloads are unavailable. Account deletion removes its active
+copies and clears the association. Anonymous uploads remain outside
+this quota; there is no global quota or publication-frequency limit. Monitor
+disk capacity.
 
 Project JSON is limited to **1,048,576 UTF-8 bytes**, including embedded media and
 Base64 overhead. This applies to private saves and public copies, not local
@@ -157,9 +160,8 @@ Anonymous authorship cannot prove who posted a copy.
 
 ## Operator actions
 
-The small operator interface is a **local CLI protected by the API host's OS
-and SSH permissions**, not public registration or an admin token bundled in the
-frontend. In `/opt/bluek-share` or `/opt/bluek-beta-share`, the CLI reads
+The operator CLI is protected by the API host's OS and SSH permissions.
+There is no public admin registration or admin token bundled in the frontend. In `/opt/bluek-share` or `/opt/bluek-beta-share`, the CLI reads
 `BLUEK_SHARE_DB` from the corresponding running systemd service. An explicit
 environment variable takes precedence. A local checkout defaults to
 `server/data/projects.sqlite`. The operator needs OS access to the service's
@@ -180,9 +182,45 @@ node server/admin.mjs accounts
 node server/admin.mjs block-account username
 node server/admin.mjs trust-account username
 node server/admin.mjs untrust-account username
+node server/admin.mjs grant-admin username
+node server/admin.mjs revoke-admin username
 node server/admin.mjs list-publications username
 node server/admin.mjs delete-account username
 ```
+
+`grant-admin` and `revoke-admin` are the only ways to change the admin role;
+trusted status alone grants no admin rights. The role is checked against the
+current database account on every admin request, so revocation applies to
+existing sessions immediately. Web actions cannot target administrator accounts;
+use the CLI for them. Blocking an account revokes its sessions. The account
+dialog opens a separate admin-only window to search accounts and active publications,
+change trust or block status, delete non-admin accounts, inspect public project
+contents and media without executing code, and block or unblock public links.
+Private project content is never exposed by this view. Account and publication lists are paginated in groups of 100 and can be narrowed
+by username or code.
+
+The account tab reports the number of accounts and the serialized bytes stored
+in private projects and public copies, with a breakdown by content type. This
+is project-payload storage, not the SQLite file size or backup size. Per-account
+storage shows private project bytes, bytes in owned public copies, and their
+sum. The account list can be sorted by username, private storage, public-copy
+storage, or attributed total, largest first. Private bytes match the 5 MiB
+account quota; public copies never count toward it. Anonymous copies are
+included in the overall total without an account attribution; expired payloads
+are included only while they remain in the projects table awaiting cleanup.
+
+The account tab also accepts up to 500 usernames in one trust action. The web
+interface splits pasted text on whitespace, commas or semicolons, ignores duplicates, and
+reports newly trusted, already trusted, missing, and administrator accounts.
+The server validates every name and applies the batch in one transaction; each
+newly trusted account receives its own audit record.
+
+CLI mutations and web admin actions create an audit record with time, actor ID,
+action and target ID or publication code, not passwords or project content.
+The interface displays up to 100 records, resolving existing account IDs to
+usernames. Records older than 90 days are removed during startup/hourly cleanup;
+backups follow the operator's retention policy. Deleting an account removes its
+name from this display, but its ID can remain in the audit until expiry.
 
 `unblock` and `unblock-account` reverse administrative blocks. Inspect outputs
 JSON for review without executing student code; it refuses expired payloads.

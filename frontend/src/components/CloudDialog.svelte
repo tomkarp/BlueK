@@ -3,6 +3,7 @@
   import { containClicks } from "../uiActions";
   import type { CloudWorkspace } from "../workspace/CloudWorkspace.svelte";
   import CloudProjectManagement from "./CloudProjectManagement.svelte";
+  import AdminPanel from "./AdminPanel.svelte";
   const language = useLanguage();
   const t = $derived($language.t);
   let { cloud }: { cloud: CloudWorkspace } = $props();
@@ -50,7 +51,7 @@
   }
 </script>
 
-{#if cloud.open}
+{#if cloud.open && !cloud.adminOpen}
   <div class="modal topmost-modal account-modal" role="presentation">
     <div
       class="dialog cloud-dialog"
@@ -71,6 +72,9 @@
           <div class="cloud-account-heading">
             <p>{t("ui.cloud.signedIn", [cloud.user.username])}</p>
             <div class="cloud-account-actions">
+              {#if cloud.storage?.admin}
+                <button disabled={cloud.busy} onclick={() => { cloud.adminOpen = true; }}>{t("ui.admin.title")}</button>
+              {/if}
               <button
                 disabled={cloud.busy}
                 onclick={() => {
@@ -127,25 +131,6 @@
             </div>
           {/if}
         </section>
-        {#if cloud.storage?.publications.length}
-          <section class="cloud-publication-section" aria-label={t("ui.cloud.publications")}>
-            <details>
-              <summary>{t("ui.cloud.publications")} <span>({cloud.storage.publications.length})</span></summary>
-              <ul class="cloud-publication-list">
-                {#each cloud.storage.publications as publication (publication.code)}
-                  <li>
-                    <div class="cloud-publication-info">
-                      <strong>{publication.name || t("ui.common.untitledProject")}</strong>
-                      <span>{t(publication.program ? "ui.cloud.publicationProgram" : "ui.cloud.publicationProject")} · <code>{publication.code}</code></span>
-                      <span>{t("ui.cloud.publicationExpires", [new Date(publication.expiresAt).toLocaleDateString($language.locale)])} · {(publication.size / 1024).toFixed(1)} KiB</span>
-                    </div>
-                    <button disabled={cloud.busy} onclick={() => cloud.removePublication(publication.code)}>{t("ui.cloud.deletePublication")}</button>
-                  </li>
-                {/each}
-              </ul>
-            </details>
-          </section>
-        {/if}
         <section class="cloud-project-management-section" aria-labelledby="cloud-project-management-title">
           <h4 id="cloud-project-management-title">{t("ui.cloud.projectManagement")}</h4>
           <CloudProjectManagement {cloud} />
@@ -480,6 +465,10 @@
   </div>
 {/if}
 
+{#if cloud.open && cloud.adminOpen && cloud.user && cloud.storage?.admin}
+  <AdminPanel onclose={() => { cloud.adminOpen = false; }} />
+{/if}
+
 <style>
   .account-modal {
     z-index: 160;
@@ -516,34 +505,6 @@
     font-size: 0.9em;
   }
   .cloud-storage-info p { margin: 0; }
-  .cloud-publication-section { margin: 0 0 4px; }
-  .cloud-publication-section summary {
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 600;
-    padding: 8px 0;
-  }
-  .cloud-publication-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    max-height: 220px;
-    overflow-y: auto;
-  }
-  .cloud-publication-list li {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 10px 12px;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    margin-bottom: 6px;
-  }
-  .cloud-publication-info { display: flex; flex-direction: column; min-width: 0; gap: 4px; }
-  .cloud-publication-info strong { overflow-wrap: anywhere; }
-  .cloud-publication-info span { color: #555; font-size: 0.85em; overflow-wrap: anywhere; }
-  .cloud-publication-list button { flex-shrink: 0; }
   .cloud-project-management-section {
     padding-top: 12px;
   }
@@ -691,14 +652,12 @@
     padding: 0;
   }
   @media (max-width: 600px) {
-    .cloud-publication-list li { align-items: flex-start; flex-direction: column; }
     .cloud-account-heading {
       align-items: flex-start;
       flex-direction: column;
     }
   }
-  :global(.dark) .cloud-storage-info, :global(.dark) .cloud-publication-info span { color: #bbb; }
-  :global(.dark) .cloud-publication-list li { border-color: #555; }
+  :global(.dark) .cloud-storage-info { color: #bbb; }
   :global(.dark) .cloud-account-actions button {
     color: #d4d4d4;
     background: #303034;

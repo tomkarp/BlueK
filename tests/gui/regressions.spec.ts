@@ -2986,7 +2986,7 @@ test("GUI-63 the sidebar explains the offline version before downloading it", as
   const dialog = page.getByRole("dialog", { name: "BlueK Offline" });
   await expect(dialog).toContainText("without downloading anything");
   await expect(dialog).toContainText("BlueK.html");
-  await expect(dialog).toContainText("Autosave");
+  await expect(dialog).not.toContainText("Autosave depends on your browser");
   await expect(dialog).toContainText("not yet been widely tested in practice");
   await expect(dialog).toContainText(
     "with your own projects and browser before relying on it",

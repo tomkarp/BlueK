@@ -115,6 +115,7 @@ below. No universal performance guarantee is implied.
 | GUI-49 | Long method menu signatures stay on one line | Recorded browser pass |
 | GUI-35 | Short-link display, copy, expiry and loading roundtrip | Recorded browser pass |
 | API-01 | Additive legacy migration, permanent identifier reservations, account/session ownership, immutable publications (7 days anonymous, 30 days signed-in), UTF-8 limits, media policy, blocks and retention; content reporting deferred | Real temporary-SQLite API test passed for anonymous/account project and program deadlines, 2026-10-25; migration/deployment completed, production load/capacity measurement not recorded |
+| ADMIN-03 | Account count and stored project payload totals; per-account private/shared/combined storage and sorting by each measure; account list remains usable if the summary endpoint is unavailable | Implemented 2026-10-31; API/GUI checks and visual acceptance pending |
 | HANDOFF-01–14 | Main/beta static app imports editorial inf-schule JSON using one central script and plain chapter links; exact opener/origin, normal runtime/drafts, cancellation, pending edits, local origins, popup fallback and keyboard retry | Chromium 14/14 and WebKit 14/14 passed, 2026-10-24; includes dev.inf-schule.de and domain lookalikes. User confirmed the published chapter handoff to main was tested, 2026-10-26. |
 | CLOUD-01 | Own/counterfeit media rejected by project and program publication UI; local JSON retains every resource | Chromium passed; all 42 actual standards independently checked by client/server helper, 2026-10-22 |
 | CLOUD-02 | Delayed public loads cannot replace edits made while pending; draft survives reload | Chromium passed, 2026-10-22 |
@@ -2033,3 +2034,107 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
   check against the running services resolved `/var/lib/bluek/projects.sqlite`
   for main and `/opt/bluek-beta-share/data/projects.sqlite` for beta. The prior
   implementation incorrectly assumed an example production env-file path.
+
+### Admin interface — 2026-10-30
+
+- API-02: temporary-SQLite `test:share-server` passed for migration of existing
+  trusted accounts without admin rights, CLI-only role grants/revocation,
+  immediate revocation, normal-user denial, CSRF, admin-account protection,
+  private-project isolation, account and publication moderation, 100-item
+  pagination, deletion and audit. CLI mutations also record audit actions.
+- ADMIN-01/02: Chromium and WebKit GUI tests passed for admin/non-admin views,
+  granting trust, publication inspection including image rendering, audit and
+  390 px layout. An initial parallel Chromium run failed because both test
+  runs tried to use port 5194; a sequential rerun passed.
+- Built-in browser with an isolated local database: signed in as the test
+  admin, granted trust, inspected public source and an image, viewed the audit,
+  and confirmed a regular test account had no admin panel. German desktop
+  screenshots were inspected by the agent; human visual acceptance pending.
+  No production or beta-server accounts were modified. Typecheck passed with
+  seven existing warnings; i18n passed. Full regression suite not run.
+- `npm run build:svelte` passed with the existing Svelte accessibility and
+  bundle-size warnings.
+
+
+### Separate administration window — 2026-10-31
+
+- ADMIN-01/02: Chromium and WebKit passed for the separate admin dialog,
+  opening from the account dialog, returning via Close and Escape, existing
+  management actions and a 390 px viewport. The integrated browser was checked
+  with a disposable admin account; opening and returning to the account dialog
+  were verified and the German window visually inspected. User visual
+  acceptance remains pending. Typecheck passed with seven existing warnings;
+  the i18n catalog check passed.
+- Account-dialog follow-up: the Administration button now sits with account
+  actions; ADMIN-01/02 passed in Chromium and WebKit, including a 390 px
+  account dialog without horizontal overflow. User visual acceptance pending.
+
+### Bulk account trust — 2026-10-31
+
+- Added a pasted username list to the admin account tab. Whitespace, commas and
+  semicolons
+  separate names; duplicates are collapsed, while missing names and admin
+  accounts are reported without stopping the remaining grants. Each grant is
+  recorded separately. Automated and browser verification has not been run.
+
+### Publication management and account quota — 2026-10-31
+
+- Removed shared-copy management from regular account dialogs and removed the
+  owner-only deletion endpoint. Published copies no longer contribute to the
+  5 MiB quota; only private account projects do. Admins can now delete copies
+  alongside inspecting and blocking them. Publication ownership remains
+  searchable in the admin view after expiry or deletion, until account deletion.
+
+### Admin storage analysis — 2026-10-31
+
+- ADMIN-03: the admin accounts view reports account count and serialized
+  project-data storage totals for private projects and retained public copies;
+  account rows show private, owned shared-copy and combined storage and can be
+  sorted by each measure, largest-first.
+  Automated/API and browser checks have not been run; visual acceptance pending.
+
+### Issue 32 — pane toggle hover footprint — 2026-10-31
+
+- Reduced the visible hover background on both lower-pane toggle arrows while
+  preserving their pointer target. This avoids coloring the splitter grip behind
+  them. Browser and visual verification have not been run.
+- Follow-up: widened each hover background outward into its own pane while
+  keeping it inset from the splitter grip. Browser and visual verification have
+  not been run.
+- Follow-up: reduced the outward extension to 6 px beyond the button width.
+- Final design: hover darkens and slightly enlarges the arrow without a
+  background; keyboard focus retains an outline. In the built-in browser the
+  agent inspected both hover states in the light theme and opened and closed
+  each pane. Dark-theme and user visual acceptance remain pending.
+- Codepad follow-up: reserved a left gutter in the history and input for the
+  pane toggle. The built-in browser showed entered code and a result with the
+  object area both collapsed and open; the agent inspected the light theme.
+  Dark-theme and user visual acceptance remain pending.
+- Reduced that gutter to 20 px and inspected entered code and output beside the
+  toggle in the maximized codepad in the built-in browser's light theme.
+- Reduced the gutter again to 16 px; inspected code and output beside the toggle
+  in the built-in browser's light theme.
+- User follow-up: adjusted the gutter to 18 px; this final spacing has not been
+  visually verified.
+
+### Account project management text — 2026-10-31
+
+- Removed the explanatory sentence above the project list. The i18n check and
+  typecheck passed; typecheck reported seven existing warnings. Browser visual
+  verification has not been run for this change.
+- Matched the widths of the two bulk actions and the text buttons in project
+  rows, with consistent heights for row actions. CLOUD-07/08 passed in Chromium
+  after the sandbox could not bind the test port; typecheck passed with seven
+  existing warnings. Visual acceptance remains pending.
+- Replaced project-row Open and JSON download text with equally sized icon
+  buttons and project-specific accessible names. CLOUD-08/16 passed in Chromium;
+  i18n and typecheck passed, with seven existing warnings. Visual acceptance
+  remains pending.
+
+### Offline download dialog — 2026-10-31
+
+- Shortened the introduction and removed the autosave and short-link paragraph.
+  GUI-63 passed in Chromium; i18n and typecheck passed with seven existing
+  warnings. Visual acceptance remains pending.
+- Updated the save instruction to match the current project-file download
+  label. The i18n check passed; this wording was not checked in a browser.

@@ -64,7 +64,6 @@
   aria-label={t("ui.cloud.projectManagement")}
 >
   <div class="cloud-project-management-heading">
-    <p>{t("ui.cloud.manageProjectsDescription")}</p>
     <button
       disabled={cloud.busy || !cloud.projects.length}
       onclick={() => void cloud.downloadAllProjectsZip()}
@@ -152,14 +151,22 @@
           </div>
           <div class="cloud-management-actions">
             <button
+              type="button"
+              class="cloud-management-icon-action"
               disabled={cloud.busy}
+              aria-label={t("ui.cloud.openProject0", [project.name])}
+              title={t("ui.cloud.openProject0", [project.name])}
               onclick={() => void cloud.load(project.id)}
-              >{t("ui.cloud.openProject")}</button
+              ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 19h12M12 16V5M9 8l3-3 3 3" /></svg></button
             >
             <button
+              type="button"
+              class="cloud-management-icon-action"
               disabled={cloud.busy}
+              aria-label={t("ui.cloud.downloadJSONProject0", [project.name])}
+              title={t("ui.cloud.downloadJSONProject0", [project.name])}
               onclick={() => void cloud.downloadProjectJSON(project.id)}
-              >{t("ui.cloud.downloadJSON")}</button
+              ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m-4-4 4 4 4-4M4 17v4h16v-4" /></svg></button
             >
             <button
               type="button"
@@ -198,7 +205,7 @@
   .cloud-project-management-heading {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     gap: 12px;
     margin-bottom: 12px;
   }
@@ -207,8 +214,11 @@
     flex-direction: column;
     min-height: 0;
   }
-  .cloud-project-management-heading p {
-    margin: 0;
+  .cloud-project-management-heading button,
+  .cloud-management-selection button {
+    box-sizing: border-box;
+    width: min(100%, 250px);
+    min-height: 36px;
   }
   .cloud-management-selection {
     display: flex;

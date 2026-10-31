@@ -825,27 +825,18 @@ test("CLOUD-13 a successful account save clears the unsaved-project warning", as
 });
 
 
-test("CLOUD-14 account storage shows and deletes an owned publication", async ({ page }) => {
-  let deleted = false;
+test("CLOUD-14 regular accounts cannot manage shared publications", async ({ page }) => {
   await page.route("**/api/account", route => route.fulfill({ json: { user: { id: "account", username: "learner" } } }));
   await page.route("**/api/private-projects", route => route.fulfill({ json: { projects: [] } }));
-  await page.route("**/api/storage", route => route.fulfill({ json: { used: deleted ? 0 : 1048576, limit: 5242880, publications: deleted ? [] : [{ code: "abcd2345efgh", expiresAt: "2027-10-30T00:00:00Z", size: 1048576, name: "Example project", program: true }] } }));
-  await page.route("**/api/owned-publications/abcd2345efgh", route => { deleted = true; return route.fulfill({ json: { ok: true } }); });
-  page.on("dialog", dialog => dialog.accept());
+  await page.route("**/api/storage", route => route.fulfill({ json: { used: 0, limit: 5242880 } }));
   await page.goto(link(project));
   await page.locator(".toolbar-account button").click();
   const account = page.getByRole("dialog", { name: "Account", exact: true });
-  await expect(account).toContainText("1.00 of 5 MiB");
-  await account.getByText("Manage shared copies").click();
-  await expect(account).toContainText("Example project");
-  await expect(account).toContainText("Runnable link");
-  await expect(account).toContainText("abcd2345efgh");
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(account.getByRole("button", { name: "Delete link" })).toBeVisible();
-  expect(await account.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
-  await account.getByRole("button", { name: "Delete link" }).click();
   await expect(account).toContainText("0.00 of 5 MiB");
+  await expect(account.getByText("Manage shared copies")).toHaveCount(0);
   await expect(account.getByText("abcd2345efgh")).toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await account.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
 });
 
 test("CLOUD-15 trusted publication sends custom media and displays a one-year receipt", async ({ page }) => {

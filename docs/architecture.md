@@ -471,10 +471,12 @@ link-error semantics. The editor and hosted player provide no content-report
 action; technical feedback remains a separate service.
 
 The Node/SQLite service enforces owner permissions, session invalidation,
-immutable public copies (seven days anonymously, 30 days with an account),
-1 MiB project limits, closed publication
-schemas and the no-custom-media policy. A separate local operator CLI inspects
-JSON and blocks copies/accounts. The additive migration preserves old
+immutable public copies (seven days anonymously, 30 days with a regular account,
+365 days with a trusted account), 1 MiB project and 5 MiB account limits, and
+closed publication schemas. Only trusted accounts may publish custom media.
+A separate admin window opened from the account dialog manages accounts and published copies, with
+server-side authorization on every request; admin roles are assigned only by
+the local operator CLI. The view never accesses private project contents. The additive migration preserves old
 payloads/deadlines and reserves every code permanently before cleanup. See
 [server-storage.md](server-storage.md) for precise API, security and retention
 contracts and [deployment.md](deployment.md) for the static/API split.

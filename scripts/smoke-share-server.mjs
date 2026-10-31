@@ -15,6 +15,8 @@ const media = [{ path: 'images/standard.png', data: 'data:image/png;base64,AAAA'
 const legacy = { ...project, resources: media };
 let db = new Database(databasePath);
 db.exec('CREATE TABLE projects (code TEXT PRIMARY KEY, created_at TEXT NOT NULL, expires_at TEXT NOT NULL, size_bytes INTEGER NOT NULL, project_json TEXT NOT NULL)');
+db.exec('CREATE TABLE accounts (id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, created_at INTEGER NOT NULL, last_used_at INTEGER NOT NULL, blocked INTEGER NOT NULL DEFAULT 0, trusted INTEGER NOT NULL DEFAULT 0)');
+db.prepare('INSERT INTO accounts VALUES (?, ?, ?, ?, ?, 0, 1)').run('legacy-account', 'legacyuser', 'test-hash', Date.now(), Date.now());
 const legacyExpiry = new Date(Date.now() + 29 * 86400000).toISOString();
 db.prepare('INSERT INTO projects VALUES (?, ?, ?, ?, ?)').run('green-lamp-river', new Date().toISOString(), legacyExpiry, 100, JSON.stringify(legacy));
 db.prepare('INSERT INTO projects VALUES (?, ?, ?, ?, ?)').run('past-past-past', '2020', '2020-01-01', 100, JSON.stringify(legacy));
@@ -52,6 +54,8 @@ function admin(...args) {
 }
 try {
   await start(); db = new Database(databasePath);
+  // Additive migration: old accounts keep trust but never gain admin rights.
+  assert.deepEqual(db.prepare('SELECT trusted, admin FROM accounts WHERE id = ?').get('legacy-account'), { trusted: 1, admin: 0 });
   // Additive migration: old payload, including old media, and deadline survive.
   assert.deepEqual((await readProject('GREEN-LAMP-RIVER')).data.project, legacy);
   assert.equal((await readProject('green-lamp-river')).data.expiresAt, legacyExpiry);
@@ -186,6 +190,7 @@ try {
 
   // Trust is server-controlled; existing and new copies have separate deadlines.
   admin('trust-account', credentials.username);
+  const usageBeforePublications = (await request('/api/storage', { cookie })).data.used;
   const trustedCopy = await post('/api/projects', { ...project, resources: media }, cookie);
   assert.equal(trustedCopy.status, 201);
   assert.equal(trustedCopy.data.expiresInDays, 365);
@@ -195,19 +200,71 @@ try {
   assert.equal(trustedProgram.data.expiresInDays, 365);
   const storage = await request('/api/storage', { cookie });
   assert.equal(storage.data.limit, 5 * 1024 * 1024);
-  assert.ok(storage.data.publications.some(item => item.code === trustedCopy.data.code && item.name === (project.projectName || '') && item.program === false));
-  assert.ok(storage.data.publications.some(item => item.code === trustedProgram.data.code && item.program === true));
+  assert.equal(Object.hasOwn(storage.data, 'publications'), false, 'Regular accounts cannot list their publications');
+  assert.equal(storage.data.used, usageBeforePublications, 'Publications do not count toward account quota');
   assert.equal((await request(`/api/owned-publications/${trustedCopy.data.code}`, { method: 'DELETE', cookie: second.cookie })).status, 404);
-  assert.equal((await request(`/api/owned-publications/${trustedCopy.data.code}`, { method: 'DELETE', cookie })).status, 200);
-  assert.equal((await readProject(trustedCopy.data.code)).status, 410);
-  assert.ok((await request('/api/storage', { cookie })).data.used < storage.data.used);
+  assert.equal((await request(`/api/owned-publications/${trustedCopy.data.code}`, { method: 'DELETE', cookie })).status, 404);
+  assert.equal((await readProject(trustedCopy.data.code)).status, 200, 'Regular accounts cannot delete their publications');
   admin('untrust-account', credentials.username);
   assert.equal((await post('/api/projects', { ...project, resources: media }, cookie)).status, 422);
   assert.equal((await readProgram(trustedProgram.data.code)).status, 200, 'Revocation leaves existing copies available');
   const large = { ...project, readme: 'x'.repeat(900000) };
   for (let i = 0; i < 5; i++) assert.equal((await post('/api/private-projects', large, cookie)).status, 201);
   assert.equal((await post('/api/private-projects', large, cookie)).data.error, 'quota');
-  assert.equal((await post('/api/projects', large, cookie)).data.error, 'quota');
+  assert.equal((await post('/api/projects', large, cookie)).status, 201, 'Publications do not consume private project quota');
+
+  // Admin role is granted only via operator CLI; permissions are checked on every request.
+  const administrator = await post('/api/account/register', { username: 'administrator', password: 'administrator-password' });
+  const victim = await post('/api/account/register', { username: 'victim', password: 'victim-password-123', admin: true });
+  const victimPrivate = await post('/api/private-projects', project, victim.cookie);
+  assert.equal((await request('/api/admin/accounts')).status, 401);
+  assert.equal((await request('/api/admin/accounts', { cookie: victim.cookie })).status, 403);
+  assert.equal((await post('/api/admin/action', { action: 'trust', target: victim.data.user.id }, victim.cookie)).status, 403);
+  admin('grant-admin', 'administrator');
+  assert.equal((await request('/api/storage', { cookie: administrator.cookie })).data.admin, true);
+  assert.equal((await request(`/api/private-projects/${victimPrivate.data.id}`, { cookie: administrator.cookie })).status, 404, 'Admin cannot read private project contents');
+  db.transaction(() => {
+    const insert = db.prepare('INSERT INTO accounts (id, username, password_hash, created_at, last_used_at) VALUES (?, ?, ?, ?, ?)');
+    for (let i = 0; i < 101; i++) insert.run(`page-user-${i}`, `pageuser${String(i).padStart(3, '0')}`, 'test', Date.now(), Date.now());
+  })();
+  const pageOne = await request('/api/admin/accounts?q=pageuser&offset=0', { cookie: administrator.cookie });
+  const pageTwo = await request('/api/admin/accounts?q=pageuser&offset=100', { cookie: administrator.cookie });
+  assert.equal(pageOne.data.accounts.length, 100);
+  assert.equal(pageOne.data.more, true);
+  assert.equal(pageTwo.data.accounts.length, 1);
+  assert.equal(pageTwo.data.more, false);
+  assert.equal((await request('/api/admin/accounts?offset=-1', { cookie: administrator.cookie })).status, 400);
+  db.prepare("DELETE FROM accounts WHERE username LIKE 'pageuser%'").run();
+
+  const adminAccounts = await request('/api/admin/accounts?q=vict', { cookie: administrator.cookie });
+  assert.equal(adminAccounts.status, 200);
+  assert.equal(adminAccounts.data.accounts[0].username, 'victim');
+  assert.ok(!JSON.stringify(adminAccounts.data).includes('password_hash'));
+  assert.equal((await request('/api/admin/action', { method: 'POST', cookie: administrator.cookie, headers: { 'x-bluek-request': '' }, value: { action: 'trust', target: victim.data.user.id } })).status, 403);
+  assert.equal((await post('/api/admin/action', { action: 'trust', target: victim.data.user.id }, administrator.cookie)).status, 200);
+  assert.equal(db.prepare('SELECT trusted FROM accounts WHERE id = ?').get(victim.data.user.id).trusted, 1);
+  assert.equal((await post('/api/admin/action', { action: 'grant-admin', target: victim.data.user.id }, administrator.cookie)).status, 400);
+  assert.equal((await post('/api/admin/action', { action: 'delete-account', target: administrator.data.user.id }, administrator.cookie)).status, 403);
+  const victimPublication = await post('/api/projects', project, victim.cookie);
+  const publicationsList = await request('/api/admin/publications?q=victim', { cookie: administrator.cookie });
+  assert.equal(publicationsList.data.publications[0].code, victimPublication.data.code);
+  assert.equal((await request(`/api/admin/publications/${victimPublication.data.code}`, { cookie: victim.cookie })).status, 403);
+  assert.equal((await request(`/api/admin/publications/${victimPublication.data.code}`, { cookie: administrator.cookie })).data.payload.format, 'bluek-project');
+  assert.equal((await post('/api/admin/action', { action: 'block-publication', target: victimPublication.data.code }, administrator.cookie)).status, 200);
+  assert.equal((await readProject(victimPublication.data.code)).status, 451);
+  assert.equal((await post('/api/admin/action', { action: 'unblock-publication', target: victimPublication.data.code }, administrator.cookie)).status, 200);
+  assert.equal((await post('/api/admin/action', { action: 'delete-publication', target: victimPublication.data.code }, administrator.cookie)).status, 200);
+  const deletedPublication = await request('/api/admin/publications?q=victim', { cookie: administrator.cookie });
+  assert.equal(deletedPublication.data.publications.find(item => item.code === victimPublication.data.code).available, false, 'Publication ownership remains searchable after admin deletion');
+  assert.equal((await post('/api/admin/action', { action: 'block-account', target: victim.data.user.id }, administrator.cookie)).status, 200);
+  assert.equal((await request('/api/storage', { cookie: victim.cookie })).status, 401);
+  assert.equal((await post('/api/admin/action', { action: 'unblock-account', target: victim.data.user.id }, administrator.cookie)).status, 200);
+  assert.equal((await post('/api/admin/action', { action: 'delete-account', target: victim.data.user.id }, administrator.cookie)).status, 200);
+  assert.equal((await readProject(victimPublication.data.code)).status, 410);
+  assert.equal(db.prepare('SELECT id FROM private_projects WHERE id = ?').get(victimPrivate.data.id), undefined);
+  assert.ok((await request('/api/admin/audit', { cookie: administrator.cookie })).data.entries.length >= 6);
+  admin('revoke-admin', 'administrator');
+  assert.equal((await request('/api/admin/accounts', { cookie: administrator.cookie })).status, 403, 'Revocation applies immediately to existing sessions');
 
   // CSRF and exact credentialed CORS. No wildcard or school-IP throttling.
   const preflight = await fetch(`${base}/api/private-projects`, { method: 'OPTIONS', headers: { Origin: origin } });

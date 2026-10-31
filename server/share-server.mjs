@@ -57,6 +57,10 @@ database.transaction(() => {
     project_json TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS private_owner ON private_projects(owner_id);
+  CREATE TABLE IF NOT EXISTS admin_audit (
+    id INTEGER PRIMARY KEY, created_at INTEGER NOT NULL, actor_id TEXT NOT NULL,
+    action TEXT NOT NULL, target TEXT NOT NULL
+  );
   CREATE TRIGGER IF NOT EXISTS delete_account_publications BEFORE DELETE ON accounts BEGIN
     DELETE FROM projects WHERE code IN (SELECT code FROM public_codes WHERE owner_id = OLD.id);
   END;
@@ -67,14 +71,10 @@ function cleanup() {
   const now = Date.now();
   database.transaction(() => {
     database
-      .prepare(
-        "UPDATE public_codes SET owner_id = NULL WHERE code IN (SELECT code FROM projects WHERE expires_at <= ?)",
-      )
-      .run(new Date(now).toISOString());
-    database
       .prepare("DELETE FROM projects WHERE expires_at <= ?")
       .run(new Date(now).toISOString());
     accounts.cleanup();
+    database.prepare("DELETE FROM admin_audit WHERE created_at < ?").run(now - 90 * 86400000);
   })();
   // Do not retain expired payloads indefinitely in a WAL. Operator backups must
   // follow the same documented finite retention; identifier tombstones contain no content.
@@ -100,8 +100,7 @@ function publicRecord(code) {
 }
 function usage(id) {
   return database.prepare(`SELECT
-    COALESCE((SELECT SUM(length(CAST(project_json AS BLOB))) FROM private_projects WHERE owner_id = ?), 0) +
-    COALESCE((SELECT SUM(size_bytes) FROM projects JOIN public_codes USING (code) WHERE owner_id = ? AND expires_at > ?), 0) AS bytes`).get(id, id, new Date().toISOString()).bytes;
+    COALESCE((SELECT SUM(length(CAST(project_json AS BLOB))) FROM private_projects WHERE owner_id = ?), 0) AS bytes`).get(id).bytes;
 }
 function checkQuota(id, delta) {
   const used = usage(id);
@@ -110,7 +109,6 @@ function checkQuota(id, delta) {
 function storePublic(payload, user) {
   return database.transaction(() => {
     const text = JSON.stringify(payload);
-    if (user) checkQuota(user.id, Buffer.byteLength(text));
     for (let attempt = 0; attempt < 30; attempt++) {
       const code = Array.from(
         { length: 12 },
@@ -169,26 +167,139 @@ async function handle(request, response) {
   const account = await accounts.handle(request, response, path);
   if (account !== null) return json(response, 200, account);
 
+  if (path.startsWith("/api/admin/")) {
+    const actor = accounts.session(request);
+    if (!actor.admin) throw new HttpError(403, "admin-required");
+    const offsetValue = Number(url.searchParams.get("offset") || 0);
+    if (!Number.isSafeInteger(offsetValue) || offsetValue < 0 || offsetValue > 1000000) throw new HttpError(400, "invalid-page");
+    if (request.method === "GET" && path === "/api/admin/storage") {
+      const accountCount = database.prepare("SELECT COUNT(*) AS count FROM accounts").get().count;
+      const privateStorage = database.prepare(`SELECT COUNT(*) AS count,
+        COALESCE(SUM(length(CAST(project_json AS BLOB))), 0) AS bytes FROM private_projects`).get();
+      const publicStorage = database.prepare(`SELECT COUNT(*) AS count,
+        COALESCE(SUM(size_bytes), 0) AS bytes FROM projects`).get();
+      return json(response, 200, {
+        accountCount,
+        privateProjectCount: privateStorage.count,
+        privateBytes: privateStorage.bytes,
+        publicationCount: publicStorage.count,
+        publicationBytes: publicStorage.bytes,
+        totalBytes: privateStorage.bytes + publicStorage.bytes,
+      });
+    }
+    if (request.method === "GET" && path === "/api/admin/accounts") {
+      const query = (url.searchParams.get("q") || "").trim().toLowerCase().slice(0, 32);
+      const sort = url.searchParams.get("sort") || "username";
+      const sortOrder = {
+        username: "username",
+        private: "privateBytes DESC, username",
+        publications: "publicationBytes DESC, username",
+        total: "totalBytes DESC, username",
+      }[sort];
+      if (!sortOrder) throw new HttpError(400, "invalid-sort");
+      const rows = database.prepare(`SELECT id, username, blocked, trusted, admin, last_used_at AS lastUsedAt,
+        (SELECT COUNT(*) FROM private_projects WHERE owner_id = accounts.id) AS privateCount,
+        (SELECT COALESCE(SUM(length(CAST(project_json AS BLOB))), 0) FROM private_projects WHERE owner_id = accounts.id) AS privateBytes,
+        (SELECT COUNT(*) FROM public_codes JOIN projects USING(code) WHERE owner_id = accounts.id AND expires_at > ?) AS publicationCount,
+        (SELECT COALESCE(SUM(size_bytes), 0) FROM public_codes JOIN projects USING(code) WHERE owner_id = accounts.id) AS publicationBytes,
+        (SELECT COALESCE(SUM(size_bytes), 0) FROM public_codes JOIN projects USING(code) WHERE owner_id = accounts.id) +
+          (SELECT COALESCE(SUM(length(CAST(project_json AS BLOB))), 0) FROM private_projects WHERE owner_id = accounts.id) AS totalBytes
+        FROM accounts WHERE instr(username, ?) > 0 ORDER BY ${sortOrder} LIMIT 101 OFFSET ?`).all(new Date().toISOString(), query, offsetValue);
+      return json(response, 200, { accounts: rows.slice(0, 100), more: rows.length > 100 });
+    }
+    if (request.method === "GET" && path === "/api/admin/publications") {
+      const query = (url.searchParams.get("q") || "").trim().toLowerCase().slice(0, 32);
+      const rows = database.prepare(`SELECT public_codes.code, projects.expires_at AS expiresAt, projects.size_bytes AS size,
+        public_codes.blocked, accounts.username AS owner, projects.project_json AS payload
+        FROM public_codes LEFT JOIN projects ON projects.code = public_codes.code
+        LEFT JOIN accounts ON accounts.id = public_codes.owner_id
+        WHERE (projects.expires_at > ? OR accounts.id IS NOT NULL)
+          AND (instr(public_codes.code, ?) > 0 OR instr(COALESCE(accounts.username, ''), ?) > 0)
+        ORDER BY projects.created_at DESC, public_codes.code LIMIT 101 OFFSET ?`).all(new Date().toISOString(), query, query, offsetValue);
+      const items = rows.slice(0, 100).map(({ payload, ...row }) => {
+        const available = !!payload && Date.parse(row.expiresAt) > Date.now();
+        const value = available ? JSON.parse(payload) : null; const program = value?.format === "bluek-program";
+        return { ...row, available, name: value ? (program ? value.project : value).projectName || "" : "", program };
+      });
+      return json(response, 200, { publications: items, more: rows.length > 100 });
+    }
+    if (request.method === "GET" && path === "/api/admin/audit") {
+      return json(response, 200, { entries: database.prepare(`SELECT admin_audit.created_at AS createdAt,
+        CASE WHEN admin_audit.actor_id = 'cli' THEN 'CLI' ELSE COALESCE(actor.username, '') END AS actor,
+        admin_audit.action, CASE WHEN admin_audit.action LIKE '%-publication' THEN admin_audit.target ELSE COALESCE(target_account.username, '') END AS target
+        FROM admin_audit LEFT JOIN accounts AS actor ON actor.id = admin_audit.actor_id
+        LEFT JOIN accounts AS target_account ON target_account.id = admin_audit.target
+        ORDER BY admin_audit.id DESC LIMIT 100`).all() });
+    }
+    if (request.method === "POST" && path === "/api/admin/trust-batch") {
+      accounts.requireWrite(request);
+      const input = await body(request, 32768);
+      const current = accounts.session(request);
+      if (!current.admin || current.id !== actor.id) throw new HttpError(403, "admin-required");
+      if (!record(input) || !Array.isArray(input.usernames) || input.usernames.length < 1 || input.usernames.length > 500 || input.usernames.some((name) => typeof name !== "string" || !/^[a-z0-9._-]{3,32}$/i.test(name))) throw new HttpError(400, "invalid-usernames");
+      const usernames = [...new Set(input.usernames.map((name) => name.toLowerCase()))];
+      const trusted = [], alreadyTrusted = [], missing = [], administrators = [];
+      database.transaction(() => {
+        const findAccount = database.prepare("SELECT id, username, trusted, admin FROM accounts WHERE username = ?");
+        const grantTrust = database.prepare("UPDATE accounts SET trusted = 1 WHERE id = ?");
+        const audit = database.prepare("INSERT INTO admin_audit(created_at, actor_id, action, target) VALUES (?, ?, 'trust', ?)");
+        for (const username of usernames) {
+          const user = findAccount.get(username);
+          if (!user) { missing.push(username); continue; }
+          if (user.admin) { administrators.push(user.username); continue; }
+          if (user.trusted) { alreadyTrusted.push(user.username); continue; }
+          grantTrust.run(user.id);
+          audit.run(Date.now(), actor.id, user.id);
+          trusted.push(user.username);
+        }
+      })();
+      return json(response, 200, { trusted, alreadyTrusted, missing, administrators });
+    }
+    const inspect = path.match(/^\/api\/admin\/publications\/([a-z0-9-]+)$/);
+    if (request.method === "GET" && inspect) {
+      const code = inspect[1].toLowerCase();
+      const row = database.prepare("SELECT project_json FROM projects WHERE code = ? AND expires_at > ?").get(code, new Date().toISOString());
+      if (!row) throw new HttpError(404, "missing");
+      return json(response, 200, { payload: JSON.parse(row.project_json) });
+    }
+    if (request.method === "POST" && path === "/api/admin/action") {
+      accounts.requireWrite(request);
+      const input = await body(request, 4096);
+      const current = accounts.session(request);
+      if (!current.admin || current.id !== actor.id) throw new HttpError(403, "admin-required");
+      if (!record(input) || typeof input.target !== "string" || typeof input.action !== "string") throw new HttpError(400, "invalid-admin-action");
+      const target = input.target.toLowerCase();
+      const actions = new Set(["trust", "untrust", "block-account", "unblock-account", "delete-account", "block-publication", "unblock-publication", "delete-publication"]);
+      if (!actions.has(input.action)) throw new HttpError(400, "invalid-admin-action");
+      database.transaction(() => {
+        if (input.action.endsWith("-publication")) {
+          if (!validCode(target) || !database.prepare("SELECT 1 FROM projects WHERE code = ? AND expires_at > ?").get(target, new Date().toISOString())) throw new HttpError(404, "missing");
+          if (input.action === "delete-publication") database.prepare("DELETE FROM projects WHERE code = ?").run(target);
+          else database.prepare("UPDATE public_codes SET blocked = ? WHERE code = ?").run(input.action === "block-publication" ? 1 : 0, target);
+        } else {
+          const user = database.prepare("SELECT id, username, admin FROM accounts WHERE id = ?").get(input.target);
+          if (!user) throw new HttpError(404, "account-missing");
+          if (user.admin) throw new HttpError(403, "admin-protected");
+          if (input.action === "delete-account") {
+            database.prepare("DELETE FROM accounts WHERE id = ?").run(user.id);
+            database.prepare("DELETE FROM login_attempts WHERE username = ?").run(user.username);
+          } else if (input.action === "trust" || input.action === "untrust") {
+            database.prepare("UPDATE accounts SET trusted = ? WHERE id = ?").run(input.action === "trust" ? 1 : 0, user.id);
+          } else {
+            const blocked = input.action === "block-account" ? 1 : 0;
+            database.prepare("UPDATE accounts SET blocked = ? WHERE id = ?").run(blocked, user.id);
+            if (blocked) database.prepare("DELETE FROM sessions WHERE account_id = ?").run(user.id);
+          }
+        }
+        database.prepare("INSERT INTO admin_audit(created_at, actor_id, action, target) VALUES (?, ?, ?, ?)").run(Date.now(), actor.id, input.action, input.action.endsWith("-publication") ? target : input.target);
+      })();
+      return json(response, 200, { ok: true });
+    }
+    throw new HttpError(404, "not-found");
+  }
   if (path === "/api/storage" && request.method === "GET") {
     const user = accounts.session(request);
-    return json(response, 200, { used: usage(user.id), limit: accountQuota, trusted: !!user.trusted,
-      publications: database.prepare("SELECT projects.code, projects.expires_at AS expiresAt, projects.size_bytes AS size, projects.project_json AS payload FROM projects JOIN public_codes USING (code) WHERE owner_id = ? AND expires_at > ? ORDER BY created_at DESC").all(user.id, new Date().toISOString()).map(({ payload, ...row }) => {
-        const value = JSON.parse(payload);
-        const program = value.format === "bluek-program";
-        return { ...row, name: (program ? value.project : value).projectName || "", program };
-      }) });
-  }
-  const ownedPublication = path.match(/^\/api\/owned-publications\/([a-z0-9-]+)$/);
-  if (ownedPublication && request.method === "DELETE") {
-    const user = accounts.session(request);
-    accounts.requireWrite(request);
-    database.transaction(() => {
-      const code = ownedPublication[1].toLowerCase();
-      if (!database.prepare("SELECT 1 FROM public_codes WHERE code = ? AND owner_id = ?").get(code, user.id)) throw new HttpError(404, "missing");
-      database.prepare("DELETE FROM projects WHERE code = ?").run(code);
-      database.prepare("UPDATE public_codes SET owner_id = NULL WHERE code = ?").run(code);
-    })();
-    return json(response, 200, { ok: true });
+    return json(response, 200, { used: usage(user.id), limit: accountQuota, trusted: !!user.trusted, admin: !!user.admin });
   }
   const privateMatch = path.match(
     /^\/api\/private-projects(?:\/([a-f0-9-]+))?$/,
