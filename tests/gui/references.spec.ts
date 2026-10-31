@@ -51,6 +51,32 @@ async function adoptLast(page: Page, name: string) {
   await expect(object(page, name)).toBeVisible();
 }
 
+test('GUI-156 inspector close button is readable in light and dark mode', async ({ page }) => {
+  await load(page);
+  await create(page, 'timer1');
+  await object(page, 'timer1').dblclick();
+  const inspector = page.getByRole('dialog', { name: 'Object inspector', exact: true });
+  const close = inspector.getByRole('button', { name: 'Close', exact: true });
+  await expect(close).toHaveCSS('color', 'rgb(34, 34, 34)');
+  await page.locator('.bluek').evaluate(element => element.classList.add('dark'));
+  await expect(close).toHaveCSS('color', 'rgb(212, 212, 212)');
+  await close.click();
+  await expect(inspector).toHaveCount(0);
+});
+
+test('GUI-157 constructor menu hover preserves readable text', async ({ page }) => {
+  await load(page);
+  for (const dark of [false, true]) {
+    await page.locator('.bluek').evaluate((element, enabled) => element.classList.toggle('dark', enabled), dark);
+    await page.getByRole('button', { name: 'Timer', exact: true }).click({ button: 'right' });
+    const item = page.locator('.constructor-menu-item');
+    await item.hover();
+    await expect(item).toHaveCSS('color', dark ? 'rgb(243, 243, 243)' : 'rgb(255, 255, 255)');
+    await expect(item).toHaveCSS('background-color', dark ? 'rgb(69, 69, 74)' : 'rgb(8, 124, 157)');
+    await page.keyboard.press('Escape');
+  }
+});
+
 test('RT-07 aliases, getters, independent declarations and name reuse survive removing original', async ({ page }) => {
   await load(page);
   await create(page, 'timer1');

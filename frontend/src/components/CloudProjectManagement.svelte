@@ -207,11 +207,12 @@
     align-items: center;
     justify-content: flex-end;
     gap: 12px;
-    margin-bottom: 12px;
+    margin: 0;
   }
   .cloud-project-management {
     display: flex;
     flex-direction: column;
+    gap: 16px;
     min-height: 0;
   }
   .cloud-project-management-heading button,
@@ -232,6 +233,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    margin: 0;
   }
   .cloud-project-management .cloud-management-selection input[type="checkbox"],
   .cloud-project-management .cloud-management-select-project input[type="checkbox"] {
@@ -247,7 +249,7 @@
   }
   .cloud-management-projects {
     list-style: none;
-    margin: 12px 0 0;
+    margin: 0;
     padding: 0;
     max-height: 48vh;
     overflow: auto;
@@ -316,12 +318,18 @@
     gap: 6px;
   }
   .cloud-management-icon-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     width: 36px;
     min-width: 36px;
     height: 36px;
-    padding: 4px;
+    margin: 0;
+    padding: 0;
   }
   .cloud-management-icon-action svg {
+    display: block;
+    flex: none;
     width: 18px;
     height: 18px;
     fill: none;
@@ -345,6 +353,12 @@
     padding: 2px 5px;
     display: block;
     font: inherit;
+  }
+  :global(.dark) .cloud-management-projects li {
+    border-color: #55555c;
+  }
+  :global(.dark) .cloud-management-project-summary span {
+    color: #bdbdc4;
   }
   @media (max-width: 600px) {
     .cloud-management-projects li {

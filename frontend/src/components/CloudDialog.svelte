@@ -526,7 +526,7 @@
     appearance: none;
     box-sizing: border-box;
     height: 34px;
-    border: 1px solid #fff;
+    border: 1px solid #aaa;
     border-radius: 6px;
     background: #eee;
     box-shadow: none;
@@ -588,7 +588,7 @@
     padding: 2px 0;
     border: 0;
     background: transparent;
-    color: #087ff5;
+    color: #0769c7;
     cursor: pointer;
     font: inherit;
   }
@@ -608,8 +608,8 @@
   }
   .cloud-mode-button[aria-pressed="true"] {
     color: #fff;
-    background: #087ff5;
-    border-color: #087ff5;
+    background: #0769c7;
+    border-color: #0769c7;
   }
   .cloud-field-label-line,
   .cloud-username-label-line {
@@ -635,6 +635,7 @@
   label {
     display: grid;
     gap: 5px;
+    margin: 0;
   }
   input {
     font: inherit;
@@ -658,6 +659,7 @@
     }
   }
   :global(.dark) .cloud-storage-info { color: #bbb; }
+  :global(.dark) .cloud-password-toggle { color: #8fc8ff; }
   :global(.dark) .cloud-account-actions button {
     color: #d4d4d4;
     background: #303034;

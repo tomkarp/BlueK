@@ -386,6 +386,8 @@ below. No universal performance guarantee is implied.
 | GUI-149 | Default ordinary object text uses an object marker instead of a constructor expression; inspector cells omit the repeated type; English/German labels, computed properties and method results preserve custom text | Runtime/reference checks and four affected Chromium cases (GUI-88/148/149, DBG-18) passed (2026-10-21). Built-in-browser German view confirmed Image references, a computed Image property and custom text without a repeated type. User visual acceptance pending. |
 | GUI-154 | Loading a project into non-empty work asks before replacing the project and its browser autosave; cancel preserves current work | Passed in focused draft GUI run, 2026-10-23 |
 | GUI-155 | Browser recovery list shows three newest drafts first and expands/collapses older drafts | Passed in focused draft GUI run, 2026-10-23 |
+| GUI-156 | Inspector Close button remains readable in light and dark mode and closes the window | Focused Chromium test passed (2026-10-31), checking text colors and closing. The initial sandbox run could not start the local server (EPERM); the network-enabled rerun passed. User accepted the fix (2026-10-31). |
+| GUI-157 | Neutral buttons use gray borders and flatter toolbar surfaces; account and menu accents use readable colors; keyboard focus is visible | CLOUD-16, GUI-156 and two GUI-157 cases passed in Chromium and WebKit (2026-10-31), covering account borders/hover and accent colors, constructor hover, and inspector close in both themes. The broader account and inspector Chromium suites passed 30/32; the two CLOUD-03 cases expected the old accent color and passed after updating the expectation. Initial constructor test expected pure white in dark mode; corrected rerun passed. One concurrent WebKit start hit the occupied test port; sequential rerun passed. Typecheck passed with seven existing warnings before the accent follow-up. Agent inspected the German light workspace and account dialog; dark appearance, focus indicators and remaining screens need visual acceptance. User's first impression was positive. |
 | GUI-127/128 | Restore lists expose individual and bulk deletion controls for local browser drafts, each with confirmation | Chromium passed, 2026-10-23 |
 | GUI-150 | Object placeholders, inspection errors, uninitialized properties and pending computed values use Codepad's gray; actual values including null and exception objects keep their normal color | Six affected Chromium cases passed (GUI-89/92/149, DBG-12/18), including light/dark mode and a getter returning null (2026-10-21). Built-in-browser German screenshot confirmed gray object/error text beside normal numbers, strings and null. User visual acceptance pending. |
 | GUI-151 | BluePlay library-card menus offer World/Actor constructors and all three Image overloads through the standard create dialog; busy runtimes disable construction, and source/test actions remain absent | Thirteen affected Chromium cases and the offline language/manual case passed (2026-10-21), including real bench objects, image dimensions/copying, actor/world integration, API help, ordinary class constructors and translations. Built-in-browser German check created World, Actor and Image, inspected width/height and confirmed all Image menu overloads. User visual acceptance pending. |
@@ -2138,3 +2140,33 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
   warnings. Visual acceptance remains pending.
 - Updated the save instruction to match the current project-file download
   label. The i18n check passed; this wording was not checked in a browser.
+
+### Neutral dialog actions — 2026-10-31
+
+- New-project, save/export, account-save and share actions use neutral titles
+  and secondary descriptions. Shared light/dark colors provide a soft hover
+  background and a separate focus ring. Help buttons retain their circular
+  shape and use the blue accent; delete/error controls retain red.
+- Agent inspected the German new-project view in light and dark themes, its
+  dark BluePlay information panel, and the generated light save screenshot.
+  Corrected the information panel background, close-icon contrast and the
+  dark examples note. Shared colors avoid gray descriptions on saturated hover
+  backgrounds. Full visual acceptance remains pending.
+- Chromium NAV-04 (both languages), GUI-01 template listing/cancel and GUI-144
+  passed. NAV-01 reached desktop/mobile save views in both languages, then
+  timed out on the obsolete `.program-settings summary` step in HTML export:
+  the current options are directly visible. No full navigation pass is claimed.
+
+### Form spacing and centered project icons — 2026-10-31
+
+- Project action buttons explicitly center their SVGs, with no baseline offset.
+  The project-management sections use a 16 px gap, separating ZIP download,
+  selection and list. Removed inherited label margins in the account and admin
+  grid/flex forms; dialog action rows can wrap on narrow screens. Reviewed the
+  field/label layouts in call, name/file, settings, export and feedback dialogs.
+- CLOUD-17 measures all four icon centers and the section gap at 1440 and
+  390 px in both themes. CLOUD-03/10/17 passed in Chromium and WebKit; ADMIN-01/02
+  passed in Chromium. Typecheck: zero errors, seven existing warnings.
+- Agent inspected the WebKit light desktop and dark mobile account screenshots.
+  Then adjusted dark project-date text and row borders; these final color-only
+  changes have not been screenshot-verified. User acceptance pending.

@@ -188,12 +188,12 @@
   .admin-content { flex: 1; min-height: 0; padding: 0 0 12px; }
   .admin-tabs, .admin-search, .admin-actions, .admin-pages { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .admin-bulk-trust { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; margin: 12px 0; }
-  .admin-bulk-trust label, .admin-bulk-trust p { grid-column: 1 / -1; }
+  .admin-bulk-trust label, .admin-bulk-trust p { grid-column: 1 / -1; margin: 0; }
   .admin-bulk-trust textarea { box-sizing: border-box; width: 100%; min-width: 0; resize: vertical; }
   .admin-tabs button[aria-pressed="true"] { background: #087ff5; color: white; }
   .admin-search { margin: 12px 0; }
   .admin-search input { flex: 1 1 180px; width: auto; margin: 0; }
-  .admin-sort { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .admin-sort { display: flex; align-items: center; gap: 6px; margin: 0; white-space: nowrap; }
   .admin-sort select { max-width: 190px; }
   .admin-storage-summary { display: grid; grid-template-columns: minmax(120px, 0.5fr) minmax(200px, 1fr); gap: 8px 20px; margin: 12px 0; padding: 12px; border: 1px solid #ccc; border-radius: 6px; }
   .admin-storage-summary div { display: flex; flex-direction: column; gap: 3px; }

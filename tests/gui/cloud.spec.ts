@@ -180,7 +180,7 @@ for (const locale of ["en", "de"])
       hasText: de ? "Anmelden" : "Sign in",
     });
     await expect(loginMode).toHaveAttribute("aria-pressed", "true");
-    await expect(loginMode).toHaveCSS("background-color", "rgb(8, 127, 245)");
+    await expect(loginMode).toHaveCSS("background-color", "rgb(7, 105, 199)");
     await cloud
       .getByRole("button", {
         name: de ? "Konto erstellen" : "Create account",
@@ -869,6 +869,7 @@ test("CLOUD-16 ordinary account and project buttons share rounded hover styling 
       const button = actions.nth(index);
       await page.mouse.move(0, 0);
       const before = await button.evaluate(element => getComputedStyle(element).backgroundColor);
+      await expect(button).toHaveCSS('border-color', dark ? 'rgb(85, 85, 92)' : 'rgb(170, 170, 170)');
       await button.hover();
       const after = await button.evaluate(element => getComputedStyle(element).backgroundColor);
       expect(after).toBe(dark ? "rgb(69, 69, 74)" : "rgb(222, 222, 222)");
@@ -888,5 +889,44 @@ test("CLOUD-16 ordinary account and project buttons share rounded hover styling 
     expect(projectStyle).toEqual(accountStyle);
     expect(projectStyle.radius).toBe("6px");
     expect(projectStyle.appearance).toBe("none");
+  }
+});
+
+test("GUI-157 account mode and password action use readable accent colors", async ({ page }) => {
+  await page.route("**/api/account", route => route.fulfill({ json: { user: null } }));
+  await page.goto(link(project));
+  await page.locator('.toolbar-account button').click();
+  const mode = page.locator('.cloud-mode-button[aria-pressed="true"]');
+  const password = page.locator('.cloud-password-toggle').last();
+  for (const dark of [false, true]) {
+    await page.locator('.bluek').evaluate((element, enabled) => element.classList.toggle('dark', enabled), dark);
+    await expect(mode).toHaveCSS('color', 'rgb(255, 255, 255)');
+    await expect(mode).toHaveCSS('background-color', 'rgb(7, 105, 199)');
+    await expect(password).toHaveCSS('color', dark ? 'rgb(143, 200, 255)' : 'rgb(7, 105, 199)');
+  }
+});
+
+test("CLOUD-17 project action icons and selection toolbar keep their spacing", async ({ page }, info) => {
+  await page.route("**/api/account", route => route.fulfill({ json: { user: { id: "account", username: "learner" } } }));
+  await page.route("**/api/private-projects", route => route.fulfill({ json: { projects: [{ id: "project", name: "Example", updatedAt: 1, revision: 1 }] } }));
+  await page.goto(link(project));
+  await page.locator(".toolbar-account button").click();
+  const actions = page.locator(".cloud-management-icon-action");
+  await expect(actions).toHaveCount(4);
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    for (const dark of [false, true]) {
+      await page.locator(".bluek").evaluate((element, enabled) => element.classList.toggle("dark", enabled), dark);
+      for (const button of await actions.all()) {
+        const bounds = (await button.boundingBox())!;
+        const icon = (await button.locator("svg").boundingBox())!;
+        expect(Math.abs(icon.x + icon.width / 2 - bounds.x - bounds.width / 2)).toBeLessThan(0.5);
+        expect(Math.abs(icon.y + icon.height / 2 - bounds.y - bounds.height / 2)).toBeLessThan(0.5);
+      }
+      const heading = (await page.locator(".cloud-project-management-heading").boundingBox())!;
+      const selection = (await page.locator(".cloud-management-selection").boundingBox())!;
+      expect(selection.y - heading.y - heading.height).toBeGreaterThanOrEqual(15);
+      await page.screenshot({ path: info.outputPath(`project-actions-${width}-${dark ? "dark" : "light"}.png`) });
+    }
   }
 });
