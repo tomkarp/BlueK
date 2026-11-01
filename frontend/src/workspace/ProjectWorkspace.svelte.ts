@@ -1316,6 +1316,12 @@ export class ProjectWorkspace {
         reason instanceof Error ? reason.message : String(reason);
     }
   };
+  canOpenProjectDrop = (event: DragEvent) => {
+    const item = event.dataTransfer?.items?.[0];
+    if (item?.webkitGetAsEntry?.()?.isDirectory) return true;
+    const file = item?.getAsFile() ?? event.dataTransfer?.files?.[0];
+    return Boolean(file && /\.(json|zip)$/i.test(file.name));
+  };
   chooseBlueJProject = async (root: string) => {
     const choice = this.blueJImportChoice;
     if (!choice) return;

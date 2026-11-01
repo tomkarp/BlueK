@@ -450,6 +450,30 @@
     )
       play.stageKey(event, true);
   }
+
+  function isProjectDropZone(event: DragEvent) {
+    return (event.target as Element | null)?.closest?.(".project-dropzone");
+  }
+
+  function isExternalFileDrag(event: DragEvent) {
+    return (
+      Array.from(event.dataTransfer?.items ?? []).some(
+        (item) => item.kind === "file",
+      ) ||
+      Array.from(event.dataTransfer?.types ?? []).includes("Files")
+    );
+  }
+
+  function handleProjectFileDragOver(event: DragEvent) {
+    if (isProjectDropZone(event) || isExternalFileDrag(event))
+      event.preventDefault();
+  }
+
+  function handleProjectFileDrop(event: DragEvent) {
+    if (isProjectDropZone(event) || !isExternalFileDrag(event)) return;
+    event.preventDefault();
+    if (project.canOpenProjectDrop(event)) void project.openProjectDrop(event);
+  }
 </script>
 
 <svelte:window
@@ -473,6 +497,8 @@
   onkeydown={handleWindowKeydown}
   onkeyup={(event) => play.stageKey(event, false)}
   onblur={play.releaseStageKeys}
+  ondragover={handleProjectFileDragOver}
+  ondrop={handleProjectFileDrop}
 />
 
 <div

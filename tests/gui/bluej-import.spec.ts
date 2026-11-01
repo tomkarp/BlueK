@@ -37,6 +37,73 @@ async function dropZip(
     .dispatchEvent("drop", { dataTransfer });
 }
 
+async function dropProjectFile(
+  page: import("@playwright/test").Page,
+  name: string,
+  contents: string,
+) {
+  const dataTransfer = await page.evaluateHandle(
+    ({ name, contents }) => {
+      const transfer = new DataTransfer();
+      transfer.items.add(
+        new File([contents], name, { type: "application/json" }),
+      );
+      return transfer;
+    },
+    { name, contents },
+  );
+  await page.locator(".bluek").dispatchEvent("drop", { dataTransfer });
+}
+
+test("GUI-158 global project file drops import while keeping failed or declined replacements safe", async ({
+  page,
+}) => {
+  const payload = (projectName: string, className: string) =>
+    JSON.stringify({
+      format: "bluek-project",
+      version: 1,
+      projectName,
+      files: [{ fileName: `${className}.kt`, source: `class ${className}` }],
+    });
+
+  await page.goto(
+    "/#bluek=p1." +
+      Buffer.from(payload("Original project", "Original")).toString("base64url"),
+  );
+  await expect(
+    page.locator('.classcard[aria-label="Original"]'),
+  ).toBeVisible();
+
+  await dropProjectFile(page, "broken.bluek.json", "not valid JSON");
+  await expect(page.locator('.classcard[aria-label="Original"]')).toBeVisible();
+
+  await page.evaluate(() => {
+    window.confirm = () => false;
+  });
+  await dropProjectFile(
+    page,
+    "replacement.bluek.json",
+    payload("Replacement project", "Replacement"),
+  );
+  await expect(
+    page.locator('.classcard[aria-label="Original"]'),
+  ).toBeVisible();
+  await expect(page.locator('.classcard[aria-label="Replacement"]')).toHaveCount(0);
+
+  await page.evaluate(() => {
+    window.confirm = () => true;
+  });
+  await dropProjectFile(
+    page,
+    "replacement.bluek.json",
+    payload("Replacement project", "Replacement"),
+  );
+  await expect(
+    page.locator('.classcard[aria-label="Replacement"]'),
+  ).toBeVisible();
+  await expect(page.locator('.classcard[aria-label="Original"]')).toHaveCount(0);
+});
+
 test("GUI-60 a BlueJ ZIP project opens with its classes, positions and hidden private methods", async ({
   page,
 }) => {

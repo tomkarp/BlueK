@@ -322,7 +322,6 @@
             aria-labelledby="open-source-computer"
           >
             <h4>{t("ui.transfer.fromComputer")}</h4>
-            <p>{t("ui.transfer.dropAProjectFileHereOrClickTo")}</p>
             <label
               class="project-dropzone"
               ondragover={(event) => event.preventDefault()}
@@ -340,6 +339,9 @@
                 }}
               />
             </label>
+            <p class="global-project-drop-tip">
+              {t("ui.transfer.globalProjectDropTip")}
+            </p>
           </div>{:else}<div
             class="open-source-panel shared-project-loader"
             role="tabpanel"

@@ -332,7 +332,7 @@
     "files": "files",
     "lastSaved": "· Last saved",
     "deleteSavedProject0": "Delete browser recovery draft {0}",
-    "dropAProjectFileHereOrClickTo": "Drop a project file or a BlueJ project folder here, or click to choose a file.",
+    "globalProjectDropTip": "Tip: You don't need to open this window to import a project. Just drop the project file anywhere on the BlueK workspace.",
     "projectFileFormats": "BlueK JSON or BlueJ project",
     "acceptedProjectFormats": "Accepted: .json, BlueJ projects as .zip or as a folder (folders by drag and drop)",
     "chooseProjectFile": "Choose project file",

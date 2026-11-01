@@ -332,7 +332,7 @@
     "files": "Dateien",
     "lastSaved": "· Zuletzt gespeichert",
     "deleteSavedProject0": "Wiederherstellungsentwurf {0} löschen",
-    "dropAProjectFileHereOrClickTo": "Projektdatei oder BlueJ-Projektordner hier ablegen oder zum Auswählen einer Datei klicken.",
+    "globalProjectDropTip": "Tipp: Dieses Fenster musst du zum Importieren nicht extra öffnen. Zieh die Projektdatei einfach irgendwo auf die BlueK-Oberfläche.",
     "projectFileFormats": "BlueK-JSON oder BlueJ-Projekt",
     "acceptedProjectFormats": "Akzeptiert: .json, BlueJ-Projekte als .zip oder als Ordner (Ordner per Drag-and-drop)",
     "chooseProjectFile": "Projektdatei auswählen",

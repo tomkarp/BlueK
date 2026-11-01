@@ -57,6 +57,19 @@ Keep those IDs stable and cite the description. Missing numbers are not new IDs
 available for reuse. “Recorded” refers to the prior evidence, not this docs edit.
 Unless explicitly stated, visual user acceptance remains pending.
 
+### Global project file drop — 2026-11-01
+
+- GUI-158 covers importing a supported project file from anywhere in the app,
+  preserving the active project after an invalid import or declined replacement,
+  and allowing replacement after confirmation. GUI-158 passed in Chromium.
+  NAV-05 verifies the separate global-drop tip in English and German and passed
+  in Chromium (2/2); its initial run failed because a locator matched both
+  paragraphs, then passed after narrowing the locator. The redundant intro
+  sentence was later removed; NAV-05 passed again in Chromium (2/2).
+  `test:i18n` passed (971 messages); `typecheck` passed with zero errors and
+  warnings after the sandbox initially blocked its temporary Vite config write.
+  Visual acceptance of the hint is pending.
+
 Before publishing the debugger, compare BluePlay project performance with the
 pre-debugger baseline. Measured locally on 2026-10-21; see the recorded result
 below. No universal performance guarantee is implied.

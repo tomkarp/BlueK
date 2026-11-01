@@ -37,6 +37,33 @@ for (const locale of ["en", "de"])
   });
 
 for (const locale of ["en", "de"])
+  test(`NAV-05 open dialog explains global project file drop (${locale})`, async ({
+    page,
+  }) => {
+    const de = locale === "de";
+    await page.addInitScript(
+      (value) => localStorage.setItem("bluek-language", value),
+      locale,
+    );
+    await page.goto("/");
+    await page
+      .getByRole("button", { name: de ? "Öffnen" : "Open", exact: true })
+      .click();
+    const open = page.getByRole("dialog", {
+      name: de ? "Öffnen" : "Open",
+      exact: true,
+    });
+    await open.locator("#open-source-computer").click();
+    await expect(
+      open.locator("#open-panel-computer .global-project-drop-tip"),
+    ).toHaveText(
+      de
+        ? "Tipp: Dieses Fenster musst du zum Importieren nicht extra öffnen. Zieh die Projektdatei einfach irgendwo auf die BlueK-Oberfläche."
+        : "Tip: You don't need to open this window to import a project. Just drop the project file anywhere on the BlueK workspace.",
+    );
+  });
+
+for (const locale of ["en", "de"])
   test(`NAV-01 project actions are separate from account and view controls (${locale})`, async ({
     page,
   }, info) => {
