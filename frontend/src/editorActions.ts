@@ -39,6 +39,8 @@ import type { Diagnostic } from "../../runtime-contract/src/index";
 export interface EditorActionHost {
   formatters: Map<string, () => boolean>;
   commenters: Map<string, () => boolean>;
+  focusers: Map<string, () => void>;
+  focusQueries: Map<string, () => boolean>;
   breakpointTogglers: Map<string, () => void>;
   debugNavigators: Map<string, (line: number, column: number) => void>;
   setFormatError: (message: string) => void;
@@ -434,6 +436,8 @@ export function createEditorActions(host: EditorActionHost) {
     };
     window.addEventListener("keydown", formatShortcut, true);
     window.addEventListener("keydown", germanCommentShortcut, true);
+    host.focusers.set(current.id, () => view.focus());
+    host.focusQueries.set(current.id, () => view.hasFocus);
     view.focus();
     return {
       update(next: EditorOptions) {
@@ -477,7 +481,11 @@ export function createEditorActions(host: EditorActionHost) {
           });
         if (previousId !== next.id) {
           host.formatters.delete(previousId);
+          host.focusers.delete(previousId);
+          host.focusQueries.delete(previousId);
           host.formatters.set(next.id, formatDocument);
+          host.focusers.set(next.id, () => view.focus());
+          host.focusQueries.set(next.id, () => view.hasFocus);
           host.commenters.delete(previousId);
           host.commenters.set(next.id, toggleComments);
           host.breakpointTogglers.delete(previousId);
@@ -540,6 +548,8 @@ export function createEditorActions(host: EditorActionHost) {
       destroy() {
         ++formatRequest;
         host.formatters.delete(current.id);
+        host.focusers.delete(current.id);
+        host.focusQueries.delete(current.id);
         host.commenters.delete(current.id);
         host.breakpointTogglers.delete(current.id);
         host.debugNavigators.delete(current.id);

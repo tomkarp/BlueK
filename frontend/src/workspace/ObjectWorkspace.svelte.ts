@@ -360,11 +360,10 @@ export class ObjectWorkspace {
     if (!value.objectId) return;
     this.objectNamePrompt = value;
     this.objectNameError = "";
-    this.objectName =
-      value.name ||
-      (value.className || "object")
-        .replace(/<.*>/, "")
-        .replace(/^./, (letter) => letter.toLowerCase());
+    this.objectName = defaultObjectName(
+      value.className || "Object",
+      this.host.session().runtime.references.map((reference) => reference.name),
+    );
   };
   getLastCodepadObject = () => {
     const entry = [...this.host.session().history]

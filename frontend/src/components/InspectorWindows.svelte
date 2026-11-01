@@ -100,7 +100,9 @@
       }}
     >
       <h2>
-        {`${inspector.referenceName} : ${inspectorType(inspector.data)}`}
+        {inspector.referenceName
+          ? `${inspector.referenceName} : ${inspectorType(inspector.data)}`
+          : `: ${inspectorType(inspector.data)}`}
       </h2>
       <InspectorFields
         data={inspector.data}

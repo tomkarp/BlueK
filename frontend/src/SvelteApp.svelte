@@ -392,18 +392,6 @@
   function handleWindowKeydown(event: KeyboardEvent) {
     const mod =
       (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey;
-    if (mod && (event.key.toLowerCase() === "k" || event.code === "KeyK")) {
-      event.preventDefault();
-      event.stopPropagation();
-      if (
-        project.files.length &&
-        session.runtime.phase !== "compiling" &&
-        session.runtime.phase !== "running" &&
-        !session.inputReady
-      )
-        session.compile();
-      return;
-    }
     if (mod && (event.key.toLowerCase() === "s" || event.code === "KeyS")) {
       event.preventDefault();
       event.stopPropagation();
@@ -451,6 +439,29 @@
       play.stageKey(event, true);
   }
 
+  function handleWindowKeydownCapture(event: KeyboardEvent) {
+    const mod =
+      (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey;
+    if (mod && (event.key.toLowerCase() === "k" || event.code === "KeyK")) {
+      // Catch compile before CodeMirror/Vim sees the modifier key sequence.
+      event.preventDefault();
+      event.stopPropagation();
+      if (
+        project.files.length &&
+        session.runtime.phase !== "compiling" &&
+        session.runtime.phase !== "running" &&
+        !session.inputReady
+      ) {
+        const restoreEditorFocus = editor.activeEditorHasFocus();
+        void session.compile().finally(() => {
+          if (restoreEditorFocus) editor.focusActiveEditor();
+        });
+      }
+      return;
+    }
+    play.captureEditorGameKey(event);
+  }
+
   function isProjectDropZone(event: DragEvent) {
     return (event.target as Element | null)?.closest?.(".project-dropzone");
   }
@@ -493,7 +504,7 @@
     )
       project.readmeHelp = false;
   }}
-  onkeydowncapture={play.captureEditorGameKey}
+  onkeydowncapture={handleWindowKeydownCapture}
   onkeydown={handleWindowKeydown}
   onkeyup={(event) => play.stageKey(event, false)}
   onblur={play.releaseStageKeys}
@@ -859,6 +870,7 @@
     assertionAvailable={Boolean(tests.state?.lastResult)}
     suggestedExpected={tests.state?.suggestedExpected || null}
     assertionError={tests.error}
+    inspectorOnTop={ui.activeWindow === "inspector"}
     addAssertion={tests.assertion}
     bind:createDialog={objects.createDialog}
     bind:invokeDialog={objects.invokeDialog}

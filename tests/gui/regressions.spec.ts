@@ -1,7 +1,11 @@
 import { mockPublications } from "./publicationFixtures";
 import { test, expect, type Page } from "@playwright/test";
 
-async function project(page: Page, source = "") {
+async function project(
+  page: Page,
+  source = "",
+  inputLabel = "Codepad input",
+) {
   const payload = {
     format: "bluek-project",
     version: 1,
@@ -10,11 +14,15 @@ async function project(page: Page, source = "") {
   await page.goto(
     "/#bluek=p1." + Buffer.from(JSON.stringify(payload)).toString("base64url"),
   );
-  await expect(page.getByLabel("Codepad input")).toBeEnabled();
+  await expect(page.getByLabel(inputLabel)).toBeEnabled();
 }
 
-async function evaluate(page: Page, code: string) {
-  const input = page.getByLabel("Codepad input");
+async function evaluate(
+  page: Page,
+  code: string,
+  inputLabel = "Codepad input",
+) {
+  const input = page.getByLabel(inputLabel);
   const entries = page.locator(".codepad-entry");
   const count = await entries.count();
   await input.fill(code);
@@ -3668,6 +3676,101 @@ test("GUI-68 the editor has a Vim mode that stays off until it is switched on", 
   await page.keyboard.press("j");
   await expect(editor.locator(".cm-line").first()).toHaveText("jclass Hund {");
 });
+
+test("GUI-159 returned objects suggest lowercase unique instance names", async ({
+  page,
+}) => {
+  await project(page, "class Karte {}");
+  await evaluate(page, "Karte()");
+  await page.locator(".codepad-object-result").last().click();
+  const name = page.locator(".topmost-modal .create-object-dialog input");
+  await expect(name).toHaveValue("karte1");
+  await page.locator(".topmost-modal .create-object-dialog button").last().click();
+
+  await evaluate(page, "Karte()");
+  await page.locator(".codepad-object-result").last().click();
+  await expect(name).toHaveValue("karte2");
+});
+
+test("GUI-160 Vim handles the first key after Cmd/Ctrl+K compilation", async ({
+  page,
+}) => {
+  await project(page, "class Hund {}");
+  await page.getByRole("button", { name: "Hund", exact: true }).dblclick();
+  const editor = page.locator(".editor-dialog");
+  await page.keyboard.press("ControlOrMeta+Shift+V");
+  await expect(editor.locator(".cm-panels")).toHaveText("--NORMAL--");
+  await editor.locator(".cm-line").first().click();
+  await page.keyboard.press("Home");
+
+  await page.keyboard.press("ControlOrMeta+k");
+  await expect(page.locator(".classcard.uncompiled")).toHaveCount(0);
+  await expect(editor.locator(".cm-content")).toBeFocused();
+  await page.keyboard.press("i");
+  await expect(editor.locator(".cm-panels")).toHaveText("--INSERT--");
+  await expect(editor.locator(".cm-line").first()).toHaveText(
+    "class Hund {}",
+  );
+});
+
+for (const locale of ["en", "de"] as const) {
+  test(`GUI-161 method result stays open while inspecting and taking over its object (${locale})`, async ({
+    page,
+  }) => {
+  await page.addInitScript((language) => localStorage.setItem("bluek-language", language), locale);
+  const inputLabel = locale === "de" ? "Codepad-Eingabe" : "Codepad input";
+  await project(page, "class Hund {\n    fun neuer(): Hund = Hund()\n}", inputLabel);
+  const entry = await evaluate(page, "Hund()", inputLabel);
+  await entry.getByRole("button").click();
+  await page.locator(".topmost-modal .create-object-dialog input").fill("hund1");
+  await page.getByRole("button", { name: "OK", exact: true }).click();
+  await page
+    .locator(".bench .object")
+    .dispatchEvent("contextmenu", { button: 2 });
+  await page
+    .locator(".popup")
+    .getByRole("button", { name: "neuer(): Hund", exact: true })
+    .click();
+
+  const result = page.locator(".result-dialog");
+  await expect(result).toBeVisible();
+  await result
+    .getByRole("button", {
+      name: locale === "de" ? "Untersuchen" : "Inspect",
+      exact: true,
+    })
+    .click();
+  const inspector = page.locator(".inspector .inspect-window").last();
+  await expect(inspector).toBeVisible();
+  await expect(inspector.locator("h2")).toHaveText(
+    ": Hund",
+  );
+  await expect(result).toBeVisible();
+  const inspectorBox = (await inspector.boundingBox())!;
+  expect(
+    await page.evaluate(
+      ({ x, y }) =>
+        Boolean(document.elementFromPoint(x, y)?.closest(".inspect-window")),
+      {
+        x: inspectorBox.x + inspectorBox.width / 2,
+        y: inspectorBox.y + inspectorBox.height / 2,
+      },
+    ),
+  ).toBe(true);
+
+  await result
+    .getByRole("button", {
+      name: locale === "de" ? "Übernehmen" : "Get",
+      exact: true,
+    })
+    .click();
+  const namePrompt = page.locator(".topmost-modal .create-object-dialog input");
+  await expect(namePrompt).toHaveValue("hund2");
+  await page.locator(".topmost-modal .create-object-dialog button").last().click();
+  await expect(result).toBeVisible();
+  await expect(page.locator(".bench .object")).toHaveCount(2);
+  });
+}
 
 test("GUI-71 Dark mode can be switched on and off in Settings", async ({
   page,

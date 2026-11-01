@@ -37,6 +37,8 @@ export class EditorWorkspace {
   private workspaceMaxRestore: EditorLayoutSnapshot | null = null;
   editorFormatters = new Map<string, () => boolean>();
   editorCommenters = new Map<string, () => boolean>();
+  editorFocusers = new Map<string, () => void>();
+  editorFocusQueries = new Map<string, () => boolean>();
   breakpointTogglers = new Map<string, () => void>();
   debugNavigators = new Map<string, (line: number, column: number) => void>();
   breakpoints = $state.raw<{ fileId: string; line: number }[]>([]);
@@ -53,6 +55,11 @@ export class EditorWorkspace {
   });
   formatEditor = (id: string) => {
     this.editorFormatters.get(id)?.();
+  };
+  activeEditorHasFocus = () =>
+    this.editorFocusQueries.get(this.activeEditorId)?.() || false;
+  focusActiveEditor = () => {
+    this.editorFocusers.get(this.activeEditorId)?.();
   };
   toggleEditorComments = (id: string) => {
     this.editorCommenters.get(id)?.();
@@ -403,6 +410,8 @@ export class EditorWorkspace {
   readonly codeMirror = createEditorActions({
     formatters: this.editorFormatters,
     commenters: this.editorCommenters,
+    focusers: this.editorFocusers,
+    focusQueries: this.editorFocusQueries,
     breakpointTogglers: this.breakpointTogglers,
     debugNavigators: this.debugNavigators,
     diagnosticsRun: () => this.diagnosticsRun,

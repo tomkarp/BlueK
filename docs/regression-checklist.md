@@ -13,6 +13,18 @@ test-results/. Full Kotlin conformance is not implied by any passing suite.
 Latest storage/account/publication verification: [2026-10-25 results](#publication-lifetime-by-authentication--2026-10-25).
 Latest project navigation verification: [2026-10-22 results](#new-open-save-and-share-navigation--2026-10-22).
 
+2026-11-01: Object-on-bench suggestions now use lowercase unique numbered
+names. Cmd/Ctrl+K is captured before CodeMirror/Vim handles the key event, and
+editor focus is restored after compilation when the shortcut came from it.
+The method-result Inspect/Get actions now keep that dialog open; GUI-161 checks
+that the inspector remains accessible above it, keeps the colon without
+inventing a reference name for the returned object, and that Get still completes.
+`typecheck` passed; GUI-159, GUI-160 and GUI-161 passed in Chromium (3/3). The first
+GUI-160 run exposed the focus loss and failed before the fix. `test:workspace`
+failed later in its existing class-rename fixture, which expected
+`RenamedTest.kt` without running syntax classification; the object-name
+assertions earlier in that run passed. Visual user acceptance is pending.
+
 2026-10-27: `build:kotlite`, `typecheck`, `test:runtime-state`,
 `test:control-flow` and `test:ui` passed for the project-file diagnostic and
 compiled top-level function discovery. The runtime test covers a file whose
@@ -142,6 +154,9 @@ below. No universal performance guarantee is implied.
 | GUI-156 | Local save options require a non-empty name for an unnamed project | Chromium passed, including blank-name rejection and JSON download, 2026-10-23 |
 | GUI-157 | Half-maximized editor fills the class-diagram canvas with matching frame styling, follows its vertical splitter, temporarily tabs every open editor and stays above other workspace layers; leaving restores the prior individual/grouped layout. Split-view arrows hide the opposite pane, single-pane arrows restore the split, and bench status/actions follow visibility and narrow widths | Built-in-browser German interaction and screenshot review passed, 2026-10-25: exact canvas bounds, tab switching, grouped/individual restoration, close/ungroup/full-maximize paths, splitters, mirrored single-pane views and narrow status actions. Four focused cases pass in Chromium and WebKit; user visual acceptance pending. |
 | GUI-158 | With the terminal active, Cmd/Ctrl+A selects its transcript and Cmd/Ctrl+C copies it without editor text | Built-in browser verified on 2026-10-30: selection and clipboard contained only `TERMINAL_ONLY_MARKER`, with the editor open and its distinct marker excluded. |
+| GUI-159 | Objects returned to the object bench suggest lowercase unique numbered names | Controller assertions passed before unrelated later failure; Chromium passed (2026-11-01); visual acceptance pending |
+| GUI-160 | Editor focus and Vim mode survive the first key after Cmd/Ctrl+K compilation | Chromium passed; first run exposed focus loss, fixed and rerun passed (2026-11-01); visual acceptance pending |
+| GUI-161 | Method-result Inspect/Get actions preserve the result dialog; the inspector stays accessible above it and keeps the colon without a synthetic name | Chromium English/German passed (2026-11-01); visual acceptance pending |
 | NAV-01 | Four project actions, separated account/view controls, grouped Save choices, separate Share and stable sidebar in English/German; Restore is the rightmost Open tab | Chromium passed at desktop and 390 px Save width; agent inspected German screenshots, 2026-10-22; human acceptance pending |
 | NAV-02 | Sign-in from Save returns without uploading; explicit save/update remains in Save and account settings remain separate | Chromium passed, 2026-10-22 |
 | NAV-03 | Open lists account projects for opening only; project management in Account owns rename/delete; canceling sign-in retains the selected source | Chromium passed, 2026-10-23 |

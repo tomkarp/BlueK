@@ -22,6 +22,7 @@
     assertionAvailable?: boolean;
     suggestedExpected?: string | null;
     assertionError?: string;
+    inspectorOnTop: boolean;
     addAssertion?: (
       expected: string,
       kind: "equals" | "null" | "notNull",
@@ -51,6 +52,7 @@
     assertionAvailable = false,
     suggestedExpected = null,
     assertionError = "",
+    inspectorOnTop,
     addAssertion = async () => {},
     createDialog = $bindable(),
     invokeDialog = $bindable(),
@@ -200,7 +202,12 @@
       </div>
     </div>
   </div>{/if}
-{#if resultDialog}<div class="modal topmost-modal">
+{#if resultDialog}<div
+    class={[
+      "modal topmost-modal result-modal",
+      { "inspector-on-top": inspectorOnTop },
+    ]}
+  >
     <div
       class="dialog result-dialog"
       role="dialog"
@@ -248,10 +255,9 @@
               const object = {
                 objectId: resultDialog!.objectId!,
                 className: resultDialog!.className || "Object",
-                name: resultDialog!.className || "Object",
+                name: "",
               };
-              inspectObject(object);
-              resultDialog = null;
+              inspectObject(object, true);
             }}>{t("ui.common.inspect")}</button
           ><button
             onclick={() => {
@@ -261,7 +267,6 @@
                 name: resultDialog!.className || "Object",
                 kind: "object",
               });
-              resultDialog = null;
             }}>{t("ui.objects.get")}</button
           >{/if}<button onclick={() => (resultDialog = null)}
           >{t("ui.common.close")}</button

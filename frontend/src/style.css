@@ -674,6 +674,7 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 .settings-field{color:#333;justify-content:space-between;align-items:center;gap:24px;margin:18px 0;display:flex}
 .settings-field select{min-width:88px;font:inherit;background:#fff;border:1px solid #999;border-radius:4px;padding:6px 8px}
 .topmost-modal{z-index:100}
+.result-modal.inspector-on-top{z-index:25}
 .main-selection-options{max-height:55vh;overflow-y:auto}
 .shared-project-loader{background:#faf9f4;border:1px solid #bbb;border-radius:6px;margin:16px 0;padding:14px}
 .shared-project-loader>strong{margin-bottom:10px;display:block}
