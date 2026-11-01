@@ -1,15 +1,24 @@
 <script lang="ts">
   import { useLanguage } from "../i18n/Language.svelte";
   const language = useLanguage();
-  $: t = $language.t;
+  const t = language.t;
   import { focusOnMount, containClicks } from "../uiActions";
 
   import type { RuntimeValue } from "../../../runtime-contract/src/index";
 
-  export let objectNamePrompt: RuntimeValue | null;
-  export let objectName: string;
-  export let objectNameError: string;
-  export let confirmObjectOnBench: () => Promise<void>;
+  interface Props {
+    objectNamePrompt: RuntimeValue | null;
+    objectName: string;
+    objectNameError: string;
+    confirmObjectOnBench: () => Promise<void>;
+  }
+
+  let {
+    objectNamePrompt = $bindable(),
+    objectName = $bindable(),
+    objectNameError,
+    confirmObjectOnBench,
+  }: Props = $props();
 </script>
 
 {#if objectNamePrompt}<div class="modal topmost-modal" role="presentation">
@@ -26,7 +35,7 @@
         >{t("ui.common.nameOfInstance")}<input
           bind:value={objectName}
           use:focusOnMount
-          on:keydown={(event) => {
+          onkeydown={(event) => {
             if (event.key === "Escape") objectNamePrompt = null;
             if (event.key === "Enter") confirmObjectOnBench();
           }}
@@ -34,10 +43,10 @@
       >
       {#if objectNameError}<p role="alert">{objectNameError}</p>{/if}
       <div class="dialog-actions">
-        <button on:click={() => (objectNamePrompt = null)}
+        <button onclick={() => (objectNamePrompt = null)}
           >{t("ui.common.cancel")}</button
         ><button
-          on:click={confirmObjectOnBench}
+          onclick={confirmObjectOnBench}
           disabled={!/^[A-Za-z_]\w*$/.test(objectName.trim())}
           >{t("ui.common.oK")}</button
         >

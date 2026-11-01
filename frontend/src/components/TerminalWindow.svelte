@@ -1,46 +1,77 @@
 <script lang="ts">
   import { useLanguage } from "../i18n/Language.svelte";
   const language = useLanguage();
-  $: t = $language.t;
+  const t = language.t;
   import type { RuntimeSnapshot } from "../../../runtime-contract/src/index";
 
   import type { ActiveWindow } from "../uiTypes";
   import { terminalParts } from "../uiParity";
-  export let terminalOpen: boolean;
-  export let terminalSplit: boolean;
-  export let terminalMaximized: boolean;
-  export let terminalPosition: { left: number; top: number } | null;
-  export let terminalSize: { width: number; height: number };
-  export let terminalSplitWidth: number;
-  export let activeWindow: ActiveWindow;
-  export let terminal: string;
-  export let inputReady: boolean;
-  export let inputElement: HTMLInputElement | null;
-  export let phase: RuntimeSnapshot["phase"];
-  export let beginTerminalDrag: (event: PointerEvent) => void;
-  export let beginTerminalResize: (
-    event: PointerEvent,
-    direction: string,
-  ) => void;
-  export let toggleTerminalMaximized: () => void;
-  export let toggleTerminalSplit: () => void;
-  export let beginTerminalSplitResize: (event: PointerEvent) => void;
-  export let clearTerminal: () => void;
-  export let resetRuntime: () => Promise<void>;
-  export let sendInput: (event: KeyboardEvent) => Promise<void>;
+  interface Props {
+    terminalOpen: boolean;
+    terminalSplit: boolean;
+    terminalMaximized: boolean;
+    terminalPosition: { left: number; top: number } | null;
+    terminalSize: { width: number; height: number };
+    terminalSplitWidth: number;
+    activeWindow: ActiveWindow;
+    terminal: string;
+    inputReady: boolean;
+    inputElement: HTMLInputElement | null;
+    phase: RuntimeSnapshot["phase"];
+    beginTerminalDrag: (event: PointerEvent) => void;
+    beginTerminalResize: (event: PointerEvent, direction: string) => void;
+    toggleTerminalMaximized: () => void;
+    toggleTerminalSplit: () => void;
+    beginTerminalSplitResize: (event: PointerEvent) => void;
+    clearTerminal: () => void;
+    resetRuntime: () => Promise<void>;
+    sendInput: (event: KeyboardEvent) => Promise<void>;
+  }
 
-  let inputLength = 0;
-  let inputCaretLeft = 0;
-  let inputFocused = false;
+  let {
+    terminalOpen = $bindable(),
+    terminalSplit = $bindable(),
+    terminalMaximized = $bindable(),
+    terminalPosition = $bindable(),
+    terminalSize,
+    terminalSplitWidth,
+    activeWindow = $bindable(),
+    terminal,
+    inputReady,
+    inputElement = $bindable(),
+    phase,
+    beginTerminalDrag,
+    beginTerminalResize,
+    toggleTerminalMaximized,
+    toggleTerminalSplit,
+    beginTerminalSplitResize,
+    clearTerminal,
+    resetRuntime,
+    sendInput,
+  }: Props = $props();
+
+  let inputLength = $state(0);
+  let inputCaretLeft = $state(0);
+  let inputFocused = $state(false);
+  function stopPropagation<E extends Event>(handler: (event: E) => unknown) {
+    return (event: E) => {
+      event.stopPropagation();
+      return handler(event);
+    };
+  }
   const inputMeasureContext =
     typeof document === "undefined"
       ? null
       : document.createElement("canvas").getContext("2d");
-  $: if (!inputReady) inputLength = 0;
-  $: if (!inputReady) {
-    inputCaretLeft = 0;
-    inputFocused = false;
-  }
+  $effect(() => {
+    if (!inputReady) inputLength = 0;
+  });
+  $effect(() => {
+    if (!inputReady) {
+      inputCaretLeft = 0;
+      inputFocused = false;
+    }
+  });
 
   function updateInput(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
@@ -74,7 +105,7 @@
     class:window-active={activeWindow === "terminal"}
     class="terminal-modal"
     role="presentation"
-    on:pointerdown={() => (activeWindow = "terminal")}
+    onpointerdown={() => (activeWindow = "terminal")}
   >
     <div
       class:split={terminalSplit}
@@ -89,7 +120,7 @@
         role="toolbar"
         tabindex="0"
         class="terminal-header window-header"
-        on:pointerdown={(event) => {
+        onpointerdown={(event) => {
           activeWindow = "terminal";
           beginTerminalDrag(event);
         }}
@@ -97,7 +128,7 @@
         <span>{t("ui.common.blueKTerminal")}</span>
         <div>
           <button
-            on:click|stopPropagation={toggleTerminalMaximized}
+            onclick={stopPropagation(toggleTerminalMaximized)}
             aria-label={terminalMaximized
               ? t("ui.common.restoreTerminalWindow")
               : t("ui.common.maximizeTerminalWindow")}
@@ -123,7 +154,7 @@
             ></button
           ><button
             class="terminal-split-toggle"
-            on:click|stopPropagation={toggleTerminalSplit}
+            onclick={stopPropagation(toggleTerminalSplit)}
             aria-label={terminalSplit
               ? t("ui.common.restoreTerminalWindow")
               : t("ui.common.splitTerminalToTheRight")}
@@ -136,64 +167,67 @@
               /></svg
             ></button
           ><button
-            on:click|stopPropagation={() => {
+            onclick={stopPropagation(() => {
               terminalOpen = false;
               terminalMaximized = false;
               terminalSplit = false;
               terminalPosition = null;
-            }}>×</button
+            })}>×</button
           >
         </div>
       </div>
       <div class="terminal-output">
-        <pre tabindex="0"><span class="terminal-transcript">{#key terminal}{#each terminalParts(terminal) as part}{#if part.box}<span
-                  class="terminal-sized"
-                  style={part.box}
-                  ><span
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex (Keyboard focus allows scrolling the terminal transcript) -->
+        <pre tabindex="0"><span class="terminal-transcript"
+            >{#key terminal}{#each terminalParts(terminal) as part}{#if part.box}<span
+                    class="terminal-sized"
+                    style={part.box}
+                    ><span
+                      class:terminal-input-echo={part.input}
+                      style={part.style}>{part.text}</span
+                    ></span
+                  >{:else}<span
                     class:terminal-input-echo={part.input}
                     style={part.style}>{part.text}</span
-                  ></span
-                >{:else}<span
-                  class:terminal-input-echo={part.input}
-                  style={part.style}>{part.text}</span
-                >{/if}{/each}{/key}</span>{#if inputReady}<span
-            class:focused={inputFocused}
-            class="terminal-inline-input-shell"
-            style={`--terminal-caret-left:${inputCaretLeft}px`}
-            ><input
-              bind:this={inputElement}
-              class="terminal-inline-input"
-              aria-label={t("ui.common.terminalInputLabel")}
-              size={inputLength + 1}
-              on:input={updateInput}
-              on:keydown={handleInputKey}
-              on:keyup={(event) => updateCaretPosition(event.currentTarget)}
-              on:select={(event) => updateCaretPosition(event.currentTarget)}
-              on:click={(event) => updateCaretPosition(event.currentTarget)}
-              on:scroll={(event) => updateCaretPosition(event.currentTarget)}
-              on:focus={(event) => {
-                inputFocused = true;
-                updateCaretPosition(event.currentTarget);
-              }}
-              on:blur={() => (inputFocused = false)}
-            /><span class="terminal-inline-caret" aria-hidden="true"></span></span
-          >{/if}</pre>
+                  >{/if}{/each}{/key}</span
+          >{#if inputReady}<span
+              class:focused={inputFocused}
+              class="terminal-inline-input-shell"
+              style={`--terminal-caret-left:${inputCaretLeft}px`}
+              ><input
+                bind:this={inputElement}
+                class="terminal-inline-input"
+                aria-label={t("ui.common.terminalInputLabel")}
+                size={inputLength + 1}
+                oninput={updateInput}
+                onkeydown={handleInputKey}
+                onkeyup={(event) => updateCaretPosition(event.currentTarget)}
+                onselect={(event) => updateCaretPosition(event.currentTarget)}
+                onclick={(event) => updateCaretPosition(event.currentTarget)}
+                onscroll={(event) => updateCaretPosition(event.currentTarget)}
+                onfocus={(event) => {
+                  inputFocused = true;
+                  updateCaretPosition(event.currentTarget);
+                }}
+                onblur={() => (inputFocused = false)}
+              /><span class="terminal-inline-caret" aria-hidden="true"
+              ></span></span
+            >{/if}</pre>
         <button
           class="terminal-clear"
-          on:click|stopPropagation={clearTerminal}
+          onclick={stopPropagation(clearTerminal)}
           aria-label={t("ui.common.clearTerminal")}>⌫</button
         >
       </div>
       {#if phase === "faulted"}<div class="terminal-notice" role="alert">
           {t(
             "ui.common.executionStoppedResetTheRuntimeBeforeRunningMore",
-          )}<button on:click={resetRuntime}
-            >{t("ui.common.resetRuntime")}</button
+          )}<button onclick={resetRuntime}>{t("ui.common.resetRuntime")}</button
           >
         </div>{/if}{#each ["n", "ne", "e", "se", "s", "sw", "w", "nw"] as direction}<div
           role="separator"
           class={`terminal-resize-handle terminal-resize-${direction}`}
-          on:pointerdown={(event) => beginTerminalResize(event, direction)}
+          onpointerdown={(event) => beginTerminalResize(event, direction)}
         ></div>{/each}
     </div>
     <!-- Inside the terminal's stacking layer: windows in front of the terminal also cover the
@@ -202,6 +236,6 @@
         class="terminal-split-divider"
         role="separator"
         aria-label={t("ui.common.resizeBlueKAndTerminal")}
-        on:pointerdown|stopPropagation={beginTerminalSplitResize}
+        onpointerdown={stopPropagation(beginTerminalSplitResize)}
       ></div>{/if}
   </div>{/if}

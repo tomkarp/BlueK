@@ -72,6 +72,7 @@ export class Language {
       /* Storage is optional. */
     }
   };
+  /** Read the current locale when called so render effects track language changes. */
   t = (
     key: MessageKey,
     values: ReadonlyArray<string | number> = [],

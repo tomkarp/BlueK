@@ -42,7 +42,9 @@ test("GUI-130 native confirmations localize; switching back preserves edited cod
   await page.getByRole("button", { name: /Leeres Projekt/ }).click();
   await expect
     .poll(() => message)
-    .toBe("Das aktuelle Projekt enthält Daten. Ersetzen?");
+    .toBe(
+      "Das ersetzt das aktuell geöffnete Projekt und seine automatische Sicherung in diesem Tab. Fortfahren?",
+    );
   await expect(page.getByLabel("Projektname")).toHaveValue("Keep my name");
   await page.getByRole("button", { name: "Abbrechen", exact: true }).click();
   await page

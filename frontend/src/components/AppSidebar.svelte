@@ -1,58 +1,91 @@
 <script lang="ts">
   import { useLanguage } from "../i18n/Language.svelte";
   const language = useLanguage();
-  $: t = $language.t;
+  const t = language.t;
   import type {
     ProjectFile,
     RuntimeSnapshot,
   } from "../../../runtime-contract/src/index";
 
   import type { NewClassType } from "../uiTypes";
-  export let newClassOpen: boolean;
-  export let newClassName: string;
-  export let newClassType: NewClassType;
-  export let inheritanceMode: boolean;
-  export let inheritanceSelection: string;
-  export let status: string;
-  export let displayFiles: ProjectFile[];
-  export let files: ProjectFile[];
-  export let phase: RuntimeSnapshot["phase"];
-  export let inputReady: boolean;
-  export let canExecute: boolean;
-  export let mainEntries: string[];
-  export let compileShortcutLabel: string;
-  export let runShortcutLabel: string;
-  export let exportProject: () => void;
-  export let compile: () => Promise<boolean>;
-  export let recording = false;
-  export let openTests: () => void = () => {};
-  export let runTests: () => void = () => {};
-  export let offlineBuild: boolean;
-  export let offlineDownloadOpen: boolean;
-  export let shortcutsHelpOpen: boolean;
-  export let settingsNotice: boolean;
-  export let runMain: () => Promise<void>;
-  export let requestDebugPause: () => Promise<void>;
-  export let stopDebug: () => Promise<void>;
-  export let debugPauseRequested: boolean;
-  export let openFeedback: () => void;
+  interface Props {
+    newClassOpen: boolean;
+    newClassName: string;
+    newClassType: NewClassType;
+    inheritanceMode: boolean;
+    inheritanceSelection: string;
+    status: string;
+    displayFiles: ProjectFile[];
+    files: ProjectFile[];
+    phase: RuntimeSnapshot["phase"];
+    inputReady: boolean;
+    canExecute: boolean;
+    mainEntries: string[];
+    compileShortcutLabel: string;
+    runShortcutLabel: string;
+    exportProject: () => void;
+    compile: () => Promise<boolean>;
+    recording?: boolean;
+    openTests?: () => void;
+    runTests?: () => void;
+    offlineBuild: boolean;
+    offlineDownloadOpen: boolean;
+    shortcutsHelpOpen: boolean;
+    settingsNotice: boolean;
+    runMain: () => Promise<void>;
+    requestDebugPause: () => Promise<void>;
+    stopDebug: () => Promise<void>;
+    debugPauseRequested: boolean;
+    openFeedback: () => void;
+  }
+
+  let {
+    newClassOpen = $bindable(),
+    newClassName = $bindable(),
+    newClassType = $bindable(),
+    inheritanceMode = $bindable(),
+    inheritanceSelection = $bindable(),
+    status = $bindable(),
+    displayFiles,
+    files,
+    phase,
+    inputReady,
+    canExecute,
+    mainEntries,
+    compileShortcutLabel,
+    runShortcutLabel,
+    exportProject,
+    compile,
+    recording = false,
+    openTests = () => {},
+    runTests = () => {},
+    offlineBuild,
+    offlineDownloadOpen = $bindable(),
+    shortcutsHelpOpen = $bindable(),
+    settingsNotice = $bindable(),
+    runMain,
+    requestDebugPause,
+    stopDebug,
+    debugPauseRequested,
+    openFeedback,
+  }: Props = $props();
 </script>
 
 <nav class="sidebar">
   <button
-    on:click={() => {
+    onclick={() => {
       newClassOpen = true;
       newClassName = "";
       newClassType = "class";
     }}>{t("ui.sidebar.newFile")}</button
   >
-  <button class="sidebar-legacy-save" on:click={exportProject}
+  <button class="sidebar-legacy-save" onclick={exportProject}
     >{t("ui.sidebar.saveProject")}</button
   >
   <button
     class:active-tool={inheritanceMode}
     disabled={displayFiles.filter((file) => file.kind === "class").length < 2}
-    on:click={() => {
+    onclick={() => {
       inheritanceMode = !inheritanceMode;
       inheritanceSelection = "";
       status = inheritanceMode ? "Select subclass, then superclass" : "Ready";
@@ -69,7 +102,7 @@
     >
   </button>
   <button
-    on:click={compile}
+    onclick={compile}
     title={t("ui.sidebar.compile0", [compileShortcutLabel])}
     disabled={!files.length ||
       phase === "compiling" ||
@@ -77,17 +110,20 @@
       inputReady}>{t("ui.common.compile")}</button
   >
   <button
-    on:click={() => void runMain()}
+    onclick={() => void runMain()}
     title={t("ui.sidebar.startMain0", [runShortcutLabel])}
     aria-label={t("ui.sidebar.startMain")}
     disabled={!canExecute || !mainEntries.length}
     >{t("ui.sidebar.startMain")}</button
   >
   {#if phase === "running"}
-    <button on:click={() => void requestDebugPause()} disabled={debugPauseRequested}>
+    <button
+      onclick={() => void requestDebugPause()}
+      disabled={debugPauseRequested}
+    >
       {debugPauseRequested ? t("ui.debug.pauseRequested") : t("ui.debug.pause")}
     </button>
-    <button on:click={() => void stopDebug()}>{t("ui.debug.stop")}</button>
+    <button onclick={() => void stopDebug()}>{t("ui.debug.stop")}</button>
   {/if}
   <details class="sidebar-testing">
     <summary
@@ -103,11 +139,11 @@
       <p class="sidebar-testing-notice">
         {t("ui.sidebar.testingIsStillInTheAlphaStage")}
       </p>
-      <button on:click={openTests}
+      <button onclick={openTests}
         >{recording ? t("ui.sidebar.recording") : t("ui.sidebar.tests")}</button
       >
       <button
-        on:click={runTests}
+        onclick={runTests}
         disabled={recording ||
           phase === "running" ||
           phase === "compiling" ||
@@ -116,7 +152,7 @@
     </div>
   </details>
   <div class="side-spacer"></div>
-  <button class="sidebar-feedback-button" on:click={openFeedback}
+  <button class="sidebar-feedback-button" onclick={openFeedback}
     >{t("ui.feedback.title")}</button
   >
   <div
@@ -126,7 +162,7 @@
   >
     {#if !offlineBuild}<button
         class="utility-icon-button toolbar-download-button"
-        on:click={() => (offlineDownloadOpen = true)}
+        onclick={() => (offlineDownloadOpen = true)}
         aria-label={t("ui.sidebar.offlineVersion")}
         title={t("ui.sidebar.downloadBlueKForOfflineUse")}
       >
@@ -136,7 +172,7 @@
       </button>{/if}
     <button
       class="utility-icon-button toolbar-help-button"
-      on:click={() => (shortcutsHelpOpen = true)}
+      onclick={() => (shortcutsHelpOpen = true)}
       aria-label={t("ui.sidebar.help")}
       title={t("ui.sidebar.help")}
     >
@@ -148,7 +184,7 @@
     </button>
     <button
       class="utility-icon-button settings-button"
-      on:click={() => (settingsNotice = true)}
+      onclick={() => (settingsNotice = true)}
       aria-label={t("ui.common.settings")}
       title={t("ui.common.settings")}
     >

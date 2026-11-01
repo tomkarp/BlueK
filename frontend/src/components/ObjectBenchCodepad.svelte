@@ -1,7 +1,7 @@
 <script lang="ts">
   import { useLanguage } from "../i18n/Language.svelte";
   const language = useLanguage();
-  $: t = $language.t;
+  const t = language.t;
   import type {
     ProjectFile,
     RuntimeSnapshot,
@@ -14,30 +14,63 @@
     codepadResultValue,
     codepadResultType,
   } from "../codepadPresentation";
-  export let codepadOpen: boolean;
-  export let bench: BenchObject[];
-  export let fieldInput: HTMLInputElement | null;
-  export let selectedObjectId: string;
-  export let history: HistoryEntry[];
-  export let codepadMenu: CodepadMenu | null;
-  export let codepad: string;
-  export let liveObjectIds: string[];
-  export let phase: RuntimeSnapshot["phase"];
-  export let inputReady: boolean;
-  export let insertBenchName: (name: string) => void;
-  export let inspectObject: (object: BenchObject) => Promise<void>;
-  export let openMenu: (
-    event: MouseEvent,
-    file?: ProjectFile,
-    object?: BenchObject,
-  ) => void;
-  export let beginBenchResize: (event: PointerEvent) => void;
-  export let benchOpen: boolean;
-  export let requestObjectOnBench: (value: RuntimeValue) => void;
-  export let submitCodepad: (event: KeyboardEvent) => void;
-  export let openFeedback: (
-    context: import("../feedbackApi").FeedbackContext,
-  ) => void;
+  interface Props {
+    codepadOpen: boolean;
+    bench: BenchObject[];
+    fieldInput: HTMLInputElement | null;
+    selectedObjectId: string;
+    history: HistoryEntry[];
+    codepadMenu: CodepadMenu | null;
+    codepad: string;
+    liveObjectIds: string[];
+    phase: RuntimeSnapshot["phase"];
+    inputReady: boolean;
+    insertBenchName: (name: string) => void;
+    inspectObject: (object: BenchObject) => Promise<void>;
+    openMenu: (
+      event: MouseEvent,
+      file?: ProjectFile,
+      object?: BenchObject,
+    ) => void;
+    beginBenchResize: (event: PointerEvent) => void;
+    benchOpen: boolean;
+    requestObjectOnBench: (value: RuntimeValue) => void;
+    submitCodepad: (event: KeyboardEvent) => void;
+    openFeedback: (context: import("../feedbackApi").FeedbackContext) => void;
+  }
+
+  let {
+    codepadOpen = $bindable(),
+    bench,
+    fieldInput,
+    selectedObjectId = $bindable(),
+    history,
+    codepadMenu = $bindable(),
+    codepad = $bindable(),
+    liveObjectIds,
+    phase,
+    inputReady,
+    insertBenchName,
+    inspectObject,
+    openMenu,
+    beginBenchResize,
+    benchOpen = $bindable(),
+    requestObjectOnBench,
+    submitCodepad,
+    openFeedback,
+  }: Props = $props();
+  function preventDefault<E extends Event>(handler: (event: E) => unknown) {
+    return (event: E) => {
+      event.preventDefault();
+      return handler(event);
+    };
+  }
+  function stopPropagation<E extends Event>(handler: (event: E) => unknown) {
+    return (event: E) => {
+      event.stopPropagation();
+      return handler(event);
+    };
+  }
 </script>
 
 <div
@@ -56,16 +89,16 @@
           title={fieldInput
             ? t("ui.codepad.insert0", [object.name])
             : undefined}
-          on:mousedown={(event) => fieldInput && event.preventDefault()}
-          on:click={(event) => {
+          onmousedown={(event) => fieldInput && event.preventDefault()}
+          onclick={(event) => {
             // Like BlueJ's call dialogs: while a field is edited, a
             // click inserts the object's name instead of selecting it.
             if (!fieldInput) selectedObjectId = object.objectId;
             else if (event.detail <= 1) insertBenchName(object.name);
           }}
-          on:dblclick={() => !fieldInput && inspectObject(object)}
-          on:keydown={(event) => event.key === "Enter" && inspectObject(object)}
-          on:contextmenu={(event) => {
+          ondblclick={() => !fieldInput && inspectObject(object)}
+          onkeydown={(event) => event.key === "Enter" && inspectObject(object)}
+          oncontextmenu={(event) => {
             selectedObjectId = object.objectId;
             openMenu(event, undefined, object);
           }}
@@ -82,28 +115,26 @@
     aria-label={benchOpen
       ? t("ui.codepad.collapseCodepad")
       : t("ui.codepad.expandObjectBench")}
-    on:click={() => {
+    onclick={() => {
       if (benchOpen) codepadOpen = !codepadOpen;
       else benchOpen = true;
-    }}
-    >›</button
+    }}>›</button
   >
   <div
     class="bench-codepad-splitter"
     role="separator"
     aria-label={t("ui.codepad.resizeObjectBenchAndCodepad")}
-    on:pointerdown={beginBenchResize}
+    onpointerdown={beginBenchResize}
   ></div>
   <button
     class="pane-toggle-right"
     aria-label={codepadOpen
       ? t("ui.codepad.collapseObjectBench")
       : t("ui.codepad.expandCodepad")}
-    on:click={() => {
+    onclick={() => {
       if (codepadOpen) benchOpen = !benchOpen;
       else codepadOpen = true;
-    }}
-    >‹</button
+    }}>‹</button
   >
   {#if codepadOpen}
     <section class="codepad">
@@ -111,19 +142,27 @@
         class="codepad-history"
         role="log"
         aria-label={t("ui.codepad.codepadHistory")}
-        on:contextmenu|preventDefault|stopPropagation={(event) =>
-          (codepadMenu = { x: event.clientX, y: event.clientY })}
+        oncontextmenu={stopPropagation(
+          preventDefault(
+            (event: MouseEvent) =>
+              (codepadMenu = { x: event.clientX, y: event.clientY }),
+          ),
+        )}
       >
         {#each history as entry}
           <div
             class="codepad-entry"
             role="group"
-            on:contextmenu|preventDefault|stopPropagation={(event) =>
-              (codepadMenu = {
-                x: event.clientX,
-                y: event.clientY,
-                text: entry.code,
-              })}
+            oncontextmenu={stopPropagation(
+              preventDefault(
+                (event: MouseEvent) =>
+                  (codepadMenu = {
+                    x: event.clientX,
+                    y: event.clientY,
+                    text: entry.code,
+                  }),
+              ),
+            )}
           >
             <div>{entry.code}</div>
             {#if entry.objectResult || entry.objectId}
@@ -131,7 +170,7 @@
                 class="codepad-object-result svelte-codepad-object-result"
                 disabled={!entry.objectId ||
                   !liveObjectIds.includes(entry.objectId)}
-                on:click={() =>
+                onclick={() =>
                   entry.objectId &&
                   requestObjectOnBench({
                     kind: "object",
@@ -160,7 +199,7 @@
                 {entry.error}
                 <button
                   class="feedback-inline-button"
-                  on:click={() =>
+                  onclick={() =>
                     openFeedback({ error: entry.error, code: entry.code })}
                   >{t("ui.feedback.title")}</button
                 >
@@ -180,7 +219,7 @@
         aria-label={t("ui.codepad.codepadInput")}
         rows="1"
         bind:value={codepad}
-        on:keydown={submitCodepad}
+        onkeydown={submitCodepad}
         disabled={codepadIsDisabled(phase, inputReady)}
       ></textarea>
     </section>

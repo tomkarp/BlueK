@@ -1,33 +1,50 @@
 <script lang="ts">
   import { useLanguage } from "../i18n/Language.svelte";
   const language = useLanguage();
-  $: t = $language.t;
+  const t = language.t;
   import { containClicks } from "../uiActions";
 
   import { standardImages, standardSounds } from "../standardImages";
   import { MEDIA, resourceBytes, type MediaKind } from "../projectMedia";
   import type { ProjectResource } from "../../../runtime-contract/src/index";
-  export let imageLibraryOpen: boolean;
-  export let soundLibraryOpen: boolean;
-  export let images: ProjectResource[];
-  export let sounds: ProjectResource[];
-  export let mediaErrors: Record<MediaKind, string>;
-  export let addMedia: (kind: MediaKind, files: File[]) => Promise<void>;
-  export let renameMedia: (kind: MediaKind, path: string) => void;
-  export let removeMedia: (kind: MediaKind, path: string) => void;
-  export let libraryId: string;
+  interface Props {
+    imageLibraryOpen: boolean;
+    soundLibraryOpen: boolean;
+    images: ProjectResource[];
+    sounds: ProjectResource[];
+    mediaErrors: Record<MediaKind, string>;
+    addMedia: (kind: MediaKind, files: File[]) => Promise<void>;
+    renameMedia: (kind: MediaKind, path: string) => void;
+    removeMedia: (kind: MediaKind, path: string) => void;
+    libraryId: string;
+  }
 
-  let imageInput: HTMLInputElement;
-  let soundInput: HTMLInputElement;
-  let preview: HTMLAudioElement | null = null;
-  let previewPath = "";
-  const megabytes = (kind: MediaKind) => String(MEDIA[kind].maxBytes / 1024 / 1024);
+  let {
+    imageLibraryOpen = $bindable(),
+    soundLibraryOpen = $bindable(),
+    images,
+    sounds,
+    mediaErrors = $bindable(),
+    addMedia,
+    renameMedia,
+    removeMedia,
+    libraryId,
+  }: Props = $props();
+
+  let imageInput: HTMLInputElement | undefined = $state();
+  let soundInput: HTMLInputElement | undefined = $state();
+  let preview: HTMLAudioElement | null = $state(null);
+  let previewPath = $state("");
+  const megabytes = (kind: MediaKind) =>
+    String(MEDIA[kind].maxBytes / 1024 / 1024);
   const fileName = (path: string) => path.split("/").at(-1) || path;
   const sizeText = (bytes: number) =>
     bytes < 1024 ? `${bytes} B` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
   // A project file replaces the standard file with the same name.
   const notReplaced = (standard: ProjectResource[], own: ProjectResource[]) =>
-    standard.filter((item) => !own.some((resource) => resource.path === item.path));
+    standard.filter(
+      (item) => !own.some((resource) => resource.path === item.path),
+    );
 
   function stopPreview() {
     preview?.pause();
@@ -48,7 +65,8 @@
       if (preview === element) stopPreview();
     });
   }
-  async function choose(kind: MediaKind, input: HTMLInputElement) {
+  async function choose(kind: MediaKind, input: HTMLInputElement | undefined) {
+    if (!input) return;
     const files = Array.from(input.files || []);
     input.value = "";
     if (files.length) await addMedia(kind, files);
@@ -62,17 +80,24 @@
     mediaErrors.sound = "";
     soundLibraryOpen = false;
   }
-  $: if (!soundLibraryOpen && preview) stopPreview();
-  $: soundGroups = [
-    { key: "project", title: t("ui.media.projectSounds"), sounds, removable: true },
+  $effect(() => {
+    if (!soundLibraryOpen && preview) stopPreview();
+  });
+  let soundGroups = $derived([
+    {
+      key: "project",
+      title: t("ui.media.projectSounds"),
+      sounds,
+      removable: true,
+    },
     {
       key: "standard",
       title: t("ui.media.standardSounds"),
       sounds: notReplaced(standardSounds, sounds),
       removable: false,
     },
-  ];
-  $: visibleStandardImages = notReplaced(standardImages, images);
+  ]);
+  let visibleStandardImages = $derived(notReplaced(standardImages, images));
 </script>
 
 {#if imageLibraryOpen && libraryId === "blueplay"}<div
@@ -90,13 +115,16 @@
       <h3 id="images-title">{t("ui.common.images")}</h3>
       <div class="image-library-content">
         <p class="media-library-hint">
-          {t("ui.media.imageHint", [megabytes("image"), String(MEDIA.image.maxSide)])}
+          {t("ui.media.imageHint", [
+            megabytes("image"),
+            String(MEDIA.image.maxSide),
+          ])}
         </p>
         <h4 class="media-group-title">{t("ui.media.projectImages")}</h4>
         <div class="standard-image-grid project-image-grid">
           <button
             class="standard-image-tile standard-image-add"
-            on:click={() => imageInput.click()}
+            onclick={() => imageInput?.click()}
             aria-label={t("ui.media.addImage")}
             title={t("ui.media.addImage")}
             ><span aria-hidden="true">+</span></button
@@ -117,8 +145,10 @@
               <div class="media-actions">
                 <button
                   class="media-rename"
-                  on:click={() => renameMedia("image", resource.path)}
-                  aria-label={t("ui.media.renameImage", [fileName(resource.path)])}
+                  onclick={() => renameMedia("image", resource.path)}
+                  aria-label={t("ui.media.renameImage", [
+                    fileName(resource.path),
+                  ])}
                   title={t("ui.media.renameImage", [fileName(resource.path)])}
                   ><svg viewBox="0 0 24 24" aria-hidden="true"
                     ><path d="M4 20h4L19 9l-4-4L4 16z" /><path
@@ -127,8 +157,10 @@
                   ></button
                 ><button
                   class="media-remove"
-                  on:click={() => removeMedia("image", resource.path)}
-                  aria-label={t("ui.media.removeImage", [fileName(resource.path)])}
+                  onclick={() => removeMedia("image", resource.path)}
+                  aria-label={t("ui.media.removeImage", [
+                    fileName(resource.path),
+                  ])}
                   title={t("ui.media.removeImage", [fileName(resource.path)])}
                   >×</button
                 >
@@ -136,7 +168,9 @@
             </div>
           {/each}
         </div>
-        {#if !images.length}<p class="media-empty">{t("ui.media.noImages")}</p>{/if}
+        {#if !images.length}<p class="media-empty">
+            {t("ui.media.noImages")}
+          </p>{/if}
         {#if mediaErrors.image}<p class="media-error" role="alert">
             {mediaErrors.image}
           </p>{/if}
@@ -148,12 +182,15 @@
           multiple
           hidden
           aria-label={t("ui.media.addImage")}
-          on:change={() => choose("image", imageInput)}
+          onchange={() => choose("image", imageInput)}
         />
         <h4 class="media-group-title">{t("ui.media.standardImages")}</h4>
         <div class="standard-image-grid standard-image-list">
           {#each visibleStandardImages as resource (resource.path)}
-            <div class="standard-image-tile" aria-label={fileName(resource.path)}>
+            <div
+              class="standard-image-tile"
+              aria-label={fileName(resource.path)}
+            >
               <div class="standard-image-preview">
                 <img src={resource.data} alt={fileName(resource.path)} />
               </div>
@@ -163,7 +200,7 @@
         </div>
       </div>
       <div class="dialog-actions">
-        <button on:click={closeImages}>{t("ui.common.close")}</button>
+        <button onclick={closeImages}>{t("ui.common.close")}</button>
       </div>
     </div>
   </div>{/if}
@@ -192,7 +229,7 @@
                 <button
                   class="sound-play"
                   class:active={previewPath === sound.path}
-                  on:click={() => togglePreview(sound)}
+                  onclick={() => togglePreview(sound)}
                   aria-label={previewPath === sound.path
                     ? t("ui.media.stopSound", [fileName(sound.path)])
                     : t("ui.media.playSound", [fileName(sound.path)])}
@@ -213,11 +250,13 @@
                 <span class="sound-size">{sizeText(resourceBytes(sound))}</span>
                 {#if group.removable}<button
                     class="media-rename"
-                    on:click={() => {
+                    onclick={() => {
                       if (previewPath === sound.path) stopPreview();
                       renameMedia("sound", sound.path);
                     }}
-                    aria-label={t("ui.media.renameSound", [fileName(sound.path)])}
+                    aria-label={t("ui.media.renameSound", [
+                      fileName(sound.path),
+                    ])}
                     title={t("ui.media.renameSound", [fileName(sound.path)])}
                     ><svg viewBox="0 0 24 24" aria-hidden="true"
                       ><path d="M4 20h4L19 9l-4-4L4 16z" /><path
@@ -226,11 +265,13 @@
                     ></button
                   ><button
                     class="media-remove"
-                    on:click={() => {
+                    onclick={() => {
                       if (previewPath === sound.path) stopPreview();
                       removeMedia("sound", sound.path);
                     }}
-                    aria-label={t("ui.media.removeSound", [fileName(sound.path)])}
+                    aria-label={t("ui.media.removeSound", [
+                      fileName(sound.path),
+                    ])}
                     title={t("ui.media.removeSound", [fileName(sound.path)])}
                     >×</button
                   >{/if}
@@ -252,13 +293,13 @@
         multiple
         hidden
         aria-label={t("ui.media.addSound")}
-        on:change={() => choose("sound", soundInput)}
+        onchange={() => choose("sound", soundInput)}
       />
       <div class="dialog-actions">
-        <button on:click={() => soundInput.click()}
+        <button onclick={() => soundInput?.click()}
           >{t("ui.media.addSound")}</button
         >
-        <button on:click={closeSounds}>{t("ui.common.close")}</button>
+        <button onclick={closeSounds}>{t("ui.common.close")}</button>
       </div>
     </div>
   </div>{/if}

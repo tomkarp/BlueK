@@ -1,7 +1,6 @@
 <script lang="ts">
   import { useLanguage } from "../i18n/Language.svelte";
   const language = useLanguage();
-  $: t = $language.t;
   import { focusOnMount, containClicks } from "../uiActions";
 
   import type { RuntimeValue } from "../../../runtime-contract/src/index";
@@ -14,40 +13,68 @@
   } from "../uiTypes";
   import { missingRequired, missingTypeArgument } from "../uiParity";
   import CallArguments from "./CallArguments.svelte";
-  export let recording = false;
-  export let assertionAvailable = false;
-  export let suggestedExpected: string | null = null;
-  export let assertionError = "";
-  export let addAssertion: (
-    expected: string,
-    kind: "equals" | "null" | "notNull",
-  ) => Promise<void> = async () => {};
-  let expected = "";
-  let assertionKind: "equals" | "null" | "notNull" = "equals";
-  let previousResult: ResultDialog | null = null;
-  $: if (resultDialog !== previousResult) {
-    previousResult = resultDialog;
-    expected = suggestedExpected || "";
+  let expected = $state("");
+  let assertionKind: "equals" | "null" | "notNull" = $state("equals");
+  let previousResult: ResultDialog | null = $state(null);
+
+  interface Props {
+    recording?: boolean;
+    assertionAvailable?: boolean;
+    suggestedExpected?: string | null;
+    assertionError?: string;
+    addAssertion?: (
+      expected: string,
+      kind: "equals" | "null" | "notNull",
+    ) => Promise<void>;
+    createDialog: CreateDialog | null;
+    invokeDialog: InvokeDialog | null;
+    resultDialog: ResultDialog | null;
+    createName: string;
+    createArgs: string[];
+    createTypeArgs: string[];
+    invokeArgs: string[];
+    invokeTypeArgs: string[];
+    dialogError: string;
+    canExecute: boolean;
+    chooseConstructor: (index: number) => void;
+    confirmCreate: () => Promise<void>;
+    confirmInvoke: () => Promise<void>;
+    inspectObject: (
+      object: BenchObject,
+      preserveReferenceName?: boolean,
+    ) => Promise<void>;
+    requestObjectOnBench: (value: RuntimeValue) => void;
   }
 
-  export let createDialog: CreateDialog | null;
-  export let invokeDialog: InvokeDialog | null;
-  export let resultDialog: ResultDialog | null;
-  export let createName: string;
-  export let createArgs: string[];
-  export let createTypeArgs: string[];
-  export let invokeArgs: string[];
-  export let invokeTypeArgs: string[];
-  export let dialogError: string;
-  export let canExecute: boolean;
-  export let chooseConstructor: (index: number) => void;
-  export let confirmCreate: () => Promise<void>;
-  export let confirmInvoke: () => Promise<void>;
-  export let inspectObject: (
-    object: BenchObject,
-    preserveReferenceName?: boolean,
-  ) => Promise<void>;
-  export let requestObjectOnBench: (value: RuntimeValue) => void;
+  let {
+    recording = false,
+    assertionAvailable = false,
+    suggestedExpected = null,
+    assertionError = "",
+    addAssertion = async () => {},
+    createDialog = $bindable(),
+    invokeDialog = $bindable(),
+    resultDialog = $bindable(),
+    createName = $bindable(),
+    createArgs = $bindable(),
+    createTypeArgs = $bindable(),
+    invokeArgs = $bindable(),
+    invokeTypeArgs = $bindable(),
+    dialogError,
+    canExecute,
+    chooseConstructor,
+    confirmCreate,
+    confirmInvoke,
+    inspectObject,
+    requestObjectOnBench,
+  }: Props = $props();
+  const t = language.t;
+  $effect(() => {
+    if (resultDialog !== previousResult) {
+      previousResult = resultDialog;
+      expected = suggestedExpected || "";
+    }
+  });
 </script>
 
 {#if createDialog}<div class="modal topmost-modal" role="presentation">
@@ -70,7 +97,7 @@
           bind:value={createName}
           use:focusOnMount={!createDialog.parameters.length &&
             !createDialog.typeParameters.length}
-          on:keydown={(event) => {
+          onkeydown={(event) => {
             if (event.key === "Escape") createDialog = null;
             if (event.key === "Enter") confirmCreate();
           }}
@@ -78,7 +105,7 @@
       >{#if createDialog.constructors.length > 1}<label
           >{t("ui.objects.constructor")}<select
             bind:value={createDialog.constructorIndex}
-            on:change={(event) =>
+            onchange={(event) =>
               chooseConstructor(
                 Number((event.currentTarget as HTMLSelectElement).value),
               )}
@@ -97,7 +124,7 @@
           {typeParameter}<input
             bind:value={createTypeArgs[index]}
             use:focusOnMount={index === 0}
-            on:keydown={(event) => event.key === "Enter" && confirmCreate()}
+            onkeydown={(event) => event.key === "Enter" && confirmCreate()}
           /></label
         >{/each}<CallArguments
         prefix={createDialog.className +
@@ -112,10 +139,10 @@
           {$language.message(dialogError)}
         </div>{/if}
       <div class="dialog-actions">
-        <button on:click={() => (createDialog = null)}
+        <button onclick={() => (createDialog = null)}
           >{t("ui.common.cancel")}</button
         ><button
-          on:click={confirmCreate}
+          onclick={confirmCreate}
           disabled={!canExecute ||
             missingTypeArgument(createTypeArgs) ||
             missingRequired(createDialog.parameters, createArgs)}
@@ -143,7 +170,7 @@
           {typeParameter}<input
             bind:value={invokeTypeArgs[index]}
             use:focusOnMount={index === 0}
-            on:keydown={(event) => event.key === "Enter" && confirmInvoke()}
+            onkeydown={(event) => event.key === "Enter" && confirmInvoke()}
           /></label
         >{/each}<CallArguments
         prefix={(invokeDialog.object
@@ -161,10 +188,10 @@
           {$language.message(dialogError)}
         </div>{/if}
       <div class="dialog-actions">
-        <button on:click={() => (invokeDialog = null)}
+        <button onclick={() => (invokeDialog = null)}
           >{t("ui.common.cancel")}</button
         ><button
-          on:click={confirmInvoke}
+          onclick={confirmInvoke}
           disabled={!canExecute ||
             missingTypeArgument(invokeTypeArgs) ||
             missingRequired(invokeDialog.method.parameters || [], invokeArgs)}
@@ -182,7 +209,12 @@
     >
       <h3>{t("ui.objects.methodResult")}</h3>
       <div class="result-method">{resultDialog.method}</div>
-      <output class="result-value">{#if resultDialog.defaultObjectDisplay}<span class="value-placeholder">{t("ui.codepad.object")}</span> : {resultDialog.className}{:else}{resultDialog.value}{/if}</output>
+      <output class="result-value"
+        >{#if resultDialog.defaultObjectDisplay}<span class="value-placeholder"
+            >{t("ui.codepad.object")}</span
+          >
+          : {resultDialog.className}{:else}{resultDialog.value}{/if}</output
+      >
       {#if recording && assertionAvailable}<div class="test-assertion">
           <label
             >{t("ui.objects.testAssertion")}<select bind:value={assertionKind}
@@ -205,14 +237,14 @@
           <button
             disabled={!canExecute ||
               (assertionKind === "equals" && !expected.trim())}
-            on:click={async () => {
+            onclick={async () => {
               await addAssertion(expected, assertionKind);
             }}>{t("ui.objects.addAssertion")}</button
           >
         </div>{:else if recording}<p>{t("ui.objects.resultRecorded")}</p>{/if}
       <div class="result-actions">
         {#if resultDialog.objectId}<button
-            on:click={() => {
+            onclick={() => {
               const object = {
                 objectId: resultDialog!.objectId!,
                 className: resultDialog!.className || "Object",
@@ -222,7 +254,7 @@
               resultDialog = null;
             }}>{t("ui.common.inspect")}</button
           ><button
-            on:click={() => {
+            onclick={() => {
               requestObjectOnBench({
                 objectId: resultDialog!.objectId!,
                 className: resultDialog!.className || "Object",
@@ -231,7 +263,7 @@
               });
               resultDialog = null;
             }}>{t("ui.objects.get")}</button
-          >{/if}<button on:click={() => (resultDialog = null)}
+          >{/if}<button onclick={() => (resultDialog = null)}
           >{t("ui.common.close")}</button
         >
       </div>

@@ -1,36 +1,61 @@
 <script lang="ts">
   import { useLanguage } from "../i18n/Language.svelte";
   const language = useLanguage();
-  $: t = $language.t;
+  const t = language.t;
   import type { ProjectFile } from "../../../runtime-contract/src/index";
 
   import type { ActiveWindow } from "../uiTypes";
-  export let cloudAvailable = false;
-  export let openCloud: () => void = () => {};
-  export let accountName = "";
-  export let accountReady = true;
-  export let newProjectOpen: boolean;
-  export let toolbarDialog: "open" | "save" | "share" | null;
-  export let files: ProjectFile[];
-  export let libraryId: string;
-  export let imageLibraryOpen: boolean;
-  export let soundLibraryOpen: boolean;
-  export let projectName: string;
-  export let terminalOpen: boolean;
-  export let terminalSplit: boolean;
-  export let activeWindow: ActiveWindow;
-  export let showInheritance: boolean;
-  export let showTestClasses: boolean;
-  export let hasTestClasses: boolean;
-  export let toggleInheritance: () => void;
-  export let toggleTestClasses: () => void;
-  export let commitProjectName: (event: KeyboardEvent) => void;
+  interface Props {
+    cloudAvailable?: boolean;
+    openCloud?: () => void;
+    accountName?: string;
+    accountReady?: boolean;
+    newProjectOpen: boolean;
+    toolbarDialog: "open" | "save" | "share" | null;
+    files: ProjectFile[];
+    libraryId: string;
+    imageLibraryOpen: boolean;
+    soundLibraryOpen: boolean;
+    projectName: string;
+    terminalOpen: boolean;
+    terminalSplit: boolean;
+    activeWindow: ActiveWindow;
+    showInheritance: boolean;
+    showTestClasses: boolean;
+    hasTestClasses: boolean;
+    toggleInheritance: () => void;
+    toggleTestClasses: () => void;
+    commitProjectName: (event: KeyboardEvent) => void;
+  }
+
+  let {
+    cloudAvailable = false,
+    openCloud = () => {},
+    accountName = "",
+    accountReady = true,
+    newProjectOpen = $bindable(),
+    toolbarDialog = $bindable(),
+    files,
+    libraryId,
+    imageLibraryOpen = $bindable(),
+    soundLibraryOpen = $bindable(),
+    projectName = $bindable(),
+    terminalOpen = $bindable(),
+    terminalSplit = $bindable(),
+    activeWindow = $bindable(),
+    showInheritance,
+    showTestClasses,
+    hasTestClasses,
+    toggleInheritance,
+    toggleTestClasses,
+    commitProjectName,
+  }: Props = $props();
 </script>
 
 <div class="toolbar">
   <button
     class="toolbar-main-action"
-    on:click={() => (newProjectOpen = true)}
+    onclick={() => (newProjectOpen = true)}
     aria-label={t("ui.toolbar.newProject")}
     title={t("ui.toolbar.newProject")}
   >
@@ -42,7 +67,7 @@
   </button>
   <button
     class="toolbar-main-action"
-    on:click={() => (toolbarDialog = "open")}
+    onclick={() => (toolbarDialog = "open")}
     aria-label={t("ui.common.openImport")}
     title={t("ui.common.openImport")}
   >
@@ -53,7 +78,7 @@
   </button>
   <button
     class="toolbar-main-action"
-    on:click={() => (toolbarDialog = "save")}
+    onclick={() => (toolbarDialog = "save")}
     disabled={!files.length}
     aria-label={t("ui.common.saveExport")}
     title={t("ui.common.saveExport")}
@@ -68,7 +93,7 @@
       disabled={!files.length}
       aria-label={t("ui.transfer.share")}
       title={t("ui.transfer.share")}
-      on:click={() => (toolbarDialog = "share")}
+      onclick={() => (toolbarDialog = "share")}
       ><span class="toolbar-action-icon" aria-hidden="true"
         ><svg viewBox="0 0 24 24"
           ><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle
@@ -82,7 +107,7 @@
   {#if libraryId === "blueplay"}
     <button
       class="toolbar-icon-button media-tool-button"
-      on:click={() => (imageLibraryOpen = true)}
+      onclick={() => (imageLibraryOpen = true)}
       aria-label={t("ui.common.images")}
       title={t("ui.common.images")}
     >
@@ -96,7 +121,7 @@
     </button>
     <button
       class="toolbar-icon-button media-tool-button"
-      on:click={() => (soundLibraryOpen = true)}
+      onclick={() => (soundLibraryOpen = true)}
       aria-label={t("ui.toolbar.audio")}
       title={t("ui.toolbar.audio")}
     >
@@ -112,13 +137,13 @@
     aria-label={t("ui.toolbar.projectName")}
     placeholder={t("ui.common.untitledProject")}
     bind:value={projectName}
-    on:keydown={commitProjectName}
+    onkeydown={commitProjectName}
   />
   <div class="toolbar-options">
     <button
       class:active={terminalOpen}
       class="toolbar-icon-button"
-      on:click={() => {
+      onclick={() => {
         terminalOpen = !terminalOpen;
         if (terminalOpen) activeWindow = "terminal";
         if (!terminalOpen) terminalSplit = false;
@@ -139,7 +164,7 @@
     <button
       class:active={showInheritance}
       class="toolbar-icon-button"
-      on:click={toggleInheritance}
+      onclick={toggleInheritance}
       aria-label={showInheritance
         ? t("ui.toolbar.hideInheritanceArrows")
         : t("ui.toolbar.showInheritanceArrows")}
@@ -163,7 +188,7 @@
     <button
       class:active={showTestClasses}
       class="toolbar-icon-button test-classes-button"
-      on:click={toggleTestClasses}
+      onclick={toggleTestClasses}
       disabled={!hasTestClasses}
       aria-label={showTestClasses
         ? t("ui.toolbar.hideTestClasses")
@@ -192,7 +217,7 @@
           : accountName
             ? t("ui.cloud.signedIn", [accountName])
             : t("ui.cloud.login")}
-        on:click={openCloud}
+        onclick={openCloud}
         ><span class="toolbar-action-icon" aria-hidden="true"
           ><svg viewBox="0 0 24 24"
             ><circle cx="12" cy="7" r="4" /><path

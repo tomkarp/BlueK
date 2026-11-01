@@ -1,15 +1,28 @@
 <script lang="ts">
   import { useLanguage } from "../i18n/Language.svelte";
   const language = useLanguage();
-  $: t = $language.t;
-  export let programShowProjectName: boolean;
-  export let programAllowDownload: boolean;
-  export let programAllowBlueK: boolean;
-  export let programAutoRun: boolean;
-  export let programShowControls: boolean;
-  export let programShowSpeed: boolean;
-  export let bluePlay: boolean;
-  export let forLinks = false;
+  const t = language.t;
+  interface Props {
+    programShowProjectName: boolean;
+    programAllowDownload: boolean;
+    programAllowBlueK: boolean;
+    programAutoRun: boolean;
+    programShowControls: boolean;
+    programShowSpeed: boolean;
+    bluePlay: boolean;
+    forLinks?: boolean;
+  }
+
+  let {
+    programShowProjectName = $bindable(),
+    programAllowDownload = $bindable(),
+    programAllowBlueK = $bindable(),
+    programAutoRun = $bindable(),
+    programShowControls = $bindable(),
+    programShowSpeed = $bindable(),
+    bluePlay,
+    forLinks = false,
+  }: Props = $props();
 </script>
 
 <div class="program-export-options">

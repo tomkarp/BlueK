@@ -1,10 +1,24 @@
 <script lang="ts">
   import { useLanguage } from "../i18n/Language.svelte";
   const language = useLanguage();
-  $: t = $language.t;
-  export let newProjectOpen: boolean;
-  export let projectInfo: "template" | "example" | null;
-  export let chooseTemplate: (choice: string) => Promise<void>;
+  const t = language.t;
+  interface Props {
+    newProjectOpen: boolean;
+    projectInfo: "template" | "example" | null;
+    chooseTemplate: (choice: string) => Promise<void>;
+  }
+
+  let {
+    newProjectOpen = $bindable(),
+    projectInfo = $bindable(),
+    chooseTemplate,
+  }: Props = $props();
+  function stopPropagation(handler: () => unknown) {
+    return (event: Event) => {
+      event.stopPropagation();
+      return handler();
+    };
+  }
 </script>
 
 {#if newProjectOpen}<div class="modal topmost-modal">
@@ -19,20 +33,20 @@
       <h4>{t("ui.transfer.newProjects")}</h4>
       <div class="project-choice-list">
         <div class="project-choice-row">
-          <button on:click={() => chooseTemplate("empty")}
+          <button onclick={() => chooseTemplate("empty")}
             ><strong>{t("ui.projects.emptyProject")}</strong><span
               >{t("ui.projects.startWithABlankBlueKProject")}</span
             ></button
           >
         </div>
         <div class="project-choice-with-info">
-          <button on:click={() => chooseTemplate("empty-blueplay")}
+          <button onclick={() => chooseTemplate("empty-blueplay")}
             ><strong>{t("ui.projects.bluePlayTemplate")}</strong><span
               >{t("ui.projects.startWithTheBuiltInWorldActorAnd")}</span
             ></button
           ><button
             class="project-info-button"
-            on:click|stopPropagation={() => (projectInfo = "template")}
+            onclick={stopPropagation(() => (projectInfo = "template"))}
             aria-label={t("ui.projects.whatIsBluePlay")}>?</button
           >
         </div>
@@ -41,19 +55,19 @@
           {t("ui.projects.theFollowingExamplesCurrentlyExistToTestAnd")}
         </p>
         <div class="project-choice-with-info">
-          <button on:click={() => chooseTemplate("blueplay")}
+          <button onclick={() => chooseTemplate("blueplay")}
             ><strong>{t("ui.projects.bluePlayExample")}</strong><span
               >{t("ui.projects.openASmallRunnableWorldAndActorProject")}</span
             ></button
           ><button
             class="project-info-button"
-            on:click|stopPropagation={() => (projectInfo = "example")}
+            onclick={stopPropagation(() => (projectInfo = "example"))}
             aria-label={t("ui.projects.whatIsBluePlay")}>?</button
           >
         </div>
         <div class="project-choice-secondary">
           <div class="project-choice-row">
-            <button on:click={() => chooseTemplate("bluek-demo")}
+            <button onclick={() => chooseTemplate("bluek-demo")}
               ><strong>{t("ui.projects.blueKDemoProject")}</strong><span
                 >{t(
                   "ui.projects.exploreClassesInheritanceAndObjectInteractionWithPerson",
@@ -62,7 +76,7 @@
             >
           </div>
           <div class="project-choice-row">
-            <button on:click={() => chooseTemplate("space-invaders")}
+            <button onclick={() => chooseTemplate("space-invaders")}
               ><strong>{t("ui.projects.spaceInvadersDemo")}</strong><span
                 >{t(
                   "ui.projects.playASimplifiedBluePlayGameWithAMovable",
@@ -74,7 +88,7 @@
       </div>
       <div class="dialog-actions">
         <button
-          on:click={() => {
+          onclick={() => {
             newProjectOpen = false;
             projectInfo = null;
           }}>{t("ui.common.cancel")}</button
@@ -88,7 +102,7 @@
         >
           <button
             class="project-info-close"
-            on:click={() => (projectInfo = null)}
+            onclick={() => (projectInfo = null)}
             aria-label={t("ui.projects.closeBluePlayInformation")}>×</button
           >
           <h4>{t("ui.projects.whatIsBluePlay")}</h4>

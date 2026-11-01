@@ -162,13 +162,21 @@
     let alive = true;
     const stop = $effect.root(() => {
       $effect(() => {
-        const files = project.files.map(file => ({ ...file }));
-        if (files.length) void analyzer.classify(files).then(results => {
-          if (alive) project.applyClassifications(files, results);
-        }).catch(() => {});
+        const files = project.files.map((file) => ({ ...file }));
+        if (files.length)
+          void analyzer
+            .classify(files)
+            .then((results) => {
+              if (alive) project.applyClassifications(files, results);
+            })
+            .catch(() => {});
       });
     });
-    return () => { alive = false; stop(); analyzer.close(); };
+    return () => {
+      alive = false;
+      stop();
+      analyzer.close();
+    };
   });
   onMount(() => {
     language.restore();
@@ -196,8 +204,10 @@
         (event.key.toLowerCase() === "a" || event.code === "KeyA") &&
         ui.activeWindow === "terminal" &&
         terminal.terminalOpen &&
-        !(document.activeElement instanceof HTMLInputElement &&
-          document.activeElement.classList.contains("terminal-inline-input"))
+        !(
+          document.activeElement instanceof HTMLInputElement &&
+          document.activeElement.classList.contains("terminal-inline-input")
+        )
       ) {
         const transcript = document.querySelector(".terminal-transcript");
         if (transcript) {
@@ -209,10 +219,14 @@
         }
       }
       if (
-        mod && !event.shiftKey &&
+        mod &&
+        !event.shiftKey &&
         (event.key.toLowerCase() === "i" || event.code === "KeyI") &&
         editor.editorWindows.length > 0 &&
-        !(document.activeElement instanceof Element && document.activeElement.closest(".cm-editor"))
+        !(
+          document.activeElement instanceof Element &&
+          document.activeElement.closest(".cm-editor")
+        )
       ) {
         event.preventDefault();
         event.stopPropagation();
@@ -440,11 +454,11 @@
 
 <svelte:window
   bind:innerWidth={ui.viewportWidth}
-  on:click={() => {
+  onclick={() => {
     objects.menu = null;
     session.codepadMenu = null;
   }}
-  on:pointerdown|capture={(event) => {
+  onpointerdowncapture={(event) => {
     // The dialog keeps its own clicks to itself, so the help has to listen
     // before them: a click anywhere else puts it away again.
     if (
@@ -455,10 +469,10 @@
     )
       project.readmeHelp = false;
   }}
-  on:keydown|capture={play.captureEditorGameKey}
-  on:keydown={handleWindowKeydown}
-  on:keyup={(event) => play.stageKey(event, false)}
-  on:blur={play.releaseStageKeys}
+  onkeydowncapture={play.captureEditorGameKey}
+  onkeydown={handleWindowKeydown}
+  onkeyup={(event) => play.stageKey(event, false)}
+  onblur={play.releaseStageKeys}
 />
 
 <div

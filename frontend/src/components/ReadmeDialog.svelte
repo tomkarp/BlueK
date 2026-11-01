@@ -1,14 +1,23 @@
 <script lang="ts">
   import { useLanguage } from "../i18n/Language.svelte";
   const language = useLanguage();
-  $: t = $language.t;
+  const t = language.t;
   import { containClicks } from "../uiActions";
 
   import { markdownEditor } from "../editorActions";
-  export let readmeOpen: boolean;
-  export let readmeHelp: boolean;
-  export let readme: string;
-  export let closeReadme: () => void;
+  interface Props {
+    readmeOpen: boolean;
+    readmeHelp: boolean;
+    readme: string;
+    closeReadme: () => void;
+  }
+
+  let {
+    readmeOpen,
+    readmeHelp = $bindable(),
+    readme = $bindable(),
+    closeReadme,
+  }: Props = $props();
 </script>
 
 {#if readmeOpen}<div class="modal topmost-modal" role="presentation">
@@ -27,7 +36,7 @@
           aria-expanded={readmeHelp}
           aria-label={t("ui.readme.markdownHelp")}
           title={t("ui.readme.markdownHelp")}
-          on:click={() => (readmeHelp = !readmeHelp)}>?</button
+          onclick={() => (readmeHelp = !readmeHelp)}>?</button
         >
       </div>
       {#if readmeHelp}<div
@@ -101,7 +110,7 @@
         }}
       ></div>
       <div class="dialog-actions">
-        <button on:click={closeReadme}>{t("ui.common.close")}</button>
+        <button onclick={closeReadme}>{t("ui.common.close")}</button>
       </div>
     </div>
   </div>{/if}

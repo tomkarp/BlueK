@@ -1,7 +1,7 @@
 <script lang="ts">
   import { useLanguage } from "../i18n/Language.svelte";
   const language = useLanguage();
-  $: t = $language.t;
+  const t = language.t;
   import { containClicks, fitPopup, fitPopupSubmenu } from "../uiActions";
 
   import type {
@@ -19,52 +19,81 @@
     directPopupMethods,
     popupObjectMethodLabel,
   } from "../objectMenuMethods";
-  export let isTestFile: (file: ProjectFile) => boolean = () => false;
-  export let createTestClass: (file: ProjectFile) => void = () => {};
-  export let runTests: (name: string, method?: string) => void = () => {};
-  export let loadFixture: (name: string) => void = () => {};
-  export let saveFixture: (name: string) => void = () => {};
-  export let recordTest: (name: string) => void = () => {};
-  export let recording = false;
-  export let canCapture = false;
-  export let menu: ObjectMenu | null;
-  export let classes: ClassMeta[];
-  export let canExecute: boolean;
-  export let phase: RuntimeSnapshot["phase"];
-  export let isBluePlayLibraryFile: (file: ProjectFile) => boolean;
-  export let openBluePlayApi: (file: ProjectFile) => void;
-  export let createObject: (className: string, index?: number) => void;
-  export let invokeClassMethod: (
-    className: string,
-    method: CallableMeta,
-  ) => void;
-  export let openEditor: (file?: ProjectFile) => void;
-  export let compile: () => Promise<boolean>;
-  export let deleteFile: (file: ProjectFile) => void;
-  export let renameFunctionsFile: (file: ProjectFile) => void;
-  export let renameClassFile: (file: ProjectFile) => void;
-  export let duplicateFile: (file: ProjectFile) => void;
-  export let invokeObject: (object: BenchObject, method: CallableMeta) => void;
-  export let inspectObject: (
-    object: BenchObject,
-    preserveReferenceName?: boolean,
-  ) => Promise<void>;
-  export let removeObject: (object: BenchObject) => Promise<void>;
+  interface Props {
+    isTestFile?: (file: ProjectFile) => boolean;
+    createTestClass?: (file: ProjectFile) => void;
+    runTests?: (name: string, method?: string) => void;
+    loadFixture?: (name: string) => void;
+    saveFixture?: (name: string) => void;
+    recordTest?: (name: string) => void;
+    recording?: boolean;
+    canCapture?: boolean;
+    menu: ObjectMenu | null;
+    classes: ClassMeta[];
+    canExecute: boolean;
+    phase: RuntimeSnapshot["phase"];
+    isBluePlayLibraryFile: (file: ProjectFile) => boolean;
+    openBluePlayApi: (file: ProjectFile) => void;
+    createObject: (className: string, index?: number) => void;
+    invokeClassMethod: (className: string, method: CallableMeta) => void;
+    openEditor: (file?: ProjectFile) => void;
+    compile: () => Promise<boolean>;
+    deleteFile: (file: ProjectFile) => void;
+    renameFunctionsFile: (file: ProjectFile) => void;
+    renameClassFile: (file: ProjectFile) => void;
+    duplicateFile: (file: ProjectFile) => void;
+    invokeObject: (object: BenchObject, method: CallableMeta) => void;
+    inspectObject: (
+      object: BenchObject,
+      preserveReferenceName?: boolean,
+    ) => Promise<void>;
+    removeObject: (object: BenchObject) => Promise<void>;
+  }
+
+  let {
+    isTestFile = () => false,
+    createTestClass = () => {},
+    runTests = () => {},
+    loadFixture = () => {},
+    saveFixture = () => {},
+    recordTest = () => {},
+    recording = false,
+    canCapture = false,
+    menu = $bindable(),
+    classes,
+    canExecute,
+    phase,
+    isBluePlayLibraryFile,
+    openBluePlayApi,
+    createObject,
+    invokeClassMethod,
+    openEditor,
+    compile,
+    deleteFile,
+    renameFunctionsFile,
+    renameClassFile,
+    duplicateFile,
+    invokeObject,
+    inspectObject,
+    removeObject,
+  }: Props = $props();
   const testClassName = (file: ProjectFile) =>
     classes.find((item) => item.testing?.fileName === file.fileName)?.name ||
     file.fileName.replace(".kt", "");
-  $: testActionBusy =
+  let testActionBusy = $derived(
     recording ||
-    phase === "running" ||
-    phase === "compiling" ||
-    phase === "waitingForInput";
+      phase === "running" ||
+      phase === "compiling" ||
+      phase === "waitingForInput",
+  );
 </script>
 
 {#if menu}
   {@const fileClassName = menu.file?.fileName.replace(".kt", "") || ""}
-  {@const constructors = menu.file && !isTestFile(menu.file)
-    ? classes.find((item) => item.name === fileClassName)?.constructors || []
-    : []}
+  {@const constructors =
+    menu.file && !isTestFile(menu.file)
+      ? classes.find((item) => item.name === fileClassName)?.constructors || []
+      : []}
   <div
     class="popup"
     style={`left:${menu.x}px;top:${menu.y}px`}
@@ -78,7 +107,7 @@
       <button
         class="constructor-menu-item"
         disabled={!canExecute}
-        on:click={() => createObject(fileClassName, index)}
+        onclick={() => createObject(fileClassName, index)}
       >
         {fileClassName}({constructor.parameters
           ?.map(
@@ -90,14 +119,14 @@
     {/each}
     {#if menu.file && isBluePlayLibraryFile(menu.file)}
       {#if constructors.length}<hr />{/if}
-      <button on:click={() => openBluePlayApi(menu!.file!)}
+      <button onclick={() => openBluePlayApi(menu!.file!)}
         >{t("ui.objects.showAPIDocumentation")}</button
       >
     {:else if menu.file}
       {#if isTestFile(menu.file)}
         <button
           disabled={testActionBusy}
-          on:click={() => {
+          onclick={() => {
             const name = testClassName(menu!.file!);
             menu = null;
             runTests(name);
@@ -105,7 +134,7 @@
         >
         {#each classes.find((item) => item.testing?.fileName === menu!.file!.fileName)?.testing?.methods || [] as method}<button
             disabled={testActionBusy}
-            on:click={() => {
+            onclick={() => {
               const name = testClassName(menu!.file!);
               menu = null;
               runTests(name, method.name);
@@ -114,7 +143,7 @@
         <hr />
         <button
           disabled={testActionBusy}
-          on:click={() => {
+          onclick={() => {
             const name = testClassName(menu!.file!);
             menu = null;
             loadFixture(name);
@@ -122,7 +151,7 @@
         >
         <button
           disabled={!canExecute || !canCapture || recording}
-          on:click={() => {
+          onclick={() => {
             const name = testClassName(menu!.file!);
             menu = null;
             saveFixture(name);
@@ -130,7 +159,7 @@
         >
         <button
           disabled={testActionBusy}
-          on:click={() => {
+          onclick={() => {
             const name = testClassName(menu!.file!);
             menu = null;
             recordTest(name);
@@ -140,33 +169,37 @@
       {#each fileMethods(menu.file, classes) as method}
         <button
           disabled={!canExecute}
-          on:click={() =>
+          onclick={() =>
             invokeClassMethod(menu!.file!.fileName.replace(".kt", ""), method)}
           >{methodLabel(method)}</button
         >
       {/each}
       <hr />
-      <button on:click={() => openEditor(menu?.file)}
+      <button onclick={() => openEditor(menu?.file)}
         >{t("ui.objects.openEditor")}</button
       >
       <button
         disabled={!canExecute && phase !== "uncompiled"}
-        on:click={() => {
+        onclick={() => {
           menu = null;
           compile();
         }}>{t("ui.common.compile")}</button
       >
-      <button on:click={() => deleteFile(menu!.file!)}
+      <button onclick={() => deleteFile(menu!.file!)}
         >{t("ui.objects.delete")}</button
       >
-      {#if menu.file.kind === "functions"}<button on:click={() => renameFunctionsFile(menu!.file!)}
-        >{t("ui.files.renameFile")}</button>{:else if menu.file.kind === "class" && !isTestFile(menu.file)}<button on:click={() => renameClassFile(menu!.file!)}
-        >{t("ui.files.renameClass")}</button>{/if}
-      <button on:click={() => duplicateFile(menu!.file!)}
+      {#if menu.file.kind === "functions"}<button
+          onclick={() => renameFunctionsFile(menu!.file!)}
+          >{t("ui.files.renameFile")}</button
+        >{:else if menu.file.kind === "class" && !isTestFile(menu.file)}<button
+          onclick={() => renameClassFile(menu!.file!)}
+          >{t("ui.files.renameClass")}</button
+        >{/if}
+      <button onclick={() => duplicateFile(menu!.file!)}
         >{t("ui.objects.duplicate")}</button
       >
       {#if menu.file.kind === "class" && !isTestFile(menu.file)}<hr />
-        <button on:click={() => createTestClass(menu!.file!)}
+        <button onclick={() => createTestClass(menu!.file!)}
           >{t("ui.common.createTestClass")}</button
         >{/if}
     {:else if menu.object}
@@ -174,9 +207,9 @@
         <div
           role="group"
           class="popup-submenu"
-          on:pointerenter={(event) =>
+          onpointerenter={(event) =>
             fitPopupSubmenu(event.currentTarget as HTMLElement)}
-          on:focusin={(event) =>
+          onfocusin={(event) =>
             fitPopupSubmenu(event.currentTarget as HTMLElement)}
         >
           <button class="popup-submenu-trigger" use:containClicks
@@ -186,7 +219,7 @@
             {#each group[1] as method}<button
                 class="method-menu-item"
                 disabled={!canExecute}
-                on:click={() => invokeObject(menu!.object!, method)}
+                onclick={() => invokeObject(menu!.object!, method)}
                 >{methodLabel({
                   ...method,
                   inheritedFrom: undefined,
@@ -200,7 +233,7 @@
         <button
           class="method-menu-item"
           disabled={!canExecute}
-          on:click={() => invokeObject(menu!.object!, method)}
+          onclick={() => invokeObject(menu!.object!, method)}
           >{popupObjectMethodLabel(method)}</button
         >
       {:else}<div class="popup-no-methods">
@@ -209,12 +242,10 @@
       <hr />
       <button
         disabled={!canExecute}
-        on:click={() => inspectObject(menu!.object!)}
+        onclick={() => inspectObject(menu!.object!)}
         >{t("ui.common.inspect")}</button
       >
-      <button
-        disabled={!canExecute}
-        on:click={() => removeObject(menu!.object!)}
+      <button disabled={!canExecute} onclick={() => removeObject(menu!.object!)}
         >{t("ui.objects.remove")}</button
       >
     {/if}

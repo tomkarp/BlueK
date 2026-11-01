@@ -397,7 +397,14 @@ test.describe("inf-schule handoff", () => {
     expect(exported.library).toEqual(complete.library);
     expect(exported.readme).toBe(complete.readme);
     expect(exported.resources).toEqual(complete.resources);
-    expect(exported.files).toEqual(complete.files);
+    expect(exported.files).toEqual(
+      complete.files.map(({ fileName, source, testTarget, isTestClass }) => ({
+        fileName,
+        source,
+        ...(testTarget ? { testTarget } : {}),
+        ...(isTestClass ? { isTestClass: true } : {}),
+      })),
+    );
     expect(exported.defaultTestClass).toBe("MainTest");
     expect(exported.cardPositions["Main.kt"]).toEqual({ x: 42, y: 84 });
   });

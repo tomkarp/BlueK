@@ -181,6 +181,7 @@ test("GUI-130 compiler and runtime diagnostics stay English in German UI", async
   await expect(page.locator(".codepad-error").last()).toContainText(
     "Keep this text",
   );
+  page.once("dialog", (dialog) => dialog.accept());
   await page.goto(
     "/#bluek=p1." +
       Buffer.from(
@@ -197,13 +198,15 @@ test("GUI-130 compiler and runtime diagnostics stay English in German UI", async
       ).toString("base64url"),
   );
   await page.getByRole("button", { name: "Kompilieren", exact: true }).click();
-  await expect(page.locator(".editor-diagnostics")).toContainText(
+  await page.getByRole("button", { name: "Broken", exact: true }).dblclick();
+  const diagnostics = page.locator(".editor-dialog .editor-diagnostics");
+  await expect(diagnostics).toContainText(
     /type|String|Int/i,
   );
-  await expect(page.locator(".editor-diagnostics")).toContainText(
+  await expect(diagnostics).toContainText(
     "Expected type is `Int`, but actual type is `String`",
   );
-  await expect(page.locator(".editor-diagnostics")).not.toContainText(
+  await expect(diagnostics).not.toContainText(
     "TypeMismatchException",
   );
 });

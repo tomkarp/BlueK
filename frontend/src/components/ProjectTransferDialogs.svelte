@@ -1,7 +1,6 @@
 <script lang="ts">
   import { useLanguage } from "../i18n/Language.svelte";
   const language = useLanguage();
-  $: t = $language.t;
   import CloudProjectPanel from "./CloudProjectPanel.svelte";
   import ProgramExportOptions from "./ProgramExportOptions.svelte";
   import type { CloudWorkspace } from "../workspace/CloudWorkspace.svelte";
@@ -12,14 +11,6 @@
 
   import type { ShareLinkDialog } from "../uiTypes";
   import type { ProjectDraftSummary } from "../projectDraftStorage";
-  export let cloud: CloudWorkspace;
-  export let showNotice: (text: string) => void;
-  export let recentProjects: ProjectDraftSummary[];
-  export let openRecentProject: (id: string) => Promise<void>;
-  export let deleteRecentProject: (id: string) => void;
-  export let deleteAllRecentProjects: () => void;
-  export let toolbarDialog: "open" | "save" | "share" | null;
-  export let shareLinkDialog: ShareLinkDialog | null;
   // A compile-time condition also removes server-only controls from offline JS.
   const serverFeatures = import.meta.env.VITE_BLUEK_OFFLINE !== "1";
   function formatShareCode(code: string) {
@@ -27,29 +18,10 @@
       ? (code.match(/.{4}/g)?.join(" ") ?? code)
       : code;
   }
-  export let shareCodeInput: string;
-  export let shareCodeError: string;
-  export let shareWithReadme: boolean;
-  export let shareWithState: boolean;
-  export let canShareState: boolean;
-  export let defaultTestClass: string;
-  export let readme: string;
-  export let files: ProjectFile[];
-  export let htmlExportBlocked: boolean;
-  export let htmlExporting: boolean;
-  export let programAllowDownload: boolean;
-  export let programAllowBlueK: boolean;
-  export let programShowProjectName: boolean;
-  export let bluePlay: boolean;
-  export let ensureProjectName: () => boolean;
-  export let programAutoRun: boolean;
-  export let programShowControls: boolean;
-  export let programShowSpeed: boolean;
-  $: if (!programAutoRun) programShowControls = true;
-  export let shareShortProgram: () => Promise<void>;
-  let saveView: "choices" | "account" | "html" = "choices";
-  let openSource: "browser" | "account" | "computer" | "link" = "computer";
-  let showAllRecoveryDrafts = false;
+  let saveView: "choices" | "account" | "html" = $state("choices");
+  let openSource: "browser" | "account" | "computer" | "link" =
+    $state("computer");
+  let showAllRecoveryDrafts = $state(false);
   function selectOpenSource(source: typeof openSource) {
     openSource = source;
     if (source === "browser") showAllRecoveryDrafts = false;
@@ -73,11 +45,6 @@
     next.focus();
     next.click();
   }
-  $: if (toolbarDialog === null) {
-    saveView = "choices";
-    openSource = "computer";
-    showAllRecoveryDrafts = false;
-  }
   function showPrivateSave() {
     saveView = "account";
     void cloud.refresh();
@@ -86,23 +53,106 @@
     toolbarDialog = null;
     void cloud.show("manage");
   }
-  export let openProjectDrop: (event: DragEvent) => Promise<void>;
-  export let blueJImportChoice: {
-    projects: BlueJProjectChoice[];
-    name: string;
-  } | null;
-  export let chooseBlueJProject: (root: string) => Promise<void>;
-  let selectedBlueJRoot = "";
-  $: if (blueJImportChoice)
-    selectedBlueJRoot = blueJImportChoice.projects[0].root;
-  export let importProject: (event: Event) => Promise<void>;
-  export let loadSharedProjectFromCode: () => Promise<void>;
-  export let saveShortProject: () => Promise<void>;
-  export let exportProject: () => void;
-  export let markProjectSaved: () => void;
-  export let exportBlueJProject: () => void;
-  export let exportHtml: () => Promise<void>;
-  export let copySharedLink: () => Promise<void>;
+  let selectedBlueJRoot = $state("");
+  interface Props {
+    cloud: CloudWorkspace;
+    showNotice: (text: string) => void;
+    recentProjects: ProjectDraftSummary[];
+    openRecentProject: (id: string) => Promise<void>;
+    deleteRecentProject: (id: string) => void;
+    deleteAllRecentProjects: () => void;
+    toolbarDialog: "open" | "save" | "share" | null;
+    shareLinkDialog: ShareLinkDialog | null;
+    shareCodeInput: string;
+    shareCodeError: string;
+    shareWithReadme: boolean;
+    shareWithState: boolean;
+    canShareState: boolean;
+    defaultTestClass: string;
+    readme: string;
+    files: ProjectFile[];
+    htmlExportBlocked: boolean;
+    htmlExporting: boolean;
+    programAllowDownload: boolean;
+    programAllowBlueK: boolean;
+    programShowProjectName: boolean;
+    bluePlay: boolean;
+    ensureProjectName: () => boolean;
+    programAutoRun: boolean;
+    programShowControls: boolean;
+    programShowSpeed: boolean;
+    shareShortProgram: () => Promise<void>;
+    openProjectDrop: (event: DragEvent) => Promise<void>;
+    blueJImportChoice: {
+      projects: BlueJProjectChoice[];
+      name: string;
+    } | null;
+    chooseBlueJProject: (root: string) => Promise<void>;
+    importProject: (event: Event) => Promise<void>;
+    loadSharedProjectFromCode: () => Promise<void>;
+    saveShortProject: () => Promise<void>;
+    exportProject: () => void;
+    markProjectSaved: () => void;
+    exportBlueJProject: () => void;
+    exportHtml: () => Promise<void>;
+    copySharedLink: () => Promise<void>;
+  }
+
+  let {
+    cloud,
+    showNotice,
+    recentProjects,
+    openRecentProject,
+    deleteRecentProject,
+    deleteAllRecentProjects,
+    toolbarDialog = $bindable(),
+    shareLinkDialog = $bindable(),
+    shareCodeInput = $bindable(),
+    shareCodeError,
+    shareWithReadme = $bindable(),
+    shareWithState = $bindable(),
+    canShareState,
+    defaultTestClass,
+    readme,
+    files,
+    htmlExportBlocked,
+    htmlExporting,
+    programAllowDownload = $bindable(),
+    programAllowBlueK = $bindable(),
+    programShowProjectName = $bindable(),
+    bluePlay,
+    ensureProjectName,
+    programAutoRun = $bindable(),
+    programShowControls = $bindable(),
+    programShowSpeed = $bindable(),
+    shareShortProgram,
+    openProjectDrop,
+    blueJImportChoice = $bindable(),
+    chooseBlueJProject,
+    importProject,
+    loadSharedProjectFromCode,
+    saveShortProject,
+    exportProject,
+    markProjectSaved,
+    exportBlueJProject,
+    exportHtml,
+    copySharedLink,
+  }: Props = $props();
+  const t = language.t;
+  $effect(() => {
+    if (!programAutoRun) programShowControls = true;
+  });
+  $effect(() => {
+    if (toolbarDialog === null) {
+      saveView = "choices";
+      openSource = "computer";
+      showAllRecoveryDrafts = false;
+    }
+  });
+  $effect(() => {
+    if (blueJImportChoice)
+      selectedBlueJRoot = blueJImportChoice.projects[0].root;
+  });
 </script>
 
 {#if toolbarDialog === "open"}<div
@@ -122,8 +172,9 @@
         <div
           class="open-source-tabs"
           role="tablist"
+          tabindex="-1"
           aria-label={t("ui.transfer.openFrom")}
-          on:keydown={handleOpenSourceKeydown}
+          onkeydown={handleOpenSourceKeydown}
         >
           <button
             id="open-source-computer"
@@ -131,7 +182,7 @@
             aria-selected={openSource === "computer"}
             tabindex={openSource === "computer" ? 0 : -1}
             aria-controls="open-panel-computer"
-            on:click={() => selectOpenSource("computer")}
+            onclick={() => selectOpenSource("computer")}
             >{t("ui.transfer.sourceComputer")}</button
           >
           {#if serverFeatures}<button
@@ -140,7 +191,7 @@
               aria-selected={openSource === "account"}
               tabindex={openSource === "account" ? 0 : -1}
               aria-controls="open-panel-account"
-              on:click={() => selectOpenSource("account")}
+              onclick={() => selectOpenSource("account")}
               >{t("ui.transfer.sourceAccount")}</button
             >{/if}
           {#if serverFeatures}<button
@@ -149,7 +200,7 @@
               aria-selected={openSource === "link"}
               tabindex={openSource === "link" ? 0 : -1}
               aria-controls="open-panel-link"
-              on:click={() => selectOpenSource("link")}
+              onclick={() => selectOpenSource("link")}
               >{t("ui.transfer.sourceLink")}</button
             >{/if}
           <button
@@ -158,16 +209,17 @@
             aria-selected={openSource === "browser"}
             tabindex={openSource === "browser" ? 0 : -1}
             aria-controls="open-panel-browser"
-            on:click={() => selectOpenSource("browser")}
+            onclick={() => selectOpenSource("browser")}
             >{t("ui.transfer.sourceBrowser")}
             {#if recentProjects.length}<span class="open-source-count"
                 >{recentProjects.length}</span
               >{/if}</button
           >
         </div>
-        {#if openSource === "browser"}<section
+        {#if openSource === "browser"}<div
             class="open-source-panel recent-projects"
             role="tabpanel"
+            tabindex="0"
             id="open-panel-browser"
             aria-labelledby="open-source-browser"
           >
@@ -180,10 +232,12 @@
                   class="delete-all-projects"
                   aria-label={t("ui.transfer.deleteAllSavedProjects")}
                   title={t("ui.transfer.deleteAllSavedProjects")}
-                  on:click={deleteAllRecentProjects}
+                  onclick={deleteAllRecentProjects}
                 >
                   <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M4 7h16M10 11v7m4-7v7M6 7l1 14h10l1-14M9 7V4h6v3" />
+                    <path
+                      d="M4 7h16M10 11v7m4-7v7M6 7l1 14h10l1-14M9 7V4h6v3"
+                    />
                   </svg>
                   {t("ui.transfer.deleteAll")}
                 </button>{/if}
@@ -193,7 +247,7 @@
                   <div class="recent-project-row">
                     <button
                       class="recent-project"
-                      on:click={() => void openRecentProject(project.id)}
+                      onclick={() => void openRecentProject(project.id)}
                     >
                       <strong
                         >{project.name === "Untitled project"
@@ -214,12 +268,18 @@
                     <button
                       class="delete-recent-project"
                       type="button"
-                      aria-label={t("ui.transfer.deleteSavedProject0", [project.name])}
-                      title={t("ui.transfer.deleteSavedProject0", [project.name])}
-                      on:click={() => deleteRecentProject(project.id)}
+                      aria-label={t("ui.transfer.deleteSavedProject0", [
+                        project.name,
+                      ])}
+                      title={t("ui.transfer.deleteSavedProject0", [
+                        project.name,
+                      ])}
+                      onclick={() => deleteRecentProject(project.id)}
                     >
                       <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M4 7h16M10 11v7m4-7v7M6 7l1 14h10l1-14M9 7V4h6v3" />
+                        <path
+                          d="M4 7h16M10 11v7m4-7v7M6 7l1 14h10l1-14M9 7V4h6v3"
+                        />
                       </svg>
                     </button>
                   </div>
@@ -228,7 +288,7 @@
               {#if recentProjects.length > 3}<button
                   class="recovery-drafts-toggle"
                   aria-expanded={showAllRecoveryDrafts}
-                  on:click={() =>
+                  onclick={() =>
                     (showAllRecoveryDrafts = !showAllRecoveryDrafts)}
                   >{showAllRecoveryDrafts
                     ? t("ui.transfer.showFewerRecoveryDrafts")
@@ -238,9 +298,10 @@
                 >{/if}{:else}<p class="open-source-empty">
                 {t("ui.transfer.noBrowserProjects")}
               </p>{/if}
-          </section>{:else if openSource === "account"}<section
+          </div>{:else if openSource === "account"}<div
             class="open-source-panel open-account-panel"
             role="tabpanel"
+            tabindex="0"
             id="open-panel-account"
             aria-labelledby="open-source-account"
           >
@@ -253,9 +314,10 @@
               onManage={openProjectManagement}
               {exportProject}
             />
-          </section>{:else if openSource === "computer"}<section
+          </div>{:else if openSource === "computer"}<div
             class="open-source-panel"
             role="tabpanel"
+            tabindex="0"
             id="open-panel-computer"
             aria-labelledby="open-source-computer"
           >
@@ -263,8 +325,8 @@
             <p>{t("ui.transfer.dropAProjectFileHereOrClickTo")}</p>
             <label
               class="project-dropzone"
-              on:dragover|preventDefault
-              on:drop={openProjectDrop}
+              ondragover={(event) => event.preventDefault()}
+              ondrop={openProjectDrop}
             >
               <strong>{t("ui.transfer.projectFileFormats")}</strong>
               <span>{t("ui.transfer.acceptedProjectFormats")}</span>
@@ -272,15 +334,16 @@
                 type="file"
                 aria-label={t("ui.transfer.chooseProjectFile")}
                 accept=".json,.bluek.json,application/json,.zip,application/zip"
-                on:change={(event) => {
+                onchange={(event) => {
                   importProject(event);
                   toolbarDialog = null;
                 }}
               />
             </label>
-          </section>{:else}<section
+          </div>{:else}<div
             class="open-source-panel shared-project-loader"
             role="tabpanel"
+            tabindex="0"
             id="open-panel-link"
             aria-labelledby="open-source-link"
           >
@@ -295,23 +358,23 @@
                 autocapitalize="none"
                 autocomplete="off"
                 spellcheck="false"
-                on:keydown={(event) =>
+                onkeydown={(event) =>
                   event.key === "Enter" && loadSharedProjectFromCode()}
               />
             </label>
             <button
               class="shared-project-load"
               disabled={!shareCodeInput.trim()}
-              on:click={loadSharedProjectFromCode}
+              onclick={loadSharedProjectFromCode}
               >{t("ui.transfer.loadProject")}</button
             >
             {#if shareCodeError}<div class="dialog-error" role="alert">
                 {$language.message(shareCodeError)}
               </div>{/if}
-          </section>{/if}
+          </div>{/if}
       </div>
       <div class="dialog-actions">
-        <button on:click={() => (toolbarDialog = null)}
+        <button onclick={() => (toolbarDialog = null)}
           >{t("ui.common.cancel")}</button
         >
       </div>
@@ -342,7 +405,7 @@
               <button
                 class="file-export-choice"
                 disabled={!files.length}
-                on:click={() => {
+                onclick={() => {
                   if (!ensureProjectName()) return;
                   exportProject();
                   toolbarDialog = null;
@@ -351,7 +414,7 @@
                   >{t("ui.transfer.exportTheCompleteBlueKProjectAsJSON")}</span
                 ></button
               >
-              {#if serverFeatures}<button on:click={showPrivateSave}
+              {#if serverFeatures}<button onclick={showPrivateSave}
                   ><strong>{t("ui.transfer.saveInAccount")}</strong><span
                     >{t("ui.transfer.privateSaveDescription")}</span
                   ></button
@@ -362,7 +425,7 @@
               <button
                 class="file-export-choice"
                 disabled={!files.length}
-                on:click={() => {
+                onclick={() => {
                   if (!ensureProjectName()) return;
                   exportBlueJProject();
                   toolbarDialog = null;
@@ -375,7 +438,7 @@
                 class="file-export-choice"
                 aria-label={t("ui.transfer.htmlFile")}
                 disabled={!files.length}
-                on:click={() => {
+                onclick={() => {
                   if (!ensureProjectName()) return;
                   saveView = "html";
                 }}
@@ -416,7 +479,7 @@
                 <button
                   class="file-export-choice"
                   disabled={!files.length || htmlExportBlocked || htmlExporting}
-                  on:click={() => {
+                  onclick={() => {
                     if (!ensureProjectName()) return;
                     toolbarDialog = null;
                     void exportHtml();
@@ -442,7 +505,6 @@
             <div class="project-choice-list toolbar-project-choice-list">
               {#if readme.trim() || canShareState}<fieldset
                   class="share-link-options single-link project-share-options"
-                  role="group"
                   aria-labelledby="link-options-label"
                 >
                   <legend id="link-options-label"
@@ -474,7 +536,7 @@
               <button
                 class="share-publish-button"
                 disabled={!files.length}
-                on:click={() => {
+                onclick={() => {
                   void saveShortProject();
                   toolbarDialog = null;
                 }}><strong>{t("ui.transfer.createProjectLink")}</strong></button
@@ -507,7 +569,7 @@
                 <button
                   class="share-publish-button"
                   disabled={!files.length || htmlExportBlocked || htmlExporting}
-                  on:click={() => {
+                  onclick={() => {
                     toolbarDialog = null;
                     void shareShortProgram();
                   }}
@@ -521,10 +583,10 @@
       </div>
       <div class="dialog-actions">
         {#if toolbarDialog === "save" && saveView !== "choices"}<button
-            on:click={() => (saveView = "choices")}
+            onclick={() => (saveView = "choices")}
             >{t("ui.transfer.back")}</button
           >{/if}
-        <button on:click={() => (toolbarDialog = null)}
+        <button onclick={() => (toolbarDialog = null)}
           >{t("ui.common.cancel")}</button
         >
       </div>
@@ -558,7 +620,7 @@
         class="share-link-code"
         aria-label={t("ui.transfer.threeWordProjectCode")}
         title={t("ui.transfer.copyProjectLink")}
-        on:click={() => {
+        onclick={() => {
           void copySharedLink();
         }}>{formatShareCode(shareLinkDialog.code)}</button
       >
@@ -567,7 +629,7 @@
         class="share-link-value"
         aria-label={t("ui.transfer.completeProjectLink")}
         title={t("ui.transfer.copyProjectLink")}
-        on:click={() => {
+        onclick={() => {
           void copySharedLink();
         }}>{shareLinkDialog.url}</button
       >
@@ -577,7 +639,7 @@
         ])}
       </p>
       <div class="dialog-actions">
-        <button on:click={() => (shareLinkDialog = null)}
+        <button onclick={() => (shareLinkDialog = null)}
           >{t("ui.common.close")}</button
         >
       </div>
@@ -612,10 +674,10 @@
         </select>
       </label>
       <div class="dialog-actions">
-        <button on:click={() => (blueJImportChoice = null)}
+        <button onclick={() => (blueJImportChoice = null)}
           >{t("ui.common.cancel")}</button
         >
-        <button on:click={() => chooseBlueJProject(selectedBlueJRoot)}
+        <button onclick={() => chooseBlueJProject(selectedBlueJRoot)}
           >{t("ui.transfer.openSelectedBlueJProject")}</button
         >
       </div>

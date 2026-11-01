@@ -1,11 +1,15 @@
 <script lang="ts">
   import { useLanguage } from "../i18n/Language.svelte";
   const language = useLanguage();
-  $: t = $language.t;
+  const t = language.t;
   import type { ProjectFile } from "../../../runtime-contract/src/index";
 
   import { bluePlayApiDocs } from "../bluePlayApi";
-  export let bluePlayApiFile: ProjectFile | null;
+  interface Props {
+    bluePlayApiFile: ProjectFile | null;
+  }
+
+  let { bluePlayApiFile = $bindable() }: Props = $props();
 </script>
 
 {#if bluePlayApiFile}{@const api = bluePlayApiDocs[bluePlayApiFile.fileName]}
@@ -40,7 +44,7 @@
         {/each}
       </div>
       <div class="dialog-actions">
-        <button on:click={() => (bluePlayApiFile = null)}
+        <button onclick={() => (bluePlayApiFile = null)}
           >{t("ui.common.close")}</button
         >
       </div>

@@ -1,17 +1,27 @@
 <script lang="ts">
   import { useLanguage } from "../i18n/Language.svelte";
   const language = useLanguage();
-  $: t = $language.t;
+  const t = language.t;
   import { focusOnMount } from "../uiActions";
 
   import type { Diagnostic } from "../../../runtime-contract/src/index";
 
-  export let compilerDialog: boolean;
-  export let compilerDiagnostics: Diagnostic[];
-  export let error: string;
-  /** An exception ended a call (RT-82); the runtime stays usable. */
-  export let exception = false;
-  export let openFeedback: () => void;
+  interface Props {
+    compilerDialog: boolean;
+    compilerDiagnostics: Diagnostic[];
+    error: string;
+    /** An exception ended a call (RT-82); the runtime stays usable. */
+    exception?: boolean;
+    openFeedback: () => void;
+  }
+
+  let {
+    compilerDialog = $bindable(),
+    compilerDiagnostics,
+    error,
+    exception = false,
+    openFeedback,
+  }: Props = $props();
 </script>
 
 {#if compilerDialog}<div class="modal topmost-modal" role="presentation">
@@ -46,8 +56,8 @@
           class="compiler-error-message">{diagnostic.message}</pre>{/each}{#if !compilerDiagnostics.length}<pre
           class="compiler-error-text">{error}</pre>{/if}
       <div class="dialog-actions">
-        <button on:click={openFeedback}>{t("ui.feedback.title")}</button>
-        <button use:focusOnMount on:click={() => (compilerDialog = false)}
+        <button onclick={openFeedback}>{t("ui.feedback.title")}</button>
+        <button use:focusOnMount onclick={() => (compilerDialog = false)}
           >{t("ui.common.close")}</button
         >
       </div>

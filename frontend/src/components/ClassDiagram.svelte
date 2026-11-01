@@ -1,42 +1,65 @@
 <script lang="ts">
   import { useLanguage } from "../i18n/Language.svelte";
   const language = useLanguage();
-  $: t = $language.t;
+  const t = language.t;
   import type { ProjectFile } from "../../../runtime-contract/src/index";
 
   import type { BenchObject } from "../uiTypes";
   import type { CardPosition, InheritanceEdge } from "../uiTypes";
-  export let testFileIds: string[] = [];
-  export let showTestClasses = true;
-  export let inheritanceMode: boolean;
-  export let inheritanceSelection: string;
-  export let showInheritance: boolean;
-  export let inheritanceEdges: InheritanceEdge[];
-  export let hasReadme: boolean;
-  export let readme: string;
-  export let displayFiles: ProjectFile[];
-  export let displayCardPositions: CardPosition[];
-  export let displayCardLayers: number[];
-  export let uncompiled: boolean;
-  export let selectCard: (file: ProjectFile, index: number) => void;
-  export let beginCardDrag: (
-    event: MouseEvent | PointerEvent,
-    file: ProjectFile,
-  ) => void;
-  export let moveCard: (
-    event: MouseEvent | PointerEvent,
-    file: ProjectFile,
-  ) => void;
-  export let endCardDrag: () => void;
-  export let openEditor: (file?: ProjectFile) => void;
-  export let openMenu: (
-    event: MouseEvent,
-    file?: ProjectFile,
-    object?: BenchObject,
-  ) => void;
-  export let isBluePlayLibraryFile: (file: ProjectFile) => boolean;
-  export let openBluePlayApi: (file: ProjectFile) => void;
-  export let openReadme: () => void;
+  interface Props {
+    testFileIds?: string[];
+    showTestClasses?: boolean;
+    inheritanceMode: boolean;
+    inheritanceSelection: string;
+    showInheritance: boolean;
+    inheritanceEdges: InheritanceEdge[];
+    hasReadme: boolean;
+    readme: string;
+    displayFiles: ProjectFile[];
+    displayCardPositions: CardPosition[];
+    displayCardLayers: number[];
+    uncompiled: boolean;
+    selectCard: (file: ProjectFile, index: number) => void;
+    beginCardDrag: (
+      event: MouseEvent | PointerEvent,
+      file: ProjectFile,
+    ) => void;
+    moveCard: (event: MouseEvent | PointerEvent, file: ProjectFile) => void;
+    endCardDrag: () => void;
+    openEditor: (file?: ProjectFile) => void;
+    openMenu: (
+      event: MouseEvent,
+      file?: ProjectFile,
+      object?: BenchObject,
+    ) => void;
+    isBluePlayLibraryFile: (file: ProjectFile) => boolean;
+    openBluePlayApi: (file: ProjectFile) => void;
+    openReadme: () => void;
+  }
+
+  let {
+    testFileIds = [],
+    showTestClasses = true,
+    inheritanceMode,
+    inheritanceSelection,
+    showInheritance,
+    inheritanceEdges,
+    hasReadme,
+    readme,
+    displayFiles,
+    displayCardPositions,
+    displayCardLayers,
+    uncompiled,
+    selectCard,
+    beginCardDrag,
+    moveCard,
+    endCardDrag,
+    openEditor,
+    openMenu,
+    isBluePlayLibraryFile,
+    openBluePlayApi,
+    openReadme,
+  }: Props = $props();
 </script>
 
 <div class="canvas">
@@ -86,8 +109,8 @@
         class="readme-card"
         aria-label="README.md"
         title={t("ui.diagram.rEADMEMdDescribeThisProject")}
-        on:click={openReadme}
-        on:keydown={(event) => {
+        onclick={openReadme}
+        onkeydown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
             openReadme();
@@ -119,20 +142,20 @@
         class:inheritance-selected={inheritanceSelection === file.id}
         class="classcard"
         style={`left:${position.x}px;top:${position.y}px;z-index:${displayCardLayers[index]};--card-left:${position.x}px;--card-top:${position.y}px`}
-        on:mousedown={(event) => {
+        onmousedown={(event) => {
           if (!inheritanceMode) beginCardDrag(event, file);
         }}
-        on:pointermove={(event) => moveCard(event, file)}
-        on:pointerup={endCardDrag}
-        on:pointercancel={endCardDrag}
-        on:click={() => selectCard(file, index)}
-        on:dblclick={() => {
+        onpointermove={(event) => moveCard(event, file)}
+        onpointerup={endCardDrag}
+        onpointercancel={endCardDrag}
+        onclick={() => selectCard(file, index)}
+        ondblclick={() => {
           if (inheritanceMode) return;
           if (isBluePlayLibraryFile(file)) openBluePlayApi(file);
           else openEditor(file);
         }}
-        on:contextmenu={(event) => openMenu(event, file)}
-        on:keydown={(event) => {
+        oncontextmenu={(event) => openMenu(event, file)}
+        onkeydown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
             selectCard(file, index);

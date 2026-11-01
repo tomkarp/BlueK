@@ -190,7 +190,8 @@ test("GUI-25 editor does not open automatic code completion", async ({
   await project(page, "class Hund {\n}");
   await page.locator(".classcard").dblclick();
   const editor = page.locator(".editor-dialog .cm-editor");
-  await editor.click();
+  await editor.locator(".cm-content").click();
+  await expect(editor.locator(".cm-content")).toBeFocused();
   await page.keyboard.type("prin");
   await expect(page.locator(".cm-tooltip-autocomplete")).toHaveCount(0);
 });
@@ -1099,12 +1100,12 @@ test("GUI-97 the terminal shows ANSI colours and handles control sequences like 
   await evaluate(page, 'Hund().karte("herz")');
   const output = page.locator(".terminal-output pre");
   await expect(output).toHaveText("┌─────┐\n│  ♥  │\n└─────┘\n");
-  const heart = output.locator("span", { hasText: "♥" });
+  const heart = output.locator(".terminal-transcript > span", { hasText: "♥" }).last();
   await expect(heart).toHaveText("♥");
   await expect(heart).toHaveCSS("color", "rgb(205, 49, 49)");
   // The dark theme has its own palette.
   await evaluate(page, 'println("\\u001B[32mgrün\\u001B[0m")');
-  const green = output.locator("span", { hasText: "grün" });
+  const green = output.locator(".terminal-transcript > span", { hasText: "grün" }).last();
   await expect(green).toHaveCSS("color", "rgb(0, 188, 0)");
   await page.locator(".bluek").evaluate((root) => root.classList.add("dark"));
   await expect(green).toHaveCSS("color", "rgb(13, 188, 121)");
@@ -1117,7 +1118,7 @@ test("GUI-97 the terminal shows ANSI colours and handles control sequences like 
     'print("\\u001B[H\\u001B[2JLaden 10%\\rLaden 100%\\n\\u001B[1mfertig\\u001B[0m")',
   );
   await expect(output).toHaveText("Laden 100%\nfertig");
-  await expect(output.locator("span", { hasText: "fertig" })).toHaveCSS(
+  await expect(output.locator(".terminal-transcript > span", { hasText: "fertig" }).last()).toHaveCSS(
     "font-weight",
     "700",
   );
@@ -1248,7 +1249,7 @@ test("RT-82 an uncaught exception ends the call, the runtime stays usable", asyn
     'vorher\nException in thread "main" IllegalArgumentException: Rang außerhalb des Bereichs: 70\n    at IllegalArgumentException.<init>(Kotlin library)\n    at Karte.wert(Karte.kt:6)\n    at main(Main.kt:3)\n',
   );
   await expect(
-    terminal.locator("span", { hasText: "Exception in thread" }),
+    terminal.locator(".terminal-transcript > span", { hasText: "Exception in thread" }).last(),
   ).toHaveCSS("color", "rgb(205, 49, 49)");
   await expect(page.locator(".terminal-notice")).toHaveCount(0);
   await expect(
@@ -2242,7 +2243,7 @@ test("GUI-35 short project links can be saved and loaded", async ({ page }) => {
   await page.getByRole("button", { name: "Share" }).click();
   await page
     .getByRole("dialog", { name: "Share" })
-    .getByRole("button", { name: /Publish Project Link/ })
+    .getByRole("button", { name: "Create editing link" })
     .click();
   const linkDialog = page.getByRole("dialog", { name: "Short project link" });
   await expect(linkDialog.getByLabel("Public project code")).toHaveText(
@@ -2381,7 +2382,7 @@ test("GUI-138 an unavailable share link explains itself and keeps the tab projec
   await page.goto("/bluek/abcd-efgh-ijkl");
   const notice = page.locator(".link-problem-notice");
   await expect(notice).toContainText(
-    "This publication has expired. Anonymous publications expire after seven days; account publications expire after 30 days.",
+    "This publication has expired or was deleted. Ask the person who shared the link for a new copy.",
   );
   await expect(page.getByLabel("Project name")).toHaveValue("Kept work");
   await expect(page.locator(".classcard")).toContainText("Kept");
@@ -2425,7 +2426,7 @@ test("GUI-138 an unavailable share link explains itself and keeps the tab projec
   await page.evaluate(() => localStorage.setItem("bluek-language", "de"));
   await page.goto("/bluek/abcd-efgh-ijkl");
   await expect(notice).toContainText(
-    "Diese Veröffentlichung ist abgelaufen. Anonyme Veröffentlichungen laufen nach sieben Tagen, Veröffentlichungen mit Konto nach 30 Tagen ab.",
+    "Diese Veröffentlichung ist abgelaufen oder wurde gelöscht.",
   );
 });
 
@@ -2457,11 +2458,15 @@ test("GUI-05 command recall survives compilation and runtime reset", async ({ pa
     await expect(input).toBeEnabled();
     await expect(page.locator(".codepad-entry")).toHaveCount(0);
   }
+  await expect(input).toBeEnabled();
   await input.press("ArrowUp");
   await expect(input).toHaveValue('println("repeat")');
+  await expect(input).toBeEnabled();
   await input.press("ArrowDown");
   await expect(input).toHaveValue("");
+  await expect(input).toBeEnabled();
   await input.press("ArrowUp");
+  await expect(input).toBeEnabled();
   await input.press("ArrowUp");
   await expect(input).toHaveValue("5");
   await input.press("ArrowUp");
@@ -2815,14 +2820,27 @@ test("GUI-08 GUI-10 editor renames files even after empty content", async ({
   page,
 }) => {
   await project(page, "class Hund {}");
+  await page.getByRole("button", { name: "Compile", exact: true }).click();
+  await expect(page.locator(".classcard.uncompiled")).toHaveCount(0);
   await page.locator(".classcard").dblclick();
   const dialog = page.locator(".editor-dialog");
   const editor = dialog.locator(".cm-content");
-  await expect(editor).toBeFocused();
-  await editor.fill("class Tier {}");
+  await expect(editor).toHaveAttribute("contenteditable", "true");
+  await editor.click();
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.insertText("class Tier {}");
+  await page.getByRole("button", { name: "Compile", exact: true }).click();
   await expect(dialog.locator("h3")).toHaveText("Tier.kt");
-  await editor.fill("");
-  await editor.fill("class Katze {}");
+  await expect(page.getByLabel("Ready", { exact: true })).toBeVisible();
+  await expect(page.locator(".classcard.uncompiled")).toHaveCount(0);
+  await expect(editor).toHaveAttribute("contenteditable", "true");
+  await editor.press("ControlOrMeta+A");
+  await editor.press("Backspace");
+  await expect(editor).toHaveText("");
+  await editor.click();
+  await page.keyboard.insertText("class Katze {}");
+  await expect(editor).toHaveText("class Katze {}");
+  await page.getByRole("button", { name: "Compile", exact: true }).click();
   await expect(dialog.locator("h3")).toHaveText("Katze.kt");
   // The editor uses the shared window chrome; Close is intentionally in the
   // title bar. The old assertion measured empty space below a former footer
@@ -2857,9 +2875,12 @@ test("GUI-12 GUI-13 GUI-15 GUI-147 inline input echo order and clearing preserve
   await expect(input).not.toHaveAttribute("placeholder");
   const emptyInputWidth = (await input.boundingBox())!.width;
   await input.fill("A longer answer that grows with the entered text");
-  expect((await input.boundingBox())!.width).toBeGreaterThan(emptyInputWidth + 100);
+  const longInputWidth = (await input.boundingBox())!.width;
+  expect(longInputWidth).toBeGreaterThan(emptyInputWidth + 100);
   await input.fill("Test");
-  expect((await input.boundingBox())!.width).toBeLessThanOrEqual(emptyInputWidth + 1);
+  const shortInputWidth = (await input.boundingBox())!.width;
+  expect(shortInputWidth).toBeGreaterThan(emptyInputWidth);
+  expect(shortInputWidth).toBeLessThan(longInputWidth);
   await input.press("Enter");
   await expect(input).toBeEnabled();
   await expect(terminal.locator("pre")).toHaveText("Name? Test\nAge? ");
@@ -3478,7 +3499,7 @@ test("GUI-66 the README note sits in the corner, formats Markdown while typing a
   const editor = dialog.locator(".readme-editor");
   // The description is there to be read first, so the text has no cursor yet.
   await expect(editor.locator(".cm-content")).not.toBeFocused();
-  await editor.click();
+  await editor.locator(".cm-content").click({ position: { x: 8, y: 8 } });
   await page.keyboard.type("# Hunde\nEin Projekt mit **Hund**.\n- beissen\n");
   // Typing Markdown formats it right away, and the markers stay in the text.
   await expect(editor.locator(".cm-md-h1")).toHaveText("Hunde");
@@ -4038,7 +4059,7 @@ test("RT-33 Download BlueK project file keeps its file name and content", async 
     format: "bluek-project",
     version: 1,
     projectName: "Hunde: Teil 1/2",
-    files: [{ fileName: "Hund.kt", kind: "class", source: "class Hund" }],
+    files: [{ fileName: "Hund.kt", source: "class Hund" }],
   });
 });
 

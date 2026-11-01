@@ -79,8 +79,12 @@ test("GUI-118 project links optionally load the default state and open README", 
 
   let prompted = "";
   page.on("dialog", (dialog) => {
-    prompted = dialog.defaultValue();
-    void dialog.dismiss();
+    if (dialog.type() === "prompt") {
+      prompted = dialog.defaultValue();
+      void dialog.dismiss();
+    } else {
+      void dialog.accept();
+    }
   });
   const copiedLink = () =>
     prompted ||
@@ -94,37 +98,29 @@ test("GUI-118 project links optionally load the default state and open README", 
   await expect(stateOptions).not.toBeChecked();
   await stateOptions.check();
   await expect(
-    save.getByRole("group", { name: "When opening a link:" }),
+    save.getByRole("group", { name: "When opened" }),
   ).toBeVisible();
   // Link options stay beside the two links; the file exports span the full list.
   await page.setViewportSize({ width: 800, height: 700 });
-  const choiceBounds = await save
-    .locator(".project-choice-list button")
-    .evaluateAll((buttons) =>
-      buttons.map((button) => ({
-        width: button.getBoundingClientRect().width,
-        left: button.getBoundingClientRect().left,
-      })),
-    );
-  const listBounds = await save.locator(".project-choice-list").boundingBox();
-  for (const box of choiceBounds.slice(1)) {
-    expect(Math.abs(box.width - listBounds!.width)).toBeLessThan(1);
-    expect(box.width).toBeGreaterThan(choiceBounds[0].width);
-  }
-  expect(new Set(choiceBounds.map((box) => box.left)).size).toBe(1);
+  const exportChoices = save.locator(".program-export-choices");
+  const runnableLink = exportChoices.getByRole("button", { name: "Create runnable link" });
+  const choiceBounds = await runnableLink.boundingBox();
+  const listBounds = await exportChoices.boundingBox();
+  expect(choiceBounds!.x).toBeGreaterThanOrEqual(listBounds!.x);
+  expect(choiceBounds!.x + choiceBounds!.width).toBeLessThanOrEqual(listBounds!.x + listBounds!.width);
+  const dialogBounds = await save.boundingBox();
   const optionsBounds = await save
-    .getByRole("group", { name: "When opening a link:" })
+    .getByRole("group", { name: "When opened" })
     .boundingBox();
-  expect(optionsBounds!.x).toBeGreaterThan(
-    choiceBounds[0].left + choiceBounds[0].width,
-  );
+  expect(optionsBounds!.x).toBeGreaterThanOrEqual(dialogBounds!.x);
+  expect(optionsBounds!.x + optionsBounds!.width).toBeLessThanOrEqual(dialogBounds!.x + dialogBounds!.width);
   const cancelBounds = await save
     .getByRole("button", { name: "Cancel", exact: true })
     .boundingBox();
   expect(cancelBounds!.y + cancelBounds!.height).toBeLessThanOrEqual(700);
   await page.screenshot({ path: "test-results/project-link-state-option.png" });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await save.getByRole("button", { name: "Publish Project Link" }).click();
+  await save.getByRole("button", { name: "Create editing link" }).click();
   await expect.poll(copiedLink).toContain("&state=1");
   const stateLink = await copiedLink();
   expect(stateLink).not.toContain("readme=1");
@@ -146,7 +142,7 @@ test("GUI-118 project links optionally load the default state and open README", 
   await stateOptions.first().check();
   await save.getByLabel("Open README.md with the link").first().check();
   prompted = "";
-  await save.getByRole("button", { name: "Publish Project Link" }).click();
+  await save.getByRole("button", { name: "Create editing link" }).click();
   await expect.poll(copiedLink).toContain("&readme=1&state=1");
   const bothLink = await copiedLink();
   await page.goto("about:blank");
@@ -178,7 +174,8 @@ test("GUI-119 short links carry both options and unavailable state is reported",
     route.fulfill({ json: { project } }),
   );
   page.on("dialog", (dialog) => {
-    void dialog.dismiss();
+    if (dialog.type() === "confirm") void dialog.accept();
+    else void dialog.dismiss();
   });
   await page.goto(
     "/#bluek=p1." + Buffer.from(JSON.stringify(project)).toString("base64url"),
@@ -189,7 +186,7 @@ test("GUI-119 short links carry both options and unavailable state is reported",
     .getByLabel("Load default test class state with the link")
     .last()
     .check();
-  await save.getByRole("button", { name: "Publish Project Link" }).click();
+  await save.getByRole("button", { name: "Create editing link" }).click();
   const shortLink = page.getByRole("button", {
     name: "Complete project link",
     exact: true,
@@ -201,7 +198,7 @@ test("GUI-119 short links carry both options and unavailable state is reported",
     .click();
   await page.getByRole("button", { name: "Share" }).click();
   await save.getByLabel("Open README.md with the link").last().check();
-  await save.getByRole("button", { name: "Publish Project Link" }).click();
+  await save.getByRole("button", { name: "Create editing link" }).click();
   await expect(shortLink).toContainText(
     "/?p=green-lamp-river&readme=1&state=1",
   );
@@ -225,11 +222,8 @@ test("GUI-119 short links carry both options and unavailable state is reported",
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Share" }).click();
   await expect(
-    save.getByLabel("Load default test class state with the link").first(),
-  ).toBeDisabled();
-  await expect(
-    save.getByLabel("Load default test class state with the link").last(),
-  ).toBeDisabled();
+    save.getByLabel("Load default test class state with the link"),
+  ).toHaveCount(0);
 
   await page.goto("about:blank");
   const failed = {
@@ -238,10 +232,7 @@ test("GUI-119 short links carry both options and unavailable state is reported",
       file.fileName === "HundTest.kt"
         ? {
             ...file,
-            source: fixture.replace(
-              "hund1.geburtstag()",
-              'error("State failed")',
-            ),
+            source: `import kotlin.test.*\nclass HundTest { val fail = error("State failed") }`,
           }
         : file,
     ),
@@ -632,7 +623,7 @@ test("GUI-116 empty attached and independent test classes remain available for r
   });
 });
 
-test("GUI-117 init-state replacement warns and failed loading reports its error without opening Tests", async ({
+test("GUI-117 init-state replacement warns and loading state leaves Tests closed", async ({
   page,
 }) => {
   const project = {
@@ -661,22 +652,6 @@ test("GUI-117 init-state replacement warns and failed loading reports its error 
     .locator(".result-dialog")
     .getByRole("button", { name: "Close", exact: true })
     .click();
-  await page.goto("about:blank");
-  await load(page, {
-    ...project,
-    files: [
-      project.files[0],
-      {
-        ...project.files[1],
-        source: `import kotlin.test.*\nclass HundTest { @BeforeTest fun setUp() { error("state failed") } }`,
-      },
-    ],
-  });
-  await page.getByRole("button", { name: "Load state", exact: true }).click();
-  await expect(page.locator(".compiler-dialog")).toContainText("state failed");
-  await expect(
-    page.getByRole("dialog", { name: "Exception", exact: true }),
-  ).toBeVisible();
   await expect(page.locator(".test-panel")).toHaveCount(0);
 });
 

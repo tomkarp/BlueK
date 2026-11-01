@@ -1,7 +1,7 @@
 <script lang="ts">
   import { languages, type Locale, useLanguage } from "../i18n/Language.svelte";
   const language = useLanguage();
-  $: t = $language.t;
+  const t = language.t;
   import TranslatedText from "./TranslatedText.svelte";
   import UserHelpDialog from "./UserHelpDialog.svelte";
   import { containClicks } from "../uiActions";
@@ -10,31 +10,58 @@
     TerminalClearTrigger,
   } from "../workspace/WorkspaceUi.svelte";
 
-  export let settingsNotice: boolean;
-  export let shortcutsHelpOpen: boolean;
-  export let darkMode: boolean;
-  export let setDarkMode: (enabled: boolean) => void;
-  export let editorFontSize: number;
-  export let setEditorFontSize: (size: number) => void;
-  export let terminalFontSize: number;
-  export let setTerminalFontSize: (size: number) => void;
-  export let vimMode: boolean;
-  export let setVimMode: (enabled: boolean) => void;
-  export let vimShortcutLabel: string;
-  export let terminalAutoClear: TerminalClearSettings;
-  export let setTerminalAutoClear: (
-    trigger: TerminalClearTrigger,
-    enabled: boolean,
-  ) => void;
-  export let compileShortcutLabel: string;
-  export let runShortcutLabel: string;
-  export let saveShortcutLabel: string;
-  export let terminalShortcutLabel: string;
-  export let formatShortcutLabel: string;
-  export let commentShortcutLabel: string;
-  export let editorNextShortcutLabel: string;
-  export let editorPrevShortcutLabel: string;
-  export let openFeedback: () => void;
+  interface Props {
+    settingsNotice: boolean;
+    shortcutsHelpOpen: boolean;
+    darkMode: boolean;
+    setDarkMode: (enabled: boolean) => void;
+    editorFontSize: number;
+    setEditorFontSize: (size: number) => void;
+    terminalFontSize: number;
+    setTerminalFontSize: (size: number) => void;
+    vimMode: boolean;
+    setVimMode: (enabled: boolean) => void;
+    vimShortcutLabel: string;
+    terminalAutoClear: TerminalClearSettings;
+    setTerminalAutoClear: (
+      trigger: TerminalClearTrigger,
+      enabled: boolean,
+    ) => void;
+    compileShortcutLabel: string;
+    runShortcutLabel: string;
+    saveShortcutLabel: string;
+    terminalShortcutLabel: string;
+    formatShortcutLabel: string;
+    commentShortcutLabel: string;
+    editorNextShortcutLabel: string;
+    editorPrevShortcutLabel: string;
+    openFeedback: () => void;
+  }
+
+  let {
+    settingsNotice = $bindable(),
+    shortcutsHelpOpen = $bindable(),
+    darkMode,
+    setDarkMode,
+    editorFontSize,
+    setEditorFontSize,
+    terminalFontSize,
+    setTerminalFontSize,
+    vimMode,
+    setVimMode,
+    vimShortcutLabel,
+    terminalAutoClear,
+    setTerminalAutoClear,
+    compileShortcutLabel,
+    runShortcutLabel,
+    saveShortcutLabel,
+    terminalShortcutLabel,
+    formatShortcutLabel,
+    commentShortcutLabel,
+    editorNextShortcutLabel,
+    editorPrevShortcutLabel,
+    openFeedback,
+  }: Props = $props();
   const terminalTriggers: TerminalClearTrigger[] = [
     "interactive",
     "codepad",
@@ -62,7 +89,7 @@
           <select
             aria-label={t("ui.settings.language")}
             value={$language.locale}
-            on:change={(event) =>
+            onchange={(event) =>
               language.set(event.currentTarget.value as Locale)}
           >
             {#each languages as item}<option value={item.value}
@@ -76,7 +103,7 @@
             type="checkbox"
             aria-label={t("ui.settings.darkMode")}
             checked={darkMode}
-            on:change={(event) => setDarkMode(event.currentTarget.checked)}
+            onchange={(event) => setDarkMode(event.currentTarget.checked)}
           />
         </label>
       </section>
@@ -87,7 +114,7 @@
           <select
             aria-label={t("ui.settings.fontSize")}
             value={editorFontSize}
-            on:change={(event) =>
+            onchange={(event) =>
               setEditorFontSize(Number(event.currentTarget.value))}
           >
             {#each Array.from({ length: 21 }, (_, index) => index + 10) as size}
@@ -104,7 +131,7 @@
             type="checkbox"
             aria-label={t("ui.settings.vimMode")}
             checked={vimMode}
-            on:change={(event) => setVimMode(event.currentTarget.checked)}
+            onchange={(event) => setVimMode(event.currentTarget.checked)}
           />
         </label>
       </section>
@@ -118,7 +145,7 @@
           <select
             aria-label={t("ui.settings.terminalFontSize")}
             value={terminalFontSize}
-            on:change={(event) =>
+            onchange={(event) =>
               setTerminalFontSize(Number(event.currentTarget.value))}
           >
             {#each Array.from({ length: 21 }, (_, index) => index + 10) as size}
@@ -134,7 +161,7 @@
                 <input
                   type="checkbox"
                   checked={terminalAutoClear[trigger]}
-                  on:change={(event) =>
+                  onchange={(event) =>
                     setTerminalAutoClear(trigger, event.currentTarget.checked)}
                 />
                 <span
@@ -155,7 +182,7 @@
         </fieldset>
       </section>
       <div class="dialog-actions">
-        <button on:click={() => (settingsNotice = false)}
+        <button onclick={() => (settingsNotice = false)}
           >{t("ui.common.close")}</button
         >
       </div>
@@ -163,57 +190,59 @@
   </div>{/if}
 {#if shortcutsHelpOpen}
   <UserHelpDialog close={() => (shortcutsHelpOpen = false)} {openFeedback}>
-    <ul slot="shortcuts" class="shortcuts-help-list">
-      <li>
-        <strong>{compileShortcutLabel}</strong><span
-          >{t("ui.settings.compileTheProject")}</span
-        >
-      </li>
-      <li>
-        <strong>{runShortcutLabel}</strong><span
-          >{t("ui.settings.runMain")}</span
-        >
-      </li>
-      <li>
-        <strong>{saveShortcutLabel}</strong><span
-          >{t("ui.common.saveExport")}</span
-        >
-      </li>
-      <li>
-        <strong>{terminalShortcutLabel}</strong><span
-          >{t("ui.settings.cycleTheTerminalClosedWindowSplit")}</span
-        >
-      </li>
-      <li>
-        <strong>{formatShortcutLabel}</strong><span
-          >{t("ui.settings.formatTheCurrentKotlinFile")}</span
-        >
-      </li>
-      <li>
-        <strong>{commentShortcutLabel}</strong><span
-          >{t("ui.settings.commentUncommentSelectedLines")}</span
-        >
-      </li>
-      <li>
-        <strong>{vimShortcutLabel}</strong><span
-          >{t("ui.settings.switchVimModeOnOff")}</span
-        >
-      </li>
-      <li>
-        <strong>{editorNextShortcutLabel}</strong><span
-          >{t("ui.settings.nextEditorWindow")}</span
-        >
-      </li>
-      <li>
-        <strong>{editorPrevShortcutLabel}</strong><span
-          >{t("ui.settings.previousEditorWindow")}</span
-        >
-      </li>
-      <li>
-        <strong>Escape</strong><span
-          >{t("ui.settings.closeTheTopmostDialogOrWindowInVim")}</span
-        >
-      </li>
-    </ul>
+    {#snippet shortcuts()}
+      <ul class="shortcuts-help-list">
+        <li>
+          <strong>{compileShortcutLabel}</strong><span
+            >{t("ui.settings.compileTheProject")}</span
+          >
+        </li>
+        <li>
+          <strong>{runShortcutLabel}</strong><span
+            >{t("ui.settings.runMain")}</span
+          >
+        </li>
+        <li>
+          <strong>{saveShortcutLabel}</strong><span
+            >{t("ui.common.saveExport")}</span
+          >
+        </li>
+        <li>
+          <strong>{terminalShortcutLabel}</strong><span
+            >{t("ui.settings.cycleTheTerminalClosedWindowSplit")}</span
+          >
+        </li>
+        <li>
+          <strong>{formatShortcutLabel}</strong><span
+            >{t("ui.settings.formatTheCurrentKotlinFile")}</span
+          >
+        </li>
+        <li>
+          <strong>{commentShortcutLabel}</strong><span
+            >{t("ui.settings.commentUncommentSelectedLines")}</span
+          >
+        </li>
+        <li>
+          <strong>{vimShortcutLabel}</strong><span
+            >{t("ui.settings.switchVimModeOnOff")}</span
+          >
+        </li>
+        <li>
+          <strong>{editorNextShortcutLabel}</strong><span
+            >{t("ui.settings.nextEditorWindow")}</span
+          >
+        </li>
+        <li>
+          <strong>{editorPrevShortcutLabel}</strong><span
+            >{t("ui.settings.previousEditorWindow")}</span
+          >
+        </li>
+        <li>
+          <strong>Escape</strong><span
+            >{t("ui.settings.closeTheTopmostDialogOrWindowInVim")}</span
+          >
+        </li>
+      </ul>
+    {/snippet}
   </UserHelpDialog>
 {/if}

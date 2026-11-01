@@ -2,10 +2,15 @@
   import TranslatedText from "./TranslatedText.svelte";
   import { useLanguage } from "../i18n/Language.svelte";
   const language = useLanguage();
-  $: t = $language.t;
+  const t = language.t;
   import { containClicks, focusOnMount } from "../uiActions";
-  export let close: () => void;
-  export let openFeedback: () => void;
+  interface Props {
+    close: () => void;
+    openFeedback: () => void;
+    shortcuts?: import("svelte").Snippet;
+  }
+
+  let { close, openFeedback, shortcuts }: Props = $props();
   const sections = [
     ["start", "Quick start"],
     ["objects", "Objects & codepad"],
@@ -17,8 +22,8 @@
     ["shortcuts", "Keyboard shortcuts"],
     ["troubleshooting", "Troubleshooting"],
   ] as const;
-  let selected: (typeof sections)[number][0] = "start";
-  let content: HTMLElement;
+  let selected: (typeof sections)[number][0] = $state("start");
+  let content: HTMLElement | undefined = $state();
   function select(id: typeof selected) {
     selected = id;
     if (content) content.scrollTop = 0;
@@ -43,7 +48,7 @@
         {#each sections as [id, title]}
           <button
             aria-current={selected === id ? "page" : undefined}
-            on:click={() => select(id)}>{$language.message(title)}</button
+            onclick={() => select(id)}>{$language.message(title)}</button
           >
         {/each}
       </nav>
@@ -319,7 +324,7 @@ fun main() {
           <p>
             {t("help.shortcuts.introduction")}
           </p>
-          <slot name="shortcuts" />
+          {@render shortcuts?.()}
         {:else}
           <h4>{t("help.navigation.troubleshooting")}</h4>
           <dl>
@@ -357,12 +362,12 @@ fun main() {
             </dd>
           </dl>
           <p><TranslatedText message="help.troubleshooting.reporting" /></p>
-          <button on:click={openFeedback}>{t("ui.feedback.title")}</button>
+          <button onclick={openFeedback}>{t("ui.feedback.title")}</button>
         {/if}
       </article>
     </div>
     <div class="dialog-actions">
-      <button on:click={close}>{t("ui.common.close")}</button>
+      <button onclick={close}>{t("ui.common.close")}</button>
     </div>
   </div>
 </div>

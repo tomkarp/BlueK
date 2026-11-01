@@ -102,7 +102,7 @@ test('EXP-04 the project can be downloaded as .bluek.json and imported in BlueK 
   expect(download.suggestedFilename()).toBe('Hunde- 1-2.bluek.json');
   const saved = JSON.parse(await readFile(await download.path(), 'utf8'));
   expect(saved).toEqual({ format: 'bluek-project', version: 1, projectName: 'Hunde: 1/2', readme: '# Hunde',
-    files: greeter.map(file => ({ kind: 'functions', ...file })) });
+    files: greeter.map(({ fileName, source }) => ({ fileName, source })) });
 
   const open = page.getByRole('link', { name: 'Open in BlueK' });
   await expect(open).toHaveAttribute('href', `${baseURL}/`);

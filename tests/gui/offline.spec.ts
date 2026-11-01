@@ -53,7 +53,7 @@ test('GUI-62 file:// runs Kotlin, input, reset and restores/imports/exports proj
   await expect(await evaluate(page, '1 + 2')).toContainText('3');
   await page.getByLabel('Codepad input').fill('println(readln())');
   await page.getByLabel('Codepad input').press('Enter');
-  const input = page.getByPlaceholder('Enter a line; press Return');
+  const input = page.locator('.terminal-window').getByLabel('Program input', { exact: true });
   await expect(input).toBeVisible();
   await input.fill('Ada');
   await input.press('Enter');

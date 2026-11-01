@@ -46,6 +46,8 @@ Shared instructions for coding agents. Do not add tool-specific files such as
   explicitly asked to change it. Runtime state is authoritative; derive UI views
   from the snapshot. Use narrow typed capabilities, no second runtime store,
   general event bus, or Kotlin grammar/source-text regex in the UI.
+- New Svelte components must use Runes mode. For Svelte work, use the Svelte
+  MCP server for documentation and code review whenever it is available.
 - Kotlin semantics belong in `vendor/kotlite-interpreter/`, the source of truth.
   Record every change in its `PATCH.md`.
   Add missing stdlib functions natively in

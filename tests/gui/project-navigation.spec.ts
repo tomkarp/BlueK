@@ -132,7 +132,6 @@ for (const locale of ["en", "de"])
         exact: true,
       })
       .click();
-    await save.locator(".program-settings summary").click();
     await expect(
       save.getByLabel(de ? "Projektnamen anzeigen" : "Show project name"),
     ).toBeVisible();
@@ -148,7 +147,7 @@ for (const locale of ["en", "de"])
       name: de ? "Teilen" : "Share",
       exact: true,
     });
-    await expect(share).toContainText(de ? "sieben Tage" : "seven days");
+    await expect(share.getByRole("heading", { name: de ? "Projekt bearbeiten" : "Edit project" })).toBeVisible();
     await expect(share.getByRole("checkbox")).toHaveCount(0);
     await expect(
       share.getByRole("button", {
@@ -191,18 +190,32 @@ for (const locale of ["en", "de"])
         ? ["Datei", "Konto", "Link", "Wiederherstellen"]
         : ["File", "Account", "Link", "Restore"],
     );
+    await expect(open.locator(".open-source-tabs")).toHaveAttribute(
+      "tabindex",
+      "-1",
+    );
     await expect(open.locator("#open-source-computer")).toHaveAttribute(
       "aria-selected",
       "true",
     );
+    await expect(open.locator("#open-panel-computer")).toHaveAttribute(
+      "tabindex",
+      "0",
+    );
     await open.locator("#open-source-browser").click();
     await expect(open.locator("#open-panel-browser")).toBeVisible();
+    await open.locator("#open-panel-browser").focus();
+    await expect(open.locator("#open-panel-browser")).toBeFocused();
     const openHeight = await open.evaluate(
       (element) => element.getBoundingClientRect().height,
     );
     expect(apiCalls).toBe(1);
     await open.locator("#open-source-account").click();
     await expect(open.locator("#open-panel-account")).toBeVisible();
+    await expect(open.locator("#open-panel-account")).toHaveAttribute(
+      "tabindex",
+      "0",
+    );
     expect(
       Math.abs(
         (await open.evaluate(
@@ -214,6 +227,10 @@ for (const locale of ["en", "de"])
     await expect(
       open.locator("#open-panel-computer .project-dropzone"),
     ).toBeVisible();
+    await expect(open.locator("#open-panel-computer")).toHaveAttribute(
+      "tabindex",
+      "0",
+    );
     expect(
       Math.abs(
         (await open.evaluate(
@@ -224,6 +241,10 @@ for (const locale of ["en", "de"])
     await open.locator("#open-source-link").click();
     await expect(open.locator("#open-panel-link")).toContainText(
       de ? "12-stellige Kennung" : "12-character code",
+    );
+    await expect(open.locator("#open-panel-link")).toHaveAttribute(
+      "tabindex",
+      "0",
     );
     expect(apiCalls).toBe(2);
     await page.keyboard.press("Escape");
@@ -305,6 +326,9 @@ test("NAV-02 signing in from Save returns to the save step without silently uplo
       json: { id: "00000000-0000-0000-0000-000000000001", revision: 1 },
     });
   });
+  await page.route("**/api/storage", (route) =>
+    route.fulfill({ json: { used: 0, limit: 5_242_880 } }),
+  );
   await page.goto(link);
   await page.getByRole("button", { name: "Save", exact: true }).click();
   const save = page.getByRole("dialog", { name: "Save", exact: true });
@@ -320,27 +344,14 @@ test("NAV-02 signing in from Save returns to the save step without silently uplo
     .last()
     .click();
   await expect(account).toBeHidden();
-  await expect(
-    save.getByRole("button", {
-      name: "Save current project privately",
-      exact: true,
-    }),
-  ).toBeVisible();
+  await expect(save.locator(".cloud-save-choice")).toContainText("Navigation project");
   expect(uploads).toBe(0);
-  await save
-    .getByRole("button", {
-      name: "Save current project privately",
-      exact: true,
-    })
-    .click();
-  await expect(save.getByRole("status")).toContainText("saved privately");
+  await save.locator(".cloud-save-choice").click();
+  await expect(save).toBeHidden();
   expect(uploads).toBe(1);
-  await expect(
-    save.getByRole("button", {
-      name: "Update this private project",
-      exact: true,
-    }),
-  ).toBeVisible();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await save.getByRole("button", { name: /^Save in account/ }).click();
+  await expect(save.locator(".cloud-save-choice")).toContainText("Overwrite in account");
   await page.keyboard.press("Escape");
   await page
     .locator(".toolbar-account")
@@ -416,6 +427,9 @@ test("NAV-05 account overview includes project management and supports project a
       },
     }),
   );
+  await page.route("**/api/storage", (route) =>
+    route.fulfill({ json: { used: 0, limit: 5_242_880 } }),
+  );
   await page.goto(link);
   await page.getByRole("button", { name: "Save", exact: true }).click();
   const save = page.getByRole("dialog", { name: "Save", exact: true });
@@ -443,11 +457,11 @@ test("NAV-05 account overview includes project management and supports project a
     .locator("li")
     .filter({ has: page.getByRole("checkbox", { name: "Select project “Inheritance exercises”", exact: true }) });
   await expect(
-    row.getByRole("button", { name: "Open", exact: true }),
+    row.getByRole("button", { name: "Open “Inheritance exercises”", exact: true }),
   ).toBeVisible();
   const [jsonDownload] = await Promise.all([
     page.waitForEvent("download"),
-    row.getByRole("button", { name: "Download JSON", exact: true }).click(),
+    row.getByRole("button", { name: "Download “Inheritance exercises” as JSON", exact: true }).click(),
   ]);
   expect(await jsonDownload.suggestedFilename()).toBe(
     "Inheritance exercises.bluek.json",
@@ -470,7 +484,7 @@ test("NAV-05 account overview includes project management and supports project a
     "Inheritance exercises.bluek.json",
   ]);
   page.once("dialog", (dialog) => dialog.accept());
-  await row.getByRole("button", { name: "Open", exact: true }).click();
+  await row.getByRole("button", { name: "Open “Inheritance exercises”", exact: true }).click();
   await expect(account).toBeHidden();
   await expect(page.getByLabel("Project name")).toHaveValue("Inheritance exercises");
   await page.getByRole("button", { name: "Account", exact: true }).click();
@@ -480,7 +494,7 @@ test("NAV-05 account overview includes project management and supports project a
     .click();
   const renameInput = manager.getByLabel("New name for “Inheritance exercises”");
   await expect(renameInput).toBeFocused();
-  await expect(row.getByRole("button", { name: "Open", exact: true })).toBeVisible();
+  await expect(row.locator("button[aria-label='Open “Inheritance exercises”']")).toBeVisible();
   expect(Math.abs((await row.boundingBox())!.height - rowHeight)).toBeLessThanOrEqual(1);
   await renameInput.fill("Inheritance unit");
   await renameInput.press("Enter");
@@ -551,6 +565,9 @@ test("NAV-07 account project management creates a separate named copy", async ({
     ];
     return route.fulfill({ status: 201, json: { id: copyId, revision: 1 } });
   });
+  await page.route("**/api/storage", (route) =>
+    route.fulfill({ json: { used: 0, limit: 5_242_880 } }),
+  );
   await page.goto(link);
   await page
     .locator(".toolbar-account")
@@ -604,6 +621,9 @@ test("NAV-03 Open only opens private projects; management owns rename and delete
             ],
       },
     }),
+  );
+  await page.route("**/api/storage", (route) =>
+    route.fulfill({ json: { used: 0, limit: 5_242_880 } }),
   );
   await page.route(`**/api/private-projects/${id}`, (route) => {
     if (route.request().method() === "DELETE") {
@@ -673,7 +693,7 @@ test("NAV-03 Open only opens private projects; management owns rename and delete
     path: info.outputPath("account-projects-renamed.png"),
   });
   page.once("dialog", (dialog) => dialog.accept());
-  await manager.getByRole("button", { name: "Open", exact: true }).click();
+  await manager.getByRole("button", { name: "Open “Renamed account project”", exact: true }).click();
   await expect(managerDialog).toBeHidden();
   await expect(page.getByLabel("Project name")).toHaveValue(
     "Renamed account project",

@@ -106,6 +106,8 @@ test("GUI-139 Terminal settings default off, persist independently and translate
   await seed(page);
   await evaluate(page, 'println("APPENDED")');
   await expect(terminal(page)).toHaveText("OLD\nAPPENDED\n");
+  await terminal(page).focus();
+  await expect(terminal(page)).toBeFocused();
   await settings(page, { interactive: true, main: true });
   await page.reload();
   await page.getByRole("button", { name: "Settings", exact: true }).click();

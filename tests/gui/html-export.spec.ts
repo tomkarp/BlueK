@@ -39,7 +39,7 @@ async function project(
 function exportButton(page: Page) {
   return page
     .getByRole("dialog", { name: "Save", exact: true })
-    .getByRole("button", { name: /Export as HTML/ });
+    .locator(".program-export-layout .program-export-choices .file-export-choice");
 }
 
 // Saved under its suggested name: a file without .html would open as text.
@@ -81,6 +81,7 @@ test("EXP-08 Export as HTML compiles on demand, asks for a name and downloads a 
 }, testInfo) => {
   await project(page, greeter);
   await page.getByRole("button", { name: "Save", exact: true }).click();
+  page.once("dialog", (dialog) => dialog.accept("Grüße an alle"));
   await page
     .getByRole("button", { name: "Runnable webpage …", exact: true })
     .click();
@@ -90,7 +91,6 @@ test("EXP-08 Export as HTML compiles on demand, asks for a name and downloads a 
   await expect(button).toContainText(
     "A single web page that runs the program, without BlueK.",
   );
-  page.once("dialog", (dialog) => dialog.accept("Grüße an alle"));
   const [download] = await Promise.all([
     page.waitForEvent("download"),
     button.click(),
@@ -211,8 +211,21 @@ test("EXP-10 a project without main cannot be exported and compile errors stop t
     ],
     { projectName: "Fehler" },
   );
-  // Only the hash changed, which is no new visit — a reload is one.
-  await page.reload();
+  // A reload restores this tab's local draft before considering the hash.
+  // Clear that draft so this case exercises the compile-error payload.
+  await page.goto("/");
+  await page.evaluate(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+  await project(
+    page,
+    [{
+      fileName: "App.kt",
+      source: 'fun main() {\n    val x: Int = "text"\n}\n',
+    }],
+    { projectName: "Fehler" },
+  );
   await expect(page.getByLabel("Project name")).toHaveValue("Fehler");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await page
@@ -245,7 +258,6 @@ test("EXP-11 a BluePlay project exported from the IDE shows its world", async ({
   await page
     .getByRole("button", { name: "Runnable webpage …", exact: true })
     .click();
-  await page.locator(".program-settings summary").click();
   await page.getByLabel("Start game automatically").uncheck();
   const [download] = await Promise.all([
     page.waitForEvent("download"),

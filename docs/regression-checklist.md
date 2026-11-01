@@ -167,6 +167,7 @@ below. No universal performance guarantee is implied.
 | ARCH-06 | Library/resources/positions and worker scheduler ownership | Coverage: runtime; no specific passing run asserted here |
 | ARCH-07 | Typed Svelte presentation modules without runtime creation | Recorded browser pass; `test:window-interaction` |
 | ARCH-08 | Domain controllers and cloneable arguments; sole runtime client | Recorded helper/browser pass; `test:workspace` |
+| ARCH-09 | All maintained Svelte components compile in Runes mode | `test:svelte-runes`; dated migration record below |
 | GUI-51 | Virtual library cards, API help and typed canvas stage | Build/runtime evidence; separate visual acceptance pending |
 | GUI-52 | Unified BluePlay window, drag/close/maximize | Built-in browser drag/close/maximize inspected; automation added |
 | GUI-53 | Pixel-visible actor/canvas clicks with scaling/rotation | Recorded browser pass |
@@ -2157,6 +2158,59 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
   timed out on the obsolete `.program-settings summary` step in HTML export:
   the current options are directly visible. No full navigation pass is claimed.
 
+### Svelte Runes migration — 2026-10-31
+
+- Migrated the existing Svelte components to `$state`, `$derived`, `$effect`,
+  `$props`, `$bindable`, event attributes and snippets where applicable. Kept
+  Language callbacks reactive by calling the language instance during render;
+  translated views update when its locale changes. Added `test:svelte-runes` to
+  `browser-smoke` and `test:regression`.
+- `typecheck`: zero errors; 7 existing Svelte warnings. `test:svelte-runes`
+  passed for all 40 components compiled with `runes: true`. `build:svelte`
+  passed. Svelte MCP documentation and Autofixer were used; its remaining
+  suggestions concern existing unkeyed lists, accessibility markup and UI
+  refactoring, outside this syntax-only pass.
+- Browser checks after migration: language switching and German help passed
+  2/2. The broader corrected focused set passed 20/24; all four failures
+  reproduced against the unchanged `HEAD`: GUI-130 confirmation wording and
+  diagnostics, GUI-62 offline input, and EXP-04 exported JSON fields. A baseline
+  run of the related 28 cases passed 21/28; its three additional failures were
+  the existing HTML-export selector/reload expectations recorded above. The
+  full GUI run was interrupted after 180/389 cases (172 passed, 7 failed, 1
+  interrupted, 209 not run); all 7 failures were reproduced in the baseline
+  subset. Visual user acceptance remains pending.
+- Follow-up full `npm run test:gui` on 2026-10-31 completed all 389 tests:
+  363 passed and 26 failed (none interrupted). Failures: EXP-04/08/10/11,
+  GUI-130 confirmations/diagnostics, GUI-62 offline input, HANDOFF-09,
+  NAV-01 (English and German), NAV-02/03/05/07, GUI-97, RT-82, GUI-35,
+  GUI-138, GUI-05 command recall, GUI-08/10, GUI-12/13/15/147, GUI-66,
+  RT-33 and GUI-118/119/117. The seven cases already compared against
+  unchanged `HEAD` reproduced there; the other failures have not been checked
+  against the baseline. Vite also logged repeated `ECONNREFUSED` for the
+  account API at `127.0.0.1:8787`; API-dependent failures need a rerun with the
+  project services running before attribution. No browser test was skipped.
+  Runes check passed for 40 components, typecheck had zero errors and 7
+  warnings, production build passed, and `git diff --check` passed.
+- Reran the 12 handoff/navigation/link-state failures selected above with the
+  local API running on port 8787 against a temporary SQLite database: all 12
+  still failed. HANDOFF-09 compares removed `kind` fields; NAV-01 waits for the
+  obsolete `.program-settings summary` selector. The other ten failures are
+  not compared against `HEAD` yet. The temporary API database was removed.
+
+- Verification follow-up: updated stale assertions and synchronization in the
+  GUI tests listed in the preceding full-run record. A fresh complete Chromium
+  run passed 388/389 tests, including every one of those 26 earlier failures.
+  DBG-14 was the sole failure: the debugger dialog remained visible after
+  Continue. A second complete GUI run then passed 389/389; the complete
+  debugger suite also passed 18/18 against unchanged `HEAD`, and on the migrated
+  tree DBG-14 passed once alone and five more consecutive repetitions. Record
+  the first result as an intermittent failure that did not reproduce. `typecheck`
+  found zero errors and seven warnings; `test:svelte-runes` passed all 40 components;
+  `test:i18n` passed for 971 messages in both locales; `build:svelte` and
+  `git diff --check` passed. The production build retains existing Svelte
+  accessibility, missing Kotlin bundle-at-build-time, externalized Node module
+  and large-chunk warnings. No WebKit GUI suite was run in this follow-up.
+
 ### Form spacing and centered project icons — 2026-10-31
 
 - Project action buttons explicitly center their SVGs, with no baseline offset.
@@ -2170,3 +2224,14 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
 - Agent inspected the WebKit light desktop and dark mobile account screenshots.
   Then adjusted dark project-date text and row borders; these final color-only
   changes have not been screenshot-verified. User acceptance pending.
+
+### Svelte accessibility warnings — 2026-11-01
+
+- Made the project-source tab panels focusable, gave the tablist a programmatic
+  focus target, and removed the redundant `group` role from its fieldset. Kept
+  the terminal transcript keyboard-focusable for scrolling; documented the
+  intentional `tabindex` exception for Svelte's static-element warning.
+- `svelte-check` reports zero warnings and zero errors. Project navigation and
+  terminal settings GUI tests passed 18/18. The production build passed; its
+  existing missing Kotlin bundle-at-build-time, externalized Node module and
+  large-chunk warnings remain.

@@ -1,15 +1,25 @@
 <script lang="ts">
   import { useLanguage } from "../i18n/Language.svelte";
   const language = useLanguage();
-  $: t = $language.t;
+  const t = language.t;
   import { focusOnMount, containClicks } from "../uiActions";
 
   import type { NewClassType } from "../uiTypes";
-  export let newClassOpen: boolean;
-  export let newClassName: string;
-  export let newClassType: NewClassType;
-  export let error: string;
-  export let confirmNewClass: () => void;
+  interface Props {
+    newClassOpen: boolean;
+    newClassName: string;
+    newClassType: NewClassType;
+    error: string;
+    confirmNewClass: () => void;
+  }
+
+  let {
+    newClassOpen = $bindable(),
+    newClassName = $bindable(),
+    newClassType = $bindable(),
+    error,
+    confirmNewClass,
+  }: Props = $props();
 </script>
 
 {#if newClassOpen}<div class="modal topmost-modal" role="presentation">
@@ -27,7 +37,7 @@
           bind:value={newClassName}
           use:focusOnMount
           placeholder={t("ui.files.eGAnimal")}
-          on:keydown={(event) => event.key === "Enter" && confirmNewClass()}
+          onkeydown={(event) => event.key === "Enter" && confirmNewClass()}
         /></label
       >
       <fieldset>
@@ -46,9 +56,9 @@
           {$language.message(error)}
         </div>{/if}
       <div class="dialog-actions">
-        <button on:click={() => (newClassOpen = false)}
+        <button onclick={() => (newClassOpen = false)}
           >{t("ui.common.cancel")}</button
-        ><button on:click={confirmNewClass}>{t("ui.common.create")}</button>
+        ><button onclick={confirmNewClass}>{t("ui.common.create")}</button>
       </div>
     </div>
   </div>{/if}

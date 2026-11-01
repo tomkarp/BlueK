@@ -16,41 +16,54 @@
   import type { BenchObject, WindowPosition } from "../uiTypes";
 
   const language = useLanguage();
-  $: t = $language.t;
-  export let phase: RuntimeSnapshot["phase"];
-  export let activeExecutionId: number | undefined;
-  export let debugPauseRequested: boolean;
-  export let debugSessionActive: boolean;
-  export let debugInspectionActive: boolean;
-  export let debug: DebugPause | undefined;
-  export let debugAction: (
-    action: "step" | "stepIn" | "continue",
-  ) => Promise<void>;
-  export let requestDebugPause: () => Promise<void>;
-  export let stopDebug: () => Promise<void>;
-  export let inspectObject: (object: BenchObject) => Promise<void>;
+  const t = language.t;
 
-  export let inspection: InspectionView | null;
-  export let fieldProperty: (
-    data: RuntimeValue,
-    field: InspectedField,
-  ) => ManifestProperty | null | undefined;
-  export let fieldValue: (data: RuntimeValue, field: InspectorField) => string;
-  export let inspectFieldReference: (
-    id: string,
-    field: InspectorField,
-  ) => Promise<void>;
-  export let onFieldError: (error: {
-    property: string;
-    message: string;
-  }) => void;
+  interface Props {
+    phase: RuntimeSnapshot["phase"];
+    activeExecutionId: number | undefined;
+    debugPauseRequested: boolean;
+    debugSessionActive: boolean;
+    debugInspectionActive: boolean;
+    debug: DebugPause | undefined;
+    debugAction: (action: "step" | "stepIn" | "continue") => Promise<void>;
+    requestDebugPause: () => Promise<void>;
+    stopDebug: () => Promise<void>;
+    inspectObject: (object: BenchObject) => Promise<void>;
+    inspection: InspectionView | null;
+    fieldProperty: (
+      data: RuntimeValue,
+      field: InspectedField,
+    ) => ManifestProperty | null | undefined;
+    fieldValue: (data: RuntimeValue, field: InspectorField) => string;
+    inspectFieldReference: (id: string, field: InspectorField) => Promise<void>;
+    onFieldError: (error: { property: string; message: string }) => void;
+  }
 
-  let position: WindowPosition | null = null;
-  $: visible =
+  let {
+    phase,
+    activeExecutionId,
+    debugPauseRequested,
+    debugSessionActive,
+    debugInspectionActive,
+    debug,
+    debugAction,
+    requestDebugPause,
+    stopDebug,
+    inspectObject,
+    inspection,
+    fieldProperty,
+    fieldValue,
+    inspectFieldReference,
+    onFieldError,
+  }: Props = $props();
+
+  let position: WindowPosition | null = $state(null);
+  let visible = $derived(
     (phase === "running" &&
       Boolean(activeExecutionId) &&
       (debugPauseRequested || debugSessionActive)) ||
-    (phase === "debugPaused" && Boolean(debug));
+      (phase === "debugPaused" && Boolean(debug)),
+  );
 
   function beginDrag(event: PointerEvent) {
     beginWindowDrag(
@@ -60,7 +73,6 @@
       "visible",
     );
   }
-
 </script>
 
 {#if visible}
@@ -76,7 +88,7 @@
       class="debugger-window-header"
       role="toolbar"
       tabindex="0"
-      on:pointerdown={beginDrag}
+      onpointerdown={beginDrag}
     >
       <strong>{t("ui.debug.title")}</strong>
       {#if phase === "debugPaused" && debug}
@@ -94,27 +106,36 @@
         <p class="debugger-help">{t("ui.debug.firstPauseHelp")}</p>
         <div class="debug-actions">
           <button
-            on:click={() => void debugAction("step")}
+            onclick={() => void debugAction("step")}
             title={t("ui.debug.stepHelp")}
             disabled={debugInspectionActive}>{t("ui.debug.step")}</button
           >
           <button
-            on:click={() => void debugAction("stepIn")}
+            onclick={() => void debugAction("stepIn")}
             title={t("ui.debug.stepInHelp")}
             disabled={!debug.stepInAvailable || debugInspectionActive}
             >{t("ui.debug.stepIn")}</button
           >
           <button
-            on:click={() => void debugAction("continue")}
+            onclick={() => void debugAction("continue")}
             disabled={debugInspectionActive}>{t("ui.debug.continue")}</button
           >
-          <button on:click={() => void stopDebug()}>{t("ui.debug.stop")}</button
-          >
+          <button onclick={() => void stopDebug()}>{t("ui.debug.stop")}</button>
         </div>
 
-        <DebuggerVariables variables={debug.variables} label={t("ui.debug.variables")} emptyMessage={t("ui.debug.noVariables")} {inspectObject} />
+        <DebuggerVariables
+          variables={debug.variables}
+          label={t("ui.debug.variables")}
+          emptyMessage={t("ui.debug.noVariables")}
+          {inspectObject}
+        />
         {#if debug.globals?.length}
-          <DebuggerVariables variables={debug.globals} label={t("ui.debug.globalVariables")} scope="global" {inspectObject} />
+          <DebuggerVariables
+            variables={debug.globals}
+            label={t("ui.debug.globalVariables")}
+            scope="global"
+            {inspectObject}
+          />
         {/if}
 
         {#if inspection}
@@ -142,12 +163,11 @@
       {:else}
         <div class="debug-actions">
           <button
-            on:click={() => void requestDebugPause()}
+            onclick={() => void requestDebugPause()}
             disabled={debugPauseRequested || debugInspectionActive}
             >{t("ui.debug.pause")}</button
           >
-          <button on:click={() => void stopDebug()}>{t("ui.debug.stop")}</button
-          >
+          <button onclick={() => void stopDebug()}>{t("ui.debug.stop")}</button>
         </div>
       {/if}
     </div>

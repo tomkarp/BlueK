@@ -1,7 +1,7 @@
 <script lang="ts">
   import { useLanguage } from "../i18n/Language.svelte";
   const language = useLanguage();
-  $: t = $language.t;
+  const t = language.t;
   import InspectorFields from "./InspectorFields.svelte";
   import { focusOnMount, containClicks } from "../uiActions";
 
@@ -13,37 +13,58 @@
 
   import type { InspectionView, InspectorField } from "../inspectorModel";
   import type { ActiveWindow, InspectorWindowView } from "../uiTypes";
-  export let inspectorViews: InspectorWindowView[];
-  export let activeWindow: ActiveWindow;
-  export let activeInspectorId: string;
-  export let inspected: InspectionView | null;
-  export let editingField: string;
-  export let fieldInput: HTMLInputElement | null;
-  export let fieldDraft: string;
-  export let fieldError: string;
-  export let inspectorError: { property: string; message: string } | null;
-  export let fieldProperty: (
-    data: RuntimeValue,
-    field: InspectedField,
-  ) => ManifestProperty | null | undefined;
-  export let canEditField: (
-    field: InspectorField,
-    data?: InspectionView | null,
-  ) => boolean;
-  export let fieldValue: (data: RuntimeValue, field: InspectorField) => string;
-  export let inspectorType: (data: InspectionView) => string;
-  export let bringInspectorToFront: (id: string) => void;
-  export let beginInspectorDrag: (event: PointerEvent, id: string) => void;
-  export let closeInspector: (id: string) => void;
-  export let saveField: (field: InspectorField) => Promise<void>;
-  export let inspectFieldReference: (
-    id: string,
-    field: InspectorField,
-  ) => Promise<void>;
-  export let beginFieldEdit: (
-    field: InspectorField,
-    data?: InspectionView | null,
-  ) => void;
+  interface Props {
+    inspectorViews: InspectorWindowView[];
+    activeWindow: ActiveWindow;
+    activeInspectorId: string;
+    inspected: InspectionView | null;
+    editingField: string;
+    fieldInput: HTMLInputElement | null;
+    fieldDraft: string;
+    fieldError: string;
+    inspectorError: { property: string; message: string } | null;
+    fieldProperty: (
+      data: RuntimeValue,
+      field: InspectedField,
+    ) => ManifestProperty | null | undefined;
+    canEditField: (
+      field: InspectorField,
+      data?: InspectionView | null,
+    ) => boolean;
+    fieldValue: (data: RuntimeValue, field: InspectorField) => string;
+    inspectorType: (data: InspectionView) => string;
+    bringInspectorToFront: (id: string) => void;
+    beginInspectorDrag: (event: PointerEvent, id: string) => void;
+    closeInspector: (id: string) => void;
+    saveField: (field: InspectorField) => Promise<void>;
+    inspectFieldReference: (id: string, field: InspectorField) => Promise<void>;
+    beginFieldEdit: (
+      field: InspectorField,
+      data?: InspectionView | null,
+    ) => void;
+  }
+
+  let {
+    inspectorViews,
+    activeWindow,
+    activeInspectorId,
+    inspected,
+    editingField = $bindable(),
+    fieldInput = $bindable(),
+    fieldDraft = $bindable(),
+    fieldError,
+    inspectorError = $bindable(),
+    fieldProperty,
+    canEditField,
+    fieldValue,
+    inspectorType,
+    bringInspectorToFront,
+    beginInspectorDrag,
+    closeInspector,
+    saveField,
+    inspectFieldReference,
+    beginFieldEdit,
+  }: Props = $props();
 </script>
 
 {#each inspectorViews as inspector, index (inspector.id)}
@@ -58,7 +79,7 @@
       aria-label={t("ui.inspector.objectInspector")}
       tabindex="-1"
       style={`position:fixed;left:${inspector.position.left}px;top:${inspector.position.top}px;margin:0;z-index:${inspector.id === activeInspectorId ? 100 : 10 + index}`}
-      on:pointerdown={(event) => {
+      onpointerdown={(event) => {
         if (
           !(event.target as HTMLElement).closest("button,input,.inspect-row")
         ) {
@@ -66,8 +87,8 @@
           beginInspectorDrag(event, inspector.id);
         }
       }}
-      on:click={() => bringInspectorToFront(inspector.id)}
-      on:keydown={(event) => {
+      onclick={() => bringInspectorToFront(inspector.id)}
+      onkeydown={(event) => {
         if (
           event.key === "Escape" &&
           (!editingField || inspected?.objectId !== inspector.id)
@@ -97,7 +118,7 @@
         onFieldError={(error) => (inspectorError = error)}
       />
       <div class="dialog-actions">
-        <button on:click={() => closeInspector(inspector.id)}
+        <button onclick={() => closeInspector(inspector.id)}
           >{t("ui.common.close")}</button
         >
       </div>
@@ -119,7 +140,7 @@
       </h3>
       <p>{inspectorError.message}</p>
       <div class="dialog-actions">
-        <button use:focusOnMount on:click={() => (inspectorError = null)}
+        <button use:focusOnMount onclick={() => (inspectorError = null)}
           >{t("ui.common.close")}</button
         >
       </div>

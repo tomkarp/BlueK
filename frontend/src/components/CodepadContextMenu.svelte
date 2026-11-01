@@ -1,13 +1,17 @@
 <script lang="ts">
   import { useLanguage } from "../i18n/Language.svelte";
   const language = useLanguage();
-  $: t = $language.t;
+  const t = language.t;
   import { containClicks } from "../uiActions";
 
   import type { HistoryEntry, CodepadMenu } from "../uiTypes";
-  export let codepadMenu: CodepadMenu | null;
-  export let history: HistoryEntry[];
-  export let clearHistory: () => void;
+  interface Props {
+    codepadMenu: CodepadMenu | null;
+    history: HistoryEntry[];
+    clearHistory: () => void;
+  }
+
+  let { codepadMenu = $bindable(), history, clearHistory }: Props = $props();
 
   function copyCodepadText(value: string) {
     navigator.clipboard?.writeText(value).catch(() => undefined);
@@ -32,16 +36,16 @@
     use:containClicks
   >
     <button
-      on:click={() =>
+      onclick={() =>
         copyCodepadText(
           codepadMenu?.text || history.map((entry) => entry.code).join("\n"),
         )}>{t("ui.codepad.copy")}</button
     ><button
-      on:click={() => {
+      onclick={() => {
         clearHistory();
         codepadMenu = null;
       }}>{t("ui.codepad.clearHistory")}</button
-    ><button on:click={selectAllCodepadHistory}
+    ><button onclick={selectAllCodepadHistory}
       >{t("ui.codepad.selectAllHistory")}</button
     >
   </div>{/if}

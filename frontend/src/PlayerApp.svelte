@@ -1,42 +1,68 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from "svelte";
   import type { Language } from "./i18n/Language.svelte";
-  export let language: Language;
-  $: t = $language.t;
-  import type { Diagnostic, RuntimeSnapshot } from "../../runtime-contract/src/index";
+  import type {
+    Diagnostic,
+    RuntimeSnapshot,
+  } from "../../runtime-contract/src/index";
   import { LocalRuntimeClient } from "./localRuntimeClient";
   import { isCompileError } from "./compileDiagnostics";
   import { mainFiles } from "./mainEntries";
   import { projectModelFromPayload } from "./projectFormat";
   import { exportFileName, type ExportedProgram } from "./programExport";
-  import { appendTerminal, combineTerminalOutput, terminalParts } from "./uiParity";
+  import {
+    appendTerminal,
+    combineTerminalOutput,
+    terminalParts,
+  } from "./uiParity";
   import { prepareRuntimeResources } from "./imageAlpha";
   import { withStandardResources } from "./standardImages";
   import {
-    StageAudio, StageRenderer, decorateStage, measureImageSizes, stageKeyName, stageStyle,
-    type ImageSizes, type StageFrame,
+    StageAudio,
+    StageRenderer,
+    decorateStage,
+    measureImageSizes,
+    stageKeyName,
+    stageStyle,
+    type ImageSizes,
+    type StageFrame,
   } from "./bluePlayStage";
 
-  /**
-   * Runs one exported program: compiles the embedded project in its own
-   * runtime worker and starts the chosen main(). Console programs get a
-   * terminal; BluePlay programs a world with its controls.
-   */
-  export let program: ExportedProgram;
-  export let createWorker: () => Worker;
-  export let developerUrl: string | undefined = undefined;
+  interface Props {
+    language: Language;
+    /**
+     * Runs one exported program: compiles the embedded project in its own
+     * runtime worker and starts the chosen main(). Console programs get a
+     * terminal; BluePlay programs a world with its controls.
+     */
+    program: ExportedProgram;
+    createWorker: () => Worker;
+    developerUrl?: string | undefined;
+  }
 
-  const model = projectModelFromPayload(program.project, (index) => `file-${index}`);
+  // The player entry is mounted once with immutable project and worker inputs.
+  const {
+    language,
+    program,
+    createWorker,
+    developerUrl = undefined,
+  }: Props = $props();
+  const t = (...args: Parameters<typeof language.t>) => language.t(...args);
+
+  function createProjectModel() {
+    return projectModelFromPayload(program.project, (index) => `file-${index}`);
+  }
+  const model = createProjectModel();
   const bluePlay = model.library?.id === "blueplay";
   const title = model.projectName || "BlueK program";
   const resources = withStandardResources(model.resources);
-  const client = new LocalRuntimeClient(createWorker);
+  const client = new LocalRuntimeClient(() => createWorker());
   const renderer = new StageRenderer(() => scheduleDraw());
   const audio = new StageAudio();
   const keysDown = new Set<string>();
 
-  let runtime: RuntimeSnapshot = client.getSnapshot();
-  let terminal = "";
+  let runtime: RuntimeSnapshot = $state(client.getSnapshot());
+  let terminal = $state("");
   // Output that has not reached the terminal yet: it is shown at most once per
   // display frame, because a program can print faster than the terminal is laid out.
   let pendingOutput = "";
@@ -56,23 +82,36 @@
     pendingOutput = "";
     terminal = "";
   }
-  let diagnostics: Diagnostic[] = [];
-  let problem = "";
-  let stage: StageFrame | null = null;
+  let diagnostics: Diagnostic[] = $state([]);
+  let problem = $state("");
+  let stage: StageFrame | null = $state(null);
   let sizes: ImageSizes = {};
-  let speed = 50;
-  let canvas: HTMLCanvasElement | null = null;
-  let inputElement: HTMLInputElement | null = null;
-  let outputElement: HTMLPreElement | null = null;
-  let blueKLink = "";
+  let speed = $state(50);
+  let canvas: HTMLCanvasElement | null = $state(null);
+  let inputElement: HTMLInputElement | null = $state(null);
+  let outputElement: HTMLPreElement | null = $state(null);
+  let blueKLink = $state("");
   let run = 0;
 
-  $: inputReady = runtime.phase === "waitingForInput";
-  $: stageRunning = runtime.simulation === "running" || runtime.simulation === "stopping" || runtime.simulation === "waiting";
-  $: loading = runtime.phase === "compiling";
-  $: canStep = Boolean(stage) && !stageRunning && runtime.phase === "ready";
-  $: canReset = !stageRunning && runtime.phase !== "compiling" && runtime.phase !== "running" && runtime.phase !== "uncompiled";
-  $: if (inputReady) tick().then(() => inputElement?.focus());
+  let inputReady = $derived(runtime.phase === "waitingForInput");
+  let stageRunning = $derived(
+    runtime.simulation === "running" ||
+      runtime.simulation === "stopping" ||
+      runtime.simulation === "waiting",
+  );
+  let loading = $derived(runtime.phase === "compiling");
+  let canStep = $derived(
+    Boolean(stage) && !stageRunning && runtime.phase === "ready",
+  );
+  let canReset = $derived(
+    !stageRunning &&
+      runtime.phase !== "compiling" &&
+      runtime.phase !== "running" &&
+      runtime.phase !== "uncompiled",
+  );
+  $effect(() => {
+    if (inputReady) tick().then(() => inputElement?.focus());
+  });
 
   let drawPending = false;
   function scheduleDraw() {
@@ -80,7 +119,8 @@
     drawPending = true;
     requestAnimationFrame(() => {
       drawPending = false;
-      if (canvas && stage) renderer.draw(canvas, stage, resources, window.devicePixelRatio);
+      if (canvas && stage)
+        renderer.draw(canvas, stage, resources, window.devicePixelRatio);
     });
   }
 
@@ -96,7 +136,12 @@
     stage = null;
     keysDown.clear();
     try {
-      const compiled = await client.compile(model.files, Date.now(), model.library, await prepareRuntimeResources(resources));
+      const compiled = await client.compile(
+        model.files,
+        Date.now(),
+        model.library,
+        await prepareRuntimeResources(resources),
+      );
       if (current !== run) return;
       if (compiled.diagnostics.some(isCompileError)) {
         diagnostics = compiled.diagnostics.filter(isCompileError);
@@ -111,7 +156,13 @@
         : await client.execute({ op: "main", fileName: program.mainFile });
       if (current === run && "kind" in result && result.kind === "error")
         problem = result.display || "The program stopped with an error.";
-      else if (current === run && bluePlay && program.autoRun && stage && runtime.phase === "ready")
+      else if (
+        current === run &&
+        bluePlay &&
+        program.autoRun &&
+        stage &&
+        runtime.phase === "ready"
+      )
         simulation("start");
     } catch (reason) {
       // A restart replaces the runtime; the old run's rejection is not an error.
@@ -124,11 +175,18 @@
     if (action === "step" && !canStep) return;
     if (action === "start" && stageRunning) return;
     if (action === "stop" && !stageRunning) return;
-    if (action === "setSpeed" && runtime.phase !== "ready" && runtime.phase !== "waitingForInput") return;
+    if (
+      action === "setSpeed" &&
+      runtime.phase !== "ready" &&
+      runtime.phase !== "waitingForInput"
+    )
+      return;
     if (action === "start") canvas?.focus();
-    client.simulation(action, action === "setSpeed" ? Number(speed) : undefined)
+    client
+      .simulation(action, action === "setSpeed" ? Number(speed) : undefined)
       .then((result) => {
-        if (result.kind === "error") problem = result.display || "BluePlay action failed.";
+        if (result.kind === "error")
+          problem = result.display || "BluePlay action failed.";
       })
       .catch((reason) => (problem = message(reason)));
   }
@@ -140,8 +198,10 @@
     problem = "";
     try {
       const result = await client.reset(program.mainFile);
-      if ("kind" in result && result.kind === "error") problem = result.display || "Reset failed.";
-      else if (program.autoRun && stage && runtime.phase === "ready") simulation("start");
+      if ("kind" in result && result.kind === "error")
+        problem = result.display || "Reset failed.";
+      else if (program.autoRun && stage && runtime.phase === "ready")
+        simulation("start");
     } catch (reason) {
       problem = message(reason);
     }
@@ -152,12 +212,17 @@
     const key = stageKeyName(event.key);
     // A held key is always released, wherever the focus went meanwhile.
     if (!pressed) {
-      if (keysDown.delete(key)) client.sendKey(key, false).catch(() => undefined);
+      if (keysDown.delete(key))
+        client.sendKey(key, false).catch(() => undefined);
       return;
     }
     if (event.metaKey || event.ctrlKey || event.altKey) return;
     // Typing into the terminal or using the controls is not game input.
-    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLButtonElement) return;
+    if (
+      event.target instanceof HTMLInputElement ||
+      event.target instanceof HTMLButtonElement
+    )
+      return;
     if (document.activeElement !== canvas && !stageRunning) return;
     event.preventDefault();
     if (keysDown.has(key)) return;
@@ -165,14 +230,20 @@
     client.sendKey(key, true).catch(() => undefined);
   }
   function releaseKeys() {
-    for (const key of keysDown) client.sendKey(key, false).catch(() => undefined);
+    for (const key of keysDown)
+      client.sendKey(key, false).catch(() => undefined);
     keysDown.clear();
   }
   function stageClick(event: MouseEvent) {
     canvas?.focus();
     if (!stage || !canvas) return;
     event.preventDefault();
-    const { x, y, actorId } = renderer.pointer(stage, canvas.getBoundingClientRect(), event.clientX, event.clientY);
+    const { x, y, actorId } = renderer.pointer(
+      stage,
+      canvas.getBoundingClientRect(),
+      event.clientX,
+      event.clientY,
+    );
     client.sendClick(x, y, actorId).catch(() => undefined);
   }
 
@@ -189,11 +260,15 @@
     inputElement.value = "";
     flushOutput();
     terminal += `\u0001${value}\u0002\n`;
-    await client.sendInput(value).catch((reason) => (problem = message(reason)));
+    await client
+      .sendInput(value)
+      .catch((reason) => (problem = message(reason)));
   }
 
   function downloadProject() {
-    const blob = new Blob([JSON.stringify(program.project, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(program.project, null, 2)], {
+      type: "application/json",
+    });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = exportFileName(model.projectName, ".bluek.json");
@@ -223,7 +298,8 @@
   ];
 
   onMount(() => {
-    document.title = program.showProjectName === false ? "BlueK program" : title;
+    document.title =
+      program.showProjectName === false ? "BlueK program" : title;
     measureImageSizes(resources).then((measured) => {
       sizes = measured;
       if (stage) {
@@ -231,7 +307,8 @@
         scheduleDraw();
       }
     });
-    if (program.allowBlueK !== false) blueKLink = developerUrl || program.blueKUrl;
+    if (program.allowBlueK !== false)
+      blueKLink = developerUrl || program.blueKUrl;
     void start();
   });
   onDestroy(() => {
@@ -240,35 +317,64 @@
   });
 </script>
 
-<svelte:window on:keydown={(event) => stageKey(event, true)} on:keyup={(event) => stageKey(event, false)} on:blur={releaseKeys} />
+<svelte:window
+  onkeydown={(event) => stageKey(event, true)}
+  onkeyup={(event) => stageKey(event, false)}
+  onblur={releaseKeys}
+/>
 
 <main class="player" class:blueplay={bluePlay}>
   {#if program.showProjectName !== false || program.allowBlueK !== false || program.allowDownload !== false}
-  <header class="player-header">
-    {#if program.showProjectName !== false}<h1>{title}</h1>{/if}
-    {#if program.allowBlueK !== false || program.allowDownload !== false}<nav class="player-actions" aria-label={t("ui.player.project")}>
-      {#if program.allowBlueK !== false && blueKLink}
-        <a class="player-button" href={blueKLink} target="_blank" rel="noopener">{t("ui.player.openBlueK")}</a>
-      {/if}
-      {#if program.allowBlueK !== false && !developerUrl}
-        <span class="player-note">{t('ui.cloud.localPlayerAdvice')}</span>
-      {/if}
-      {#if program.allowDownload !== false}<button class="player-button" on:click={downloadProject}>{t("ui.player.download")}</button>{/if}
-    </nav>{/if}
-  </header>
+    <header class="player-header">
+      {#if program.showProjectName !== false}<h1>{title}</h1>{/if}
+      {#if program.allowBlueK !== false || program.allowDownload !== false}<nav
+          class="player-actions"
+          aria-label={t("ui.player.project")}
+        >
+          {#if program.allowBlueK !== false && blueKLink}
+            <a
+              class="player-button"
+              href={blueKLink}
+              target="_blank"
+              rel="noopener">{t("ui.player.openBlueK")}</a
+            >
+          {/if}
+          {#if program.allowBlueK !== false && !developerUrl}
+            <span class="player-note">{t("ui.cloud.localPlayerAdvice")}</span>
+          {/if}
+          {#if program.allowDownload !== false}<button
+              class="player-button"
+              onclick={downloadProject}>{t("ui.player.download")}</button
+            >{/if}
+        </nav>{/if}
+    </header>
   {/if}
 
   {#if diagnostics.length}
-    <section class="player-problem" role="alert" aria-label={t("ui.player.compileErrors")}>
+    <section
+      class="player-problem"
+      role="alert"
+      aria-label={t("ui.player.compileErrors")}
+    >
       <strong>{t("ui.player.compileFailed")}</strong>
       <ul>
         {#each diagnostics as diagnostic}
-          <li><code>{diagnostic.fileName ?? "?"}:{diagnostic.line}:{diagnostic.column}</code> {diagnostic.message}</li>
+          <li>
+            <code
+              >{diagnostic.fileName ??
+                "?"}:{diagnostic.line}:{diagnostic.column}</code
+            >
+            {diagnostic.message}
+          </li>
         {/each}
       </ul>
     </section>
   {:else if problem || runtime.phase === "faulted"}
-    <section class="player-problem" role="alert" aria-label={t("ui.player.error")}>
+    <section
+      class="player-problem"
+      role="alert"
+      aria-label={t("ui.player.error")}
+    >
       <strong>{t("ui.player.stopped")}</strong>
       <pre>{problem || runtime.error || "Runtime error."}</pre>
     </section>
@@ -284,21 +390,46 @@
           role="button"
           tabindex="0"
           style={stageStyle(stage)}
-          on:click={stageClick}
+          onclick={stageClick}
         ></canvas>
-        {#if program.showControls !== false || program.showSpeed !== false}<div class="player-controls" aria-label={t("ui.player.controls")}>
-          <!-- Same order and stable sizes as the world window in BlueK. -->
-          {#if program.showControls !== false}<div class="player-buttons">
-            <button on:click={() => simulation("step")} disabled={!canStep}>Act</button>
-            <button
-              on:click={() => simulation(stageRunning ? "stop" : "start")}
-              disabled={!stageRunning && runtime.phase !== "ready"}
-              aria-label={t(stageRunning ? "ui.player.pause" : "ui.player.run")}
-            ><span class="toggle-labels" aria-hidden="true"><span class:inactive-label={stageRunning}>{t("ui.player.run")}</span><span class:inactive-label={!stageRunning}>{t("ui.player.pause")}</span></span></button>
-            <button on:click={resetWorld} disabled={!canReset}>{t("ui.player.reset")}</button>
+        {#if program.showControls !== false || program.showSpeed !== false}<div
+            class="player-controls"
+            aria-label={t("ui.player.controls")}
+          >
+            <!-- Same order and stable sizes as the world window in BlueK. -->
+            {#if program.showControls !== false}<div class="player-buttons">
+                <button onclick={() => simulation("step")} disabled={!canStep}
+                  >Act</button
+                >
+                <button
+                  onclick={() => simulation(stageRunning ? "stop" : "start")}
+                  disabled={!stageRunning && runtime.phase !== "ready"}
+                  aria-label={t(
+                    stageRunning ? "ui.player.pause" : "ui.player.run",
+                  )}
+                  ><span class="toggle-labels" aria-hidden="true"
+                    ><span class:inactive-label={stageRunning}
+                      >{t("ui.player.run")}</span
+                    ><span class:inactive-label={!stageRunning}
+                      >{t("ui.player.pause")}</span
+                    ></span
+                  ></button
+                >
+                <button onclick={resetWorld} disabled={!canReset}
+                  >{t("ui.player.reset")}</button
+                >
+              </div>{/if}
+            {#if program.showSpeed !== false}<label
+                >{t("ui.player.speed")}
+                <input
+                  type="range"
+                  min="1"
+                  max="100"
+                  bind:value={speed}
+                  oninput={() => simulation("setSpeed")}
+                /></label
+              >{/if}
           </div>{/if}
-          {#if program.showSpeed !== false}<label>{t("ui.player.speed")} <input type="range" min="1" max="100" bind:value={speed} on:input={() => simulation("setSpeed")} /></label>{/if}
-        </div>{/if}
       {:else if loading}
         <p class="player-placeholder">{t("ui.player.loading")}</p>
       {/if}
@@ -307,60 +438,219 @@
 
   {#if !bluePlay || terminal || inputReady}
     <section class="player-terminal" aria-label="Terminal">
-      <pre bind:this={outputElement}>{#each terminalParts(terminal) as part}{#if part.box}<span class="player-sized" style={part.box}><span class:player-input-echo={part.input} style={part.style}>{part.text}</span></span>{:else}<span class:player-input-echo={part.input} style={part.style}>{part.text}</span>{/if}{/each}</pre>
+      <pre
+        bind:this={
+          outputElement
+        }>{#each terminalParts(terminal) as part}{#if part.box}<span
+              class="player-sized"
+              style={part.box}
+              ><span class:player-input-echo={part.input} style={part.style}
+                >{part.text}</span
+              ></span
+            >{:else}<span
+              class:player-input-echo={part.input}
+              style={part.style}>{part.text}</span
+            >{/if}{/each}</pre>
       <div class="player-input-row">
         <input
           bind:this={inputElement}
           aria-label={t("ui.player.programInput")}
           placeholder={inputReady ? t("ui.player.inputHint") : ""}
           disabled={!inputReady}
-          on:keydown={sendInput}
+          onkeydown={sendInput}
         />
-        {#if !bluePlay}<button on:click={() => void start()} disabled={loading}>{t("ui.player.restart")}</button>{/if}
+        {#if !bluePlay}<button onclick={() => void start()} disabled={loading}
+            >{t("ui.player.restart")}</button
+          >{/if}
       </div>
     </section>
   {/if}
 </main>
 
 <style>
-  :global(*) { box-sizing: border-box; }
-  :global(body) { margin: 0; background: #e5e6e7; color: #222; font: 14px Arial, sans-serif; }
-  .player { max-width: 1100px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; min-height: 100vh; }
-  .player-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
-  h1 { margin: 0; font-size: 22px; overflow-wrap: anywhere; }
-  .player-actions { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-  .player-button, .player-controls button, .player-input-row button {
-    padding: 6px 12px; border: 1px solid #999; border-radius: 5px; background: linear-gradient(#fff, #d9d9d9);
-    color: #222; font: inherit; text-decoration: none; cursor: pointer;
+  :global(*) {
+    box-sizing: border-box;
   }
-  .player-button:hover, .player-controls button:hover:not(:disabled), .player-input-row button:hover:not(:disabled) { background: linear-gradient(#fff, #cfcfcf); }
-  button:disabled { cursor: not-allowed; opacity: .55; }
-  .player-note { color: #555; font-size: 12px; max-width: 260px; }
-  .player-problem { border: 1px solid #d49a9a; border-radius: 8px; background: #fff3f3; color: #8a0000; padding: 10px 14px; }
-  .player-problem ul { margin: 6px 0 0; padding-left: 18px; }
-  .player-problem pre { margin: 6px 0 0; white-space: pre-wrap; font: 13px monospace; }
-  .player-world { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  :global(body) {
+    margin: 0;
+    background: #e5e6e7;
+    color: #222;
+    font:
+      14px Arial,
+      sans-serif;
+  }
+  .player {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-height: 100vh;
+  }
+  .player-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  h1 {
+    margin: 0;
+    font-size: 22px;
+    overflow-wrap: anywhere;
+  }
+  .player-actions {
+    margin-left: auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .player-button,
+  .player-controls button,
+  .player-input-row button {
+    padding: 6px 12px;
+    border: 1px solid #999;
+    border-radius: 5px;
+    background: linear-gradient(#fff, #d9d9d9);
+    color: #222;
+    font: inherit;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .player-button:hover,
+  .player-controls button:hover:not(:disabled),
+  .player-input-row button:hover:not(:disabled) {
+    background: linear-gradient(#fff, #cfcfcf);
+  }
+  button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+  .player-note {
+    color: #555;
+    font-size: 12px;
+    max-width: 260px;
+  }
+  .player-problem {
+    border: 1px solid #d49a9a;
+    border-radius: 8px;
+    background: #fff3f3;
+    color: #8a0000;
+    padding: 10px 14px;
+  }
+  .player-problem ul {
+    margin: 6px 0 0;
+    padding-left: 18px;
+  }
+  .player-problem pre {
+    margin: 6px 0 0;
+    white-space: pre-wrap;
+    font: 13px monospace;
+  }
+  .player-world {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
   .player-stage {
-    width: var(--bluek-world-width); max-width: 100%; height: auto; display: block;
-    border: 2px solid #555; box-shadow: 2px 3px 8px #0003; outline: none; cursor: pointer;
+    width: var(--bluek-world-width);
+    max-width: 100%;
+    height: auto;
+    display: block;
+    border: 2px solid #555;
+    box-shadow: 2px 3px 8px #0003;
+    outline: none;
+    cursor: pointer;
   }
-  .player-stage:focus-visible { outline: 3px solid #0a9dcc; outline-offset: 2px; }
-  .player-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-  .player-buttons { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; }
-  .toggle-labels { display: inline-grid; }
-  .toggle-labels > span { grid-area: 1 / 1; }
-  .toggle-labels > .inactive-label { visibility: hidden; }
-  .player-controls label { display: flex; align-items: center; gap: 6px; color: #555; font-size: 12px; }
-  .player-controls input { width: 110px; }
-  .player-placeholder { color: #555; }
-  .player-terminal { display: flex; flex-direction: column; gap: 6px; background: #f5f4f1; border: 2px solid #999; border-radius: 9px; padding: 10px; }
+  .player-stage:focus-visible {
+    outline: 3px solid #0a9dcc;
+    outline-offset: 2px;
+  }
+  .player-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+  .player-buttons {
+    display: inline-grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: 6px;
+  }
+  .toggle-labels {
+    display: inline-grid;
+  }
+  .toggle-labels > span {
+    grid-area: 1 / 1;
+  }
+  .toggle-labels > .inactive-label {
+    visibility: hidden;
+  }
+  .player-controls label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #555;
+    font-size: 12px;
+  }
+  .player-controls input {
+    width: 110px;
+  }
+  .player-placeholder {
+    color: #555;
+  }
+  .player-terminal {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: #f5f4f1;
+    border: 2px solid #999;
+    border-radius: 9px;
+    padding: 10px;
+  }
   /* A console program is its terminal: it fills the window and scrolls inside. */
-  .player:not(.blueplay) { height: 100vh; min-height: 420px; }
-  .player:not(.blueplay) .player-terminal { flex: 1; min-height: 0; }
-  .player:not(.blueplay) .player-terminal pre { max-height: none; min-height: 0; }
-  .player-terminal pre { flex: 1; min-height: 120px; max-height: 60vh; margin: 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.4 monospace; }
-  .player-input-echo { color: #0655b5; }
-  .player-input-row { display: flex; gap: 8px; }
-  .player-input-row input { flex: 1; min-width: 0; padding: 6px; border: 1px solid #aaa; border-radius: 4px; font: 13px monospace; }
-  .player-input-row input:disabled { background: #e5e5e5; }
+  .player:not(.blueplay) {
+    height: 100vh;
+    min-height: 420px;
+  }
+  .player:not(.blueplay) .player-terminal {
+    flex: 1;
+    min-height: 0;
+  }
+  .player:not(.blueplay) .player-terminal pre {
+    max-height: none;
+    min-height: 0;
+  }
+  .player-terminal pre {
+    flex: 1;
+    min-height: 120px;
+    max-height: 60vh;
+    margin: 0;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font: 13px/1.4 monospace;
+  }
+  .player-input-echo {
+    color: #0655b5;
+  }
+  .player-input-row {
+    display: flex;
+    gap: 8px;
+  }
+  .player-input-row input {
+    flex: 1;
+    min-width: 0;
+    padding: 6px;
+    border: 1px solid #aaa;
+    border-radius: 4px;
+    font: 13px monospace;
+  }
+  .player-input-row input:disabled {
+    background: #e5e5e5;
+  }
 </style>
