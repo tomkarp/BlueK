@@ -4,7 +4,7 @@ button{-webkit-appearance:none;appearance:none;color:inherit;background:#eee;bor
 button:hover:not(:disabled){background:#dedede;border-color:#aaa}
 button:focus-visible{outline:2px solid #087c9d;outline-offset:2px}
 button:disabled{cursor:not-allowed;opacity:.48}
-.bluek{background:#e5e6e7;width:100vw;height:100vh;overflow:hidden;user-select:none}
+.bluek{background:#e5e6e7;width:100vw;height:100vh;height:100dvh;overflow:hidden;user-select:none}
 .bluek{--action-bg:#fff;--action-text:#222;--action-muted:#555;--action-border:#aaa;--action-hover-bg:#edf5f7;--action-hover-border:#087c9d;--action-accent:#075b70;--action-focus:#087c9d}
 .bluek.dark{--action-bg:#303034;--action-text:#eee;--action-muted:#bdbdc4;--action-border:#55555c;--action-hover-bg:#253e47;--action-hover-border:#62b7d0;--action-accent:#8fd1e3;--action-focus:#8fd1e3}
 .bluek input,.bluek textarea,.bluek [contenteditable="true"],.bluek .cm-content{user-select:text}

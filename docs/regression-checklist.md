@@ -13,6 +13,11 @@ test-results/. Full Kotlin conformance is not implied by any passing suite.
 Latest storage/account/publication verification: [2026-10-25 results](#publication-lifetime-by-authentication--2026-10-25).
 Latest project navigation verification: [2026-10-22 results](#new-open-save-and-share-navigation--2026-10-22).
 
+2026-11-02: Issue 35 showed the app extending below the visible iPad Safari
+viewport. The root now uses the dynamic viewport height where supported, with
+`100vh` as a fallback. No browser verification has been run; iPad visual
+acceptance is pending.
+
 2026-11-01: Object-on-bench suggestions now use lowercase unique numbered
 names. Cmd/Ctrl+K is captured before CodeMirror/Vim handles the key event, and
 editor focus is restored after compilation when the shortcut came from it.
@@ -98,6 +103,7 @@ below. No universal performance guarantee is implied.
 | GUI-08 | Editor initial focus, rename and shared close control | Recorded browser pass |
 | GUI-09 | Bench/codepad splitter does not jump on initial drag | Recorded browser pass; user confirmation recorded |
 | GUI-10 | Class/file rename, including temporarily empty source and a blocked filename collision followed by a later successful rename | Recorded browser pass; collision recovery added 2026-10-27, browser acceptance pending |
+| GUI-162 | App height follows the visible iPad Safari viewport as browser chrome changes | Issue 35 screenshot identified the fixed `100vh` root height; dynamic viewport sizing added 2026-11-02. Browser verification not run; iPad visual acceptance pending |
 | GUI-11 | Codepad compile-on-demand in empty/class projects | Recorded browser pass |
 | GUI-12 | Terminal input echo between surrounding output | Recorded browser pass |
 | GUI-13 | Clear/form-feed and later output in split terminal | Recorded browser pass |
