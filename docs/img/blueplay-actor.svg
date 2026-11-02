@@ -3,7 +3,7 @@
 <text x="144.0" y="20" text-anchor="middle" font-size="15" font-weight="bold" fill="#0f172a">Actor</text>
 <line x1="0.75" y1="30" x2="287.25" y2="30" stroke="#334155" stroke-width="1"/>
 <text x="12" y="50" font-size="13" fill="#0f172a">world: World</text>
-<text x="12" y="70" font-size="13" fill="#0f172a">image: Image?</text>
+<text x="12" y="70" font-size="13" fill="#0f172a">image: Image</text>
 <text x="12" y="90" font-size="13" fill="#0f172a">x: Int</text>
 <text x="12" y="110" font-size="13" fill="#0f172a">y: Int</text>
 <text x="12" y="130" font-size="13" fill="#0f172a">rotation: Int</text>

@@ -21,7 +21,7 @@
   "Actor": {
     "create": "Erzeugt einen Akteur ohne Welt.",
     "world": "Zugehörige Welt; wirft eine Ausnahme, wenn der Akteur keine Welt hat.",
-    "image": "Erscheinungsbild; null verwendet einen Platzhalter.",
+    "image": "Erscheinungsbild; beginnt mit einem automatisch erzeugten Platzhalterbild.",
     "x": "Spalte in Zellen; auf die Weltgrenzen begrenzt.",
     "y": "Zeile in Zellen; auf die Weltgrenzen begrenzt.",
     "rotation": "Richtung in Grad: 0 zeigt nach rechts, im Uhrzeigersinn.",

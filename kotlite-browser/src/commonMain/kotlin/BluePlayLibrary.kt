@@ -129,7 +129,12 @@ object BluePlayLibrary {
                 set(value) { field = if (worldHeight > 0) if (value < 0) 0 else if (value >= worldHeight) worldHeight - 1 else value else value }
             var rotation = 0
                 set(value) { field = ((value % 360) + 360) % 360 }
-            var image: Image? = null
+            // Give every actor its own editable placeholder so student code can
+            // read or draw on image without nullable handling.
+            var image: Image = Image(30, 30).also {
+                it.setColor(180, 180, 190); it.fill()
+                it.setColor(90, 90, 100); it.drawRect(0, 0, 29, 29); it.drawString("?", 12, 20)
+            }
             // World-dependent members throw IllegalStateException without a world.
             val world: World get() = bluekActorWorld<World>(this)
             open fun act() {}

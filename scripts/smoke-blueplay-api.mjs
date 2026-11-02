@@ -30,7 +30,7 @@ const expected = {
   },
   Actor: {
     constructors: [''],
-    properties: ['val world:World', 'var image:Image?', 'var x:Int', 'var y:Int', 'var rotation:Int', 'val isAtEdge:Boolean', 'val isClicked:Boolean'],
+    properties: ['val world:World', 'var image:Image', 'var x:Int', 'var y:Int', 'var rotation:Int', 'val isAtEdge:Boolean', 'val isClicked:Boolean'],
     methods: ['act():Unit', 'move(distance:Int):Unit', 'turn(degrees:Int):Unit', 'turnTowards(x:Int,y:Int):Unit', 'distanceTo(other:Actor):Int', 'intersects(other:Actor):Boolean', 'getIntersecting<T : Actor>():List<T>', 'getOneIntersecting<T : Actor>():T?', 'isTouching<T : Actor>():Boolean', 'removeTouching<T : Actor>():Unit'],
   },
   Image: {

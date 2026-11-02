@@ -717,7 +717,7 @@ test('GUI-91 BluePlay help contains the exact reference API and stays compact', 
   await page.getByRole('button', { name: 'Close BluePlay world' }).click();
   const required: Record<string, string[]> = {
     World: ['World(width: Int, height: Int, cellSize: Int)', 'fun allObjects(): List<Actor>', 'fun getObjects<T : Actor>(): List<T>', 'var background: Image'],
-    Actor: ['val world: World', 'var image: Image?', 'fun turnTowards(x: Int, y: Int)', 'fun getOneIntersecting<T : Actor>(): T?'],
+    Actor: ['val world: World', 'var image: Image', 'fun turnTowards(x: Int, y: Int)', 'fun getOneIntersecting<T : Actor>(): T?'],
     Image: ['Image(width: Int, height: Int)', 'Image(fileName: String)', 'Image(other: Image)', 'fun fillRect(x: Int, y: Int, w: Int, h: Int)', 'fun scale(width: Int, height: Int)'],
     BluePlayFunctions: ['fun isKeyDown(key: String): Boolean', 'fun playSound(fileName: String)', 'fun step()'],
   };

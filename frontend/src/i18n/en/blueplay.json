@@ -21,7 +21,7 @@
   "Actor": {
     "create": "Creates an actor without a world.",
     "world": "Containing world; throws if the actor has no world.",
-    "image": "Appearance; null uses a placeholder.",
+    "image": "Appearance; starts with a generated placeholder image.",
     "x": "Column in cells; limited to the world bounds.",
     "y": "Row in cells; limited to the world bounds.",
     "rotation": "Heading in degrees: 0 is right, clockwise.",

@@ -11,6 +11,11 @@ in `tests/fixtures/blueplay-reference/`; do not regenerate it from BlueK's code.
 Actor.image is nullable in the reference source despite its documentation table.
 Engine internals and JVM/AWT fields are not student API.
 
+Since 2026-11-02, BlueK intentionally makes `Actor.image` non-nullable to match
+the published teaching contract and starts each actor with its own editable
+placeholder image. This differs from the reference implementation's nullable
+field while preserving its visible default placeholder.
+
 ## Reproduced defects and corrections
 
 The original audit tested BlueK `21bc5cc`, bundle SHA-256

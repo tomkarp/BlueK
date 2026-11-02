@@ -1129,8 +1129,8 @@
           "type": {
             "classifier": "Image",
             "arguments": [],
-            "nullable": true,
-            "displayName": "Image?"
+            "nullable": false,
+            "displayName": "Image"
           },
           "mutable": true,
           "visibility": "public",
@@ -1186,7 +1186,7 @@
       ],
       "methods": [
         {
-          "sourceLine": 122,
+          "sourceLine": 127,
           "id": "Actor.act.0",
           "name": "act",
           "declaringType": "Actor",
@@ -1201,7 +1201,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 123,
+          "sourceLine": 128,
           "id": "Actor.move.1",
           "name": "move",
           "declaringType": "Actor",
@@ -1227,7 +1227,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 124,
+          "sourceLine": 129,
           "id": "Actor.turn.2",
           "name": "turn",
           "declaringType": "Actor",
@@ -1253,7 +1253,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 125,
+          "sourceLine": 130,
           "id": "Actor.turnTowards.3",
           "name": "turnTowards",
           "declaringType": "Actor",
@@ -1289,7 +1289,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 128,
+          "sourceLine": 133,
           "id": "Actor.distanceTo.4",
           "name": "distanceTo",
           "declaringType": "Actor",
@@ -1315,7 +1315,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 129,
+          "sourceLine": 134,
           "id": "Actor.intersects.5",
           "name": "intersects",
           "declaringType": "Actor",
@@ -1341,7 +1341,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 130,
+          "sourceLine": 135,
           "id": "Actor.getIntersecting.6",
           "name": "getIntersecting",
           "declaringType": "Actor",
@@ -1365,7 +1365,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 131,
+          "sourceLine": 136,
           "id": "Actor.getOneIntersecting.7",
           "name": "getOneIntersecting",
           "declaringType": "Actor",
@@ -1382,7 +1382,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 132,
+          "sourceLine": 137,
           "id": "Actor.isTouching.8",
           "name": "isTouching",
           "declaringType": "Actor",
@@ -1399,7 +1399,7 @@
           "visibility": "public"
         },
         {
-          "sourceLine": 133,
+          "sourceLine": 138,
           "id": "Actor.removeTouching.9",
           "name": "removeTouching",
           "declaringType": "Actor",
@@ -1421,7 +1421,7 @@
   ],
   "functions": [
     {
-      "sourceLine": 138,
+      "sourceLine": 143,
       "id": "<top-level>.isKeyDown.0",
       "name": "isKeyDown",
       "declaringType": "<top-level>",
@@ -1448,7 +1448,7 @@
       "builtin": true
     },
     {
-      "sourceLine": 139,
+      "sourceLine": 144,
       "id": "<top-level>.start.1",
       "name": "start",
       "declaringType": "<top-level>",
@@ -1464,7 +1464,7 @@
       "builtin": true
     },
     {
-      "sourceLine": 140,
+      "sourceLine": 145,
       "id": "<top-level>.stop.2",
       "name": "stop",
       "declaringType": "<top-level>",
@@ -1480,7 +1480,7 @@
       "builtin": true
     },
     {
-      "sourceLine": 141,
+      "sourceLine": 146,
       "id": "<top-level>.step.3",
       "name": "step",
       "declaringType": "<top-level>",
@@ -1496,7 +1496,7 @@
       "builtin": true
     },
     {
-      "sourceLine": 142,
+      "sourceLine": 147,
       "id": "<top-level>.getSpeed.4",
       "name": "getSpeed",
       "declaringType": "<top-level>",
@@ -1512,7 +1512,7 @@
       "builtin": true
     },
     {
-      "sourceLine": 143,
+      "sourceLine": 148,
       "id": "<top-level>.setSpeed.5",
       "name": "setSpeed",
       "declaringType": "<top-level>",
@@ -1539,7 +1539,7 @@
       "builtin": true
     },
     {
-      "sourceLine": 144,
+      "sourceLine": 149,
       "id": "<top-level>.playSound.6",
       "name": "playSound",
       "declaringType": "<top-level>",

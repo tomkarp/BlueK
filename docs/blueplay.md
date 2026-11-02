@@ -191,13 +191,13 @@ if (coin != null) {
 | **Properties** | |
 |---|---|
 | `world: World` | The world this actor is in. Throws an `IllegalStateException` if the actor has no world. |
-| `image: Image?` | The actor's image (appearance). `null` shows a placeholder. |
+| `image: Image` | The actor's image (appearance). Each actor starts with its own generated placeholder image, which you can replace or draw on. |
 | `x, y: Int` | Position in cells. Automatically clamped to the world boundaries. |
 | `rotation: Int` | Heading in degrees (0 = right, clockwise). |
 | `isAtEdge: Boolean` | `true` if the actor is at the edge of the world. |
 | `isClicked: Boolean` | `true` if this actor was just clicked. |
 | **Constructor** | |
-| `Actor()` | Creates a new figure without a world. Set its image afterwards via the `image` property (usually in the `init` block). |
+| `Actor()` | Creates a new figure without a world. It starts with a generated placeholder image that you can replace via `image` (usually in the `init` block). |
 | **Methods** | |
 | `act()` | Called on every step. Override to program the figure's behaviour. |
 | `move(distance: Int)` | Moves the actor by `distance` cells in its current heading. |

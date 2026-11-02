@@ -574,7 +574,7 @@ internal class BluePlayEngine(private val playSound: (String) -> Unit = {}) {
         return contained(actor.world, target, firstOnly) { other -> other !== actor && intersects(own, geometry(other)) }
     }
 
-    /** The model of the actor's current image; null for an actor without image. */
+    /** The model of the actor's current image; defensive null handling covers malformed runtime state. */
     private fun imageOf(entry: ActorEntry): ImageModel? {
         val instance = entry.image.read(null) as? ClassInstance ?: return null
         return entry.imageModel?.takeIf { it.image === instance } ?: ImageModel(instance).also { entry.imageModel = it }
@@ -627,7 +627,7 @@ internal class BluePlayEngine(private val playSound: (String) -> Unit = {}) {
     }
 
     private fun visible(geometry: Geometry, worldX: Double, worldY: Double): Boolean {
-        // An actor without image is a fully visible placeholder.
+        // Defensive fallback for malformed runtime state; normal actors have a generated image.
         val image = geometry.image ?: return true
         if (geometry.transparency <= 16) return false
         val dx = worldX - geometry.centerX; val dy = worldY - geometry.centerY

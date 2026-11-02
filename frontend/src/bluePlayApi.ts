@@ -18,7 +18,7 @@ const descriptions: Record<string, Record<string, string>> = {
     setBackground: 'Sets the background from an image file or RGB color.', showText: 'Text at (x, y); an empty string removes it.',
   },
   Actor: {
-    create: 'Creates an actor without a world.', world: 'Containing world; throws if the actor has no world.', image: 'Appearance; null uses a placeholder.',
+    create: 'Creates an actor without a world.', world: 'Containing world; throws if the actor has no world.', image: 'Appearance; starts with a generated placeholder image.',
     x: 'Column in cells; limited to the world bounds.', y: 'Row in cells; limited to the world bounds.',
     rotation: 'Heading in degrees: 0 is right, clockwise.', isAtEdge: 'Whether the actor is at the world edge; requires a world.', isClicked: 'Whether this actor was clicked; requires a world.',
     act: 'Override to define what happens on each step.', move: 'Moves in the current heading, in cells.', turn: 'Changes the heading by degrees.',

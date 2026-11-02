@@ -18,6 +18,12 @@ viewport. The root now uses the dynamic viewport height where supported, with
 `100vh` as a fallback. No browser verification has been run; iPad visual
 acceptance is pending.
 
+2026-11-02: Actor.image now has non-null type `Image` and each actor starts
+with an independent generated placeholder image. The Kotlin bundle was rebuilt;
+the API description is now translated in English and German to match that
+behavior. API checks and browser verification have not been run. Visual
+acceptance is pending.
+
 2026-11-01: Object-on-bench suggestions now use lowercase unique numbered
 names. Cmd/Ctrl+K is captured before CodeMirror/Vim handles the key event, and
 editor focus is restored after compilation when the shortcut came from it.
@@ -104,6 +110,7 @@ below. No universal performance guarantee is implied.
 | GUI-09 | Bench/codepad splitter does not jump on initial drag | Recorded browser pass; user confirmation recorded |
 | GUI-10 | Class/file rename, including temporarily empty source and a blocked filename collision followed by a later successful rename | Recorded browser pass; collision recovery added 2026-10-27, browser acceptance pending |
 | GUI-162 | App height follows the visible iPad Safari viewport as browser chrome changes | Issue 35 screenshot identified the fixed `100vh` root height; dynamic viewport sizing added 2026-11-02. Browser verification not run; iPad visual acceptance pending |
+| GUI-163 | Every Actor starts with an independent generated placeholder image and exposes `image: Image` | Kotlin bundle rebuilt 2026-11-02; API checks and browser verification not run. Visual acceptance pending |
 | GUI-11 | Codepad compile-on-demand in empty/class projects | Recorded browser pass |
 | GUI-12 | Terminal input echo between surrounding output | Recorded browser pass |
 | GUI-13 | Clear/form-feed and later output in split terminal | Recorded browser pass |
