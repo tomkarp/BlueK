@@ -7,6 +7,7 @@ import {
 } from "node:crypto";
 import { promisify } from "node:util";
 import { HttpError, body, record } from "./http.mjs";
+import { createRegistrationProof } from "./registration-proof.mjs";
 const derive = promisify(scrypt);
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 const day = 86400000;
@@ -29,6 +30,7 @@ export function createAccounts(database) {
   CREATE TABLE IF NOT EXISTS login_attempts (
     username TEXT PRIMARY KEY, failures INTEGER NOT NULL, next_at INTEGER NOT NULL, last_at INTEGER NOT NULL
   );`);
+  const proof = createRegistrationProof(database);
   const busy = new Set();
   let hashing = 0;
   if (!database.prepare("PRAGMA table_info(accounts)").all().some((column) => column.name === "trusted"))
@@ -141,6 +143,7 @@ export function createAccounts(database) {
       return { user: user ? { id: user.id, username: user.username } : null };
     }
     requireWrite(request);
+    if (request.method === "POST" && path === "/api/account/registration-challenge") return proof.challenge();
     if (request.method === "POST" && path === "/api/account/logout") {
       database
         .prepare("DELETE FROM sessions WHERE token_hash = ?")
@@ -204,7 +207,9 @@ export function createAccounts(database) {
       request.method === "POST" &&
       ["/api/account/register", "/api/account/login"].includes(path)
     ) {
-      const { username, password } = credentials(await body(request, 4096));
+      const input = await body(request, 4096);
+      const { username, password } = credentials(input);
+      if (path.endsWith("/register")) await proof.consume(input.proof);
       if (busy.has(username))
         throw new HttpError(429, "login-wait", { retryAfter: 1 });
       const attempt = database
@@ -426,6 +431,7 @@ export function createAccounts(database) {
     throw new HttpError(404, "not-found");
   }
   function cleanup() {
+    proof.cleanup();
     const now = Date.now();
     database
       .prepare(

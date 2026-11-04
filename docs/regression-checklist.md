@@ -2276,3 +2276,21 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
   terminal settings GUI tests passed 18/18. The production build passed; its
   existing missing Kotlin bundle-at-build-time, externalized Node module and
   large-chunk warnings remain.
+
+
+### Registration proof of work — 2026-11-04
+
+- Registration API: Registration requires a single-use locally generated ALTCHA proof;
+  no account-count limit is applied to a shared school IP. Server-side checks
+  cover missing, tampered, expired and concurrently replayed proofs. The existing account-dialog tests
+  exercise proof generation in the browser with a test challenge, verified by the server library.
+- API regression passed 2026-11-04. Chromium CLOUD-03/10 passed with mocked
+  endpoints; real school-device performance and visual acceptance remain pending.
+
+### Account creation progress — 2026-11-04
+
+- CLOUD-18: A foreground status with two animated construction workers indicates progress
+  during proof generation and registration. Chromium passed in German and English
+  with delayed, mocked endpoints, including narrow-screen bounds and reduced-motion
+  behavior. Agent inspected the German narrow-screen screenshot; user visual
+  acceptance is pending.

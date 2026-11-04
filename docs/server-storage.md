@@ -35,7 +35,22 @@ the document level even though its browser application opens successfully.
 
 ## Accounts and sessions
 
-Registration is open and usernames are pseudonyms. The operator may manually mark an
+Registration is open and usernames are pseudonyms. Before creating an account,
+the browser solves a locally served ALTCHA proof-of-work challenge in a worker;
+BlueK verifies it before password hashing. Challenges expire after 20 minutes,
+are accepted once using SQLite, and pending challenges become invalid on service
+restart. No external verification service is used. Login does not require this
+proof. Challenge generation and verification share a four-operation concurrency
+limit. The proof raises the cost of bulk registrations; it does not establish
+that a person is present. A school can register multiple accounts from one IP.
+
+`BLUEK_REGISTRATION_WORK` controls the upper bound of the random deterministic
+counter (default 10000; range 1–100000); changing it affects new challenges.
+It is not a duration: actual time depends on the device. Measure on school
+hardware before raising it. Client and server must be deployed together: old
+clients cannot register against the new API.
+
+The operator may manually mark an
 account as trusted after personal review; this is not a formal identity verification.
 To request trusted access, users may contact karp@fmsg-speyer.de with their
 username and background. Accounts have no email, password reset, recovery question
@@ -68,7 +83,7 @@ Requests during the wait cannot extend it. After fifteen minutes without a
 failed password check, the history resets; successful login clears it. Concurrent
 checks for the same username are serialized/rejected. Password-change guesses
 use the same protection. There is no permanent failure lock or school-IP ban,
-and no CAPTCHA dependency. Automated sustained attacks can still disrupt access;
+and no external CAPTCHA service. Automated sustained attacks can still disrupt access;
 operators should monitor failures and consider a target-specific CAPTCHA if
 needed. Account blocking is a separate explicit operator action. See the
 [OWASP authentication guidance](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html#login-throttling).

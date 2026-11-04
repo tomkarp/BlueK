@@ -1,5 +1,11 @@
 import { test, expect } from "@playwright/test";
+import { createChallenge, verifySolution } from "altcha-lib";
+import { deriveKey } from "altcha-lib/algorithms/pbkdf2";
 test.beforeEach(async ({ page }) => {
+  await page.route("**/api/account/registration-challenge", async route => {
+    const challenge = await createChallenge({ algorithm: "PBKDF2/SHA-256", cost: 1, counter: 3, deriveKey, hmacSignatureSecret: "test-secret", hmacKeySignatureSecret: "test-key-secret", expiresAt: new Date(Date.now() + 60000) });
+    await route.fulfill({ json: challenge });
+  });
   await page.route("**/api/storage", route => route.fulfill({ json: { used: 0, limit: 5242880, publications: [] } }));
 });
 const project = {
@@ -142,7 +148,9 @@ for (const locale of ["en", "de"])
         },
       }),
     );
-    await page.route("**/api/account/register", (route) => {
+    await page.route("**/api/account/register", async (route) => {
+      const { proof } = route.request().postDataJSON();
+      expect((await verifySolution({ ...proof, deriveKey, hmacSignatureSecret: "test-secret", hmacKeySignatureSecret: "test-key-secret" })).verified).toBe(true);
       signedIn = true;
       return route.fulfill({
         json: { user: { id: "account", username: "learner" } },
@@ -546,6 +554,8 @@ for (const locale of ["en", "de"])
         password: string;
       };
       expect(body.password).toBe("a-unique-bluek-password");
+      const { proof } = route.request().postDataJSON();
+      expect((await verifySolution({ ...proof, deriveKey, hmacSignatureSecret: "test-secret", hmacKeySignatureSecret: "test-key-secret" })).verified).toBe(true);
       registered = true;
       return route.fulfill({
         json: { user: { id: "account", username: body.username } },
@@ -930,3 +940,61 @@ test("CLOUD-17 project action icons and selection toolbar keep their spacing", a
     }
   }
 });
+
+for (const locale of ["en", "de"])
+  test(`CLOUD-18 account creation shows progress through verification and registration (${locale})`, async ({ page }) => {
+    await page.addInitScript(value => localStorage.setItem("bluek-language", value), locale);
+    let releaseChallenge!: () => void;
+    let releaseRegistration!: () => void;
+    const challengePending = new Promise<void>(resolve => { releaseChallenge = resolve; });
+    const registrationPending = new Promise<void>(resolve => { releaseRegistration = resolve; });
+    await page.route("**/api/account", route => route.fulfill({ json: { user: null } }));
+    await page.route("**/api/account/registration-challenge", async route => {
+      await challengePending;
+      const challenge = await createChallenge({ algorithm: "PBKDF2/SHA-256", cost: 1, counter: 3, deriveKey, hmacSignatureSecret: "test-secret", hmacKeySignatureSecret: "test-key-secret", expiresAt: new Date(Date.now() + 60000) });
+      await route.fulfill({ json: challenge });
+    });
+    let registrationReceived = false;
+    await page.route("**/api/account/register", async route => {
+      registrationReceived = true;
+      await registrationPending;
+      await route.fulfill({ json: { user: { id: "account", username: "learner" } } });
+    });
+    await page.route("**/api/private-projects", route => route.fulfill({ json: { projects: [] } }));
+    await page.goto(link(project));
+    await page.locator(".toolbar-account button").click();
+    const account = page.getByRole("dialog", { name: locale === "de" ? "Konto" : "Account", exact: true });
+    await account.getByRole("button", { name: locale === "de" ? "Konto erstellen" : "Create account", exact: true }).click();
+    await account.locator('input[name="username"]').fill("learner");
+    await account.locator('input[name="password"]').fill("a-unique-bluek-password");
+    await account.locator('input[name="confirm-password"]').fill("a-unique-bluek-password");
+    await account.locator('.cloud-ack input').nth(0).check();
+    await account.locator('.cloud-ack input').nth(1).check();
+    const submit = account.getByRole("button", { name: locale === "de" ? "Konto erstellen" : "Create account", exact: true }).last();
+    await submit.click();
+    const progress = page.locator(".cloud-registration-progress");
+    await expect(progress).toContainText(locale === "de" ? "Das kann einen Moment dauern." : "This may take a moment.");
+    await expect(progress.locator("strong")).toHaveText(locale === "de" ? "Konto wird erstellt …" : "Creating account…");
+    await expect(progress.locator('.cloud-construction')).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 844 });
+    const progressBounds = await progress.boundingBox();
+    expect(progressBounds).not.toBeNull();
+    expect(progressBounds!.x).toBeGreaterThanOrEqual(0);
+    expect(progressBounds!.x + progressBounds!.width).toBeLessThanOrEqual(390);
+    const hammer = progress.locator('.cloud-builder-hammer');
+    const brush = progress.locator('.cloud-builder-brush');
+    await expect(hammer).not.toHaveCSS('animation-name', 'none');
+    await expect(brush).not.toHaveCSS('animation-name', 'none');
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await expect(hammer).toHaveCSS('animation-name', 'none');
+    await expect(brush).toHaveCSS('animation-name', 'none');
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await expect(account.locator('button[type="submit"]')).toBeDisabled();
+    await expect(account.locator('button[type="submit"]')).toHaveText(locale === "de" ? "Konto wird erstellt …" : "Creating account…");
+    releaseChallenge();
+    await expect.poll(() => registrationReceived).toBe(true);
+    await expect(progress).toBeVisible();
+    releaseRegistration();
+    await expect(account.getByText(/Angemeldet als learner|Signed in as learner/)).toBeVisible();
+    await expect(progress).toHaveCount(0);
+  });

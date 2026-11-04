@@ -1,5 +1,8 @@
 import { adminDatabasePath } from '../server/admin-database.mjs';
 import assert from 'node:assert/strict';
+import { solveChallenge } from 'altcha-lib';
+import { deriveKey } from 'altcha-lib/algorithms/pbkdf2';
+import { createRegistrationProof } from '../server/registration-proof.mjs';
 import Database from 'better-sqlite3';
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdtemp, rm, readFile } from 'node:fs/promises';
@@ -28,7 +31,7 @@ assert.equal(adminDatabasePath('/opt/bluek-share', '/explicit.sqlite', { getPid:
 assert.equal(adminDatabasePath('/tmp/bluek-dev', undefined, { cwd: '/tmp/bluek-dev' }), '/tmp/bluek-dev/server/data/projects.sqlite');
 assert.throws(() => adminDatabasePath('/opt/bluek-share', undefined, { getPid: () => '0' }), /Cannot read/);
 assert.throws(() => adminDatabasePath('/opt/bluek-share', undefined, { getPid: () => '123', readFile: () => 'OTHER=ignored' }), /not set/);
-const env = { ...process.env, BLUEK_SHARE_PORT: String(port), BLUEK_SHARE_DB: databasePath, BLUEK_COOKIE_SECURE: '0', BLUEK_FEEDBACK_TOKEN: '', BLUEK_FEEDBACK_TOKEN_FILE: '' };
+const env = { ...process.env, BLUEK_REGISTRATION_WORK: '8', BLUEK_SHARE_PORT: String(port), BLUEK_SHARE_DB: databasePath, BLUEK_COOKIE_SECURE: '0', BLUEK_FEEDBACK_TOKEN: '', BLUEK_FEEDBACK_TOKEN_FILE: '' };
 let child;
 async function start() {
   child = spawn(process.execPath, ['server/share-server.mjs'], { env, stdio: ['ignore', 'pipe', 'inherit'] });
@@ -44,7 +47,13 @@ async function request(path, { method = 'GET', value, cookie, headers = {} } = {
   const response = await fetch(`${base}${path}`, { method, headers: { Origin: origin, 'content-type': 'application/json', 'x-bluek-request': '1', ...(cookie ? { cookie } : {}), ...headers }, ...(value !== undefined ? { body: JSON.stringify(value) } : {}) });
   return { response, status: response.status, data: await response.json(), cookie: response.headers.get('set-cookie')?.split(';')[0] };
 }
-const post = (path, value, cookie) => request(path, { method: 'POST', value, cookie });
+async function solvedProof() {
+  const challenge = (await request('/api/account/registration-challenge', { method: 'POST' })).data;
+  const solution = await solveChallenge({ challenge, deriveKey });
+  assert.ok(solution);
+  return { challenge, solution };
+}
+const post = async (path, value, cookie) => request(path, { method: 'POST', value: path === '/api/account/register' ? { ...value, proof: await solvedProof() } : value, cookie });
 const readProject = code => request(`/api/projects/${code}`);
 const readProgram = code => request(`/api/programs/${code}`);
 function admin(...args) {
@@ -53,6 +62,16 @@ function admin(...args) {
   return result.stdout;
 }
 try {
+  // Expiry is checked against the signed challenge.
+  const proofDb = new Database(':memory:');
+  const proofService = createRegistrationProof(proofDb);
+  const expiryChallenge = await proofService.challenge();
+  const expirySolution = await solveChallenge({ challenge: expiryChallenge, deriveKey });
+  const realNow = Date.now;
+  try {
+    Date.now = () => realNow() + 21 * 60000;
+    await assert.rejects(proofService.consume({ challenge: expiryChallenge, solution: expirySolution }), error => error.reason === 'registration-proof' || error.message === 'registration-proof');
+  } finally { Date.now = realNow; proofDb.close(); }
   await start(); db = new Database(databasePath);
   // Additive migration: old accounts keep trust but never gain admin rights.
   assert.deepEqual(db.prepare('SELECT trusted, admin FROM accounts WHERE id = ?').get('legacy-account'), { trusted: 1, admin: 0 });
@@ -113,6 +132,14 @@ try {
 
   // Actual authentication and account isolation, without trusting frontend checks.
   assert.equal((await request('/api/private-projects')).status, 401);
+  const proof = await solvedProof();
+  assert.equal((await request('/api/account/register', { method: 'POST', value: { username: 'proof_tamper', password: 'secure-password', proof: { ...proof, challenge: { ...proof.challenge, parameters: { ...proof.challenge.parameters, cost: 1 } } } } })).status, 400);
+  assert.equal((await request('/api/account/register', { method: 'POST', value: { username: 'proof_valid', password: 'secure-password', proof } })).status, 200);
+  assert.equal((await request('/api/account/register', { method: 'POST', value: { username: 'proof_replay', password: 'secure-password', proof } })).status, 400);
+  assert.equal((await request('/api/account/register', { method: 'POST', value: { username: 'proof_missing', password: 'secure-password' } })).status, 400);
+  const concurrentProof = await solvedProof();
+  const concurrent = await Promise.all(['proof_race_a', 'proof_race_b'].map(username => request('/api/account/register', { method: 'POST', value: { username, password: 'secure-password', proof: concurrentProof } })));
+  assert.deepEqual(concurrent.map(item => item.status).sort(), [200, 400]);
   const credentials = { username: 'student_one', password: 'a-unique-test-password' };
   const register = await post('/api/account/register', credentials);
   assert.equal(register.status, 200);

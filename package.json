@@ -68,6 +68,7 @@
     "@lezer/highlight": "^1.2.3",
     "@replit/codemirror-vim": "^6.4.0",
     "@scalar/kotlin-fmt": "0.4.1",
+    "altcha-lib": "^2.8.0",
     "better-sqlite3": "^12.11.1",
     "fflate": "^0.8.3",
     "vite": "8.2.2"

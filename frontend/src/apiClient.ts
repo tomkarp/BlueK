@@ -92,6 +92,7 @@ const errors: Record<string, MessageKey> = {
   authentication: "ui.cloud.authentication",
   "account-blocked": "ui.cloud.accountBlocked",
   "credentials-format": "ui.cloud.credentialsFormat",
+  "registration-proof": "ui.cloud.registrationVerificationFailed",
   "username-taken": "ui.cloud.usernameTaken",
   "current-password": "ui.cloud.currentPasswordIncorrect",
   "login-failed": "ui.cloud.loginFailed",

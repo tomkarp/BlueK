@@ -44,10 +44,11 @@
     return issues;
   });
   async function authenticate() {
-    await cloud.authenticate(register, username, password);
-    password = "";
-    confirmPassword = "";
-    showPasswords = false;
+    if (await cloud.authenticate(register, username, password)) {
+      password = "";
+      confirmPassword = "";
+      showPasswords = false;
+    }
   }
 </script>
 
@@ -442,8 +443,9 @@
               <span>{t("ui.cloud.acknowledgeAccessLoss")}</span>
             </label>{/if}
           <button
+            type="submit"
             disabled={cloud.busy || (register && (!acknowledgedUniquePassword || !acknowledgedAccessLoss))}
-            >{t(register ? "ui.cloud.register" : "ui.cloud.login")}</button
+            >{t(cloud.creatingAccount ? "ui.cloud.registrationCreating" : register ? "ui.cloud.register" : "ui.cloud.login")}</button
           >
         </form>
       {/if}
@@ -462,6 +464,71 @@
         >
       </div>
     </div>
+    {#if cloud.creatingAccount}
+      <div class="cloud-registration-overlay">
+        <div class="cloud-registration-progress" role="status" aria-live="polite">
+          <svg class="cloud-construction" viewBox="0 0 320 180" aria-hidden="true">
+            <rect x="12" y="8" width="296" height="150" rx="42" fill="#e7f4fb" />
+            <circle cx="46" cy="42" r="4" fill="#b6d8e9" />
+            <circle cx="275" cy="55" r="5" fill="#c0dfeb" />
+            <path d="M42 72h16m-8-8v16m208-48v14m-7-7h14" stroke="#8bc4d9" stroke-width="2" stroke-linecap="round" />
+            <ellipse cx="160" cy="155" rx="139" ry="12" fill="#cce6ed" />
+            <!-- A large account card, being assembled by the two workers. -->
+            <rect x="101" y="35" width="125" height="116" rx="13" fill="#b3d1df" />
+            <rect x="96" y="30" width="125" height="116" rx="13" fill="#fff" stroke="#8bb8cd" stroke-width="3" />
+            <rect x="111" y="43" width="36" height="36" rx="11" fill="#d9eff7" />
+            <circle cx="129" cy="55" r="6" fill="#5a96b1" />
+            <path d="M118 71c1-6 5-9 11-9s10 3 11 9" fill="#5a96b1" />
+            <rect x="158" y="49" width="46" height="6" rx="3" fill="#6d9eb5" />
+            <rect x="158" y="62" width="33" height="5" rx="2.5" fill="#bed8e4" />
+            <rect x="112" y="92" width="92" height="6" rx="3" fill="#d9eaf0" />
+            <rect x="112" y="105" width="65" height="6" rx="3" fill="#d9eaf0" />
+            <rect x="112" y="120" width="42" height="13" rx="6.5" fill="#a9d9bd" />
+            <!-- Builder with hammer. -->
+            <path d="M51 114l-3 34h15l5-25 6 25h15l-5-34" fill="#315d76" stroke="#25495d" stroke-width="2" stroke-linejoin="round" />
+            <path d="M45 148h20v7H40q-1-4 5-7zm29 0h16q6 3 6 7H73z" fill="#263f4e" />
+            <path d="M52 80q17-10 31 0l5 38H48z" fill="#f2a044" stroke="#d88232" stroke-width="2" />
+            <path d="M57 81l3 21h17l3-21m-20 21v16m17-16v16" fill="none" stroke="#315d76" stroke-width="4" />
+            <rect x="64" y="105" width="10" height="8" rx="2" fill="#315d76" />
+            <path d="M52 86l-9 19" stroke="#e8ad83" stroke-width="9" stroke-linecap="round" />
+            <circle cx="68" cy="65" r="15" fill="#e8ad83" />
+            <path d="M54 63q1-17 14-17t14 17z" fill="#f6c84c" stroke="#dca62b" stroke-width="2" />
+            <path d="M52 64h32M68 47v8" stroke="#dca62b" stroke-width="3" stroke-linecap="round" />
+            <circle cx="73" cy="67" r="1.5" fill="#493e39" />
+            <path d="M70 73q3 2 6 0" fill="none" stroke="#9d6553" stroke-width="1.5" stroke-linecap="round" />
+            <g class="cloud-builder-hammer">
+              <path d="M81 86l13-14 7-10" fill="none" stroke="#e8ad83" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" />
+              <path d="M100 65l7-18" stroke="#a16d43" stroke-width="4" stroke-linecap="round" />
+              <path d="M101 45l13 5" stroke="#5a7180" stroke-width="7" stroke-linecap="round" />
+            </g>
+            <!-- Builder with brush and hair tucked behind her helmet. -->
+            <path d="M238 114l-5 34h15l6-25 5 25h15l-3-34" fill="#315d76" stroke="#25495d" stroke-width="2" stroke-linejoin="round" />
+            <path d="M231 148h18v7h-24q0-4 6-7zm28 0h16q6 3 6 7h-22z" fill="#263f4e" />
+            <path d="M239 80q16-10 30 0l6 38h-42z" fill="#f18c55" stroke="#d87542" stroke-width="2" />
+            <path d="M243 81l3 21h17l3-21m-20 21v16m17-16v16" fill="none" stroke="#315d76" stroke-width="4" />
+            <rect x="250" y="105" width="10" height="8" rx="2" fill="#315d76" />
+            <path d="M268 86l11 20" stroke="#b87957" stroke-width="9" stroke-linecap="round" />
+            <path d="M261 55c10 0 14 8 13 17l-1 13c0 4 2 7 4 9-9 1-14-3-15-11z" fill="#513d37" />
+            <circle cx="254" cy="65" r="15" fill="#b87957" />
+            <path d="M262 57c6 2 7 8 6 14l-3 5-1-11z" fill="#513d37" />
+            <path d="M240 63q1-17 14-17t14 17z" fill="#f6c84c" stroke="#dca62b" stroke-width="2" />
+            <path d="M238 64h32m-16-17v8" stroke="#dca62b" stroke-width="3" stroke-linecap="round" />
+            <circle cx="249" cy="67" r="1.5" fill="#493e39" />
+            <path d="M246 73q3 2 6 0" fill="none" stroke="#82523e" stroke-width="1.5" stroke-linecap="round" />
+            <g class="cloud-builder-brush">
+              <path d="M240 87l-12 7-10-4" fill="none" stroke="#b87957" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" />
+              <path d="M219 91l-9-6" stroke="#a16d43" stroke-width="4" stroke-linecap="round" />
+              <path d="M207 82l-4 6" stroke="#4a9dc4" stroke-width="6" stroke-linecap="round" />
+            </g>
+            <rect x="18" y="140" width="21" height="14" rx="3" fill="#eb8f4c" stroke="#ce743a" stroke-width="2" />
+            <path d="M24 140v-4h9v4" fill="none" stroke="#ce743a" stroke-width="2" />
+            <path d="M288 155h18m-15 0 2-15h11l2 15" fill="#f0b84e" stroke="#d3932b" stroke-width="2" stroke-linejoin="round" />
+          </svg>
+          <strong>{t("ui.cloud.registrationCreating")}</strong>
+          <span>{t("ui.cloud.registrationVerification")}</span>
+        </div>
+      </div>
+    {/if}
   </div>
 {/if}
 
@@ -600,6 +667,54 @@
     stroke-linecap: round;
     stroke-linejoin: round;
     stroke-width: 1.8;
+  }
+  .cloud-registration-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    padding: 18px;
+    background: #12283c99;
+  }
+  .cloud-registration-progress {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 9px;
+    box-sizing: border-box;
+    width: min(420px, 100%);
+    padding: 22px 24px 26px;
+    border: 1px solid #cbdde6;
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 18px 60px #12283c40;
+    color: #27475d;
+    text-align: center;
+  }
+  .cloud-registration-progress strong { font-size: 1.2rem; }
+  .cloud-registration-progress span { font-size: 0.95rem; line-height: 1.45; }
+  .cloud-construction {
+    display: block;
+    width: min(320px, 100%);
+    height: auto;
+    margin-bottom: 3px;
+  }
+  .cloud-builder-hammer, .cloud-builder-brush {
+    transform-box: fill-box;
+    transform-origin: 10% 90%;
+  }
+  .cloud-builder-hammer { animation: cloud-hammer 0.9s ease-in-out infinite alternate; }
+  .cloud-builder-brush { transform-origin: 95% 20%; animation: cloud-brush 1.1s ease-in-out infinite alternate; }
+  @keyframes cloud-hammer { to { transform: rotate(-18deg); } }
+  @keyframes cloud-brush { to { transform: rotate(13deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    .cloud-builder-hammer, .cloud-builder-brush { animation: none; }
+  }
+  :global(.dark) .cloud-registration-progress {
+    background: #273844;
+    border-color: #516977;
+    color: #eef7fb;
   }
   .cloud-actions {
     display: flex;

@@ -4,6 +4,7 @@ import {
   ApiError,
   checkServerProject,
 } from "../apiClient";
+import { registrationProof } from "../registrationProof";
 import type { SavedProject } from "../projectFormat";
 import type { Language } from "../i18n/Language.svelte";
 import { strToU8, zipSync } from "fflate";
@@ -54,6 +55,7 @@ export class CloudWorkspace {
   adminOpen = $state(false);
   private intent: "account" | "open" | "save" | "manage" = "account";
   busy = $state(false);
+  creatingAccount = $state(false);
   sessionReady = $state(false);
   user: User | null = $state(null);
   projects: CloudProject[] = $state.raw([]);
@@ -144,21 +146,27 @@ export class CloudWorkspace {
   };
   authenticate = (register: boolean, username: string, password: string) =>
     this.run(async () => {
-      this.user = (
-        await apiRequest<{ user: User }>(
-          `/api/account/${register ? "register" : "login"}`,
-          { method: "POST", body: JSON.stringify({ username, password }) },
+      this.creatingAccount = register;
+      try {
+        const proof = register ? await registrationProof() : undefined;
+        this.user = (
+          await apiRequest<{ user: User }>(
+            `/api/account/${register ? "register" : "login"}`,
+            { method: "POST", body: JSON.stringify({ username, password, ...(register ? { proof } : {}) }) },
+          )
+        ).user;
+        this.binding = null;
+        if (this.intent !== "account" && this.intent !== "manage")
+          this.open = false;
+        if (
+          this.intent === "account" ||
+          this.intent === "open" ||
+          this.intent === "manage"
         )
-      ).user;
-      this.binding = null;
-      if (this.intent !== "account" && this.intent !== "manage")
-        this.open = false;
-      if (
-        this.intent === "account" ||
-        this.intent === "open" ||
-        this.intent === "manage"
-      )
-        await this.list();
+          await this.list();
+      } finally {
+        this.creatingAccount = false;
+      }
     });
   logout = () =>
     this.run(async () => {
