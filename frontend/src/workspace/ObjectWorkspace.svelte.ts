@@ -360,10 +360,13 @@ export class ObjectWorkspace {
     if (!value.objectId) return;
     this.objectNamePrompt = value;
     this.objectNameError = "";
-    this.objectName = defaultObjectName(
-      value.className || "Object",
-      this.host.session().runtime.references.map((reference) => reference.name),
-    );
+    const usedNames = this.host
+      .session()
+      .runtime.references.map((reference) => reference.name);
+    this.objectName =
+      value.name && /^[A-Za-z_]\w*$/.test(value.name)
+        ? value.name
+        : defaultObjectName(value.className || "Object", usedNames);
   };
   getLastCodepadObject = () => {
     const entry = [...this.host.session().history]
