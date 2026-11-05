@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from "svelte";
   import type { Language } from "./i18n/Language.svelte";
+  import TerminalCardFonts from "./components/TerminalCardFonts.svelte";
+  import TerminalText from "./components/TerminalText.svelte";
   import type {
     Diagnostic,
     RuntimeSnapshot,
@@ -323,7 +325,9 @@
   onblur={releaseKeys}
 />
 
-<main class="player" class:blueplay={bluePlay}>
+<TerminalCardFonts />
+
+<main class="player" class:blueplay={bluePlay} lang={language.locale}>
   {#if program.showProjectName !== false || program.allowBlueK !== false || program.allowDownload !== false}
     <header class="player-header">
       {#if program.showProjectName !== false}<h1>{title}</h1>{/if}
@@ -445,11 +449,11 @@
               class="player-sized"
               style={part.box}
               ><span class:player-input-echo={part.input} style={part.style}
-                >{part.text}</span
+                ><TerminalText text={part.text} /></span
               ></span
             >{:else}<span
               class:player-input-echo={part.input}
-              style={part.style}>{part.text}</span
+              style={part.style}><TerminalText text={part.text} /></span
             >{/if}{/each}</pre>
       <div class="player-input-row">
         <input

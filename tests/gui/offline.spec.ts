@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { test, expect, webkit, type Page } from '@playwright/test';
+import { cardText, cardRasters, expectLocalizedCards } from './cardFontChecks';
 
 let html = process.env.BLUEK_OFFLINE_HTML;
 let target: string | undefined;
@@ -43,6 +44,22 @@ async function evaluate(page: Page, code: string) {
   await expect(entries.last().locator('.codepad-error')).toHaveCount(0);
   return entries.last();
 }
+
+test('GUI-158 offline IDE embeds licensed card fonts and switches existing output without network', async ({ page }) => {
+  const verify = await open(page, `fun main() { println("${cardText}") }`);
+  await page.getByRole('button', { name: 'Compile', exact: true }).click();
+  await page.getByRole('button', { name: 'Start main', exact: true }).click();
+  const terminal = page.locator('.terminal-output pre');
+  await expect(terminal).toHaveText(cardText + '\n');
+  const english = await cardRasters(terminal, 'en');
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByLabel('Language', { exact: true }).selectOption('de');
+  await page.getByRole('button', { name: 'Schließen', exact: true }).click();
+  expectLocalizedCards(english, await cardRasters(terminal, 'de'));
+  await expect(terminal).toHaveText(cardText + '\n');
+  await expect(page.locator('meta[name="bluek-card-font-license"]')).toHaveAttribute('content', /SIL OPEN FONT LICENSE/);
+  verify();
+});
 
 test('GUI-62 file:// runs Kotlin, input, reset and restores/imports/exports projects without network', async ({ page }, info) => {
   const verify = await open(page, 'fun main() { println("lokal") }');

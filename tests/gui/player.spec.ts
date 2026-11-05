@@ -5,6 +5,25 @@ import { pathToFileURL } from 'node:url';
 import { test, expect, webkit, type Page, type TestInfo } from '@playwright/test';
 import { createExportedProgram, embedProgram, PUBLIC_BLUEK_URL } from '../../frontend/src/programExport';
 import { parseProject } from '../../frontend/src/projectFormat';
+import { cardText, cardRasters, expectLocalizedCards } from './cardFontChecks';
+
+test('GUI-158 exported HTML embeds licensed English/German playing-card fonts without network', async ({ browser }, info) => {
+  const url = await exportFile(info, 'cards', [{ fileName: 'Cards.kt', source: `fun main() { println("${cardText}") }` }], 'Cards.kt');
+  const rasters: Record<string, string[]> = {};
+  for (const locale of ['en', 'de'] as const) {
+    const context = await browser.newContext({ locale });
+    try {
+      const page = await context.newPage();
+      const requests = await openPlayer(page, url);
+      const terminal = page.locator('.player-terminal pre');
+      await expect(terminal).toHaveText(cardText + '\n');
+      rasters[locale] = await cardRasters(terminal, locale);
+      await expect(page.locator('meta[name="bluek-card-font-license"]')).toHaveAttribute('content', /SIL OPEN FONT LICENSE/);
+      expect(requests).toEqual([]);
+    } finally { await context.close(); }
+  }
+  expectLocalizedCards(rasters.en, rasters.de);
+});
 
 // The exported player is a single HTML file opened from disk. These tests fill
 // the built template the way the IDE does and open the result via file://.

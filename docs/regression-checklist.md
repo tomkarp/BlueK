@@ -429,6 +429,7 @@ below. No universal performance guarantee is implied.
 | GUI-154 | Loading a project into non-empty work asks before replacing the project and its browser autosave; cancel preserves current work | Passed in focused draft GUI run, 2026-10-23 |
 | GUI-155 | Browser recovery list shows three newest drafts first and expands/collapses older drafts | Passed in focused draft GUI run, 2026-10-23 |
 | GUI-156 | Inspector Close button remains readable in light and dark mode and closes the window | Focused Chromium test passed (2026-10-31), checking text colors and closing. The initial sandbox run could not start the local server (EPERM); the network-enabled rerun passed. User accepted the fix (2026-10-31). |
+| GUI-158 | Unicode terminal cards use B/D/K/A in German and J/Q/K/A in English, update existing output on language changes, preserve text and normal monospace metrics, and embed licensed fonts in offline IDE/HTML exports | Chromium/WebKit card checks, file:// export and offline card/language checks passed (2026-11-05); 17 affected card/language/terminal cases and two offline cases passed. B/D stroke weights matched to A/K after user feedback; final card/export/offline reruns passed. Agent inspected enlarged card artwork; final user visual acceptance pending. |
 | GUI-157 | Neutral buttons use gray borders and flatter toolbar surfaces; account and menu accents use readable colors; keyboard focus is visible | CLOUD-16, GUI-156 and two GUI-157 cases passed in Chromium and WebKit (2026-10-31), covering account borders/hover and accent colors, constructor hover, and inspector close in both themes. The broader account and inspector Chromium suites passed 30/32; the two CLOUD-03 cases expected the old accent color and passed after updating the expectation. Initial constructor test expected pure white in dark mode; corrected rerun passed. One concurrent WebKit start hit the occupied test port; sequential rerun passed. Typecheck passed with seven existing warnings before the accent follow-up. Agent inspected the German light workspace and account dialog; dark appearance, focus indicators and remaining screens need visual acceptance. User's first impression was positive. |
 | GUI-127/128 | Restore lists expose individual and bulk deletion controls for local browser drafts, each with confirmation | Chromium passed, 2026-10-23 |
 | GUI-150 | Object placeholders, inspection errors, uninitialized properties and pending computed values use Codepad's gray; actual values including null and exception objects keep their normal color | Six affected Chromium cases passed (GUI-89/92/149, DBG-12/18), including light/dark mode and a getter returning null (2026-10-21). Built-in-browser German screenshot confirmed gray object/error text beside normal numbers, strings and null. User visual acceptance pending. |
@@ -2294,3 +2295,36 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
   with delayed, mocked endpoints, including narrow-screen bounds and reduced-motion
   behavior. Agent inspected the German narrow-screen screenshot; user visual
   acceptance is pending.
+
+### Localized playing cards — 2026-11-05
+
+- GUI-158: shared terminal presentation embeds renamed Noto-derived English and
+  German card fonts under SIL OFL 1.1. Original copyright and full license are
+  included in font metadata and HTML metadata. FontTools audit preserved all 82
+  English card outlines and changed only the eight German jack/queen glyphs.
+- Browser checks compare rasterized glyphs in Chromium/WebKit, switch existing
+  output English → German → English, and preserve the Unicode transcript, ANSI
+  sizing and normal monospace font. HTML exports and the offline IDE load both
+  fonts without HTTP requests. The initial single-file run exposed unresolved
+  CSS font URLs; explicit inline asset imports fixed it. WebKit's unquoted CSS
+  family serialization required a tolerant assertion. Initial sandbox runs
+  could not start the server/browser; authorized reruns succeeded.
+- First visual review found that selecting the symbol font for an entire `pre`
+  increased plain-text line heights. Card-only spans and compact font metrics
+  fixed this. User feedback identified lighter B/D strokes; their main strokes
+  now match the original K's 15 font units. Agent inspected enlarged B/D/K/A
+  artwork; user acceptance of this weight adjustment remains pending.
+- Final affected run: 17/17 card, localization and terminal-settings browser
+  cases; 2/2 offline card/language cases. After the weight adjustment, card/export
+  cases passed again (3/3), and the rebuilt offline file passed its card case
+  (1/1). Typecheck (zero errors/warnings), i18n, player, offline and hosted builds
+  passed. Svelte MCP reviewed the new components without issues; existing parent
+  components retain their unrelated unkeyed-loop/style suggestions.
+- Smaller-display follow-up: user rejected the 78% opacity experiment. Restored
+  full opacity and inset only central court artwork by two font units, reducing
+  fine ink strokes by four units and opening white gaps. Frames, corner suit
+  marks and rank labels retain their contours. Font audit confirmed this for all
+  16 court glyphs per language, with other cards and full OFL unchanged. Agent
+  compared old/new artwork at 90px and 125px font sizes with device scale 1.
+  Chromium/WebKit/export checks passed (3/3), rebuilt offline passed (1/1), and
+  typecheck, player/offline/hosted builds passed. User visual acceptance pending.

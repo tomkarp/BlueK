@@ -8,6 +8,7 @@
   import { TestWorkspace } from "./workspace/TestWorkspace.svelte";
   import BluePlayWindow from "./components/BluePlayWindow.svelte";
   import TerminalWindow from "./components/TerminalWindow.svelte";
+  import TerminalCardFonts from "./components/TerminalCardFonts.svelte";
   import EditorWindows from "./components/EditorWindows.svelte";
   import CompilerDialog from "./components/CompilerDialog.svelte";
   import InspectorWindows from "./components/InspectorWindows.svelte";
@@ -511,6 +512,8 @@
   ondragover={handleProjectFileDragOver}
   ondrop={handleProjectFileDrop}
 />
+
+<TerminalCardFonts />
 
 <div
   class:terminal-split={terminal.terminalOpen && terminal.terminalSplit}

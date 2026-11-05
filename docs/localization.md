@@ -26,6 +26,12 @@ output and compiler/runtime diagnostics remain unchanged. Runtime test errors
 are displayed verbatim; finite UI status labels are translated. Native browser
 confirmations/prompts receive localized UI text.
 
+Unicode playing-card glyphs are a presentation exception: the terminal selects
+an embedded English (J/Q/K/A) or German (B/D/K/A) font using inherited `lang`.
+Existing output changes appearance immediately on a language switch; its text
+and copied Unicode code points remain unchanged. Offline IDE and HTML players
+embed the same fonts and license. See [terminal formatting](terminal.md#playing-cards).
+
 Compile diagnostics show the English message without the interpreter's internal
 `SemanticException` class name (including subclasses such as
 `TypeMismatchException`). Runtime exceptions retain their Kotlin class names.

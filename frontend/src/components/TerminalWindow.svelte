@@ -6,6 +6,7 @@
 
   import type { ActiveWindow } from "../uiTypes";
   import { terminalParts } from "../uiParity";
+  import TerminalText from "./TerminalText.svelte";
   interface Props {
     terminalOpen: boolean;
     terminalSplit: boolean;
@@ -184,11 +185,11 @@
                     style={part.box}
                     ><span
                       class:terminal-input-echo={part.input}
-                      style={part.style}>{part.text}</span
+                      style={part.style}><TerminalText text={part.text} /></span
                     ></span
                   >{:else}<span
                     class:terminal-input-echo={part.input}
-                    style={part.style}>{part.text}</span
+                    style={part.style}><TerminalText text={part.text} /></span
                   >{/if}{/each}{/key}</span
           >{#if inputReady}<span
               class:focused={inputFocused}

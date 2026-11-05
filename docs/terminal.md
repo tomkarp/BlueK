@@ -41,6 +41,25 @@ print("\u000C")
 
 ## Program output
 
+### Playing cards
+
+Unicode playing-card characters use bundled, monochrome card fonts. German UI
+uses **B, D, K, A**; English uses **J, Q, K, A**. Switching Settings → Language
+updates cards already visible in the terminal without changing the transcript
+or Kotlin source. Copied text still contains the original Unicode characters;
+its appearance in another application depends on that application's font.
+Normal text keeps its monospace font, and ANSI colors and text sizing also apply
+to cards. Court artwork uses thinner contours and wider white gaps at full
+opacity; frames, rank labels and corner suit marks retain their original weight.
+Both fonts are embedded in offline BlueK and exported
+HTML programs; the player uses its existing browser/saved-language selection.
+
+The fonts derive from Noto Sans Symbols 2 under SIL OFL 1.1, with new family names
+and original attribution and license retained. See
+[font provenance and regeneration](../frontend/src/assets/card-fonts/README.md).
+
+### Control sequences
+
 BlueK and exported HTML programs support ANSI colors/styles, cursor movement
 and clearing, plus kitty text sizing. ESC (code 27) is `"\u001B"` in Kotlin.
 

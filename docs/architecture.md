@@ -118,6 +118,10 @@ Language choice persists separately in Local Storage. Without a saved choice,
 the browser language is used when supported, otherwise English. Runtime
 diagnostics, source and program output are never translated. See [localization](localization.md) for catalog contracts.
 
+Terminal playing-card glyphs use language-selected embedded fonts; transcript
+code points are unchanged. Font selection is CSS presentation only, shared by
+the IDE and player. See [terminal formatting](terminal.md#playing-cards).
+
 ### Browser drafts
 
 `projectDraftStorage.ts` owns storage I/O and exclusive document-lifetime draft
