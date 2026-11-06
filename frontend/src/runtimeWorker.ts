@@ -11,24 +11,28 @@ export function startRuntimeWorker(loadKotlite: () => Promise<string>) {
   let sourceSession: {
     classifyProjectFile(filename: string, source: string): string;
     classRenameReferences(filenames: string[], sources: string[], className: string, withBluePlay: boolean): string;
+    completionQuery(filenames: string[], sources: string[], activeFile: string, cursor: number, withBluePlay: boolean): string;
   } | undefined;
   const hostReady = loadKotlite().then(source => {
     (0, eval)(source);
     const api = (globalThis as any)['bluek-kotlite-browser'];
     return new RuntimeHost(() => api.bluekCreateKotliteSession());
   });
-  self.onmessage = (event: MessageEvent<(WorkerCommand & { id: number }) | { op: 'classifyFiles'; id: number; files: { fileName: string; source: string }[] } | { op: 'classReferences'; id: number; files: { fileName: string; source: string }[]; className: string; withBluePlay: boolean }>) => {
+  self.onmessage = (event: MessageEvent<(WorkerCommand & { id: number }) | { op: 'classifyFiles'; id: number; files: { fileName: string; source: string }[] } | { op: 'classReferences'; id: number; files: { fileName: string; source: string }[]; className: string; withBluePlay: boolean } | { op: 'completionQuery'; id: number; files: { fileName: string; source: string }[]; activeFile: string; cursor: number; withBluePlay: boolean }>) => {
     const request = event.data;
-    if (request.op === 'classifyFiles' || request.op === 'classReferences') {
+    if (request.op === 'classifyFiles' || request.op === 'classReferences' || request.op === 'completionQuery') {
       hostReady.then(() => {
         const api = (globalThis as any)['bluek-kotlite-browser'];
         sourceSession ??= api.bluekCreateKotliteSession();
         if (request.op === 'classifyFiles') {
           const files = request.files.map(file => JSON.parse(sourceSession!.classifyProjectFile(file.fileName, file.source)));
           self.postMessage({ id: request.id, files });
-        } else {
+        } else if (request.op === 'classReferences') {
           const references = JSON.parse(sourceSession!.classRenameReferences(request.files.map(file => file.fileName), request.files.map(file => file.source), request.className, request.withBluePlay));
           self.postMessage({ id: request.id, ...references });
+        } else {
+          const completion = JSON.parse(sourceSession!.completionQuery(request.files.map(file => file.fileName), request.files.map(file => file.source), request.activeFile, request.cursor, request.withBluePlay));
+          self.postMessage({ id: request.id, completion });
         }
       }).catch(error => self.postMessage({ id: request.id, transportError: error instanceof Error ? error.message : String(error) }));
       return;

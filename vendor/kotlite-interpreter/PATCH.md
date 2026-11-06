@@ -1267,6 +1267,24 @@ read existing backing values without invoking accessors. The snapshot lists
 custom-getter properties as computed and unevaluated, preserving program state
 while keeping those properties visible in the debugger.
 
+## 2026-11-05: syntax-only editor completion receiver types
+
+`ReplAnalyzer.analyzeForCompletion` exposes the semantic analyzer's receiver
+type at a caller-supplied member-hole token. The analyzer visits the receiver
+in its ordinary lexical and smart-cast context, records the resolved type, and
+returns accessible property/method names using Kotlite's visibility rules at
+that source location. It accepts only the synthetic member token without
+resolving or executing it. The navigation node retains the placeholder type
+for later block and initializer type queries. Constructor completion replaces
+the incomplete call with a synthetic `null!!` bottom-typed expression during
+analysis, so a missing argument list does not cause Kotlite to reject the
+query before returning the parsed constructor signatures. The synthetic
+expression is never evaluated.
+BlueK's separate source-analysis worker uses the Kotlite lexer to identify the
+cursor's member or empty constructor-call context, rewrites that location for
+analysis, and returns the normal typed manifest. No interpreter or student
+initializer is run. A parse/type error elsewhere makes the query unresolved.
+
 Constructor stepping: while `constructClassInstance()` evaluates an explicit
 property initializer, it invokes the same statement hook used by block
 statements immediately before evaluating the initializer. This gives Step in

@@ -22,7 +22,32 @@ import com.sunnychung.lib.multiplatform.kotlite.model.*
  * created when it is declared.
  */
 object ReplAnalyzer {
+    data class CompletionResolution(
+        val script: ScriptNode,
+        val receiverType: TypeNode?,
+        val classContext: String?,
+        val accessibleProperties: Set<String>,
+        val accessibleMethods: Set<String>,
+    )
     fun analyze(filename: String, source: String, environment: ExecutionEnvironment, retiredProperties: Map<Int, List<String>> = emptyMap(), unitStarts: List<Int> = emptyList()): ScriptNode {
+        return analyzeInternal(filename, source, environment, retiredProperties, unitStarts, null).script
+    }
+
+    /** Analyze a synthetic member hole and return its receiver type without evaluating the script. */
+    fun analyzeForCompletion(filename: String, source: String, environment: ExecutionEnvironment, markerIndex: Int, unitStarts: List<Int> = emptyList()): CompletionResolution {
+        val result = analyzeInternal(filename, source, environment, emptyMap(), unitStarts, markerIndex)
+        return CompletionResolution(result.script, result.receiverType, result.classContext, result.accessibleProperties, result.accessibleMethods)
+    }
+
+    private data class InternalResult(
+        val script: ScriptNode,
+        val receiverType: TypeNode?,
+        val classContext: String?,
+        val accessibleProperties: Set<String>,
+        val accessibleMethods: Set<String>,
+    )
+
+    private fun analyzeInternal(filename: String, source: String, environment: ExecutionEnvironment, retiredProperties: Map<Int, List<String>>, unitStarts: List<Int>, markerIndex: Int?): InternalResult {
         val script = Parser(Lexer(filename, source)).script()
         fun nodeIndexAt(offset: Int) = script.nodes.indexOfFirst { it.position.index >= offset }
             .let { if (it < 0) script.nodes.size else it }
@@ -33,8 +58,15 @@ object ReplAnalyzer {
         retiredProperties.entries.sortedBy { it.key }.forEach { (offset, names) ->
             retireBeforeNode.getOrPut(nodeIndexAt(offset)) { mutableListOf() }.addAll(names)
         }
-        SemanticAnalyzer(script, environment, retireBeforeNode, unitStarts.map { nodeIndexAt(it) }.toSet()).analyze()
-        return script.copy(nodes = evaluationOrder(script.nodes))
+        val analyzer = SemanticAnalyzer(script, environment, retireBeforeNode, unitStarts.map { nodeIndexAt(it) }.toSet(), markerIndex)
+        analyzer.analyze()
+        return InternalResult(
+            script.copy(nodes = evaluationOrder(script.nodes)),
+            analyzer.completionReceiverType,
+            analyzer.completionClassContext,
+            analyzer.completionAccessibleProperties,
+            analyzer.completionAccessibleMethods,
+        )
     }
 
     private fun evaluationOrder(nodes: List<ASTNode>): List<ASTNode> {

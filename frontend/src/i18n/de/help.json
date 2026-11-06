@@ -14,7 +14,7 @@
   "start": {
     "aFirstClass": "Eine erste Klasse",
     "workspaceReference": "Arbeitsbereiche",
-    "editing": "Verwende im Editor den Button <strong>//</strong> zum Kommentieren oder Entkommentieren ausgewählter Zeilen und <strong>≡</strong> zum Formatieren der Datei. Offene Dateien können als Tabs oder separate Fenster angeordnet werden.",
+    "editing": "Verwende im Editor den Button <strong>//</strong> zum Kommentieren oder Entkommentieren ausgewählter Zeilen und <strong>≡</strong> zum Formatieren der Datei. Setze für Codevorschläge den Cursor hinter einen Punkt oder die öffnende Klammer eines Konstruktoraufrufs. Drücke auf macOS <strong>Cmd+.</strong>, unter Windows und Linux <strong>Ctrl+Leertaste</strong>. Offene Dateien können als Tabs oder separate Fenster angeordnet werden.",
     "runningACompleteProgram": "Ein vollständiges Programm ausführen",
     "debuggingTitle": "Mit Haltepunkten debuggen",
     "debugging": "Klicke neben eine Codezeile, um dort einen Haltepunkt zu setzen. Starte danach main, rufe eine Objektmethode über ihr Menü auf oder starte ein BluePlay-Spiel. Die Ausführung hält vor der markierten Anweisung an. Während ein unterstütztes Programm läuft, hält <strong>Pause</strong> an der nächsten sicheren Anweisung an. Verwende danach <strong>Schritt</strong>, <strong>Hinein</strong>, <strong>Weiter</strong> oder <strong>Stopp</strong>. Das Panel zeigt lokale Variablen und einen integrierten Objektinspektor mit schreibgeschützten Attributen. Der Inspektor führt Getter beim Anhalten automatisch aus und aktualisiert ihre Werte nach jedem Schritt. Beim Kompilieren, Testen und bei automatischer Inspektion halten Haltepunkte nicht an. Synchrone native Callbacks werden übersprungen.",

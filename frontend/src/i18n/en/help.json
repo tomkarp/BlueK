@@ -14,7 +14,7 @@
   "start": {
     "aFirstClass": "A first class",
     "workspaceReference": "Workspace reference",
-    "editing": "Use the editor’s <strong>//</strong> button to comment or uncomment selected lines and <strong>≡</strong> to format the file. Open files can be arranged in tabs or separate windows.",
+    "editing": "Use the editor’s <strong>//</strong> button to comment or uncomment selected lines and <strong>≡</strong> to format the file. For code suggestions, place the cursor after a dot or an opening constructor parenthesis and press <strong>Cmd+.</strong> on macOS or <strong>Ctrl+Space</strong> on Windows and Linux. Open files can be arranged in tabs or separate windows.",
     "runningACompleteProgram": "Running a complete program",
     "debuggingTitle": "Debugging with breakpoints",
     "debugging": "Click beside a code line to set a breakpoint, then start main, call an object method from its menu, or run a BluePlay game. Execution pauses before the marked instruction. While a supported program is running, choose <strong>Pause</strong> to stop at the next safe instruction. At a pause, use <strong>Step</strong>, <strong>Step in</strong>, <strong>Continue</strong> or <strong>Stop</strong>. The panel shows local variables and an integrated, read-only object inspector. The inspector automatically evaluates getters when execution pauses and refreshes their values after each step. Debug pauses do not run during compilation, tests or automatic inspection. Synchronous native callbacks are skipped.",

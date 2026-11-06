@@ -214,7 +214,11 @@
     "resizeEditor0": "Resize editor {0}",
     "toggleBreakpoint": "Toggle breakpoint on current line",
     "collectEditorWindowsIntoTabs": "Collect editor windows into tabs",
-    "closeEditor": "Close editor"
+    "closeEditor": "Close editor",
+    "kotlinHelpUnavailable": "Kotlin type could not be resolved here.",
+    "kotlinHelpNoMatches": "No matching members.",
+    "inheritedFrom0": "Inherited from {0}",
+    "optionalParameter": "optional"
   },
   "inspector": {
     "objectInspector": "Object inspector",

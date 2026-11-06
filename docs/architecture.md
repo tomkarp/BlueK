@@ -176,7 +176,11 @@ they supply the bundle. Client, protocol and runtime ownership stay identical.
 
 Project file presentation also uses a separate syntax-only worker through
 `projectSourceAnalysis.ts`. It invokes the same Kotlite parser without loading
-or executing the project. Results are applied only to the matching source and
+or executing the project. Contextual editor help sends the latest project
+sources, library selection and cursor to that worker; Kotlite analyzes a
+synthetic member hole or constructor call and returns typed manifest metadata.
+The query never evaluates student code or consults the compiled runtime
+snapshot. Results are applied only to the matching source and
 filename; incomplete or mixed files retain the last known presentation. A file
 loaded without a reliable classification starts with a neutral presentation.
 This worker does not own runtime state. The saved `kind` field is ignored and

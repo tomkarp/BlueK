@@ -18,7 +18,7 @@ export interface ClassMeta{id:string;name:string;qualifiedName?:string;kind:stri
 export interface ClassMeta { companionMethods?: CallableMeta[] }
 export interface ClassMeta { builtin?: boolean; documentation?: string }
 export interface ManifestConstructor{ id:string; parameters:{name:string; type:TypeRef; hasDefault:boolean}[] }
-export interface ManifestProperty{ id:string; name:string; type:TypeRef; mutable:boolean; visibility:string; getter?:boolean; setter?:boolean; getterId?:string; setterId?:string; generated?:boolean }
+export interface ManifestProperty{ id:string; name:string; type:TypeRef; mutable:boolean; visibility:string; inheritedFrom?:string; getter?:boolean; setter?:boolean; getterId?:string; setterId?:string; generated?:boolean }
 export interface ManifestCallable extends CallableMeta{ generated?:boolean; companion?:boolean }
 export interface ManifestClass{
     id:string;

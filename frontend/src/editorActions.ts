@@ -2,8 +2,19 @@ import { KotlinFormatterClient } from "./kotlinFormatterClient";
 import { applyDiagnostics, editorDiagnostics } from "./editorDiagnostics";
 import { vim } from "@replit/codemirror-vim";
 import { minimalSetup } from "codemirror";
-import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
-import { Compartment, EditorState, StateEffect, StateField } from "@codemirror/state";
+import {
+  autocompletion,
+  closeBrackets,
+  closeCompletion,
+  closeBracketsKeymap,
+  completionKeymap,
+  completionStatus,
+  startCompletion,
+  type Completion,
+  type CompletionContext,
+  type CompletionResult,
+} from "@codemirror/autocomplete";
+import { Compartment, EditorState, Prec, StateEffect, StateField } from "@codemirror/state";
 import {
   EditorView,
   drawSelection,
@@ -14,6 +25,7 @@ import {
   keymap,
   lineNumbers,
   placeholder as editorPlaceholder,
+  tooltips,
 } from "@codemirror/view";
 import {
   defaultKeymap,
@@ -125,6 +137,13 @@ export type EditorOptions = {
   value: string;
   fontSize: number;
   onChange: (value: string) => void;
+  queryKotlinHelp?: (source: string, cursor: number) => Promise<{
+    from: number;
+    to: number;
+    options: { label: string; type: string; detail?: string; insertText: string; selectionStart?: number; selectionEnd?: number }[];
+  } | null>;
+  completionUnavailable?: string;
+  completionNoMatches?: string;
   diagnostics: Diagnostic[];
   // Each compile run bumps this, so the same error can be marked again after
   // the student edited the line and compiled once more.
@@ -200,6 +219,46 @@ export function createEditorActions(host: EditorActionHost) {
     let view: EditorView;
     let applyingExternalDocument = false;
     let formatRequest = 0;
+    const showSuggestions = (editor: EditorView) =>
+      current.editable !== false && !!current.queryKotlinHelp && startCompletion(editor);
+    const kotlinHelpSource = async (context: CompletionContext): Promise<CompletionResult | null> => {
+      if (!current.queryKotlinHelp) return null;
+      const source = context.state.doc.toString();
+      let result: Awaited<ReturnType<NonNullable<EditorOptions["queryKotlinHelp"]>>> = null;
+      try { result = await current.queryKotlinHelp(source, context.pos); } catch { result = null; }
+      if (!result) return {
+        from: context.pos,
+        options: [{
+          label: current.completionUnavailable || "Kotlin type could not be resolved here.",
+          type: "text",
+          apply: () => {},
+        }],
+        filter: false,
+      };
+      if (!result.options.length) return {
+        from: result.from,
+        to: result.to,
+        options: [{ label: current.completionNoMatches || "No matching members.", type: "text", apply: () => {} }],
+        filter: false,
+      };
+      const options: Completion[] = result.options.map(item => ({
+        label: item.label,
+        type: item.type,
+        detail: item.detail,
+        apply: (editor, _completion, from, to) => {
+          const hasClosingParen = item.insertText.endsWith(")") && editor.state.doc.sliceString(to).trimStart().startsWith(")");
+          const value = hasClosingParen ? item.insertText.slice(0, -1) : item.insertText;
+          const selectionStart = item.selectionStart ?? value.length;
+          const selectionEnd = item.selectionEnd ?? selectionStart;
+          if (value) editor.dispatch({
+            changes: { from, to, insert: value },
+            selection: { anchor: from + Math.min(selectionStart, value.length), head: from + Math.min(selectionEnd, value.length) },
+          });
+          else closeCompletion(editor);
+        },
+      }));
+      return { from: result.from, to: result.to, options, filter: false };
+    };
     const canToggleBreakpoint = () => current.breakpointEditable ?? current.editable !== false;
     const formatDocument = () => {
       if (current.editable === false) return false;
@@ -349,6 +408,17 @@ export function createEditorActions(host: EditorActionHost) {
       state: EditorState.create({
         doc: current.value,
         extensions: [
+          EditorView.domEventHandlers({
+            keydown(event, view) {
+              if (event.key === "Escape" && completionStatus(view.state)) {
+                closeCompletion(view);
+                event.preventDefault();
+                event.stopPropagation();
+                return true;
+              }
+              return false;
+            },
+          }),
           vimKeys.of(current.vim ? vim({ status: true }) : []),
           editorEditable.of(EditorView.editable.of(current.editable !== false)),
           editorTheme.of(current.dark ? darkEditorTheme : []),
@@ -360,6 +430,7 @@ export function createEditorActions(host: EditorActionHost) {
           ),
           editorLanguage.of(EditorState.phrases.of(current.phrases ?? {})),
           minimalSetup,
+          tooltips({ parent: document.body }),
           lineNumbers(),
           breakpointField,
           debugLineField,
@@ -367,6 +438,11 @@ export function createEditorActions(host: EditorActionHost) {
           indentUnit.of("    "),
           historyExtension(),
           closeBrackets(),
+          autocompletion({ override: [kotlinHelpSource], activateOnTyping: false, defaultKeymap: false }),
+          Prec.highest(keymap.of([
+            { key: "Ctrl-Space", mac: "Cmd-.", run: showSuggestions },
+            ...completionKeymap.filter(({ run }) => run !== startCompletion),
+          ])),
           bracketMatching(),
           drawSelection(),
           highlightActiveLine(),

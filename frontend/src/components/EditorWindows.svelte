@@ -27,6 +27,7 @@
     darkMode: boolean;
     commentShortcutLabel: string;
     formatShortcutLabel: string;
+    queryKotlinHelp: (fileId: string, source: string, cursor: number) => Promise<import("../workspace/EditorWorkspace.svelte").KotlinHelpResult | null>;
     codeMirror: Action<HTMLElement, EditorOptions>;
     breakpointLines: (fileId: string) => number[];
     toggleBreakpointAt: (fileId: string, line: number) => void;
@@ -71,6 +72,7 @@
     darkMode,
     commentShortcutLabel,
     formatShortcutLabel,
+    queryKotlinHelp,
     codeMirror,
     breakpointLines,
     toggleBreakpointAt,
@@ -273,6 +275,9 @@
               value: editorFile.source,
               fontSize: editorFontSize,
               onChange: (value: string) => updateSource(editorFile.id, value),
+              queryKotlinHelp: (source: string, cursor: number) => queryKotlinHelp(editorFile.id, source, cursor),
+              completionUnavailable: t("ui.editor.kotlinHelpUnavailable"),
+              completionNoMatches: t("ui.editor.kotlinHelpNoMatches"),
               diagnostics: diagnosticsByFile[editorFile.fileName] || [],
               diagnosticsRun,
               vim: vimMode,
@@ -502,6 +507,9 @@
                 value: editorFile.source,
                 fontSize: editorFontSize,
                 onChange: (value: string) => updateSource(editorFile.id, value),
+                queryKotlinHelp: (source: string, cursor: number) => queryKotlinHelp(editorFile.id, source, cursor),
+                completionUnavailable: t("ui.editor.kotlinHelpUnavailable"),
+                completionNoMatches: t("ui.editor.kotlinHelpNoMatches"),
                 diagnostics: diagnosticsByFile[editorFile.fileName] || [],
                 diagnosticsRun,
                 vim: vimMode,

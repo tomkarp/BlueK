@@ -984,6 +984,101 @@ class KotliteSession {
         return "{\"kind\":\"$kind\"" + (name?.let { ",\"className\":${JSON.stringify(it)}" } ?: "") + (nameFrom?.let { ",\"classNameFrom\":$it" } ?: "") + "}"
     }
 
+    /** Syntax-only Kotlin help at a single editor cursor. Student expressions are analyzed, never evaluated. */
+    fun completionQuery(filenames: Array<String>, sources: Array<String>, activeFile: String, cursor: Int, withBluePlay: Boolean): String {
+        if (filenames.size != sources.size || filenames.size != filenames.distinct().size || activeFile !in filenames) {
+            return "{\"kind\":\"unresolved\"}"
+        }
+        val activeIndex = filenames.indexOf(activeFile)
+        val original = sources[activeIndex]
+        if (cursor !in 0..original.length) return "{\"kind\":\"unresolved\"}"
+        return try {
+            val tokens = Lexer(activeFile, original).readAllTokens().filter { it.type != TokenType.NewLine && it.type != TokenType.EOF }
+            val tokenAtCursor = tokens.indexOfFirst { it.type == TokenType.Identifier && cursor >= it.position.index && cursor <= it.endExclusive.index }
+            val memberIndex = if (tokenAtCursor >= 0) tokenAtCursor else tokens.indexOfLast { it.endExclusive.index <= cursor }
+            val memberToken = tokens.getOrNull(memberIndex)
+            val previous = tokens.getOrNull(memberIndex - 1)
+            val isMember = memberToken?.type == TokenType.Identifier && previous?.value == "." &&
+                (memberToken.position.index <= cursor || memberToken.position.index == cursor)
+            val isTrailingDot = memberToken?.value == "." && memberToken.endExclusive.index <= cursor
+            val marker = "__bluek_completion_hole__"
+            var queryKind: String
+            var queryPrefix = ""
+            var replaceFrom = cursor
+            var replaceTo = cursor
+            var markerIndexInActive = -1
+            var constructorName = ""
+            val activeEdited: String
+            if (isMember || isTrailingDot) {
+                if (isMember) {
+                    replaceFrom = memberToken!!.position.index
+                    replaceTo = memberToken.endExclusive.index
+                    queryPrefix = original.substring(replaceFrom, cursor.coerceIn(replaceFrom, replaceTo))
+                }
+                activeEdited = original.substring(0, replaceFrom) + marker + original.substring(replaceTo)
+                markerIndexInActive = replaceFrom
+                queryKind = "member"
+            } else {
+                val openIndex = tokens.indexOfLast { it.value == "(" && it.endExclusive.index <= cursor }
+                val open = tokens.getOrNull(openIndex)
+                val classToken = tokens.getOrNull(openIndex - 1)
+                if (open == null || classToken?.type != TokenType.Identifier || cursor < open.endExclusive.index ||
+                    original.substring(open.endExclusive.index, cursor).any { !it.isWhitespace() }) return "{\"kind\":\"unresolved\"}"
+                val close = tokens.getOrNull(openIndex + 1)?.takeIf { it.value == ")" }
+                if (tokens.drop(openIndex + 1).any { it.position.index < cursor && it !== close }) return "{\"kind\":\"unresolved\"}"
+                constructorName = classToken.value as String
+                replaceFrom = classToken.position.index
+                replaceTo = close?.endExclusive?.index ?: cursor
+                // The completion target may intentionally have no arguments yet. A bottom-typed
+                // expression keeps the surrounding source analyzable without evaluating it or
+                // asking the constructor resolver to reject the incomplete call.
+                activeEdited = original.substring(0, replaceFrom) + "null!!" + original.substring(replaceTo)
+                queryKind = "constructor"
+            }
+
+            val analysis = KotliteSession()
+            analysis.configureBluePlay(withBluePlay)
+            val libraryPrefix = if (withBluePlay) BluePlayLibrary.source + "\n\n" else ""
+            val combined = StringBuilder(libraryPrefix)
+            val regions = mutableListOf<Triple<String, Int, Int>>()
+            filenames.indices.forEach { index ->
+                if (index > 0) combined.append("\n\n")
+                combined.append("// BlueK file: ${filenames[index]}\n")
+                val start = combined.length
+                combined.append(if (index == activeIndex) activeEdited else sources[index])
+                regions += Triple(filenames[index], start, combined.length)
+            }
+            val unitStarts = regions.drop(1).map { it.second }
+            val scriptAndType = if (queryKind == "member") {
+                val globalMarker = regions[activeIndex].second + markerIndexInActive
+                ReplAnalyzer.analyzeForCompletion("<BlueK completion>", combined.toString(), analysis.environment, globalMarker, unitStarts)
+            } else {
+                ReplAnalyzer.CompletionResolution(
+                    ReplAnalyzer.analyze("<BlueK completion>", combined.toString(), analysis.environment, unitStarts = unitStarts),
+                    null, null, emptySet(), emptySet(),
+                )
+            }
+            analysis.analyzedScript = scriptAndType.script
+            regions.forEach { (file, start, end) ->
+                val lineStart = combined.substring(0, start).count { it == '\n' } + 1
+                val lineEnd = combined.substring(0, end).count { it == '\n' } + 1
+                analysis.projectFunctionRanges += Triple(file, lineStart, lineEnd)
+            }
+            val manifest = analysis.manifest()
+            if (manifest.contains("\"error\"")) return "{\"kind\":\"unresolved\"}"
+            val receiver = scriptAndType.receiverType
+            if (queryKind == "member" && receiver == null) return "{\"kind\":\"unresolved\"}"
+            val completionFrom = if (queryKind == "constructor") cursor else replaceFrom
+            val completionTo = if (queryKind == "constructor") cursor else replaceTo
+            val accessible = if (queryKind == "member") {
+                ",\"accessibleProperties\":${JSON.stringify(scriptAndType.accessibleProperties.toList().toTypedArray())},\"accessibleMethods\":${JSON.stringify(scriptAndType.accessibleMethods.toList().toTypedArray())}"
+            } else ""
+            "{\"kind\":\"$queryKind\",\"prefix\":${JSON.stringify(queryPrefix)},\"from\":$completionFrom,\"to\":$completionTo,\"className\":${JSON.stringify(if (queryKind == "member") receiver!!.name else constructorName)},\"type\":${JSON.stringify(receiver?.descriptiveName() ?: constructorName)},\"classContext\":${JSON.stringify(scriptAndType.classContext)}$accessible,\"manifest\":$manifest}"
+        } catch (_: Throwable) {
+            "{\"kind\":\"unresolved\"}"
+        }
+    }
+
     /** Resolve class and constructor references without executing any project code. */
     fun classRenameReferences(filenames: Array<String>, sources: Array<String>, className: String, withBluePlay: Boolean): String {
         if (filenames.size != sources.size) return "{\"error\":\"Project filenames and sources must match.\"}"

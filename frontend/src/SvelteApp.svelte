@@ -60,6 +60,7 @@
   });
   const editor: EditorWorkspace = new EditorWorkspace({
     project: () => project,
+    sourceAnalysis: () => sourceAnalysis,
     ui: () => ui,
     objects: () => objects,
     terminal: () => terminal,
@@ -694,6 +695,10 @@
         darkMode={ui.darkMode}
         commentShortcutLabel={ui.commentShortcutLabel}
         formatShortcutLabel={ui.formatShortcutLabel}
+        queryKotlinHelp={(fileId, source, cursor) => editor.queryKotlinHelp(fileId, source, cursor, {
+          optionalParameter: t("ui.editor.optionalParameter"),
+          inheritedFrom: (name) => t("ui.editor.inheritedFrom0", [name]),
+        })}
         codeMirror={editor.codeMirror}
         breakpointLines={editor.linesFor}
         toggleBreakpointAt={editor.toggleBreakpointAt}

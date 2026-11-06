@@ -127,7 +127,16 @@ import com.sunnychung.lib.multiplatform.kotlite.util.FunctionAndTypes
  * A REPL host appends every accepted input as a unit; code may use top-level
  * functions and properties declared later in its own unit, never in a later one.
  */
-open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: ExecutionEnvironment, private val retiredProperties: Map<Int, List<String>> = emptyMap(), private val unitStarts: Set<Int> = emptySet()) {
+open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: ExecutionEnvironment, private val retiredProperties: Map<Int, List<String>> = emptyMap(), private val unitStarts: Set<Int> = emptySet(), private val completionMarkerIndex: Int? = null) {
+    /** Receiver type captured at a syntax-only member completion hole. */
+    var completionReceiverType: TypeNode? = null
+        private set
+    var completionClassContext: String? = null
+        private set
+    var completionAccessibleProperties: Set<String> = emptySet()
+        private set
+    var completionAccessibleMethods: Set<String> = emptySet()
+        private set
     val builtinSymbolTable = SemanticAnalyzerSymbolTable(scopeLevel = 0, scopeName = ":builtin", scopeType = ScopeType.Script, parentScope = null)
     val symbolTable = SemanticAnalyzerSymbolTable(scopeLevel = 1, scopeName = ":global", scopeType = ScopeType.Script, parentScope = builtinSymbolTable)
     var currentScope = builtinSymbolTable
@@ -3486,6 +3495,40 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
 
     private fun NavigationNode.visitMember(modifier: Modifier, lookupType: IdentifierClassifier, isCheckWriteAccess: Boolean): DataType {
         subject.visit(modifier = modifier)
+
+        if (completionMarkerIndex != null && member.position.index == completionMarkerIndex) {
+            val resolved = subject.type().unboxClassTypeAsCompanion()
+            // Later block and initializer type queries must also skip the synthetic member lookup.
+            type = resolved
+            completionReceiverType = resolved
+            completionClassContext = currentClassName()
+            val receiverClass = currentScope.findClass(resolved.toDataType().nameWithNullable)?.first
+            if (receiverClass != null) {
+                val hierarchy = mutableListOf<ClassDefinition>()
+                val visited = mutableSetOf<String>()
+                fun collect(clazz: ClassDefinition) {
+                    if (!visited.add(clazz.fullQualifiedName)) return
+                    hierarchy += clazz
+                    clazz.superClass?.let(::collect)
+                    clazz.superInterfaces.forEach(::collect)
+                }
+                collect(receiverClass)
+                val propertyNames = hierarchy.flatMap { it.getDeclaredPropertiesInThisClass().keys + it.getDeclaredPropertyAccessorsInThisClass().keys }.toSet()
+                completionAccessibleProperties = propertyNames.filter { name ->
+                    val owner = receiverClass.findMemberPropertyOwnerName(name)
+                    (!receiverClass.isPrivateMemberProperty(name) || canAccessPrivateMembersOf(owner)) &&
+                        (!receiverClass.isProtectedMemberProperty(name) || canAccessProtectedMembersOf(owner))
+                }.toSet()
+                val methodNames = hierarchy.flatMap { it.getMemberFunctionsDeclaredInThisClass().values.map(FunctionDeclarationNode::name) }.toSet()
+                completionAccessibleMethods = methodNames.filter { name ->
+                    receiverClass.findMemberFunctionsWithEnclosingTypeNameByDeclaredName(name).values.any { (function, owner) ->
+                        (FunctionModifier.private !in function.modifiers || canAccessPrivateMembersOf(owner)) &&
+                            (FunctionModifier.protected !in function.modifiers || canAccessProtectedMembersOf(owner))
+                    }
+                }.toSet()
+            }
+            return resolved.toDataType()
+        }
 
         member.visit(modifier = modifier)
 

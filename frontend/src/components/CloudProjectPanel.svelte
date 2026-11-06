@@ -109,8 +109,6 @@
     display: flex;
     align-items: stretch;
     margin: 8px 0;
-    border: 1px solid #ccc;
-    border-radius: 5px;
   }
   .cloud-projects {
     flex: 1;
@@ -122,6 +120,8 @@
   .cloud-project-open {
     flex: 1;
     min-width: 0;
+    width: 100%;
+    margin: 0;
     display: flex;
     flex-direction: column;
     align-items: flex-start;

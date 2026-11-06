@@ -31,7 +31,9 @@ export function manifestClasses(manifest: SymbolManifest, files: ProjectFile[]):
       methods: [...item.methods, ...parents.flatMap(parent => parent.methods
         .filter(method => !own.has(signature(method)))
         .map(method => ({ ...method, inheritedFrom: method.inheritedFrom || parent.name })))],
-      properties: [...item.properties, ...parents.flatMap(parent => parent.properties.filter(p => !properties.has(p.name)))],
+      properties: [...item.properties, ...parents.flatMap(parent => parent.properties
+        .filter(p => !properties.has(p.name))
+        .map(property => ({ ...property, inheritedFrom: property.inheritedFrom || parent.name })))],
     };
   };
   return all.map(item => visit(item, new Set()));

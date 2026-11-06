@@ -214,7 +214,11 @@
     "resizeEditor0": "Größe des Editors {0} ändern",
     "toggleBreakpoint": "Haltepunkt in aktueller Zeile umschalten",
     "collectEditorWindowsIntoTabs": "Editorfenster als Tabs zusammenfassen",
-    "closeEditor": "Editor schließen"
+    "closeEditor": "Editor schließen",
+    "kotlinHelpUnavailable": "Der Kotlin-Typ konnte hier nicht aufgelöst werden.",
+    "kotlinHelpNoMatches": "Keine passenden Members.",
+    "inheritedFrom0": "Geerbt von {0}",
+    "optionalParameter": "optional"
   },
   "inspector": {
     "objectInspector": "Objektinspektor",

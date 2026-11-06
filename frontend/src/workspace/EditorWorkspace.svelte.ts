@@ -5,6 +5,9 @@ import { beginWindowDrag, beginWindowResize } from "../windowInteraction";
 import { createEditorActions } from "../editorActions";
 
 import type { Diagnostic } from "../../../runtime-contract/src/index";
+import type { CallableMeta } from "../../../runtime-contract/src/index";
+import type { ProjectSourceAnalysis } from "../projectSourceAnalysis";
+import { manifestClasses } from "../runtimeMetadata";
 
 import type { ProjectWorkspace } from "./ProjectWorkspace.svelte";
 import type { WorkspaceUi } from "./WorkspaceUi.svelte";
@@ -13,12 +16,34 @@ import type { TerminalWorkspace } from "./TerminalWorkspace.svelte";
 import type { ExecutionWorkspace } from "./ExecutionWorkspace.svelte";
 interface EditorWorkspaceHost {
   project: () => Readonly<
-    Pick<ProjectWorkspace, "currentFile" | "files" | "selectFile" | "resolvePendingClassRenames">
+    Pick<ProjectWorkspace, "currentFile" | "files" | "library" | "selectFile" | "resolvePendingClassRenames">
   >;
+  sourceAnalysis: () => ProjectSourceAnalysis;
   ui: () => Pick<WorkspaceUi, "activeWindow" | "dialogError">;
   objects: () => Pick<ObjectWorkspace, "dismissMenu">;
   terminal: () => Readonly<Pick<TerminalWorkspace, "terminalOpen">>;
   session: () => Pick<ExecutionWorkspace, "setBreakpoint" | "runtime">;
+}
+
+export interface KotlinHelpOption {
+  label: string;
+  type: string;
+  detail?: string;
+  insertText: string;
+  selectionStart?: number;
+  selectionEnd?: number;
+}
+export interface KotlinHelpResult { from: number; to: number; options: KotlinHelpOption[] }
+export interface KotlinHelpLabels { optionalParameter: string; inheritedFrom: (name: string) => string }
+
+function formatParameters(parameters: { name: string; type: { displayName: string }; hasDefault: boolean }[], optionalParameter: string) {
+  return parameters.map(parameter => `${parameter.name}: ${parameter.type.displayName}${parameter.hasDefault ? ` = ${optionalParameter}` : ""}`).join(", ");
+}
+function formatMethod(method: CallableMeta, optionalParameter: string) {
+  const generic = method.typeParameters?.length ? `<${method.typeParameters.join(", ")}>` : "";
+  const returnType = method.returnType.displayName;
+  const returnSuffix = returnType === "Unit" ? "" : `: ${returnType}`;
+  return `fun ${method.name}${generic}(${formatParameters(method.parameters, optionalParameter)})${returnSuffix}`;
 }
 
 interface EditorLayoutSnapshot {
@@ -30,6 +55,54 @@ interface EditorLayoutSnapshot {
 
 export class EditorWorkspace {
   constructor(private readonly host: EditorWorkspaceHost) {}
+  queryKotlinHelp = async (fileId: string, source: string, cursor: number, labels: KotlinHelpLabels): Promise<KotlinHelpResult | null> => {
+    const project = this.host.project();
+    const file = project.files.find(item => item.id === fileId);
+    if (!file) return null;
+    const files = project.files.map(item => item.id === fileId ? { ...item, source } : item);
+    const result = await this.host.sourceAnalysis().completion(files, file.fileName, cursor, project.library?.id === "blueplay");
+    if (!result) return null;
+    const classes = manifestClasses(result.manifest, files);
+    if (result.kind === "constructor") {
+      const klass = classes.find(item => item.name === result.className);
+      if (!klass || !klass.constructors.length) return null;
+      return {
+        from: result.from,
+        to: result.to,
+        options: klass.constructors.map(constructor => {
+          const parameters = constructor.parameters.map(parameter => parameter.name);
+          const insertText = parameters.length ? `${parameters.join(", ")})` : ")";
+          return {
+            label: `${klass.name}(${formatParameters(constructor.parameters, labels.optionalParameter)})`,
+            type: "class",
+            insertText,
+            ...(parameters.length ? { selectionStart: 0, selectionEnd: parameters[0].length } : {}),
+          };
+        }),
+      };
+    }
+    const klass = classes.find(item => item.name === result.className);
+    if (!klass) return null;
+    const options: KotlinHelpOption[] = [
+      ...klass.properties.filter(property => (result.accessibleProperties || []).includes(property.name) && property.name.startsWith(result.prefix)).map(property => ({
+        label: `${property.mutable ? "var" : "val"} ${property.name}: ${property.type.displayName}`,
+        type: "property",
+        detail: property.inheritedFrom ? labels.inheritedFrom(property.inheritedFrom) : undefined,
+        insertText: property.name,
+      })),
+      ...klass.methods.filter(method => (result.accessibleMethods || []).includes(method.name) && method.name.startsWith(result.prefix)).map(method => ({
+        label: formatMethod(method, labels.optionalParameter),
+        type: "function",
+        detail: method.inheritedFrom ? labels.inheritedFrom(method.inheritedFrom) : undefined,
+        insertText: `${method.name}(${method.parameters.map(parameter => parameter.name).join(", ")})`,
+        ...(method.parameters.length ? {
+          selectionStart: method.name.length + 1,
+          selectionEnd: method.name.length + 1 + method.parameters[0].name.length,
+        } : {}),
+      })),
+    ];
+    return { from: result.from, to: result.to, options };
+  };
   editorWindows: EditorWindowState[] = $state([]);
   activeEditorId = $state("");
   editorTabbed = $state(false);

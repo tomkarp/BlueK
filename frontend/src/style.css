@@ -708,6 +708,9 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 .editor-header h3{font-size:14px}
 .editor-header button{cursor:pointer;background:linear-gradient(#fff,#d5d5d5);border:1px solid #999;border-radius:4px;padding:5px 12px;font-size:14px;line-height:normal}
 .svelte-editor-host{background:#fff;border:1px solid #aaa;flex:1;height:auto;min-height:0;margin:0;overflow:hidden}
+.cm-tooltip-autocomplete>ul{max-height:60vh;overscroll-behavior:contain}
+.cm-tooltip-autocomplete .cm-completionDetail{color:#999}
+.dark .cm-tooltip-autocomplete .cm-completionDetail{color:#bbb}
 .terminal-modal,.editor-modal{z-index:20}
 .terminal-modal.window-active,.editor-modal.window-active{z-index:30}
 .stage-window.debug-editor-in-front{z-index:15}
