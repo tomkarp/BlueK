@@ -17,6 +17,10 @@ vendor/kotlite-interpreter/.gradle/
 vendor/kotlite-interpreter/build/
 .gradle-local/
 .DS_Store
+# Local environment configuration. Allow a checked-in example.
+*.env
+.env.*
+!.env.example
 # Local share-service data, including SQLite databases and WAL/SHM sidecars.
 server/data/
 .cache/
