@@ -14,6 +14,7 @@ test("ADMIN-01 administration shows actions, searches, previews public media and
   await page.route("**/api/admin/publications?*", route => route.fulfill({ json: { publications: [publication], more: false } }));
   await page.route("**/api/admin/publications/abcd2345efgh", route => route.fulfill({ json: { payload: { format: "bluek-project", projectName: "Example", files: [], resources: [{ path: "images/test.png", data: "data:image/png;base64,iVBORw0KGgo=" }] } } }));
   await page.route("**/api/admin/action", async route => { expect(route.request().postDataJSON()).toEqual({ action: "trust", target: "user-id" }); trusted = true; await route.fulfill({ json: { ok: true } }); });
+  await page.route("**/api/admin/password", async route => { expect(route.request().postDataJSON()).toEqual({ target: "user-id", password: "a-new-test-password" }); await route.fulfill({ json: { ok: true, username: "learner" } }); });
   await page.route("**/api/admin/audit", route => route.fulfill({ json: { entries: [{ createdAt: 1000000000, actor: "operator", action: "trust", target: "learner" }] } }));
   await page.goto("/");
   await page.locator(".toolbar-account button").click();
@@ -31,6 +32,11 @@ test("ADMIN-01 administration shows actions, searches, previews public media and
   await expect(admin).toContainText("learner");
   await admin.getByRole("button", { name: "Grant trust", exact: true }).click();
   await expect(admin.getByRole("button", { name: "Revoke trust" })).toBeVisible();
+  await admin.getByRole("button", { name: "Set password", exact: true }).click();
+  await admin.getByLabel("New password (10–128 characters)").fill("a-new-test-password");
+  await admin.getByLabel("Repeat password").fill("a-new-test-password");
+  await admin.getByRole("button", { name: "Save password", exact: true }).click();
+  await expect(admin.getByRole("button", { name: "Set password", exact: true })).toBeVisible();
   await admin.getByRole("button", { name: "Shared links" }).click();
   await expect(admin).toContainText("Example");
   await admin.getByRole("button", { name: "Show content" }).click();

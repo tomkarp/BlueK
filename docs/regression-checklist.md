@@ -13,6 +13,17 @@ test-results/. Full Kotlin conformance is not implied by any passing suite.
 Latest storage/account/publication verification: [2026-10-25 results](#publication-lifetime-by-authentication--2026-10-25).
 Latest project navigation verification: [2026-10-22 results](#new-open-save-and-share-navigation--2026-10-22).
 
+### Admin account passwords — 2026-11-06
+
+- ADMIN-04: Admins can set a 10–128 character password for a non-admin account.
+  Server hashing, admin-only access, admin-account protection, session revocation
+  and audit redaction passed in `npm run test:share-server`. ADMIN-01/02 and the
+  password form passed in Chromium and WebKit (2/2 each). Typecheck, Svelte
+  diagnostics and i18n passed with zero diagnostics. Password material is
+  excluded from audit data.
+- Visual acceptance of the password form in the live admin window remains
+  pending.
+
 2026-11-02: Issue 35 showed the app extending below the visible iPad Safari
 viewport. The root now uses the dynamic viewport height where supported, with
 `100vh` as a fallback. No browser verification has been run; iPad visual
@@ -154,6 +165,7 @@ below. No universal performance guarantee is implied.
 | GUI-35 | Short-link display, copy, expiry and loading roundtrip | Recorded browser pass |
 | API-01 | Additive legacy migration, permanent identifier reservations, account/session ownership, immutable publications (7 days anonymous, 30 days signed-in), UTF-8 limits, media policy, blocks and retention; content reporting deferred | Real temporary-SQLite API test passed for anonymous/account project and program deadlines, 2026-10-25; migration/deployment completed, production load/capacity measurement not recorded |
 | ADMIN-03 | Account count and stored project payload totals; per-account private/shared/combined storage and sorting by each measure; account list remains usable if the summary endpoint is unavailable | Implemented 2026-10-31; API/GUI checks and visual acceptance pending |
+| ADMIN-04 | Admin sets a non-admin account password; length validation, admin-only authorization, admin protection, session revocation and audit redaction | API and Chromium/WebKit passed 2026-11-06; visual acceptance pending |
 | HANDOFF-01–14 | Main/beta static app imports editorial inf-schule JSON using one central script and plain chapter links; exact opener/origin, normal runtime/drafts, cancellation, pending edits, local origins, popup fallback and keyboard retry | Chromium 14/14 and WebKit 14/14 passed, 2026-10-24; includes dev.inf-schule.de and domain lookalikes. User confirmed the published chapter handoff to main was tested, 2026-10-26. |
 | CLOUD-01 | Own/counterfeit media rejected by project and program publication UI; local JSON retains every resource | Chromium passed; all 42 actual standards independently checked by client/server helper, 2026-10-22 |
 | CLOUD-02 | Delayed public loads cannot replace edits made while pending; draft survives reload | Chromium passed, 2026-10-22 |

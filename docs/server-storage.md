@@ -209,7 +209,7 @@ current database account on every admin request, so revocation applies to
 existing sessions immediately. Web actions cannot target administrator accounts;
 use the CLI for them. Blocking an account revokes its sessions. The account
 dialog opens a separate admin-only window to search accounts and active publications,
-change trust or block status, delete non-admin accounts, inspect public project
+change trust or block status, set passwords for non-admin accounts, delete non-admin accounts, inspect public project
 contents and media without executing code, and block or unblock public links.
 Private project content is never exposed by this view. Account and publication lists are paginated in groups of 100 and can be narrowed
 by username or code.
@@ -232,6 +232,9 @@ newly trusted account receives its own audit record.
 
 CLI mutations and web admin actions create an audit record with time, actor ID,
 action and target ID or publication code, not passwords or project content.
+Admin-set passwords follow the same 10–128 character bounds and Scrypt hashing
+as account registration, clear login throttling for the target, and revoke all
+target sessions. Administrator accounts cannot be changed from the web UI.
 The interface displays up to 100 records, resolving existing account IDs to
 usernames. Records older than 90 days are removed during startup/hourly cleanup;
 backups follow the operator's retention policy. Deleting an account removes its

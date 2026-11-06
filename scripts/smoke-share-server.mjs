@@ -286,6 +286,16 @@ try {
   assert.equal((await post('/api/admin/action', { action: 'block-account', target: victim.data.user.id }, administrator.cookie)).status, 200);
   assert.equal((await request('/api/storage', { cookie: victim.cookie })).status, 401);
   assert.equal((await post('/api/admin/action', { action: 'unblock-account', target: victim.data.user.id }, administrator.cookie)).status, 200);
+  assert.equal((await post('/api/admin/password', { target: victim.data.user.id, password: '123456789' }, administrator.cookie)).status, 400, 'Admin-set passwords use the account password length rules');
+  assert.equal((await post('/api/admin/password', { target: administrator.data.user.id, password: 'admin-reset-password' }, administrator.cookie)).status, 403, 'Admin accounts cannot be reset through this action');
+  const adminPasswordResult = await post('/api/admin/password', { target: victim.data.user.id, password: 'admin-set-new-password' }, administrator.cookie);
+  assert.equal(adminPasswordResult.status, 200);
+  assert.equal(adminPasswordResult.data.username, 'victim');
+  assert.equal((await request('/api/storage', { cookie: victim.cookie })).status, 401, 'Admin-set password revokes all existing sessions');
+  const resetLogin = await post('/api/account/login', { username: 'victim', password: 'admin-set-new-password' });
+  assert.equal(resetLogin.status, 200, 'Admin-set password can be used to sign in');
+  assert.equal((await request('/api/admin/audit', { cookie: administrator.cookie })).data.entries.some(entry => entry.action === 'set-password' && entry.target === 'victim'), true, 'Password changes are audited');
+  assert.equal((await request('/api/admin/audit', { cookie: administrator.cookie })).data.entries.some(entry => entry.action === 'set-password' && entry.target.includes('admin-set-new-password')), false, 'Audit never records password material');
   assert.equal((await post('/api/admin/action', { action: 'delete-account', target: victim.data.user.id }, administrator.cookie)).status, 200);
   assert.equal((await readProject(victimPublication.data.code)).status, 410);
   assert.equal(db.prepare('SELECT id FROM private_projects WHERE id = ?').get(victimPrivate.data.id), undefined);

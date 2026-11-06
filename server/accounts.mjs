@@ -56,6 +56,24 @@ export function createAccounts(database) {
       hashing--;
     }
   }
+  async function setPasswordByAdmin(id, password, authorize) {
+    if (typeof password !== "string" || password.length < 10 || password.length > 128)
+      throw new HttpError(400, "credentials-format");
+    const user = database.prepare("SELECT id, username, admin FROM accounts WHERE id = ?").get(id);
+    if (!user) throw new HttpError(404, "account-missing");
+    if (user.admin) throw new HttpError(403, "admin-protected");
+    const encoded = await passwordHash(password);
+    database.transaction(() => {
+      authorize();
+      const current = database.prepare("SELECT admin FROM accounts WHERE id = ?").get(id);
+      if (!current) throw new HttpError(404, "account-missing");
+      if (current.admin) throw new HttpError(403, "admin-protected");
+      database.prepare("UPDATE accounts SET password_hash = ? WHERE id = ?").run(encoded, id);
+      database.prepare("DELETE FROM sessions WHERE account_id = ?").run(id);
+      database.prepare("DELETE FROM login_attempts WHERE username = ?").run(user.username);
+    })();
+    return user.username;
+  }
   const dummy = `scrypt-v1:${randomBytes(16).toString("hex")}:${randomBytes(64).toString("hex")}`;
   function normalizedUsername(value) {
     const username =
@@ -447,5 +465,5 @@ export function createAccounts(database) {
       .prepare("DELETE FROM accounts WHERE last_used_at < ?")
       .run(cutoff.getTime());
   }
-  return { handle, session, requireWrite, cleanup };
+  return { handle, session, requireWrite, cleanup, setPasswordByAdmin };
 }

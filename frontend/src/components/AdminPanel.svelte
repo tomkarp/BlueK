@@ -14,7 +14,7 @@
     trust: "ui.admin.trust", untrust: "ui.admin.untrust", "block-account": "ui.admin.blockAccount",
     "unblock-account": "ui.admin.unblockAccount", "delete-account": "ui.admin.deleteAccount",
     "block-publication": "ui.admin.blockPublication", "unblock-publication": "ui.admin.unblockPublication",
-    "delete-publication": "ui.admin.deletePublication",
+    "delete-publication": "ui.admin.deletePublication", "set-password": "ui.admin.setPassword",
     "grant-admin": "ui.admin.grantAdmin", "revoke-admin": "ui.admin.revokeAdmin",
   };
   let { onclose }: { onclose: () => void } = $props();
@@ -24,6 +24,9 @@
   let accountSort = $state<"username" | "private" | "publications" | "total">("username");
   let bulkUsernames = $state("");
   let bulkResult = $state("");
+  let passwordTarget = $state("");
+  let newPassword = $state("");
+  let confirmPassword = $state("");
   let offset = $state(0);
   let busy = $state(false);
   let error = $state("");
@@ -71,6 +74,16 @@
     busy = false;
     await load();
   }
+  async function setPassword(account: Account) {
+    if (busy || newPassword.length < 10 || newPassword.length > 128 || newPassword !== confirmPassword) return;
+    if (!window.confirm(t("ui.admin.setPasswordConfirm", [account.username]))) return;
+    busy = true; error = "";
+    try {
+      await apiRequest("/api/admin/password", { method: "POST", body: JSON.stringify({ target: account.id, password: newPassword }) });
+      passwordTarget = ""; newPassword = ""; confirmPassword = "";
+    } catch { error = t("ui.admin.actionError"); busy = false; return; }
+    busy = false; await load();
+  }
   async function inspect(code: string) {
     if (inspected?.code === code) { inspected = null; return; }
     busy = true; error = "";
@@ -101,7 +114,7 @@
     <h3 id="admin-title">{t("ui.admin.title")}</h3>
     <div class="admin-content">
       <nav class="admin-tabs" aria-label={t("ui.admin.title")}>
-        {#each tabs as item}
+        {#each tabs as item (item)}
           <button aria-pressed={tab === item} disabled={busy} onclick={() => switchTab(item)}>{t(`ui.admin.${item}`)}</button>
         {/each}
       </nav>
@@ -153,9 +166,18 @@
             <li><div class="admin-item-info"><strong>{account.username}</strong><span>{t(account.admin ? "ui.admin.administrator" : account.trusted ? "ui.admin.trusted" : "ui.admin.ordinary")} · {t(account.blocked ? "ui.admin.blocked" : "ui.admin.active")}</span><span>{t("ui.admin.lastUsed", [new Date(account.lastUsedAt).toLocaleDateString($language.locale)])}</span><span>{t("ui.admin.accountCounts", [account.privateCount, account.publicationCount])}</span><span>{t("ui.admin.privateStorage", [formatBytes(account.privateBytes)])}</span><span>{t("ui.admin.publicationStorage", [formatBytes(account.publicationBytes)])}</span><span>{t("ui.admin.accountTotalStorage", [formatBytes(account.totalBytes)])}</span></div>
               {#if !account.admin}<div class="admin-actions">
                 <button disabled={busy} onclick={() => act(account.trusted ? "untrust" : "trust", account.id, account.trusted ? t("ui.admin.untrustConfirm", [account.username]) : undefined)}>{t(account.trusted ? "ui.admin.untrust" : "ui.admin.trust")}</button>
+                <button disabled={busy} aria-expanded={passwordTarget === account.id} onclick={() => { passwordTarget = passwordTarget === account.id ? "" : account.id; newPassword = ""; confirmPassword = ""; }}>{t("ui.admin.setPassword")}</button>
                 <button disabled={busy} onclick={() => act(account.blocked ? "unblock-account" : "block-account", account.id, account.blocked ? undefined : t("ui.admin.blockAccountConfirm", [account.username]))}>{t(account.blocked ? "ui.admin.unblockAccount" : "ui.admin.blockAccount")}</button>
                 <button disabled={busy} onclick={() => act("delete-account", account.id, t("ui.admin.deleteConfirm", [account.username]))}>{t("ui.admin.deleteAccount")}</button>
-              </div>{/if}</li>
+              </div>
+              {#if passwordTarget === account.id}
+                <form class="admin-password-form" onsubmit={(event) => { event.preventDefault(); void setPassword(account); }}>
+                  <label>{t("ui.admin.newPassword")}<input type="password" bind:value={newPassword} minlength="10" maxlength="128" autocomplete="new-password" required disabled={busy} /></label>
+                  <label>{t("ui.admin.confirmPassword")}<input type="password" bind:value={confirmPassword} minlength="10" maxlength="128" autocomplete="new-password" required disabled={busy} /></label>
+                  {#if confirmPassword && newPassword !== confirmPassword}<p class="dialog-error" role="alert">{t("ui.admin.passwordMismatch")}</p>{/if}
+                  <button type="submit" disabled={busy || newPassword.length < 10 || newPassword.length > 128 || newPassword !== confirmPassword}>{t("ui.admin.savePassword")}</button>
+                </form>
+              {/if}{/if}</li>
           {/each}
         </ul>
       {:else if tab === "publications"}
@@ -166,8 +188,8 @@
               {#if publication.available}<div class="admin-actions"><button disabled={busy} onclick={() => inspect(publication.code)}>{t(inspected?.code === publication.code ? "ui.admin.hide" : "ui.admin.inspect")}</button><button disabled={busy} onclick={() => act(publication.blocked ? "unblock-publication" : "block-publication", publication.code, publication.blocked ? undefined : t("ui.admin.blockPublicationConfirm", [publication.code]))}>{t(publication.blocked ? "ui.admin.unblockPublication" : "ui.admin.blockPublication")}</button><button disabled={busy} onclick={() => act("delete-publication", publication.code, t("ui.admin.deletePublicationConfirm", [publication.code]))}>{t("ui.admin.deletePublication")}</button></div>{/if}
               {#if inspected?.code === publication.code}
                 <div class="admin-preview">
-                  {#each inspected.images as image}<figure><img src={image.data} alt={image.path} /><figcaption>{image.path}</figcaption></figure>{/each}
-                  {#each inspected.sounds as sound}<figure><figcaption>{sound.path}</figcaption><audio controls src={sound.data}><track kind="captions" /></audio></figure>{/each}
+                  {#each inspected.images as image (image.path)}<figure><img src={image.data} alt={image.path} /><figcaption>{image.path}</figcaption></figure>{/each}
+                  {#each inspected.sounds as sound (sound.path)}<figure><figcaption>{sound.path}</figcaption><audio controls src={sound.data}><track kind="captions" /></audio></figure>{/each}
                   <pre class="admin-inspection">{inspected.text}</pre>
                 </div>
               {/if}</li>
@@ -175,7 +197,7 @@
         </ul>
       {:else}
         {#if !busy && !audit.length}<p>{t("ui.admin.auditEmpty")}</p>{/if}
-        <ul class="admin-list">{#each audit as entry}<li><span>{new Date(entry.createdAt).toLocaleString($language.locale)} · {entry.actor || t("ui.admin.deletedAccount")} · {auditLabels[entry.action] ? t(auditLabels[entry.action]) : entry.action} · {entry.target || t("ui.admin.deletedAccount")}</span></li>{/each}</ul>
+        <ul class="admin-list">{#each audit as entry (`${entry.createdAt}-${entry.actor}-${entry.action}-${entry.target}`)}<li><span>{new Date(entry.createdAt).toLocaleString($language.locale)} · {entry.actor || t("ui.admin.deletedAccount")} · {auditLabels[entry.action] ? t(auditLabels[entry.action]) : entry.action} · {entry.target || t("ui.admin.deletedAccount")}</span></li>{/each}</ul>
       {/if}
     </div>
     <div class="dialog-actions"><button onclick={onclose}>{t("ui.admin.close")}</button></div>
@@ -190,6 +212,10 @@
   .admin-bulk-trust { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; margin: 12px 0; }
   .admin-bulk-trust label, .admin-bulk-trust p { grid-column: 1 / -1; margin: 0; }
   .admin-bulk-trust textarea { box-sizing: border-box; width: 100%; min-width: 0; resize: vertical; }
+  .admin-password-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); flex-basis: 100%; gap: 8px; align-items: end; }
+  .admin-password-form label { display: flex; flex-direction: column; gap: 4px; }
+  .admin-password-form input { box-sizing: border-box; width: 100%; min-width: 0; }
+  .admin-password-form .dialog-error { grid-column: 1 / -1; margin: 0; }
   .admin-tabs button[aria-pressed="true"] { background: #087ff5; color: white; }
   .admin-search { margin: 12px 0; }
   .admin-search input { flex: 1 1 180px; width: auto; margin: 0; }

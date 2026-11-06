@@ -231,6 +231,21 @@ async function handle(request, response) {
         LEFT JOIN accounts AS target_account ON target_account.id = admin_audit.target
         ORDER BY admin_audit.id DESC LIMIT 100`).all() });
     }
+    if (request.method === "POST" && path === "/api/admin/password") {
+      accounts.requireWrite(request);
+      const input = await body(request, 4096);
+      const current = accounts.session(request);
+      if (!current.admin || current.id !== actor.id) throw new HttpError(403, "admin-required");
+      if (!record(input) || typeof input.target !== "string" || typeof input.password !== "string")
+        throw new HttpError(400, "invalid-admin-password");
+      const username = await accounts.setPasswordByAdmin(input.target, input.password, () => {
+        const stillAdmin = accounts.session(request);
+        if (!stillAdmin.admin || stillAdmin.id !== actor.id) throw new HttpError(403, "admin-required");
+      });
+      database.prepare("INSERT INTO admin_audit(created_at, actor_id, action, target) VALUES (?, ?, 'set-password', ?)")
+        .run(Date.now(), actor.id, input.target);
+      return json(response, 200, { ok: true, username });
+    }
     if (request.method === "POST" && path === "/api/admin/trust-batch") {
       accounts.requireWrite(request);
       const input = await body(request, 32768);
