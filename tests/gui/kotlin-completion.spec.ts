@@ -1,5 +1,45 @@
 import { expect, test } from "@playwright/test";
 
+test("GUI-164 suggests implicit class and file declarations", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "platform", { value: "MacIntel" });
+    localStorage.setItem("bluek-language", "en");
+  });
+  const files = [
+    { fileName: "Base.kt", source: "open class Base { fun inherited() {} }" },
+    { fileName: "Probe.kt", source: ["class Probe : Base() {", "    private val count = 1", "    fun draw(value: Int) {}", "    fun use() {", "        ", "    }", "}"].join("\n") },
+    { fileName: "Functions.kt", source: ["val score = 1", "fun show(value: Int) {}", "fun main() {", "    score", "}"].join("\n") },
+  ];
+  await page.goto("/#bluek=p1." + Buffer.from(JSON.stringify({ format: "bluek-project", version: 1, files })).toString("base64url"));
+  await page.getByRole("button", { name: "Probe", exact: true }).dblclick();
+  let content = page.locator(".editor-dialog .cm-content");
+  await content.locator(".cm-line").nth(4).click();
+  await page.keyboard.press("End");
+  await page.keyboard.press("Meta+Period");
+  await expect(page.getByRole("option", { name: "val count: Int", exact: true })).toBeVisible();
+  await expect(page.getByRole("option", { name: "fun draw(value: Int)", exact: true })).toBeVisible();
+  await expect(page.getByRole("option", { name: /fun inherited\(\).*Inherited from Base/ })).toBeVisible();
+  await expect(page.getByRole("option", { name: /println/ })).toHaveCount(0);
+  await page.getByRole("option", { name: "fun draw(value: Int)", exact: true }).click();
+  await page.keyboard.type("42");
+  await expect(content).toContainText("draw(42)");
+  await page.getByRole("button", { name: "Functions", exact: true }).dblclick();
+  content = page.locator(".editor-dialog .cm-content").last();
+  await content.locator(".cm-line").filter({ hasText: "sc" }).last().click();
+  await page.keyboard.press("End");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("Meta+Period");
+  await expect(page.getByRole("option", { name: "val score: Int", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("Meta+Period");
+  await expect(page.getByRole("option", { name: "fun show(value: Int)", exact: true })).toBeVisible();
+  await expect(page.getByRole("option", { name: /println/ })).toHaveCount(0);
+});
+
 const project = {
   format: "bluek-project",
   version: 1,

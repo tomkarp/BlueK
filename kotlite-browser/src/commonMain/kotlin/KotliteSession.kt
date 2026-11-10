@@ -1000,7 +1000,7 @@ class KotliteSession {
             val previous = tokens.getOrNull(memberIndex - 1)
             val isMember = memberToken?.type == TokenType.Identifier && previous?.value == "." &&
                 (memberToken.position.index <= cursor || memberToken.position.index == cursor)
-            val isTrailingDot = memberToken?.value == "." && memberToken.endExclusive.index <= cursor
+            val isTrailingDot = memberToken?.value == "." && memberToken.endExclusive.index == cursor
             val marker = "__bluek_completion_hole__"
             var queryKind: String
             var queryPrefix = ""
@@ -1022,18 +1022,34 @@ class KotliteSession {
                 val openIndex = tokens.indexOfLast { it.value == "(" && it.endExclusive.index <= cursor }
                 val open = tokens.getOrNull(openIndex)
                 val classToken = tokens.getOrNull(openIndex - 1)
-                if (open == null || classToken?.type != TokenType.Identifier || cursor < open.endExclusive.index ||
-                    original.substring(open.endExclusive.index, cursor).any { !it.isWhitespace() }) return "{\"kind\":\"unresolved\"}"
                 val close = tokens.getOrNull(openIndex + 1)?.takeIf { it.value == ")" }
-                if (tokens.drop(openIndex + 1).any { it.position.index < cursor && it !== close }) return "{\"kind\":\"unresolved\"}"
-                constructorName = classToken.value as String
-                replaceFrom = classToken.position.index
-                replaceTo = close?.endExclusive?.index ?: cursor
-                // The completion target may intentionally have no arguments yet. A bottom-typed
-                // expression keeps the surrounding source analyzable without evaluating it or
-                // asking the constructor resolver to reject the incomplete call.
-                activeEdited = original.substring(0, replaceFrom) + "null!!" + original.substring(replaceTo)
-                queryKind = "constructor"
+                if (open != null && classToken?.type == TokenType.Identifier &&
+                    original.substring(open.endExclusive.index, cursor).all { it.isWhitespace() }) {
+                    constructorName = classToken.value as String
+                    replaceFrom = classToken.position.index
+                    replaceTo = close?.endExclusive?.index ?: cursor
+                    activeEdited = original.substring(0, replaceFrom) + "null!!" + original.substring(replaceTo)
+                    queryKind = "constructor"
+                } else {
+                    if (tokenAtCursor >= 0) {
+                        replaceFrom = memberToken!!.position.index
+                        replaceTo = memberToken.endExclusive.index
+                        queryPrefix = original.substring(replaceFrom, cursor)
+                    }
+                    val placeholder = original.substring(0, replaceFrom) + "null!!" + original.substring(replaceTo)
+                    val parsed = parse(activeFile, placeholder)
+                    val enclosing = parsed.nodes.filterIsInstance<ClassDeclarationNode>()
+                        .filter { replaceFrom >= it.position.index && replaceFrom < it.sourceEnd }
+                        .maxByOrNull { it.position.index }
+                    if (enclosing != null) {
+                        activeEdited = original.substring(0, replaceFrom) + "this." + marker + original.substring(replaceTo)
+                        markerIndexInActive = replaceFrom + 5
+                        queryKind = "implicitMember"
+                    } else {
+                        activeEdited = placeholder
+                        queryKind = "topLevel"
+                    }
+                }
             }
 
             val analysis = KotliteSession()
@@ -1049,7 +1065,7 @@ class KotliteSession {
                 regions += Triple(filenames[index], start, combined.length)
             }
             val unitStarts = regions.drop(1).map { it.second }
-            val scriptAndType = if (queryKind == "member") {
+            val scriptAndType = if (queryKind == "member" || queryKind == "implicitMember") {
                 val globalMarker = regions[activeIndex].second + markerIndexInActive
                 ReplAnalyzer.analyzeForCompletion("<BlueK completion>", combined.toString(), analysis.environment, globalMarker, unitStarts)
             } else {
@@ -1067,13 +1083,19 @@ class KotliteSession {
             val manifest = analysis.manifest()
             if (manifest.contains("\"error\"")) return "{\"kind\":\"unresolved\"}"
             val receiver = scriptAndType.receiverType
-            if (queryKind == "member" && receiver == null) return "{\"kind\":\"unresolved\"}"
+            if ((queryKind == "member" || queryKind == "implicitMember") && receiver == null) return "{\"kind\":\"unresolved\"}"
             val completionFrom = if (queryKind == "constructor") cursor else replaceFrom
             val completionTo = if (queryKind == "constructor") cursor else replaceTo
-            val accessible = if (queryKind == "member") {
+            val accessible = if (queryKind == "member" || queryKind == "implicitMember") {
                 ",\"accessibleProperties\":${JSON.stringify(scriptAndType.accessibleProperties.toList().toTypedArray())},\"accessibleMethods\":${JSON.stringify(scriptAndType.accessibleMethods.toList().toTypedArray())}"
             } else ""
-            "{\"kind\":\"$queryKind\",\"prefix\":${JSON.stringify(queryPrefix)},\"from\":$completionFrom,\"to\":$completionTo,\"className\":${JSON.stringify(if (queryKind == "member") receiver!!.name else constructorName)},\"type\":${JSON.stringify(receiver?.descriptiveName() ?: constructorName)},\"classContext\":${JSON.stringify(scriptAndType.classContext)}$accessible,\"manifest\":$manifest}"
+            val properties = if (queryKind == "topLevel") {
+                val region = regions[activeIndex]
+                scriptAndType.script.nodes.filterIsInstance<PropertyDeclarationNode>()
+                    .filter { it.position.index in region.second until region.third && it.receiver == null }
+                    .joinToString(",", "[", "]") { jsonProperty("<top-level>", it.name, it.type, it.isMutable, visibility(it.modifiers), false, false, false) }
+            } else "[]"
+            "{\"kind\":\"$queryKind\",\"prefix\":${JSON.stringify(queryPrefix)},\"from\":$completionFrom,\"to\":$completionTo,\"className\":${JSON.stringify(receiver?.name ?: constructorName)},\"type\":${JSON.stringify(receiver?.descriptiveName() ?: constructorName)},\"classContext\":${JSON.stringify(scriptAndType.classContext)}$accessible,\"topLevelProperties\":$properties,\"manifest\":$manifest}"
         } catch (_: Throwable) {
             "{\"kind\":\"unresolved\"}"
         }

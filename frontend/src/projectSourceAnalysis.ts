@@ -1,10 +1,10 @@
 import { createLocalRuntimeWorker } from "./localRuntimeWorkerFactory";
-import type { ProjectFile, SymbolManifest } from "../../runtime-contract/src/index";
+import type { ManifestProperty, ProjectFile, SymbolManifest } from "../../runtime-contract/src/index";
 
 export type FileClassification = { kind: "class" | "functions" | "mixed" | "unknown"; className?: string; classNameFrom?: number };
 export type ClassReferenceEdit = { fileName: string; from: number; to: number };
 export type CompletionAnalysis = {
-  kind: "member" | "constructor";
+  kind: "member" | "constructor" | "implicitMember" | "topLevel";
   prefix: string;
   from: number;
   to: number;
@@ -12,6 +12,7 @@ export type CompletionAnalysis = {
   type: string;
   accessibleProperties?: string[];
   accessibleMethods?: string[];
+  topLevelProperties?: ManifestProperty[];
   manifest: SymbolManifest;
 };
 

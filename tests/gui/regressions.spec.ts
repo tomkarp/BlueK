@@ -461,6 +461,29 @@ test("GUI-39 editor font size is configurable in Settings", async ({
     .toBe(true);
 });
 
+test("GUI-39 line numbers stay aligned after inserting lines at the beginning", async ({ page }) => {
+  await project(page, "fun main() {\n    println(1)\n}");
+  await page.locator(".classcard").dblclick();
+  const editor = page.locator(".editor-dialog");
+  const content = editor.locator(".cm-content");
+  await page.getByLabel("Settings", { exact: true }).click();
+  await page.getByRole("dialog", { name: "Settings" }).getByLabel("Font size", { exact: true }).selectOption("30");
+  await page.getByRole("dialog", { name: "Settings" }).getByRole("button", { name: "Close" }).click();
+  await content.click();
+  for (let i = 0; i < 5; i++) {
+    await page.keyboard.press("ControlOrMeta+Home");
+    await page.keyboard.press("Enter");
+    await expect.poll(() => editor.evaluate(root => {
+      const lines = [...root.querySelectorAll<HTMLElement>(".cm-line")];
+      const numbers = [...root.querySelectorAll<HTMLElement>(".cm-lineNumbers .cm-gutterElement")];
+      return lines.slice(0, 4).every((line, index) => {
+        const number = numbers.find(item => item.textContent?.trim() === String(index + 1));
+        return number && Math.abs(number.getBoundingClientRect().top - line.getBoundingClientRect().top) < 1;
+      });
+    })).toBe(true);
+  }
+});
+
 test("GUI-40 Settings and New File dialog stay above windows", async ({
   page,
 }) => {

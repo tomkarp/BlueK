@@ -82,15 +82,17 @@ export class EditorWorkspace {
       };
     }
     const klass = classes.find(item => item.name === result.className);
-    if (!klass) return null;
+    const properties = result.kind === "topLevel" ? result.topLevelProperties || [] : klass?.properties || [];
+    const methods = result.kind === "topLevel" ? result.manifest.functions.filter(method => method.sourceFile === file.fileName) : klass?.methods || [];
+    if (result.kind !== "topLevel" && !klass) return null;
     const options: KotlinHelpOption[] = [
-      ...klass.properties.filter(property => (result.accessibleProperties || []).includes(property.name) && property.name.startsWith(result.prefix)).map(property => ({
+      ...properties.filter(property => (result.kind === "topLevel" || (result.accessibleProperties || []).includes(property.name)) && property.name.startsWith(result.prefix)).map(property => ({
         label: `${property.mutable ? "var" : "val"} ${property.name}: ${property.type.displayName}`,
         type: "property",
         detail: property.inheritedFrom ? labels.inheritedFrom(property.inheritedFrom) : undefined,
         insertText: property.name,
       })),
-      ...klass.methods.filter(method => (result.accessibleMethods || []).includes(method.name) && method.name.startsWith(result.prefix)).map(method => ({
+      ...methods.filter(method => (result.kind === "topLevel" || (result.accessibleMethods || []).includes(method.name)) && method.name.startsWith(result.prefix)).map(method => ({
         label: formatMethod(method, labels.optionalParameter),
         type: "function",
         detail: method.inheritedFrom ? labels.inheritedFrom(method.inheritedFrom) : undefined,
