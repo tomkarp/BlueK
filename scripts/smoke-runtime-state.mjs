@@ -292,8 +292,12 @@ assert.equal(convertedCard?.kind, 'functions');
 assert.ok(convertedCard.methods.some(method => method.name === 'main'));
 assert.notEqual((await projectClient.execute({ op: 'main', fileName: 'Hauptprogramm.kt' })).kind, 'error');
 assert.equal(projectOutputs.splice(0).join(''), 'converted\n');
-for (const template of ['kotlin-example', 'blueplay-empty', 'blueplay']) {
-  const payload = JSON.parse(await readFile(`frontend/public/examples/${template}.bluek.json`, 'utf8'));
+for (const [template, file] of [
+  ['kotlin-example', 'tests/fixtures/project-examples/kotlin-example.bluek.json'],
+  ['blueplay-empty', 'frontend/public/examples/blueplay-empty.bluek.json'],
+  ['blueplay', 'frontend/public/examples/blueplay.bluek.json'],
+]) {
+  const payload = JSON.parse(await readFile(file, 'utf8'));
   const builtinFiles = new Set(['World.kt', 'Actor.kt', 'Image.kt', 'BluePlayFunctions.kt', 'BluePlayHelpers.kt']);
   const projectFiles = payload.library?.id === 'blueplay'
     ? payload.files.filter(entry => !builtinFiles.has(entry.fileName))

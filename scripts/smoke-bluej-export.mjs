@@ -68,12 +68,12 @@ const targetsOf = properties => Array.from({ length: Number(properties.get('pack
   const music = 'data:audio/mpeg;base64,SUQzAwAAAAAAAA==';
   const project = {
     ...example,
-    files: [...example.files, { fileName: 'FigureTest.kt', kind: 'class', source: 'import kotlin.test.*\n\nclass FigureTest\n', testTarget: 'Figure.kt', isTestClass: true }],
+    files: [...example.files, { fileName: 'DogTest.kt', kind: 'class', source: 'import kotlin.test.*\n\nclass DogTest\n', testTarget: 'Dog.kt', isTestClass: true }],
     resources: [...(example.resources ?? []), { path: 'images/cat.png', data: customCat }, { path: 'sounds/music.mp3', data: music }],
-    cardPositions: { 'World.kt': { x: 300, y: 20 }, 'Figure.kt': { x: 600, y: 300 } },
+    cardPositions: { 'World.kt': { x: 300, y: 20 }, 'Dog.kt': { x: 600, y: 300 } },
   };
   assert.deepEqual(blueJExportLimits(example), { testClasses: [], mp3Sounds: [] }, 'The example needs no notice.');
-  assert.deepEqual(blueJExportLimits(project), { testClasses: ['FigureTest'], mp3Sounds: ['music.mp3'] });
+  assert.deepEqual(blueJExportLimits(project), { testClasses: ['DogTest'], mp3Sounds: ['music.mp3'] });
   const files = unpack(blueJProjectZip(project, 'Game'));
   const names = Object.keys(files);
   const library = ['Actor.kt', 'BluePlayFunctions.kt', 'Image.kt', 'World.kt'];
@@ -81,7 +81,7 @@ const targetsOf = properties => Array.from({ length: Number(properties.get('pack
     assert.equal(decoder.decode(files[`Game/${name}`]), await readFile(`assets/bluej-blueplay/${name}`, 'utf8'), `${name} is the BlueJ library source.`);
   assert.ok(decoder.decode(files['Game/BluePlayFunctions.kt']).includes('import javax.swing'), 'The exported library is the JVM version.');
   for (const file of example.files) assert.equal(decoder.decode(files[`Game/${file.fileName}`]), file.source);
-  assert.equal('Game/FigureTest.kt' in files, false);
+  assert.equal('Game/DogTest.kt' in files, false);
   const standardImages = (await readdir('assets/standard-images')).filter(name => name.endsWith('.png'));
   const standardSounds = (await readdir('assets/standard-sounds')).filter(name => name.endsWith('.wav'));
   assert.deepEqual(names.filter(name => name.startsWith('Game/images/')).map(name => name.slice(12)).sort(), [...new Set([...standardImages, ...(example.resources ?? []).map(resource => resource.path.slice(7))])].sort());
@@ -95,7 +95,7 @@ const targetsOf = properties => Array.from({ length: Number(properties.get('pack
     ...example.files.map(file => [file.fileName.slice(0, -3), file.kind === 'functions' ? 'KotlinFileTarget' : 'ClassTarget']),
   ]);
   assert.deepEqual(targets.find(target => target.name === 'World'), { name: 'World', type: 'ClassTarget', x: 300, y: 20 });
-  assert.deepEqual(targets.find(target => target.name === 'Figure'), { name: 'Figure', type: 'ClassTarget', x: 600, y: 300 });
+  assert.deepEqual(targets.find(target => target.name === 'Dog'), { name: 'Dog', type: 'ClassTarget', x: 600, y: 300 });
 
   // Importing the export again restores the BluePlay project; unchanged
   // standard media stay standard resources instead of becoming project files.
@@ -109,7 +109,7 @@ const targetsOf = properties => Array.from({ length: Number(properties.get('pack
   assert.deepEqual(imported.resources.map(resource => resource.path).sort(), expected);
   assert.ok(expected.includes('images/cat.png') && expected.includes('sounds/music.mp3'));
   assert.equal(imported.resources.find(resource => resource.path === 'images/cat.png').data, customCat);
-  assert.deepEqual(imported.cardPositions['Figure.kt'], { x: 600, y: 300 });
+  assert.deepEqual(imported.cardPositions['Dog.kt'], { x: 600, y: 300 });
 }
 
 console.log('BlueJ export passed: Kotlin files, README.TXT, package.bluej targets and positions, BlueJ BluePlay library, all standard images/sounds with project overrides, omitted test classes, notice lists for test classes/MP3 and import round trips.');

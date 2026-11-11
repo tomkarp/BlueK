@@ -302,15 +302,10 @@
     "emptyProject": "Leeres Projekt",
     "startWithABlankBlueKProject": "Mit einem leeren BlueK-Projekt beginnen.",
     "bluePlayTemplate": "BluePlay-Vorlage",
-    "startWithTheBuiltInWorldActorAnd": "Mit der integrierten Bibliothek World, Actor und Image beginnen.",
+    "startWithTheBuiltInWorldActorAnd": "Enthält die BluePlay-Bibliothek mit World, Actor und Image.",
     "whatIsBluePlay": "Was ist BluePlay?",
     "bluePlayExample": "BluePlay-Beispiel",
-    "openASmallRunnableWorldAndActorProject": "Ein kleines ausführbares Projekt mit World und Actor öffnen.",
-    "theFollowingExamplesCurrentlyExistToTestAnd": "Die folgenden Beispiele dienen zum Testen und Vorführen von BlueK. Sie werden später entfernt.",
-    "blueKDemoProject": "BlueK-Demoprojekt",
-    "exploreClassesInheritanceAndObjectInteractionWithPerson": "Klassen, Vererbung und Objektinteraktion mit Person und Student erkunden.",
-    "spaceInvadersDemo": "Space-Invaders-Demo",
-    "playASimplifiedBluePlayGameWithAMovable": "Ein vereinfachtes BluePlay-Spiel mit steuerbarem Verteidiger und Angreifern spielen.",
+    "openASmallRunnableWorldAndActorProject": "Ein einfaches Beispiel mit einem laufenden Hund.",
     "closeBluePlayInformation": "BluePlay-Information schließen",
     "bluePlayIsALightweightKotlinLibraryForCreating": "BluePlay ist eine kleine Kotlin-Bibliothek für interaktive Programme und Spiele. Sie bietet Welten, Akteure, Bilder und Sounds und ruft beim Ausführen wiederholt deine act()-Methoden auf.",
     "theTemplateProvidesAnEmptyStartingPoint": "Die Vorlage bietet einen leeren Ausgangspunkt.",
@@ -446,9 +441,7 @@
     "createProjectLink": "Bearbeitungslink erstellen",
     "back": "Zurück",
     "signInToOpen": "Melde dich an, um deine privaten Projekte zu öffnen.",
-    "signInToSave": "Melde dich an, um dieses Projekt in deinem Konto zu speichern.",
-    "newProjects": "Leere Projekte und Vorlagen",
-    "examples": "Beispiele"
+    "signInToSave": "Melde dich an, um dieses Projekt in deinem Konto zu speichern."
   },
   "readme": {
     "markdownHelp": "Markdown-Hilfe",

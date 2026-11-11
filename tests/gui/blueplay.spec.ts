@@ -20,12 +20,23 @@ async function loadBluePlay(page: Page) {
   return stage;
 }
 
-async function loadSpaceInvaders(page: Page, openDefenderEditor = false) {
+async function loadSpaceInvaders(
+  page: Page,
+  openDefenderEditor = false,
+  transform: (project: any) => void = () => {},
+) {
+  const project = JSON.parse(await readFile(
+    'tests/fixtures/project-examples/space-invaders.bluek.json',
+    'utf8',
+  ));
+  transform(project);
   await page.goto('/');
-  await page.getByRole('button', { name: 'New', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Create New Project' });
-  await dialog.getByRole('button', { name: /^Space Invaders Demo/ }).click();
-  await expect(dialog).toBeHidden();
+  await page.getByRole('button', { name: 'Open', exact: true }).click();
+  await page.getByLabel('Choose project file').setInputFiles({
+    name: 'space-invaders.bluek.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(project)),
+  });
   if (openDefenderEditor) await page.locator('.classcard[aria-label="Defender"]').dblclick();
   const input = page.getByLabel('Codepad input');
   await input.fill('main()');
@@ -37,13 +48,11 @@ async function loadSpaceInvaders(page: Page, openDefenderEditor = false) {
 
 for (const apple of [false, true]) test(`GUI-153 held Space keeps game focus and source unchanged (${apple ? 'apple' : 'standard sprite'})`, async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('bluek-ui-settings', JSON.stringify({ vimMode: true })));
-  if (apple) await page.route('**/examples/space-invaders.bluek.json', async route => {
-    const project = await (await route.fetch()).json();
+  const stage = await loadSpaceInvaders(page, true, project => {
+    if (!apple) return;
     const defender = project.files.find((file: { fileName: string }) => file.fileName === 'Defender.kt');
     defender.source = defender.source.replace('image = sprite', 'image = Image("apple.png")');
-    await route.fulfill({ json: project });
   });
-  const stage = await loadSpaceInvaders(page, true);
   const content = page.locator('.editor-dialog .cm-content');
   await content.press('i');
   const source = await content.innerText();
@@ -269,7 +278,7 @@ test('GUI-76 BluePlay templates use the reference card order and shared grid spa
   }
 
   await expectCards(
-    ['BluePlayFunctions', 'World', 'Actor', 'Image', 'Main', 'MyWorld', 'Figure'],
+    ['BluePlayFunctions', 'World', 'Actor', 'Image', 'Main', 'MyWorld', 'Dog'],
     [[80, 40], [360, 40], [640, 40], [920, 40], [80, 200], [360, 200], [640, 200]],
   );
 
@@ -546,13 +555,9 @@ test('RT-11 Run stays active, Pause stops it, and speed can be dragged during Ru
 
 test('PERF-01 Space Invaders advances in coherent frames while a key is held', async ({ page }) => {
   // Match the reported scenario without changing the shipped example.
-  await page.route('**/examples/space-invaders.bluek.json', async route => {
-    const response = await route.fetch();
-    const project = await response.json();
+  const stage = await loadSpaceInvaders(page, false, project => {
     for (const file of project.files) file.source = file.source.replaceAll('x -= 5', 'x -= 1').replaceAll('x += 5', 'x += 1');
-    await route.fulfill({ json: project });
   });
-  const stage = await loadSpaceInvaders(page);
   const slider = stage.locator('input[type="range"]');
   await slider.fill('95');
   await stage.evaluate((element) => {
@@ -597,7 +602,7 @@ test('GUI-53 canvas clicks target visible Actor pixels and ignore transparent pi
   const stage = await loadBluePlay(page);
   const input = page.getByLabel('Codepad input');
   const entries = page.locator('.codepad-entry');
-  await input.fill('val clickWorld = MyWorld(); val clickActor = Figure(); clickWorld.addObject(clickActor, 100, 100); clickWorld.show()');
+  await input.fill('val clickWorld = MyWorld(); val clickActor = Dog(); clickWorld.addObject(clickActor, 100, 100); clickWorld.show()');
   await input.press('Enter');
   await expect(entries).toHaveCount(2);
 
@@ -659,7 +664,7 @@ test('GUI-69 standard graphics are available everywhere and a missing name is re
   await expect(entries.last()).toContainText('true');
 
   // The stage draws it, so the standard graphics reach the renderer as well.
-  await input.fill('val duckWorld = MyWorld(); val duck = Figure(); duck.image = Image("duck.png"); duckWorld.addObject(duck, 100, 100); duckWorld.show()');
+  await input.fill('val duckWorld = MyWorld(); val duck = Dog(); duck.image = Image("duck.png"); duckWorld.addObject(duck, 100, 100); duckWorld.show()');
   await input.press('Enter');
   await expect(entries).toHaveCount(3);
   await expect(stage).toBeVisible();
@@ -1079,7 +1084,7 @@ test('GUI-145 BlueJ export downloads a BlueJ project with the BlueJ library and 
   expect(text('package.bluej')).toContain('target1.name=BluePlayFunctions');
   expect(text('BluePlayFunctions.kt')).toContain('import javax.swing');
   expect(text('World.kt')).toContain('open class World');
-  expect(text('Figure.kt')).toContain('class Figure');
+  expect(text('Dog.kt')).toContain('class Dog');
   expect(Object.keys(entries).filter(name => name.startsWith('Game/images/'))).toHaveLength(STANDARD_IMAGES.length);
   expect(Object.keys(entries).filter(name => name.startsWith('Game/sounds/'))).toHaveLength(STANDARD_SOUNDS.length);
   // Without test classes or MP3 sounds there is nothing to point out.
@@ -1092,7 +1097,7 @@ test('GUI-145 BlueJ export downloads a BlueJ project with the BlueJ library and 
   await page.getByRole('button', { name: 'Open', exact: true }).click();
   await page.getByLabel('Choose project file').setInputFiles(file);
   await expect(page.locator('.classcard[aria-label="World"]')).toBeVisible();
-  await expect(page.locator('.classcard[aria-label="Figure"]')).toBeVisible();
+  await expect(page.locator('.classcard[aria-label="Dog"]')).toBeVisible();
 });
 
 test('GUI-146 BlueJ export names left-out test classes and MP3 sounds only when the project has them, until the notice is closed', async ({ page }, info) => {
@@ -1100,7 +1105,7 @@ test('GUI-146 BlueJ export names left-out test classes and MP3 sounds only when 
   const project = {
     ...example,
     projectName: 'Sounds',
-    files: [...example.files, { fileName: 'FigureTest.kt', kind: 'class', source: 'import kotlin.test.*\n\nclass FigureTest\n', testTarget: 'Figure.kt', isTestClass: true }],
+    files: [...example.files, { fileName: 'DogTest.kt', kind: 'class', source: 'import kotlin.test.*\n\nclass DogTest\n', testTarget: 'Dog.kt', isTestClass: true }],
     resources: [...(example.resources ?? []), { path: 'sounds/music.mp3', data: 'data:audio/mpeg;base64,SUQzAwAAAAAAAA==' }],
   };
   const source = info.outputPath('Sounds.bluek.json');
@@ -1109,13 +1114,13 @@ test('GUI-146 BlueJ export names left-out test classes and MP3 sounds only when 
   await page.goto('/');
   await page.getByRole('button', { name: 'Open', exact: true }).click();
   await page.getByLabel('Choose project file').setInputFiles(source);
-  await expect(page.locator('.classcard[aria-label="FigureTest"]')).toBeVisible();
+  await expect(page.locator('.classcard[aria-label="DogTest"]')).toBeVisible();
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   const [download] = await Promise.all([
     page.waitForEvent('download'), page.getByRole('button', { name: /^Export BlueJ Project/ }).click(),
   ]);
   const notice = page.locator('.bluej-export-notice');
-  await expect(notice).toContainText('Test classes are not exported because BlueJ has no kotlin.test: FigureTest.');
+  await expect(notice).toContainText('Test classes are not exported because BlueJ has no kotlin.test: DogTest.');
   await expect(notice).toContainText('does not play MP3 files: music.mp3');
   // The notice stays until it is closed.
   await page.clock.fastForward(120_000);
@@ -1126,5 +1131,5 @@ test('GUI-146 BlueJ export names left-out test classes and MP3 sounds only when 
   await download.saveAs(file);
   const entries = unzipSync(new Uint8Array(await readFile(file)));
   expect(Object.keys(entries)).toContain('Sounds/sounds/music.mp3');
-  expect(Object.keys(entries)).not.toContain('Sounds/FigureTest.kt');
+  expect(Object.keys(entries)).not.toContain('Sounds/DogTest.kt');
 });

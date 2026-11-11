@@ -13,6 +13,22 @@ test-results/. Full Kotlin conformance is not implied by any passing suite.
 Latest storage/account/publication verification: [2026-10-25 results](#publication-lifetime-by-authentication--2026-10-25).
 Latest project navigation verification: [2026-10-22 results](#new-open-save-and-share-navigation--2026-10-22).
 
+### Project examples — 2026-11-11
+
+- GUI-01 now covers the empty project, BluePlay template and small BluePlay
+  example with no section headings; the BlueK/Space Invaders demos were removed.
+  The two demo payloads now live under test fixtures and are no longer included
+  in hosted or offline assets. Test expectations and the user guide were
+  updated. No tests have been run; visual acceptance remains pending.
+
+2026-11-12: BluePlay template descriptions in English and German now identify
+the built-in library. No tests or browser checks have been run.
+
+2026-11-12: BluePlay example descriptions in English and German now call out the
+running dog. The example uses a `Dog` actor with standard `dog.png`, without a
+project image resource. Runtime/browser test expectations were updated; no
+tests or browser checks have been run.
+
 ### Admin account passwords — 2026-11-06
 
 - ADMIN-04: Admins can set a 10–128 character password for a non-admin account.
@@ -110,7 +126,7 @@ below. No universal performance guarantee is implied.
 
 | ID | Behavior | Recorded evidence / remaining acceptance |
 | --- | --- | --- |
-| GUI-01 | Project templates, demo grouping and order | Recorded browser pass; `test:blueplay-demos` |
+| GUI-01 | Empty project, BluePlay template and small BluePlay example, without section headings | Updated tests; browser verification pending |
 | GUI-02 | Parameterless creation still asks for an object name | Recorded automated pass |
 | GUI-03 | Inspector computed property values | Recorded browser pass; user confirmation recorded |
 | GUI-04 | Inspector getter refresh after property/codepad changes | Recorded browser pass |

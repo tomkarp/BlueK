@@ -9,11 +9,13 @@ const api = globalThis['bluek-kotlite-browser'];
 // resources; only their paths are needed to tell a typo from a real file.
 const standardImages = [...(await readFile(new URL('../frontend/src/standardImages.generated.ts', import.meta.url), 'utf8'))
   .matchAll(/path: "images\/([^"]+)"/g)].map(match => match[1]);
-if (!standardImages.includes('figure.png') || !standardImages.includes('duck.png')) throw new Error('The standard graphics manifest is missing BluePlay names.');
+if (!standardImages.includes('dog.png') || !standardImages.includes('duck.png')) throw new Error('The standard graphics manifest is missing BluePlay names.');
 const standardManifest = standardImages.map(name => `images/${name}\0\0\0`).join('\n');
 const staticProject = JSON.parse(await readFile(new URL('../frontend/public/examples/blueplay.bluek.json', import.meta.url), 'utf8'));
-const figureResource = staticProject.resources?.find(resource => resource.path === 'images/figure.png');
-if (!figureResource?.data?.startsWith('data:image/png;base64,')) throw new Error('The bundled BluePlay example image is missing from the static project asset.');
+if (staticProject.resources?.length) throw new Error('The bundled BluePlay example should use standard images without project resources.');
+const dogSource = staticProject.files.find(file => file.fileName === 'Dog.kt')?.source;
+if (!dogSource?.includes('Image("dog.png")') || !staticProject.files.find(file => file.fileName === 'MyWorld.kt')?.source.includes('Dog()'))
+  throw new Error('The bundled BluePlay example should show its running Dog with the standard dog image.');
 if (staticProject.library?.id !== 'blueplay' || staticProject.library.version !== 1) throw new Error('The bundled BluePlay example must declare library blueplay v1.');
 const expectOk = (json, label) => {
   if (json.kind === 'error') throw new Error(`${label}: ${json.display}`);
@@ -24,7 +26,7 @@ const expectOk = (json, label) => {
 const nativeSession = api.bluekCreateKotliteSession();
 nativeSession.configureBluePlay(true, 'native-blueplay-smoke');
 nativeSession.setBluePlayResources(standardManifest);
-const nativeFiles = ['Figure.kt', 'MyWorld.kt', 'Main.kt'];
+const nativeFiles = ['Dog.kt', 'MyWorld.kt', 'Main.kt'];
 const nativeSources = await Promise.all(nativeFiles.map(file => readFile(new URL(`../examples/blueplay/${file}`, import.meta.url), 'utf8')));
 const awaitCompletion = (start) => new Promise(resolve => {
   const started = JSON.parse(start(() => {}, value => resolve(JSON.parse(value))));

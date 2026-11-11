@@ -108,7 +108,7 @@ a helper passing does not prove a visible browser interaction.
 | `npm run test:flow-state` | Definite initialization, nullability and simple-capture fixtures in split projects, checked against the bundled interpreter |
 | `npm run test:flow-state:kotlin` | Compile the same flow-state fixtures with installed Kotlin/JVM and run accepted programs |
 | `npm run test:blueplay-api` | Independent pinned BlueJ API, help manifest and original student examples |
-| `npm run test:blueplay-demos` | Space Invaders template in the interpreter |
+| `npm run test:blueplay-demos` | Space Invaders runtime fixture in the interpreter |
 | `npm run test:inspector`, `test:codepad-flow`, `test:project-format`, `test:program-export`, `test:blueplay-stage`, `test:player-worker`, `test:ui` | Focused TypeScript/helper behavior |
 | `npm run test:window-interaction` | Window geometry, minimum sizes, pointer cancellation and title buttons |
 | `npm run test:workspace` | Compiled Svelte controllers, cloneable arguments, isolated app instances and stale results |

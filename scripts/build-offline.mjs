@@ -31,7 +31,7 @@ const formatterGzipBase64 = gzipSync(brotliDecompressSync(await readFile(
   path.join(repository, 'node_modules/@scalar/kotlin-fmt/kotlin_fmt.wasm.br'),
 )), { level: 9 }).toString('base64');
 const projectTemplates = Object.fromEntries(await Promise.all([
-  'blueplay-empty.bluek.json', 'blueplay.bluek.json', 'kotlin-example.bluek.json', 'space-invaders.bluek.json',
+  'blueplay-empty.bluek.json', 'blueplay.bluek.json',
 ].map(async file => [file, JSON.parse(await readFile(path.join(repository, 'frontend/public/examples', file), 'utf8'))])));
 const assetsId = '\0bluek-offline-assets';
 const wasmId = '\0bluek-offline-unused-wasm-url';

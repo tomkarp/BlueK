@@ -117,7 +117,7 @@ const otherWorld = 'val otherWorld = World(50,50,1); otherWorld.addObject(b, 5, 
 assert.equal(evaluate('w.numberOfObjects == 0 && b.world === otherWorld').display, 'true');
 
 // Original student files are immutable fixtures from the BlueJ version, not BlueK examples.
-const files = ['Figure.kt', 'MyWorld.kt', 'Main.kt'];
+const files = ['Dog.kt', 'MyWorld.kt', 'Main.kt'];
 const original = await create(files, await Promise.all(files.map(file => readFile(new URL(`../tests/fixtures/blueplay-reference/${file}`, import.meta.url), 'utf8'))));
 ok(await complete((input, done) => original.startBluePlayMain(null, input, done)), 'original main');
 assert.deepEqual(JSON.parse(original.takeStage()).stage.objects.map(a => [a.x, a.y]), [[100, 200]]);

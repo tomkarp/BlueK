@@ -94,10 +94,10 @@ test('GUI-62 file:// runs Kotlin, input, reset and restores/imports/exports proj
   verify();
 });
 
-test('GUI-62 all project templates are available locally; BluePlay renders standard images and steps', async ({ page }) => {
+test('GUI-62 remaining project choices are available locally; BluePlay renders standard images and steps', async ({ page }) => {
   const verify = await open(page);
   page.on('dialog', dialog => dialog.accept());
-  for (const choice of ['BluePlay Template', 'BlueK Demo Project', 'Space Invaders Demo', 'BluePlay Example']) {
+  for (const choice of ['BluePlay Template', 'BluePlay Example']) {
     await page.getByRole('button', { name: 'New', exact: true }).click();
     await page.getByRole('dialog', { name: 'Create New Project' }).getByRole('button', { name: new RegExp('^' + choice) }).click();
     await expect(page.getByRole('dialog', { name: 'Create New Project' })).toBeHidden();

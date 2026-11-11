@@ -542,8 +542,6 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 .new-project-dialog p{color:#555;margin:0 0 14px}
 .project-choice-list{gap:8px;display:grid}
 .project-choice-row{grid-template-columns:1fr;gap:8px;display:grid}
-.project-choice-secondary{border-top:1px solid #ddd;gap:8px;margin-top:18px;padding-top:14px;display:grid}
-.project-choice-note{color:#777;margin:0;font-size:12px}
 .project-choice-list button:not(.project-info-button){text-align:left;color:var(--action-text);cursor:pointer;background:var(--action-bg);border:1px solid var(--action-border);border-radius:6px;flex-direction:column;align-items:flex-start;gap:4px;width:100%;margin:0;padding:12px 14px;line-height:1.4;display:flex}
 .project-choice-list button:not(.project-info-button):hover:not(:disabled){color:var(--action-text);background:var(--action-hover-bg);border-color:var(--action-hover-border)}
 .project-choice-list button:not(.project-info-button):focus-visible{outline:2px solid var(--action-focus);outline-offset:2px}
@@ -1172,7 +1170,6 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 .dark .project-info-panel a{color:#8fd1e3}
 .dark .project-info-panel p{color:#ccc}
 .dark .project-info-close{color:#ccc!important}
-.dark .new-project-dialog .project-choice-note{color:#bbb}
 .program-export-choices{align-content:start}
 .program-export-choices>button{min-height:80px}
 .program-export-options{grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:12px;min-width:0;padding:10px 12px;display:grid}
@@ -1244,5 +1241,3 @@ button.standard-image-tile{padding:0;box-shadow:0 1px 2px #aaa}
 .dark .transfer-details{color:#bbb}
 .dark .share-action-section+.share-action-section{border-color:#555}
 .new-project-dialog h4{margin:12px 0 4px}
-.new-project-dialog .project-choice-secondary{margin-top:0}
-.new-project-dialog .project-choice-note{color:#777;margin:0 0 10px;font-size:12px}

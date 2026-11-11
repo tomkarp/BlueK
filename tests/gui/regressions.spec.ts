@@ -2547,7 +2547,7 @@ test("GUI-05 explicitly clearing history also clears command recall", async ({ p
   await expect(input).toHaveValue("6");
 });
 
-test("GUI-01 new project offers all templates and can be cancelled", async ({
+test("GUI-01 new project offers the remaining projects and can be cancelled", async ({
   page,
 }) => {
   await project(page);
@@ -2557,8 +2557,6 @@ test("GUI-01 new project offers all templates and can be cancelled", async ({
     "Empty Project",
     "BluePlay Template",
     "BluePlay Example",
-    "BlueK Demo Project",
-    "Space Invaders Demo",
   ].map((name) => dialog.getByRole("button", { name: new RegExp("^" + name) }));
   for (const choice of choices) await expect(choice).toBeEnabled();
   const boxes = await Promise.all(
@@ -2568,14 +2566,8 @@ test("GUI-01 new project offers all templates and can be cancelled", async ({
     expect(boxes[index]!.y).toBeGreaterThan(boxes[index - 1]!.y);
     expect(Math.abs(boxes[index]!.x - boxes[0]!.x)).toBeLessThan(2);
   }
-  // Keep the main templates and examples visibly grouped by the section labels.
-  await expect(dialog.locator("h4")).toHaveText([
-    "Empty projects and templates",
-    "Examples",
-  ]);
-  await expect(dialog.locator(".project-choice-note")).toHaveText(
-    "The following examples currently exist to test and demonstrate BlueK. They will be removed in the long run.",
-  );
+  // Project choices appear directly below the dialog title without section headings.
+  await expect(dialog.locator("h4")).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
 });
@@ -2687,17 +2679,6 @@ for (const name of ["BluePlay Template", "BluePlay Example"]) {
     await expect(
       page.locator('.classcard[aria-label="World"]'),
     ).not.toContainText("BluePlay API");
-  });
-}
-
-for (const name of ["BlueK Demo Project", "Space Invaders Demo"]) {
-  test(`GUI-01 creates ${name}`, async ({ page }) => {
-    await project(page);
-    await page.getByRole("button", { name: "New", exact: true }).click();
-    const dialog = page.getByRole("dialog", { name: "Create New Project" });
-    await dialog.getByRole("button", { name: new RegExp("^" + name) }).click();
-    await expect(dialog).toBeHidden();
-    await expect(page.locator(".classcard").first()).toBeVisible();
   });
 }
 

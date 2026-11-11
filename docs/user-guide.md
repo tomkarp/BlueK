@@ -21,7 +21,8 @@ program output and compiler/runtime errors keep their original text.
 
 ## Projects and editing
 
-**New** offers an empty project, BluePlay templates and demo projects.
+**New** offers an empty project, a BluePlay template and a small runnable
+BluePlay example.
 Each Kotlin file contains either one class, interface or enum, or top-level
 functions and properties. Inheritance appears as arrows in the diagram.
 A project can also have a name and a README note.
@@ -105,7 +106,8 @@ library when applicable; Kotlin files, card positions, images and sounds are
 imported. If a ZIP or folder contains several projects, choose one from the
 project list. Cancel leaves the current project open. Java source is not interpreted.
 
-**New** offers empty projects and BluePlay templates first, followed by examples.
+**New** offers an empty project, a BluePlay template and a small runnable
+BluePlay example.
 The left-hand editing/run/test controls and the terminal/window layout are unchanged.
 The view buttons remain in the upper-right toolbar; a separator distinguishes
 **Sign in / Account** from these display controls.

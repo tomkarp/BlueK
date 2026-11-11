@@ -17,7 +17,7 @@ const link =
   "/#bluek=p1." + Buffer.from(JSON.stringify(project)).toString("base64url");
 
 for (const locale of ["en", "de"])
-  test(`NAV-04 new project explains that examples are temporary (${locale})`, async ({
+  test(`NAV-04 new project keeps only the small BluePlay example (${locale})`, async ({
     page,
   }) => {
     const de = locale === "de";
@@ -29,11 +29,22 @@ for (const locale of ["en", "de"])
     await page
       .getByRole("button", { name: de ? "Neu" : "New", exact: true })
       .click();
-    await expect(page.locator(".project-choice-note")).toHaveText(
-      de
-        ? "Die folgenden Beispiele dienen zum Testen und Vorführen von BlueK. Sie werden später entfernt."
-        : "The following examples currently exist to test and demonstrate BlueK. They will be removed in the long run.",
-    );
+    const dialog = page.getByRole("dialog", {
+      name: de ? "Neues Projekt erstellen" : "Create New Project",
+    });
+    await expect(dialog.getByRole("button", {
+      name: de ? /^BluePlay-Beispiel/ : /^BluePlay Example/,
+    })).toBeVisible();
+    await expect(dialog.getByRole("heading", {
+      name: de ? "Beispiele" : "Examples",
+      exact: true,
+    })).toHaveCount(0);
+    await expect(dialog.getByRole("button", {
+      name: de ? /^BlueK-Demoprojekt/ : /^BlueK Demo Project/,
+    })).toHaveCount(0);
+    await expect(dialog.getByRole("button", {
+      name: de ? /^Space-Invaders-Demo/ : /^Space Invaders Demo/,
+    })).toHaveCount(0);
   });
 
 for (const locale of ["en", "de"])

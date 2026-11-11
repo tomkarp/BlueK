@@ -30,7 +30,6 @@
       aria-labelledby="new-project-title"
     >
       <h3 id="new-project-title">{t("ui.projects.createNewProject")}</h3>
-      <h4>{t("ui.transfer.newProjects")}</h4>
       <div class="project-choice-list">
         <div class="project-choice-row">
           <button onclick={() => chooseTemplate("empty")}
@@ -50,10 +49,6 @@
             aria-label={t("ui.projects.whatIsBluePlay")}>?</button
           >
         </div>
-        <h4>{t("ui.transfer.examples")}</h4>
-        <p class="project-choice-note">
-          {t("ui.projects.theFollowingExamplesCurrentlyExistToTestAnd")}
-        </p>
         <div class="project-choice-with-info">
           <button onclick={() => chooseTemplate("blueplay")}
             ><strong>{t("ui.projects.bluePlayExample")}</strong><span
@@ -64,26 +59,6 @@
             onclick={stopPropagation(() => (projectInfo = "example"))}
             aria-label={t("ui.projects.whatIsBluePlay")}>?</button
           >
-        </div>
-        <div class="project-choice-secondary">
-          <div class="project-choice-row">
-            <button onclick={() => chooseTemplate("bluek-demo")}
-              ><strong>{t("ui.projects.blueKDemoProject")}</strong><span
-                >{t(
-                  "ui.projects.exploreClassesInheritanceAndObjectInteractionWithPerson",
-                )}</span
-              ></button
-            >
-          </div>
-          <div class="project-choice-row">
-            <button onclick={() => chooseTemplate("space-invaders")}
-              ><strong>{t("ui.projects.spaceInvadersDemo")}</strong><span
-                >{t(
-                  "ui.projects.playASimplifiedBluePlayGameWithAMovable",
-                )}</span
-              ></button
-            >
-          </div>
         </div>
       </div>
       <div class="dialog-actions">

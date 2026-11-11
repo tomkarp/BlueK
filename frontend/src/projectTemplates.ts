@@ -3,8 +3,6 @@ import offlineAssets from './offlineAssets';
 const templateFiles: Record<string, string> = {
   'empty-blueplay': 'blueplay-empty.bluek.json',
   blueplay: 'blueplay.bluek.json',
-  'bluek-demo': 'kotlin-example.bluek.json',
-  'space-invaders': 'space-invaders.bluek.json',
 };
 
 /** Static HTTP assets online, fresh copies of embedded payloads under file://. */

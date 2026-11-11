@@ -4,7 +4,7 @@ import vm from 'node:vm';
 
 // BLUEK_BUNDLE selects another interpreter build, e.g. the unminified one for profiling (DEVELOPMENT.md).
 vm.runInThisContext(await readFile(process.env.BLUEK_BUNDLE || 'frontend/public/kotlite/bluek-kotlite-browser.js', 'utf8'));
-const project = JSON.parse(await readFile('frontend/public/examples/space-invaders.bluek.json', 'utf8'));
+const project = JSON.parse(await readFile('tests/fixtures/project-examples/space-invaders.bluek.json', 'utf8'));
 const complete = start => new Promise((resolve, reject) => {
   const accept = raw => {
     const value = JSON.parse(raw);

@@ -1,10 +1,10 @@
 /**
- * A simple figure that slowly walks to the right.
+ * A simple dog that walks to the right.
  */
-class Figure : Actor() {
+class Dog : Actor() {
 
     init {
-        image = Image("figure.png")
+        image = Image("dog.png")
     }
 
     override fun act() {

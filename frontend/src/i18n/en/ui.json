@@ -302,15 +302,10 @@
     "emptyProject": "Empty Project",
     "startWithABlankBlueKProject": "Start with a blank BlueK project.",
     "bluePlayTemplate": "BluePlay Template",
-    "startWithTheBuiltInWorldActorAnd": "Start with the built-in World, Actor and Image library.",
+    "startWithTheBuiltInWorldActorAnd": "Includes the BluePlay library with World, Actor and Image.",
     "whatIsBluePlay": "What is BluePlay?",
     "bluePlayExample": "BluePlay Example",
-    "openASmallRunnableWorldAndActorProject": "Open a small runnable World and Actor project.",
-    "theFollowingExamplesCurrentlyExistToTestAnd": "The following examples currently exist to test and demonstrate BlueK. They will be removed in the long run.",
-    "blueKDemoProject": "BlueK Demo Project",
-    "exploreClassesInheritanceAndObjectInteractionWithPerson": "Explore classes, inheritance and object interaction with Person and Student.",
-    "spaceInvadersDemo": "Space Invaders Demo",
-    "playASimplifiedBluePlayGameWithAMovable": "Play a simplified BluePlay game with a movable defender and invaders.",
+    "openASmallRunnableWorldAndActorProject": "A simple example with a running dog.",
     "closeBluePlayInformation": "Close BluePlay information",
     "bluePlayIsALightweightKotlinLibraryForCreating": "BluePlay is a lightweight Kotlin library for creating interactive programs and games. It provides worlds, actors, images and sounds, and calls your act() methods repeatedly when you run the simulation.",
     "theTemplateProvidesAnEmptyStartingPoint": "The template provides an empty starting point.",
@@ -446,9 +441,7 @@
     "createProjectLink": "Create editing link",
     "back": "Back",
     "signInToOpen": "Sign in to open your private projects.",
-    "signInToSave": "Sign in to save this project in your account.",
-    "newProjects": "Empty projects and templates",
-    "examples": "Examples"
+    "signInToSave": "Sign in to save this project in your account."
   },
   "readme": {
     "markdownHelp": "Markdown help",
