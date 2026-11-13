@@ -15,6 +15,7 @@ const outIndex = process.argv.indexOf('--out');
 const target = path.resolve(repository, outIndex === -1 ? 'dist-offline' : process.argv[outIndex + 1]);
 const bundle = path.join(target, 'BlueK-offline');
 const downloads = path.join(repository, 'frontend/public/downloads');
+const favicon = encodeURIComponent(await readFile(path.join(repository, 'frontend/public/bluek.svg'), 'utf8'));
 const withZip = !process.argv.includes('--no-zip');
 if (process.argv.includes('--if-missing') && existsSync(path.join(downloads, 'BlueK-offline.zip'))) process.exit(0);
 
@@ -68,6 +69,7 @@ if (/<\/style/i.test(css)) throw new Error('CSS cannot be inlined safely.');
 const html = `<!doctype html>
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>BlueK</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,${favicon}">
 <style>${css}</style></head>
 <body><div id="root"></div><script>${inlineScript(app)}</script></body>
 </html>\n`;
