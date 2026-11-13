@@ -111,14 +111,14 @@ test('EXP-03 compile errors, a missing main and runtime errors are shown instead
     'before\nException in thread "main" IndexOutOfBoundsException: index: 5, size: 1\n    at get(Kotlin library)\n    at main(App.kt:4)\n');
 });
 
-test('EXP-04 the project can be downloaded as .bluek.json and imported in BlueK from JSON', async ({ page, context, baseURL }, testInfo) => {
+test('EXP-04 the project can be downloaded as .bluek and imported in BlueK from JSON', async ({ page, context, baseURL }, testInfo) => {
   const url = await exportFile(testInfo, 'links', greeter, 'App.kt', { projectName: 'Hunde: 1/2', readme: '# Hunde' }, baseURL + '/');
   await openPlayer(page, url);
   const [download] = await Promise.all([
     page.waitForEvent('download'),
-    page.getByRole('button', { name: 'Download project (.bluek.json)' }).click(),
+    page.getByRole('button', { name: 'Download project (.bluek)' }).click(),
   ]);
-  expect(download.suggestedFilename()).toBe('Hunde- 1-2.bluek.json');
+  expect(download.suggestedFilename()).toBe('Hunde- 1-2.bluek');
   const saved = JSON.parse(await readFile(await download.path(), 'utf8'));
   expect(saved).toEqual({ format: 'bluek-project', version: 1, projectName: 'Hunde: 1/2', readme: '# Hunde',
     files: greeter.map(({ fileName, source }) => ({ fileName, source })) });
@@ -143,7 +143,7 @@ test('EXP-05 large local projects never generate content links', async ({ page }
   const target = await page.getByRole('link', { name: 'Open in BlueK' }).getAttribute('href');
   expect(new URL(target!).hash).toBe('');
   expect(new URL(target!).search).toBe('');
-  await expect(page.getByRole('button', { name: 'Download project (.bluek.json)' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Download project (.bluek)' })).toBeVisible();
 });
 
 const rocketGame: Files = [

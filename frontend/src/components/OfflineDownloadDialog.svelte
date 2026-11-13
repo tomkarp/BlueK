@@ -1,5 +1,4 @@
 <script lang="ts">
-  import TranslatedText from "./TranslatedText.svelte";
   import { useLanguage } from "../i18n/Language.svelte";
   const language = useLanguage();
   const t = language.t;
@@ -27,11 +26,29 @@
       <p>
         {t("ui.offline.intro")}
       </p>
-      <ol>
-        <li>{t("ui.offline.downloadAndExtractTheZIPFile")}</li>
-        <li><TranslatedText message="ui.offline.openHtml" /></li>
-        <li><TranslatedText message="ui.offline.saveProjects" /></li>
-      </ol>
+      <section class="offline-version-option">
+        <h4>{t("ui.offline.browserTitle")}</h4>
+        <p>{t("ui.offline.browserDescription")}</p>
+        <a
+          class="offline-download-action"
+          href={downloadUrl}
+          download="BlueK-offline.zip"
+          onclick={() => (open = false)}>{t("ui.offline.downloadZIP")}</a
+        >
+      </section>
+      <section class="offline-version-option">
+        <h4>{t("ui.offline.desktopTitle")}</h4>
+        <p>{t("ui.offline.desktopDescription")}</p>
+        <p>{t("ui.offline.desktopPlatformNote")}</p>
+        <a
+          class="offline-download-action"
+          href="https://github.com/tomkarp/BlueK/releases/latest"
+          target="_blank"
+          rel="noopener noreferrer"
+          onclick={() => (open = false)}
+          >{t("ui.offline.downloadDesktopApp")}</a
+        >
+      </section>
       <div class="offline-download-caution">
         <p>
           {t("ui.offline.theOfflineVersionHasNotYetBeenWidely")}
@@ -45,12 +62,6 @@
       </div>
       <div class="dialog-actions">
         <button onclick={() => (open = false)}>{t("ui.common.cancel")}</button>
-        <a
-          class="offline-download-action"
-          href={downloadUrl}
-          download="BlueK-offline.zip"
-          onclick={() => (open = false)}>{t("ui.offline.downloadZIP")}</a
-        >
       </div>
     </div>
   </div>

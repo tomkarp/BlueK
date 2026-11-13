@@ -63,7 +63,7 @@ const targetsOf = properties => Array.from({ length: Number(properties.get('pack
 // A BluePlay project: the BlueJ library replaces BlueK's built-in one, and
 // every standard image and sound is included; project resources win.
 {
-  const example = JSON.parse(await readFile('frontend/public/examples/blueplay.bluek.json', 'utf8'));
+  const example = JSON.parse(await readFile('frontend/public/examples/blueplay.bluek', 'utf8'));
   const customCat = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==';
   const music = 'data:audio/mpeg;base64,SUQzAwAAAAAAAA==';
   const project = {

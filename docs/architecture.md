@@ -125,34 +125,47 @@ the IDE and player. See [terminal formatting](terminal.md#playing-cards).
 ### Browser drafts
 
 `projectDraftStorage.ts` owns storage I/O and exclusive document-lifetime draft
-ownership. Session Storage contains the draft ID only; one Local Storage entry
-per ID contains project data. Edits, template changes and explicit link imports
-replace that tab's entry without version history. Storage events derive Recent
-work from the saved entries. Web Locks prevent copied tabs sharing writes; the
-fallback forks on restoration. Legacy single-project autosave is migrated.
+ownership. Session Storage contains the tab's draft ID only; one Local Storage
+entry per ID contains project data. Edits replace that tab's entry without
+version history. Web Locks prevent copied tabs sharing writes. Reload and
+back/forward-cache return preserve the same tab ID and recovery copy; when Web
+Locks are unavailable, retaining that ID still ensures ordinary reload recovery.
+Legacy single-project autosave is migrated.
 
-The active tab's draft is restored automatically and omitted from Open's
-**Restore** list. That list contains drafts from other tabs or earlier sessions;
-it shows the three newest first and expands on request. Loading a project into a
-non-empty workspace asks before replacing both the open project and that tab's
-autosave. Reload restores the active draft automatically without asking the
-user to select it from Open → Restore. Leaving with changes since the latest
-explicit JSON export or successful account save invokes the browser's native
-`beforeunload` confirmation. Browser draft autosave preserves recovery but
-does not count as an explicit project save.
+There is no recovery list or notice. A tab restores its own copy automatically.
+When a tab has no ID, BlueK restores the newest leftover copy only if no other
+tab owns a draft; with Web Locks it removes older abandoned copies. Without Web
+Locks, it leaves other copies untouched. Loading a project into a non-empty
+workspace asks before replacing both the open project and that tab's recovery
+copy. Leaving with changes since the latest explicit project export or
+successful account save invokes the browser's native `beforeunload`
+confirmation. Browsers control this prompt and do not let the page offer Save /
+Discard / Cancel actions while a tab or window is closing. Tauri uses the same
+project fingerprint to intercept window-close and application-exit requests and
+show those three actions in BlueK; Save writes to the opened file or asks where
+to save, while Discard closes without writing the project file. Browser recovery
+preserves unsaved work but does not count as an explicit project save.
 
-A failed save names its reason: a full Local Storage quota (with the sizes of
-this project and the other drafts), storage blocked by the browser, or the
-error text. The warning stays until closed or until saving succeeds; a closed
-warning returns only for a different reason.
+A failed save names its reason: a full Local Storage quota for this project,
+storage blocked by the browser, or the error text. The warning stays until
+closed or until saving succeeds; a closed warning returns only for a different
+reason. Normalize payloads before fingerprinting so JSON field order cannot
+create false updates. Keep the fingerprint when reclaiming the same draft;
+reset it when ownership requires a new ID.
 
-Deleting recovery drafts requires confirmation and keeps settings/open projects.
-Deleting a project source file also requires confirmation before changing files,
-test attachments, editor windows or the runtime session.
-An unchanged tab does not recreate a deleted entry on close or BFCache return;
-subsequent edits may save again. Normalize payloads before fingerprinting so
-JSON field order cannot create false updates. Keep the fingerprint when
-reclaiming the same draft; reset it when ownership requires a new ID.
+### Desktop files
+
+The Tauri shell registers `.bluek` as a project file type and forwards opened
+paths to the focused window. `desktopFiles.ts` is the narrow native bridge for
+dialogs, file reads/writes, new windows and launch events. When a non-empty
+window receives a file or creates a project, it can replace the current project
+or open a separate window. A new window receives the selected template as its
+startup intent, bypassing recovery and a second template picker. All native
+window closes use the Tauri close-request hook, including its required destroy
+permission; app exit is a separate action. The project payload remains JSON and is parsed
+through `ProjectWorkspace.loadProject`; native I/O does not create a second
+project store. Browser export remains a download, and browser drafts remain
+recovery rather than an explicit save.
 
 Link README/state options belong to transfer. After link import,
 `ProjectWorkspace` delegates default-state loading to

@@ -26,14 +26,14 @@ async function loadSpaceInvaders(
   transform: (project: any) => void = () => {},
 ) {
   const project = JSON.parse(await readFile(
-    'tests/fixtures/project-examples/space-invaders.bluek.json',
+    'tests/fixtures/project-examples/space-invaders.bluek',
     'utf8',
   ));
   transform(project);
   await page.goto('/');
   await page.getByRole('button', { name: 'Open', exact: true }).click();
   await page.getByLabel('Choose project file').setInputFiles({
-    name: 'space-invaders.bluek.json',
+    name: 'space-invaders.bluek',
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(project)),
   });
@@ -1101,14 +1101,14 @@ test('GUI-145 BlueJ export downloads a BlueJ project with the BlueJ library and 
 });
 
 test('GUI-146 BlueJ export names left-out test classes and MP3 sounds only when the project has them, until the notice is closed', async ({ page }, info) => {
-  const example = JSON.parse(await readFile('frontend/public/examples/blueplay.bluek.json', 'utf8'));
+  const example = JSON.parse(await readFile('frontend/public/examples/blueplay.bluek', 'utf8'));
   const project = {
     ...example,
     projectName: 'Sounds',
     files: [...example.files, { fileName: 'DogTest.kt', kind: 'class', source: 'import kotlin.test.*\n\nclass DogTest\n', testTarget: 'Dog.kt', isTestClass: true }],
     resources: [...(example.resources ?? []), { path: 'sounds/music.mp3', data: 'data:audio/mpeg;base64,SUQzAwAAAAAAAA==' }],
   };
-  const source = info.outputPath('Sounds.bluek.json');
+  const source = info.outputPath('Sounds.bluek');
   await writeFile(source, JSON.stringify(project));
   await page.clock.install();
   await page.goto('/');

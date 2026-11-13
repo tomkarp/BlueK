@@ -74,7 +74,7 @@ test("GUI-158 global project file drops import while keeping failed or declined 
     page.locator('.classcard[aria-label="Original"]'),
   ).toBeVisible();
 
-  await dropProjectFile(page, "broken.bluek.json", "not valid JSON");
+  await dropProjectFile(page, "broken.bluek", "not valid JSON");
   await expect(page.locator('.classcard[aria-label="Original"]')).toBeVisible();
 
   await page.evaluate(() => {
@@ -82,7 +82,7 @@ test("GUI-158 global project file drops import while keeping failed or declined 
   });
   await dropProjectFile(
     page,
-    "replacement.bluek.json",
+    "replacement.bluek",
     payload("Replacement project", "Replacement"),
   );
   await expect(
@@ -95,7 +95,7 @@ test("GUI-158 global project file drops import while keeping failed or declined 
   });
   await dropProjectFile(
     page,
-    "replacement.bluek.json",
+    "replacement.bluek",
     payload("Replacement project", "Replacement"),
   );
   await expect(

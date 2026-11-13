@@ -188,10 +188,10 @@ test("EXP-13 published program link starts chosen main without the IDE, supports
   const [download] = await Promise.all([
     player.waitForEvent("download"),
     player
-      .getByRole("button", { name: "Download project (.bluek.json)" })
+      .getByRole("button", { name: "Download project (.bluek)" })
       .click(),
   ]);
-  expect(download.suggestedFilename()).toBe("Shared program.bluek.json");
+  expect(download.suggestedFilename()).toBe("Shared program.bluek");
   const developer = await context.newPage();
   await developer.goto(
     (await player

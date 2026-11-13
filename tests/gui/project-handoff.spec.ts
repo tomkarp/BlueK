@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 
 const exampleRoot = new URL("../../integrations/inf-schule/", import.meta.url);
 const example = JSON.parse(
-  await readFile(new URL("example.bluek.json", exampleRoot), "utf8"),
+  await readFile(new URL("example.bluek", exampleRoot), "utf8"),
 );
 type SourceWindow = Window & {
   handoffChild: Window;
@@ -58,7 +58,7 @@ async function provider(
       const path = new URL(route.request().url()).pathname;
       if (path.endsWith("bluek-handoff.js"))
         return route.fulfill({ contentType: "text/javascript", body: helper });
-      if (path.endsWith("example.bluek.json")) {
+      if (path.endsWith("example.bluek")) {
         await options.pending;
         return options.failed
           ? route.fulfill({ status: 404, body: "Not found" })
@@ -104,7 +104,7 @@ test.describe("inf-schule handoff", () => {
     const projectRequests: string[] = [];
     context.on("request", (request) => {
       if (request.method() !== "GET") writes.push(request.url());
-      if (request.url().endsWith("example.bluek.json"))
+      if (request.url().endsWith("example.bluek"))
         projectRequests.push(request.url());
     });
     const child = await open(page);
@@ -120,7 +120,7 @@ test.describe("inf-schule handoff", () => {
     ).toBe("?import=inf-schule&sender=https%3A%2F%2Finf-schule.de");
     expect(child.url()).toBe(baseURL + "/");
     expect(projectRequests).toEqual([
-      "https://inf-schule.de/handoff-example/example.bluek.json",
+      "https://inf-schule.de/handoff-example/example.bluek",
     ]);
     expect(writes).toEqual([]);
     // Import uses the normal runtime, and never runs student code automatically.
@@ -448,7 +448,7 @@ test.describe("inf-schule handoff", () => {
     await expect(link).not.toHaveAttribute("aria-busy", "true");
     await expect(
       page.getByRole("link", { name: "Projekt als JSON herunterladen" }),
-    ).toHaveAttribute("href", "./example.bluek.json");
+    ).toHaveAttribute("href", "./example.bluek");
     const popup = page.waitForEvent("popup");
     await link.focus();
     await page.keyboard.press("Enter");

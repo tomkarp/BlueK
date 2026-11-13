@@ -22,6 +22,7 @@ verification and rollback runbook. See [storage contract](server-storage.md).
 | deploy-pages.yml | main push/manual | Full build; root base `/`, dedicated API at `https://api.bluek.online`; independent Pages artifact/deployment |
 | deploy-server.yml | main push/manual | API/migration tests, API source/dependencies only, restart existing bluek-share service; no static build or rsync |
 | deploy-beta.yml | beta push/manual | Full build and API tests; back up only the beta database; deploy the beta API service, then beta static files |
+| release-desktop.yml | `bluek-v<version>` tag | Signed and notarized Apple Silicon DMG plus unsigned Windows installers in a public GitHub release |
 
 Pages and the production API are separate workflows with no job dependency. A
 failed production API build/deployment cannot block Pages. Beta keeps its own
@@ -54,6 +55,19 @@ The editorial [inf-schule handoff](inf-schule-handoff.md) is part of the normal
 static app on main and beta, including GitHub Pages. It requires no API or
 special build flag; offline builds disable the receiver. The sender script and
 project files are copied to inf-schule separately, outside these workflows.
+
+## Desktop app release
+
+The macOS app is distributed separately from the static editor and API. The
+first target is Apple Silicon (`aarch64-apple-darwin`, M1 and newer), as a
+Developer ID signed and Apple notarized DMG attached to a public GitHub release.
+The manual `desktop-build.yml` workflow is for test DMGs; the
+`release-desktop.yml` workflow requires all Apple signing/notarization secrets
+and runs only when a `bluek-v<version>` tag matches the Tauri app version. It
+also builds unsigned Windows x64 EXE and MSI installers. After both builds
+succeed, the workflow publishes the release automatically; anyone can download
+its assets without a GitHub account. Certificate export, secret names, and local
+verification steps are in [desktop app signing](desktop-app.md#signing-and-release-setup).
 
 ## Cutover order and rollback
 

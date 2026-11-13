@@ -10,7 +10,6 @@
   import type { ProjectFile } from "../../../runtime-contract/src/index";
 
   import type { ShareLinkDialog } from "../uiTypes";
-  import type { ProjectDraftSummary } from "../projectDraftStorage";
   // A compile-time condition also removes server-only controls from offline JS.
   const serverFeatures = import.meta.env.VITE_BLUEK_OFFLINE !== "1";
   function formatShareCode(code: string) {
@@ -19,12 +18,9 @@
       : code;
   }
   let saveView: "choices" | "account" | "html" = $state("choices");
-  let openSource: "browser" | "account" | "computer" | "link" =
-    $state("computer");
-  let showAllRecoveryDrafts = $state(false);
+  let openSource: "account" | "computer" | "link" = $state("computer");
   function selectOpenSource(source: typeof openSource) {
     openSource = source;
-    if (source === "browser") showAllRecoveryDrafts = false;
     if (source === "account") void cloud.refresh(true);
   }
   function handleOpenSourceKeydown(event: KeyboardEvent) {
@@ -57,10 +53,6 @@
   interface Props {
     cloud: CloudWorkspace;
     showNotice: (text: string) => void;
-    recentProjects: ProjectDraftSummary[];
-    openRecentProject: (id: string) => Promise<void>;
-    deleteRecentProject: (id: string) => void;
-    deleteAllRecentProjects: () => void;
     toolbarDialog: "open" | "save" | "share" | null;
     shareLinkDialog: ShareLinkDialog | null;
     shareCodeInput: string;
@@ -77,7 +69,7 @@
     programAllowBlueK: boolean;
     programShowProjectName: boolean;
     bluePlay: boolean;
-    ensureProjectName: () => boolean;
+    ensureProjectName: () => Promise<boolean>;
     programAutoRun: boolean;
     programShowControls: boolean;
     programShowSpeed: boolean;
@@ -91,9 +83,9 @@
     importProject: (event: Event) => Promise<void>;
     loadSharedProjectFromCode: () => Promise<void>;
     saveShortProject: () => Promise<void>;
-    exportProject: () => void;
+    exportProject: () => Promise<void>;
     markProjectSaved: () => void;
-    exportBlueJProject: () => void;
+    exportBlueJProject: () => Promise<void>;
     exportHtml: () => Promise<void>;
     copySharedLink: () => Promise<void>;
   }
@@ -101,10 +93,6 @@
   let {
     cloud,
     showNotice,
-    recentProjects,
-    openRecentProject,
-    deleteRecentProject,
-    deleteAllRecentProjects,
     toolbarDialog = $bindable(),
     shareLinkDialog = $bindable(),
     shareCodeInput = $bindable(),
@@ -146,7 +134,6 @@
     if (toolbarDialog === null) {
       saveView = "choices";
       openSource = "computer";
-      showAllRecoveryDrafts = false;
     }
   });
   $effect(() => {
@@ -169,7 +156,7 @@
     >
       <h3 id="open-import-title">{t("ui.common.openImport")}</h3>
       <div class="open-project-content">
-        <div
+        {#if serverFeatures}<div
           class="open-source-tabs"
           role="tablist"
           tabindex="-1"
@@ -203,102 +190,8 @@
               onclick={() => selectOpenSource("link")}
               >{t("ui.transfer.sourceLink")}</button
             >{/if}
-          <button
-            id="open-source-browser"
-            role="tab"
-            aria-selected={openSource === "browser"}
-            tabindex={openSource === "browser" ? 0 : -1}
-            aria-controls="open-panel-browser"
-            onclick={() => selectOpenSource("browser")}
-            >{t("ui.transfer.sourceBrowser")}
-            {#if recentProjects.length}<span class="open-source-count"
-                >{recentProjects.length}</span
-              >{/if}</button
-          >
-        </div>
-        {#if openSource === "browser"}<div
-            class="open-source-panel recent-projects"
-            role="tabpanel"
-            tabindex="0"
-            id="open-panel-browser"
-            aria-labelledby="open-source-browser"
-          >
-            <div class="recent-projects-heading">
-              <div>
-                <h4>{t("ui.transfer.browserRecovery")}</h4>
-                <p>{t("ui.transfer.savedInThisBrowserChooseAProjectTo")}</p>
-              </div>
-              {#if recentProjects.length}<button
-                  class="delete-all-projects"
-                  aria-label={t("ui.transfer.deleteAllSavedProjects")}
-                  title={t("ui.transfer.deleteAllSavedProjects")}
-                  onclick={deleteAllRecentProjects}
-                >
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path
-                      d="M4 7h16M10 11v7m4-7v7M6 7l1 14h10l1-14M9 7V4h6v3"
-                    />
-                  </svg>
-                  {t("ui.transfer.deleteAll")}
-                </button>{/if}
-            </div>
-            {#if recentProjects.length}<div class="recent-project-list">
-                {#each showAllRecoveryDrafts ? recentProjects : recentProjects.slice(0, 3) as project (project.id)}
-                  <div class="recent-project-row">
-                    <button
-                      class="recent-project"
-                      onclick={() => void openRecentProject(project.id)}
-                    >
-                      <strong
-                        >{project.name === "Untitled project"
-                          ? t("ui.common.untitledProject")
-                          : project.name}</strong
-                      >
-                      <span
-                        >{project.fileCount}
-                        {project.fileCount === 1
-                          ? t("ui.transfer.file")
-                          : t("ui.transfer.files")}
-                        {t("ui.transfer.lastSaved")}
-                        {new Date(project.updatedAt).toLocaleString(
-                          $language.locale,
-                        )}</span
-                      >
-                    </button>
-                    <button
-                      class="delete-recent-project"
-                      type="button"
-                      aria-label={t("ui.transfer.deleteSavedProject0", [
-                        project.name,
-                      ])}
-                      title={t("ui.transfer.deleteSavedProject0", [
-                        project.name,
-                      ])}
-                      onclick={() => deleteRecentProject(project.id)}
-                    >
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path
-                          d="M4 7h16M10 11v7m4-7v7M6 7l1 14h10l1-14M9 7V4h6v3"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-                {/each}
-              </div>
-              {#if recentProjects.length > 3}<button
-                  class="recovery-drafts-toggle"
-                  aria-expanded={showAllRecoveryDrafts}
-                  onclick={() =>
-                    (showAllRecoveryDrafts = !showAllRecoveryDrafts)}
-                  >{showAllRecoveryDrafts
-                    ? t("ui.transfer.showFewerRecoveryDrafts")
-                    : t("ui.transfer.showMoreRecoveryDrafts", [
-                        recentProjects.length - 3,
-                      ])}</button
-                >{/if}{:else}<p class="open-source-empty">
-                {t("ui.transfer.noBrowserProjects")}
-              </p>{/if}
-          </div>{:else if openSource === "account"}<div
+        </div>{/if}
+        {#if openSource === "account"}<div
             class="open-source-panel open-account-panel"
             role="tabpanel"
             tabindex="0"
@@ -332,7 +225,7 @@
               <input
                 type="file"
                 aria-label={t("ui.transfer.chooseProjectFile")}
-                accept=".json,.bluek.json,application/json,.zip,application/zip"
+                accept=".bluek,.json,application/json,.zip,application/zip"
                 onchange={(event) => {
                   importProject(event);
                   toolbarDialog = null;
@@ -407,9 +300,9 @@
               <button
                 class="file-export-choice"
                 disabled={!files.length}
-                onclick={() => {
-                  if (!ensureProjectName()) return;
-                  exportProject();
+                onclick={async () => {
+                  if (!(await ensureProjectName())) return;
+                  await exportProject();
                   toolbarDialog = null;
                 }}
                 ><strong>{t("ui.common.exportProjectJSON")}</strong><span
@@ -427,9 +320,9 @@
               <button
                 class="file-export-choice"
                 disabled={!files.length}
-                onclick={() => {
-                  if (!ensureProjectName()) return;
-                  exportBlueJProject();
+                onclick={async () => {
+                  if (!(await ensureProjectName())) return;
+                  await exportBlueJProject();
                   toolbarDialog = null;
                 }}
                 ><strong>{t("ui.transfer.exportBlueJProjectZip")}</strong><span
@@ -440,8 +333,8 @@
                 class="file-export-choice"
                 aria-label={t("ui.transfer.htmlFile")}
                 disabled={!files.length}
-                onclick={() => {
-                  if (!ensureProjectName()) return;
+                onclick={async () => {
+                  if (!(await ensureProjectName())) return;
                   saveView = "html";
                 }}
                 ><strong>{t("ui.transfer.htmlFile")}</strong><span
@@ -481,8 +374,8 @@
                 <button
                   class="file-export-choice"
                   disabled={!files.length || htmlExportBlocked || htmlExporting}
-                  onclick={() => {
-                    if (!ensureProjectName()) return;
+                  onclick={async () => {
+                    if (!(await ensureProjectName())) return;
                     toolbarDialog = null;
                     void exportHtml();
                   }}

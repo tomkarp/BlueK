@@ -126,7 +126,7 @@ test("GUI-129 leaving BlueK warns only when project changes have not been explic
       .getByRole("button", { name: /^Download BlueK project file/ })
       .click(),
   ]);
-  expect(download.suggestedFilename()).toBe("Unsaved change.bluek.json");
+  expect(download.suggestedFilename()).toBe("Unsaved change.bluek");
   expect(await dispatchBeforeUnload()).toBe(false);
 });
 
@@ -187,7 +187,7 @@ test("GUI-154 replacing a non-empty project asks first and can be cancelled", as
   await expect
     .poll(() => saved(page).then((p) => p?.files[0].source))
     .toContain("42");
-  expect(prompt).toContain("browser autosave");
+  expect(prompt).toContain("recovery copy");
 
   replace = true;
   await page.goto(link(project("Incoming project")));
@@ -197,101 +197,29 @@ test("GUI-154 replacing a non-empty project asks first and can be cancelled", as
     .toBe("class Hund { val age = 1 }");
 });
 
-test("GUI-155 restore list starts with the three newest drafts and can expand", async ({
+test("GUI-122 a fresh tab automatically restores only the newest abandoned copy", async ({
   page,
   context,
 }) => {
-  const tabs: Page[] = [page];
-  for (let index = 1; index < 5; index++) tabs.push(await context.newPage());
-  for (const [index, tab] of tabs.entries())
-    await load(tab, project(`Draft ${index + 1}`));
-
-  const fresh = await context.newPage();
-  await fresh.goto("/");
-  await fresh.getByRole("button", { name: "Open", exact: true }).click();
-  const open = fresh.getByRole("dialog", { name: "Open", exact: true });
-  await open.getByRole("tab", { name: /^Restore/ }).click();
-  await expect(open.locator(".recent-project")).toHaveCount(3);
-  const expand = open.getByRole("button", { name: "Show 2 more drafts" });
-  await expect(expand).toHaveAttribute("aria-expanded", "false");
-  await expand.click();
-  await expect(open.locator(".recent-project")).toHaveCount(5);
-  const collapse = open.getByRole("button", { name: "Show fewer drafts" });
-  await expect(collapse).toHaveAttribute("aria-expanded", "true");
-  await collapse.click();
-  await expect(open.locator(".recent-project")).toHaveCount(3);
-});
-
-test("GUI-122 closed tabs stay in Recent work; fresh startup shows a dismissible notice and restores full project data", async ({
-  page,
-  context,
-}) => {
-  const payload = {
-    ...project("Dogs A"),
-    readme: "# Dogs",
-    defaultTestClass: "StateTest",
-    files: [
-      ...project("Dogs A").files,
-      {
-        fileName: "StateTest.kt",
-        kind: "class",
-        isTestClass: true,
-        source:
-          "import kotlin.test.*\nclass StateTest { val dog: Hund = Hund() }",
-      },
-    ],
-    cardPositions: { "Hund.kt": { x: 111, y: 123 } },
-    resources: [{ path: "images/dog.png", data: "data:image/png;base64,AAAA" }],
-  };
-  await load(page, payload);
-  const firstId = await draftId(page);
+  await load(page, project("Dogs A"));
+  await edit(page, "class Hund { val age = 123 }");
   const second = await context.newPage();
   await load(second, project("Dogs B"));
+  await edit(second, "class Hund { val age = 456 }");
   await Promise.all([page.close(), second.close()]);
+
   const fresh = await context.newPage();
   await fresh.goto("/");
-  await expect(fresh.locator(".classcard")).toHaveCount(0);
-  const notice = fresh.locator(".project-recovery-notice");
-  await expect(notice).toContainText("Other browser drafts are available. Open → Restore");
-  await fresh
-    .getByRole("button", { name: "Dismiss recovery drafts notice" })
-    .click();
-  await expect(notice).toHaveCount(0);
-  await fresh
-    .getByRole("button", { name: "Open", exact: true })
-    .click();
-  const open = fresh.getByRole("dialog", { name: "Open", exact: true });
-  await open.getByRole("tab", { name: /^Restore/ }).click();
-  await expect(open.locator(".recent-project")).toHaveCount(2);
-  await expect(open.locator(".recent-project").first()).toContainText("Dogs B");
-  await fresh.setViewportSize({ width: 700, height: 500 });
-  const cancel = await open
-    .getByRole("button", { name: "Cancel", exact: true })
-    .boundingBox();
-  expect(cancel!.y + cancel!.height).toBeLessThanOrEqual(500);
-  await fresh.screenshot({ path: "test-results/recent-projects.png" });
-  await open.getByRole("button", { name: /^Dogs A/ }).click();
-  await expect(open).toHaveCount(0);
-  await expect(fresh.getByLabel("Project name")).toHaveValue("Dogs A");
-  expect(await draftId(fresh)).toBe(firstId);
-  const restored = await saved(fresh);
-  expect(restored.defaultTestClass).toBe("StateTest");
-  expect(restored.readme).toBe("# Dogs");
-  expect(restored.cardPositions["Hund.kt"]).toEqual({ x: 111, y: 123 });
-  expect(restored.resources).toEqual(payload.resources);
+  await expect(fresh.getByLabel("Project name")).toHaveValue("Dogs B");
+  expect((await saved(fresh)).files[0].source).toContain("456");
   await expect(fresh.locator(".project-recovery-notice")).toHaveCount(0);
-  // Choosing a draft still owned by another live tab gives an independent copy.
-  const another = await context.newPage();
-  await another.goto("/");
-  await another.getByRole("button", { name: "Open", exact: true }).click();
-  const anotherOpen = another.getByRole("dialog", { name: "Open", exact: true });
-  await anotherOpen.getByRole("tab", { name: /^Restore/ }).click();
-  await anotherOpen.getByRole("button", { name: /^Dogs A/ }).click();
-  await expect(another.getByLabel("Project name")).toHaveValue("Dogs A");
-  expect(await draftId(another)).not.toBe(firstId);
+  const remaining = await fresh.evaluate(() =>
+    Object.keys(localStorage).filter((key) => key.startsWith("bluek.project-draft.v1.")),
+  );
+  expect(remaining).toHaveLength(1);
 });
 
-test("GUI-123 migrates the old autosave, ignores corrupt drafts and has no recovery hint on explicit links", async ({
+test("GUI-123 migrates the old autosave and ignores corrupt drafts", async ({
   page,
   context,
 }) => {
@@ -303,22 +231,13 @@ test("GUI-123 migrates the old autosave, ignores corrupt drafts and has no recov
     }
   }, project("Old autosave"));
   await page.goto("/");
-  await expect(page.locator(".project-recovery-notice")).toBeVisible();
-  await expect(page.locator(".classcard")).toHaveCount(0);
+  await expect(page.getByLabel("Project name")).toHaveValue("Old autosave");
+  await expect(page.getByRole("button", { name: "Hund", exact: true })).toBeVisible();
   expect(
     await page.evaluate(() => localStorage.getItem("bluek.current-project.v1")),
   ).toBeNull();
-  await page.getByRole("button", { name: "Open", exact: true }).click();
-  const open = page.getByRole("dialog", { name: "Open", exact: true });
-  await open.getByRole("tab", { name: /^Restore/ }).click();
-  await expect(open.locator(".recent-project")).toHaveCount(1);
-  await open.getByRole("button", { name: /^Old autosave/ }).click();
-  await expect(
-    page.getByRole("button", { name: "Hund", exact: true }),
-  ).toBeVisible();
   const fresh = await context.newPage();
   await load(fresh, project("From link"));
-  await expect(fresh.locator(".project-recovery-notice")).toHaveCount(0);
 });
 
 test("GUI-124 project replacement updates the same tab draft and an empty project clears the default test class", async ({
@@ -353,8 +272,7 @@ test("GUI-124 project replacement updates the same tab draft and an empty projec
   expect(await saved(page)).not.toHaveProperty("defaultTestClass");
   await page.getByRole("button", { name: "Open", exact: true }).click();
   const open = page.getByRole("dialog", { name: "Open", exact: true });
-  await expect(open.locator(".recent-project")).toHaveCount(0);
-  await expect(open.getByRole("button", { name: /^Original/ })).toHaveCount(0);
+  await expect(open.getByRole("tab", { name: /^Restore/ })).toHaveCount(0);
 });
 
 test("GUI-125 unavailable storage reports the limitation and leaves editing and export usable", async ({
@@ -371,10 +289,9 @@ test("GUI-125 unavailable storage reports the limitation and leaves editing and 
   ).toBeVisible();
   const notice = page.locator(".project-recovery-notice");
   await expect(notice).toContainText(
-    "Your changes could not be saved in this browser because its storage for BlueK is full",
+    "Your changes could not be kept for recovery because BlueK's local storage is full",
   );
-  await expect(notice).toContainText(/This project needs about \d+\.\d MB; 0 other recovery drafts use about 0\.0 MB\./);
-  await expect(notice).toContainText("Open → Restore");
+  await expect(notice).toContainText(/This project needs about \d+\.\d MB\./);
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(
     page
@@ -419,7 +336,7 @@ test("GUI-125 blocked storage and other storage errors name their reason", async
   );
 });
 
-test("GUI-126 browser restart keeps multiple projects in the persistent profile", async ({
+test("GUI-126 browser restart automatically restores the newest project only", async ({
   baseURL,
 }) => {
   const directory = await mkdtemp(path.join(tmpdir(), "bluek-draft-profile-"));
@@ -441,123 +358,13 @@ test("GUI-126 browser restart keeps multiple projects in the persistent profile"
     });
     const fresh = await browser.newPage();
     await fresh.goto("/");
-    await expect(fresh.locator(".project-recovery-notice")).toBeVisible();
-    await expect(fresh.locator(".classcard")).toHaveCount(0);
-    await fresh.getByRole("button", { name: "Open", exact: true }).click();
-    const open = fresh.getByRole("dialog", { name: "Open", exact: true });
-    await open.getByRole("tab", { name: /^Restore/ }).click();
-    await expect(open.locator(".recent-project")).toHaveCount(2);
-    await open.getByRole("button", { name: /^Before closing A/ }).click();
-    await expect
-      .poll(() => saved(fresh).then((p) => p?.files[0].source))
-      .toContain("123");
-    await fresh.getByRole("button", { name: "Open", exact: true }).click();
-    await fresh
-      .getByRole("dialog", { name: "Open", exact: true })
-      .getByRole("tab", { name: /^Restore/ })
-      .click();
-    // Loading B replaces the currently restored A project.
-    fresh.once("dialog", (dialog) => dialog.accept());
-    await fresh
-      .getByRole("dialog", { name: "Open", exact: true })
-    .getByRole("button", { name: /^Before closing B/ })
-      .click();
+    await expect(fresh.getByLabel("Project name")).toHaveValue("Before closing B");
     await expect
       .poll(() => saved(fresh).then((p) => p?.files[0].source))
       .toContain("456");
+    await expect(fresh.getByRole("tab", { name: /^Restore/ })).toHaveCount(0);
   } finally {
     await browser.close();
     await rm(directory, { recursive: true, force: true });
   }
-});
-
-test("GUI-127 saved projects can be deleted individually, with cancel and cross-tab updates", async ({
-  page,
-  context,
-}) => {
-  await load(page, project("Delete me"));
-  const removeId = await draftId(page);
-  const other = await context.newPage();
-  await load(other, project("Keep me"));
-  await other.getByRole("button", { name: "Open", exact: true }).click();
-  const otherOpen = other.getByRole("dialog", { name: "Open", exact: true });
-  await otherOpen.getByRole("tab", { name: /^Restore/ }).click();
-  await page.getByRole("button", { name: "Open", exact: true }).click();
-  const open = page.getByRole("dialog", { name: "Open", exact: true });
-  await open.getByRole("tab", { name: /^Restore/ }).click();
-  await expect(open.locator(".recent-project")).toHaveCount(1);
-  await expect(otherOpen.locator(".recent-project")).toHaveCount(1);
-  const otherRemove = otherOpen.getByRole("button", {
-    name: "Delete browser recovery draft Delete me",
-    exact: true,
-  });
-  other.once("dialog", (dialog) => dialog.dismiss());
-  await otherRemove.click();
-  await expect(otherOpen.locator(".recent-project")).toHaveCount(1);
-  other.once("dialog", (dialog) => dialog.accept());
-  await otherRemove.click();
-  await expect(otherOpen.locator(".recent-project")).toHaveCount(0);
-  await expect(open.locator(".recent-project")).toHaveCount(1);
-  expect(
-    await page.evaluate(
-      (id) => localStorage.getItem("bluek.project-draft.v1." + id),
-      removeId,
-    ),
-  ).toBeNull();
-  await open.getByRole("button", { name: "Cancel", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Hund", exact: true }),
-  ).toBeVisible();
-  // Merely closing the unchanged tab must not resurrect the saved copy.
-  await page.close();
-  expect(
-    await other.evaluate(
-      (id) => localStorage.getItem("bluek.project-draft.v1." + id),
-      removeId,
-    ),
-  ).toBeNull();
-});
-
-test("GUI-128 Delete all removes saved projects, keeps settings and requires confirmation", async ({
-  page,
-  context,
-}) => {
-  await load(page, project("One"));
-  const second = await context.newPage();
-  await load(second, project("Two"));
-  await page.evaluate(() => localStorage.setItem("bluek.test-setting", "keep"));
-  const fresh = await context.newPage();
-  await fresh.goto("/");
-  await expect(fresh.locator(".project-recovery-notice")).toBeVisible();
-  await fresh.getByRole("button", { name: "Open", exact: true }).click();
-  const open = fresh.getByRole("dialog", { name: "Open", exact: true });
-  await open.getByRole("tab", { name: /^Restore/ }).click();
-  const removeAll = open.getByRole("button", {
-    name: "Delete all recovery drafts",
-  });
-  await expect(removeAll.locator("svg")).toBeVisible();
-  fresh.once("dialog", (dialog) => dialog.dismiss());
-  await removeAll.click();
-  await expect(open.locator(".recent-project")).toHaveCount(2);
-  fresh.once("dialog", (dialog) => dialog.accept());
-  await removeAll.click();
-  await expect(open.locator(".recent-project")).toHaveCount(0);
-  await expect(fresh.locator(".project-recovery-notice")).toHaveCount(0);
-  const storage = await fresh.evaluate(() => ({
-    keys: Object.keys(localStorage),
-    setting: localStorage.getItem("bluek.test-setting"),
-  }));
-  expect(
-    storage.keys.filter((key) => key.startsWith("bluek.project-draft.v1.")),
-  ).toHaveLength(0);
-  expect(storage.setting).toBe("keep");
-  await Promise.all([page.close(), second.close()]);
-  await fresh.reload();
-  await expect(fresh.locator(".project-recovery-notice")).toHaveCount(0);
-  await fresh.getByRole("button", { name: "Open", exact: true }).click();
-  await expect(
-    fresh
-      .getByRole("dialog", { name: "Open", exact: true })
-      .locator(".recent-project"),
-  ).toHaveCount(0);
 });

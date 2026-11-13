@@ -42,6 +42,10 @@ Student Kotlin is interpreted, not compiled. `npm run build` builds these tools:
    copies the ZIP into `frontend/public/downloads/`.
 4. **vite build**: builds the hosted IDE into `frontend/dist/`.
 
+The Tauri desktop shell uses that same Svelte IDE. See
+[desktop app development and signing](docs/desktop-app.md) for macOS setup,
+Windows build preparation and release credentials.
+
 `npm run build:svelte` builds the frontend without rebuilding Kotlin.
 `npm run build:standard-images` regenerates the committed image/alpha-mask,
 sound and BlueJ library modules plus the API standard-media checksum manifest after changing `assets/standard-images/`,

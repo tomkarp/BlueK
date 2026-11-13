@@ -1,4 +1,4 @@
-name: Deploy BlueK beta to own server
+name: Deploy BlueK beta
 
 on:
   push:
@@ -14,7 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
+  deploy:
+    name: Deploy
     runs-on: ubuntu-latest
     env:
       VITE_BASE_PATH: /

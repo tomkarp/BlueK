@@ -2219,7 +2219,7 @@ test("GUI-22 top actions are grouped, ordered and switch to icon-only mode toget
   );
   await expect(openDialog.getByLabel("Choose project file")).toHaveAttribute(
     "accept",
-    ".json,.bluek.json,application/json,.zip,application/zip",
+    ".json,.bluek,application/json,.zip,application/zip",
   );
   await expect(openDialog.getByLabel("Choose project directory")).toHaveCount(
     0,
@@ -4157,7 +4157,7 @@ test("RT-33 Download BlueK project file keeps its file name and content", async 
       .getByRole("button", { name: /Download BlueK project file/ })
       .click(),
   ]);
-  expect(download.suggestedFilename()).toBe("Hunde- Teil 1-2.bluek.json");
+  expect(download.suggestedFilename()).toBe("Hunde- Teil 1-2.bluek");
   const stream = await download.createReadStream();
   const chunks: Buffer[] = [];
   for await (const chunk of stream) chunks.push(chunk as Buffer);

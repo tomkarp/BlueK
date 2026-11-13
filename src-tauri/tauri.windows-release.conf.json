@@ -1,0 +1,10 @@
+{
+  "build": {
+    "beforeBuildCommand": ""
+  },
+  "bundle": {
+    "windows": {
+      "signCommand": null
+    }
+  }
+}

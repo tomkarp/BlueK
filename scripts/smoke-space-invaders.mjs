@@ -4,7 +4,7 @@ import vm from 'node:vm';
 const bundle = await readFile(new URL('../frontend/public/kotlite/bluek-kotlite-browser.js', import.meta.url), 'utf8');
 vm.runInThisContext(bundle, { filename: 'bluek-kotlite-browser.js' });
 const api = globalThis['bluek-kotlite-browser'];
-const project = JSON.parse(await readFile(new URL('../tests/fixtures/project-examples/space-invaders.bluek.json', import.meta.url), 'utf8'));
+const project = JSON.parse(await readFile(new URL('../tests/fixtures/project-examples/space-invaders.bluek', import.meta.url), 'utf8'));
 const session = api.bluekCreateKotliteSession();
 session.configureBluePlay(true, 'space-invaders-smoke');
 

@@ -1,4 +1,4 @@
-name: Deploy BlueK to GitHub Pages
+name: Deploy BlueK website
 
 on:
   push:
@@ -16,6 +16,7 @@ concurrency:
 
 jobs:
   build:
+    name: Build
     runs-on: ubuntu-latest
     env:
       VITE_BASE_PATH: /
@@ -45,6 +46,7 @@ jobs:
           path: frontend/dist
 
   deploy:
+    name: Publish
     needs: build
     runs-on: ubuntu-latest
     environment:

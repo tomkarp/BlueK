@@ -24,3 +24,5 @@ vendor/kotlite-interpreter/build/
 # Local share-service data, including SQLite databases and WAL/SHM sidecars.
 server/data/
 .cache/
+
+src-tauri/target/

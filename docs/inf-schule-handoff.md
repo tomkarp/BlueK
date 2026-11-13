@@ -18,7 +18,7 @@ it once in the central site template (adjust the script path):
 Content pages contain only an ordinary link to their project file:
 
 ```html
-<a href="./projekt.bluek.json" data-bluek-project>In BlueK öffnen</a>
+<a href="./projekt.bluek" data-bluek-project>In BlueK öffnen</a>
 ```
 
 Paths are relative to the content page, as with normal downloads. The script
@@ -28,7 +28,7 @@ BlueK; modifier/middle clicks retain the ordinary file-link behavior. Keeping
 an explicit download link is useful if scripts or new tabs are blocked:
 
 ```html
-<a href="./projekt.bluek.json" download>Projekt herunterladen</a>
+<a href="./projekt.bluek" download>Projekt herunterladen</a>
 ```
 
 There is no JavaScript or event handler in chapter content. The default target
@@ -40,11 +40,11 @@ script include; the script and project links remain identical:
         data-bluek-target="https://beta.bluek.online/" defer></script>
 ```
 
-Keep the sender script and editorial `.bluek.json` files on inf-schule. BlueK
+Keep the sender script and editorial `.bluek` files on inf-schule. BlueK
 does not fetch or host these files. The reusable sender is maintained in the
 BlueK repository. The Kotlin chapter's `_skripte.js` includes the sender and
 uses `https://bluek.online/` as its standard target. Its KrokoAlarm link opens
-the corresponding `krokoalarm.bluek.json` project file. The chapter changes
+the corresponding `krokoalarm.bluek` project file. The chapter changes
 have been published and the live handoff was tested on 2026-10-26 (user
 confirmation). Any normally exported project is supported, including README,
 BluePlay resources, positions and saved test state.

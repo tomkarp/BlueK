@@ -8,9 +8,7 @@ import { englishText } from "../i18n/catalog";
 import { projectTemplate } from "../projectTemplates";
 import {
   ProjectDraftStorage,
-  DRAFT_PREFIX,
   type DraftSaveFailure,
-  type ProjectDraftSummary,
 } from "../projectDraftStorage";
 import { untrack } from "svelte";
 import type { CardPosition, InheritanceEdge } from "../uiTypes";
@@ -79,6 +77,7 @@ import type {
 } from "../../../runtime-contract/src/index";
 type Resource = ProjectResource;
 type MessageKey = import("../i18n/Language.svelte").MessageKey;
+type ProjectDestinationChoice = "replace" | "new-window" | "cancel";
 
 const MEDIA_PROBLEM_TEXT: Record<
   MediaKind,
@@ -176,15 +175,34 @@ export class ProjectWorkspace {
     newId: () => crypto.randomUUID(),
     now: () => Date.now(),
   });
-  recentProjects: ProjectDraftSummary[] = $state.raw([]);
-  savedProjectsNotice = $state(false);
   /** Project replacements invalidate cloud associations; source edits keep them. */
   documentVersion = $state(0);
   /** Fingerprint of the latest project explicitly exported or saved to an account. */
   private savedPayloadFingerprint = $state("");
+  closePromptOpen = $state(false);
+  closePromptBusy = $state(false);
+  closeProjectNameRequired = $state(false);
+  projectNamePromptOpen = $state(false);
+  projectNameDraft = $state("");
+  projectNamePromptRequired = $state(false);
+  projectDestinationDialogOpen = $state(false);
+  private projectDestinationResolver:
+    | ((choice: ProjectDestinationChoice) => void)
+    | null = null;
+  private closeRequestKind: "window" | "application" = "window";
+  private projectNamePromptResolver: ((confirmed: boolean) => void) | null = null;
+  private projectNamePromptPromise: Promise<boolean> | null = null;
+  private confirmedDesktopClose = false;
   /** Why the opened link could not be loaded; cleared when a project loads. */
   linkProblem: { message: string; expired: boolean } | null = $state(null);
   handoffPending = $state(false);
+  activeDesktopFile = $state<string | null>(null);
+  private stopDesktopFileListener: (() => void) | null = null;
+  private stopDesktopCloseListener: (() => void) | null = null;
+  private stopDesktopExitListener: (() => void) | null = null;
+  private desktopFileEventsReady = false;
+  private pendingDesktopFiles: string[] = [];
+  private desktopProjectsOpening = new Set<string>();
   private disconnectHandoff: () => void = () => {};
   /** What the last BlueJ export could not carry over; stays until closed or the next BlueJ export. */
   blueJExportNotice = $state("");
@@ -193,81 +211,12 @@ export class ProjectWorkspace {
     projects: BlueJProjectChoice[];
     name: string;
   } | null>(null);
-  /** Why the browser draft is not stored; `session` means it cannot be restored after a reload. */
-  autosaveWarning: DraftSaveFailure | { reason: "session" } | null =
-    $state(null);
+  /** Why the recovery copy could not be stored. */
+  autosaveWarning: DraftSaveFailure | null = $state(null);
   /** The reason of a warning the user closed; it stays closed until the reason changes. */
   autosaveWarningDismissed = $state("");
   dismissAutosaveWarning = () => {
     this.autosaveWarningDismissed = this.autosaveWarning?.reason ?? "";
-  };
-  refreshRecentProjects = () => {
-    // The current tab restores itself automatically. Only show other-tab or
-    // earlier-session drafts here, where they can actually be recovered.
-    this.recentProjects = this.drafts
-      .list()
-      .filter((project) => project.id !== this.drafts.activeId);
-    if (!this.recentProjects.length) this.savedProjectsNotice = false;
-  };
-  deleteRecentProject = (id: string) => {
-    const draft = this.recentProjects.find((project) => project.id === id);
-    if (
-      !draft ||
-      !window.confirm(
-        this.text("ui.transfer.delete0FromThisBrowserSSavedProjects", [
-          draft.name,
-        ]),
-      )
-    )
-      return;
-    try {
-      this.drafts.delete(id);
-      this.refreshRecentProjects();
-      this.host.ui().status = "Saved project deleted";
-    } catch {
-      this.host.ui().error =
-        "Could not delete the saved project from this browser.";
-    }
-  };
-  deleteAllRecentProjects = () => {
-    if (
-      !window.confirm(
-        this.text("ui.transfer.deleteAllSavedProjectsFromThisBrowser"),
-      )
-    )
-      return;
-    try {
-      this.drafts.deleteAll();
-      this.host.ui().status = "All saved projects deleted";
-    } catch {
-      this.host.ui().error =
-        "Could not delete all saved projects from this browser.";
-    } finally {
-      this.refreshRecentProjects();
-    }
-  };
-  openRecentProject = async (id: string) => {
-    if (
-      id !== this.drafts.activeId &&
-      !this.confirmProjectReplacement()
-    )
-      return;
-    this.saveAutosave();
-    const ready = this.autosaveReady;
-    this.autosaveReady = false;
-    try {
-      const payload = await this.drafts.open(id);
-      await this.loadProject(payload, "Saved project restored.", false);
-      this.toolbarDialog = null;
-      this.savedProjectsNotice = false;
-    } catch (reason) {
-      this.host.ui().error =
-        reason instanceof Error ? reason.message : String(reason);
-    } finally {
-      this.autosaveReady = ready;
-      this.saveAutosave();
-      this.refreshRecentProjects();
-    }
   };
   private defaultCardPosition = (index: number): CardPosition => ({
     x: 80 + (index % 4) * 280,
@@ -478,6 +427,65 @@ export class ProjectWorkspace {
   markProjectSaved = () => {
     this.savedPayloadFingerprint = JSON.stringify(this.projectPayload());
   };
+  cancelDesktopClose = () => {
+    this.closePromptOpen = false;
+    this.closeRequestKind = "window";
+    this.closeProjectNameRequired = false;
+  };
+  private requestDesktopExit = async () => {
+    this.closeRequestKind = "application";
+    if (this.hasUnsavedChanges) {
+      this.closeProjectNameRequired = false;
+      this.closePromptOpen = true;
+      return;
+    }
+    try {
+      this.drafts.clearActive();
+    } catch {
+      /* A clean desktop exit should not leave a recovery copy. */
+    }
+    await (await import("../desktopFiles")).exitDesktopApplication();
+  };
+  private finishDesktopClose = async () => {
+    const desktop = await import("../desktopFiles");
+    this.confirmedDesktopClose = true;
+    this.closePromptOpen = false;
+    try {
+      this.drafts.clearActive();
+      if (this.closeRequestKind === "application")
+        await desktop.exitDesktopApplication();
+      else await desktop.closeDesktopWindow();
+    } catch (reason) {
+      this.confirmedDesktopClose = false;
+      this.saveAutosave();
+      this.closePromptOpen = true;
+      this.host.ui().status = "Project error";
+      this.host.ui().error = reason instanceof Error ? reason.message : String(reason);
+    }
+  };
+  saveAndCloseDesktop = async () => {
+    if (this.closePromptBusy) return;
+    if (!this.projectName.trim()) {
+      this.closeProjectNameRequired = true;
+      return;
+    }
+    this.closePromptBusy = true;
+    try {
+      await this.exportProject();
+      if (!this.hasUnsavedChanges) await this.finishDesktopClose();
+    } finally {
+      this.closePromptBusy = false;
+    }
+  };
+  closeDesktopWithoutSaving = async () => {
+    if (this.closePromptBusy) return;
+    this.closePromptBusy = true;
+    try {
+      await this.finishDesktopClose();
+    } finally {
+      this.closePromptBusy = false;
+    }
+  };
   setProjectName = (name: string) => {
     this.projectName = name;
   };
@@ -498,7 +506,7 @@ export class ProjectWorkspace {
   };
   saveAutosave = () => {
     if (!this.autosaveReady) return;
-    this.persistDraft(this.projectPayload());
+    this.persistDraft(this.projectPayload(), this.hasUnsavedChanges);
   };
   private hasProjectData = () =>
     Boolean(
@@ -513,12 +521,21 @@ export class ProjectWorkspace {
     window.confirm(this.text("ui.transfer.replaceCurrentProjectBeforeLoading"));
   private persistDraft = (
     payload: ReturnType<ProjectWorkspace["projectPayload"]>,
+    hasUnsavedChanges: boolean,
   ) => {
+    if (!hasUnsavedChanges) {
+      try {
+        this.drafts.clearActive();
+      } catch {
+        /* A stale recovery copy is harmless after an explicit save. */
+      }
+      this.autosaveWarning = null;
+      this.autosaveWarningDismissed = "";
+      return;
+    }
     try {
       this.drafts.save(payload);
-      this.autosaveWarning = this.drafts.sessionAvailable
-        ? null
-        : { reason: "session" };
+      this.autosaveWarning = null;
     } catch (error) {
       this.autosaveWarning = this.drafts.failure(error, payload);
     }
@@ -987,35 +1004,84 @@ export class ProjectWorkspace {
     this.inheritanceMode = false;
     this.inheritanceSelection = "";
   };
-  ensureProjectName = () => {
-    if (this.projectName.trim()) return true;
-    const entered = window.prompt(
-      this.text("ui.transfer.whatShouldYourProjectBeCalled"),
-      "",
-    );
-    if (entered === null) return false;
-    const name = entered.trim();
+  ensureProjectName = (): Promise<boolean> => {
+    if (this.projectName.trim()) return Promise.resolve(true);
+    if (!this.projectNamePromptPromise) {
+      this.projectNameDraft = "";
+      this.projectNamePromptRequired = false;
+      this.projectNamePromptOpen = true;
+      this.projectNamePromptPromise = new Promise((resolve) => {
+        this.projectNamePromptResolver = resolve;
+      });
+    }
+    return this.projectNamePromptPromise;
+  };
+  confirmProjectName = () => {
+    const name = this.projectNameDraft.trim();
     if (!name) {
-      window.alert(this.text("ui.transfer.projectNameRequired"));
-      return false;
+      this.projectNamePromptRequired = true;
+      return;
     }
     this.projectName = name;
-    return true;
+    this.projectNamePromptOpen = false;
+    this.projectNamePromptRequired = false;
+    this.projectNamePromptPromise = null;
+    const resolve = this.projectNamePromptResolver;
+    this.projectNamePromptResolver = null;
+    resolve?.(true);
   };
-  exportProject = () => {
-    if (!this.ensureProjectName()) return;
+  cancelProjectNamePrompt = () => {
+    this.projectNamePromptOpen = false;
+    this.projectNamePromptRequired = false;
+    this.projectNamePromptPromise = null;
+    const resolve = this.projectNamePromptResolver;
+    this.projectNamePromptResolver = null;
+    resolve?.(false);
+  };
+  requestProjectDestination = (): Promise<ProjectDestinationChoice> => {
+    this.projectDestinationDialogOpen = true;
+    return new Promise((resolve) => {
+      this.projectDestinationResolver = resolve;
+    });
+  };
+  chooseProjectDestination = (choice: ProjectDestinationChoice) => {
+    this.projectDestinationDialogOpen = false;
+    const resolve = this.projectDestinationResolver;
+    this.projectDestinationResolver = null;
+    resolve?.(choice);
+  };
+  exportProject = async () => {
+    if (!(await this.ensureProjectName())) return;
     const payload = this.projectPayload();
+    if ((await import("../desktopFiles")).isDesktopBuild()) {
+      try {
+        const desktop = await import("../desktopFiles");
+        const path = await desktop.saveDesktopProject(
+          JSON.stringify(payload, null, 2),
+          exportFileName(this.projectName, ".bluek"),
+          this.activeDesktopFile,
+        );
+        if (!path) return;
+        this.activeDesktopFile = path;
+        this.markProjectSaved();
+        this.host.ui().status = "Project saved";
+      } catch (reason) {
+        this.host.ui().status = "Project error";
+        this.host.ui().error = reason instanceof Error ? reason.message : String(reason);
+      }
+      return;
+    }
     downloadFile(
       JSON.stringify(payload, null, 2),
       "application/json",
-      exportFileName(this.projectName, ".bluek.json"),
+      exportFileName(this.projectName, ".bluek"),
     );
     this.markProjectSaved();
     this.host.ui().status = "Project exported";
   };
   /** A ZIP for BlueJ, with the cards where the class diagram shows them. */
-  exportBlueJProject = () => {
-    if (!this.ensureProjectName()) return;
+  exportBlueJProject = async () => {
+    if (!(await this.ensureProjectName())) return;
     const cardPositions = Object.fromEntries(
       this.displayFiles.map((file, index) => [
         file.fileName,
@@ -1055,7 +1121,7 @@ export class ProjectWorkspace {
       this.host.session().mainDialog
     )
       return;
-    if (!this.ensureProjectName()) return;
+    if (!(await this.ensureProjectName())) return;
     if (action === "shareShortProgram") {
       try {
         checkServerProject(this.projectPayload());
@@ -1225,6 +1291,7 @@ export class ProjectWorkspace {
     payload: unknown,
     message = "Project loaded.",
     confirmReplacement = true,
+    markAsSaved = true,
   ): Promise<boolean> => {
     const imported = projectModelFromPayload(
       payload,
@@ -1233,7 +1300,7 @@ export class ProjectWorkspace {
     if (confirmReplacement && !this.confirmProjectReplacement()) return false;
     this.saveAutosave();
     this.documentVersion++;
-    this.savedProjectsNotice = false;
+    this.activeDesktopFile = null;
     this.linkProblem = null;
     const librarySourceFiles = new Set([
       "World.kt",
@@ -1260,7 +1327,7 @@ export class ProjectWorkspace {
       )
         ? imported.defaultTestClass
         : "";
-    this.markProjectSaved();
+    if (markAsSaved) this.markProjectSaved();
     this.closeReadme();
     this.selected = 0;
     this.host.editor().resetWindows();
@@ -1269,6 +1336,17 @@ export class ProjectWorkspace {
     return true;
   };
   importProject = async (event: Event) => {
+    if ((await import("../desktopFiles")).isDesktopBuild()) {
+      try {
+        const opened = await (await import("../desktopFiles")).chooseDesktopProject();
+        if (!opened) return;
+        await this.openDesktopProject(opened.path, true, opened.contents);
+      } catch (reason) {
+        this.host.ui().status = "Project error";
+        this.host.ui().error = reason instanceof Error ? reason.message : String(reason);
+      }
+      return;
+    }
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
     input.value = "";
@@ -1277,9 +1355,9 @@ export class ProjectWorkspace {
   };
   openProjectFile = async (file: File) => {
     try {
-      if (!/\.(json|zip)$/i.test(file.name)) {
+      if (!/\.(bluek|json|zip)$/i.test(file.name)) {
         this.host.ui().status =
-          "Choose a BlueK .json file, a BlueJ .zip file or a project directory.";
+          "Choose a BlueK project file, a BlueJ .zip file or a project directory.";
         return;
       }
       if (/\.zip$/i.test(file.name)) {
@@ -1298,6 +1376,54 @@ export class ProjectWorkspace {
       this.host.ui().error =
         reason instanceof Error ? reason.message : String(reason);
     }
+  };
+  openDesktopProject = async (
+    path: string,
+    askDestination = true,
+    openedContents?: string,
+  ) => {
+    if (this.activeDesktopFile === path && !this.hasUnsavedChanges) return;
+    if (this.desktopProjectsOpening.has(path)) return;
+    this.desktopProjectsOpening.add(path);
+    try {
+      const desktop = await import("../desktopFiles");
+      const contents =
+        openedContents ?? (await desktop.readDesktopProject(path)).contents;
+      const name = path.split(/[\\/]/).at(-1) || "project.bluek";
+      if (askDestination && this.hasProjectData()) {
+        const choice = await this.requestProjectDestination();
+        if (choice === "cancel") return;
+        if (choice === "new-window") {
+          await desktop.openDesktopProjectWindow(path);
+          return;
+        }
+      }
+      const loaded = await this.loadProject(
+        JSON.parse(contents),
+        `Loaded ${name}`,
+        false,
+      );
+      if (loaded) this.activeDesktopFile = path;
+    } catch (reason) {
+      this.host.ui().status = "Project error";
+      this.host.ui().error = reason instanceof Error ? reason.message : String(reason);
+    } finally {
+      this.desktopProjectsOpening.delete(path);
+    }
+  };
+  private receiveDesktopProject = (path: string) => {
+    if (!this.desktopFileEventsReady) {
+      this.pendingDesktopFiles.push(path);
+      return;
+    }
+    void this.openDesktopProject(path);
+  };
+  saveShortcut = async () => {
+    if (!(await import("../desktopFiles")).isDesktopBuild()) {
+      this.toolbarDialog = "save";
+      return;
+    }
+    if (this.files.length) await this.exportProject();
   };
   openProjectEntries = async (entries: ImportEntry[], name: string) => {
     try {
@@ -1320,7 +1446,7 @@ export class ProjectWorkspace {
     const item = event.dataTransfer?.items?.[0];
     if (item?.webkitGetAsEntry?.()?.isDirectory) return true;
     const file = item?.getAsFile() ?? event.dataTransfer?.files?.[0];
-    return Boolean(file && /\.(json|zip)$/i.test(file.name));
+    return Boolean(file && /\.(bluek|json|zip)$/i.test(file.name));
   };
   chooseBlueJProject = async (root: string) => {
     const choice = this.blueJImportChoice;
@@ -1440,7 +1566,24 @@ export class ProjectWorkspace {
     this.host.session().markUncompiled();
   };
   chooseTemplate = async (choice: string) => {
-    if (!this.confirmProjectReplacement()) return;
+    const desktop = await import("../desktopFiles");
+    if (this.hasProjectData()) {
+      if (desktop.isDesktopBuild()) {
+        const destination = await this.requestProjectDestination();
+        if (destination === "cancel") return;
+        if (destination === "new-window") {
+          try {
+            await desktop.openNewProjectWindow(choice);
+            this.newProjectOpen = false;
+            this.projectInfo = null;
+          } catch (reason) {
+            this.host.ui().status = "Project error";
+            this.host.ui().error = reason instanceof Error ? reason.message : String(reason);
+          }
+          return;
+        }
+      } else if (!this.confirmProjectReplacement()) return;
+    }
     await this.host.session().stopForProjectReplacement();
     if (choice === "empty") {
       await this.loadProject(
@@ -1477,6 +1620,41 @@ export class ProjectWorkspace {
   moveCard = this.diagram.moveCard;
   endCardDrag = this.diagram.endCardDrag;
   initialize = async (): Promise<void> => {
+    const desktop = await import("../desktopFiles");
+    let startupDesktopPath: string | null = null;
+    let startupTemplate: string | null = null;
+    if (desktop.isDesktopBuild()) {
+      const params = new URLSearchParams(window.location.search);
+      startupDesktopPath = params.get("bluekOpenProject");
+      startupTemplate = params.get("bluekNewProject");
+      if (!["empty", "empty-blueplay", "blueplay"].includes(startupTemplate ?? ""))
+        startupTemplate = null;
+      if (startupDesktopPath || startupTemplate) {
+        params.delete("bluekOpenProject");
+        params.delete("bluekNewProject");
+        const search = params.toString();
+        window.history.replaceState(
+          window.history.state,
+          "",
+          `${window.location.pathname}${search ? `?${search}` : ""}${window.location.hash}`,
+        );
+      }
+      this.stopDesktopCloseListener = await desktop.listenForDesktopCloseRequest(
+        () => this.hasUnsavedChanges,
+        () => {
+          this.closeRequestKind = "window";
+          this.closeProjectNameRequired = false;
+          this.closePromptOpen = true;
+        },
+      );
+      this.stopDesktopExitListener = await desktop.listenForDesktopExitRequest(
+        () => void this.requestDesktopExit(),
+      );
+      this.stopDesktopFileListener = await desktop.listenForDesktopProject((path) => {
+        void desktop.takeStartupDesktopProject();
+        this.receiveDesktopProject(path);
+      });
+    }
     this.markProjectSaved();
     const handoffRequested = new URLSearchParams(window.location.search).has(
       "import",
@@ -1569,11 +1747,7 @@ export class ProjectWorkspace {
     const restoreTab = async () => {
       const saved = await this.drafts.restore();
       if (saved)
-        await this.loadProject(saved, "Local project restored.", false);
-      else {
-        this.refreshRecentProjects();
-        this.savedProjectsNotice = this.recentProjects.length > 0;
-      }
+        await this.loadProject(saved, "Recovered unsaved project.", false, false);
     };
     this.drafts.migrateLegacy();
     const hasExplicitProject = Boolean(
@@ -1586,9 +1760,21 @@ export class ProjectWorkspace {
     );
     // Restore and enable local drafts before any optional server request.
     // A delayed/failed link cannot replace edits made while it is loading.
-    await restoreTab();
+    if (startupDesktopPath || startupTemplate) await this.drafts.start();
+    else await restoreTab();
     this.autosaveReady = true;
     this.saveAutosave();
+    if (desktop.isDesktopBuild()) {
+      if (startupDesktopPath)
+        await this.openDesktopProject(startupDesktopPath, false);
+      if (startupTemplate) await this.chooseTemplate(startupTemplate);
+      const startupPath = await desktop.takeStartupDesktopProject();
+      if (startupPath) this.pendingDesktopFiles.push(startupPath);
+      this.desktopFileEventsReady = true;
+      for (const path of [...new Set(this.pendingDesktopFiles)])
+        await this.openDesktopProject(path);
+      this.pendingDesktopFiles = [];
+    }
     if (handoffRequested) {
       const before = JSON.stringify(this.projectPayload());
       const version = this.documentVersion;
@@ -1631,10 +1817,9 @@ export class ProjectWorkspace {
     });
     $effect(() => {
       const payload = this.projectPayload();
-      if (this.autosaveReady) untrack(() => this.persistDraft(payload));
-    });
-    $effect(() => {
-      if (this.toolbarDialog === "open") untrack(this.refreshRecentProjects);
+      const unsaved = this.hasUnsavedChanges;
+      if (this.autosaveReady)
+        untrack(() => this.persistDraft(payload, unsaved));
     });
     $effect(() => {
       void this.files;
@@ -1644,17 +1829,26 @@ export class ProjectWorkspace {
     });
     const timer = window.setInterval(this.refreshInheritanceEdges, 250);
     this.refreshInheritanceEdges();
+    let pagehideHandled = false;
     const pagehide = () => {
-      this.saveAutosave();
+      pagehideHandled = true;
+      if (this.confirmedDesktopClose) {
+        try {
+          this.drafts.clearActive();
+        } catch {
+          /* Storage may be unavailable during shutdown. */
+        }
+      } else this.saveAutosave();
       this.drafts.release();
     };
     const beforeunload = (event: BeforeUnloadEvent) => {
-      if (!this.hasUnsavedChanges) return;
+      if (this.confirmedDesktopClose || !this.hasUnsavedChanges) return;
       event.preventDefault();
       event.returnValue = "";
     };
     const pageshow = (event: PageTransitionEvent) => {
       if (event.persisted) {
+        pagehideHandled = false;
         this.autosaveReady = false;
         void this.drafts.reclaim().then(() => {
           this.autosaveReady = true;
@@ -1662,22 +1856,23 @@ export class ProjectWorkspace {
         });
       }
     };
-    const storageChanged = (event: StorageEvent) => {
-      if (event.key === null || event.key.startsWith(DRAFT_PREFIX))
-        this.refreshRecentProjects();
-    };
     window.addEventListener("pagehide", pagehide);
     window.addEventListener("beforeunload", beforeunload);
     window.addEventListener("pageshow", pageshow);
-    window.addEventListener("storage", storageChanged);
     return () => {
       this.disconnectHandoff();
-      pagehide();
+      this.stopDesktopFileListener?.();
+      this.stopDesktopFileListener = null;
+      this.stopDesktopCloseListener?.();
+      this.stopDesktopCloseListener = null;
+      this.stopDesktopExitListener?.();
+      this.stopDesktopExitListener = null;
+      if (!pagehideHandled) this.saveAutosave();
+      this.drafts.release();
       window.clearInterval(timer);
       window.removeEventListener("pagehide", pagehide);
       window.removeEventListener("beforeunload", beforeunload);
       window.removeEventListener("pageshow", pageshow);
-      window.removeEventListener("storage", storageChanged);
     };
   };
   selectFile = (id: string) => {

@@ -71,7 +71,7 @@ downloading, recover it for import into BlueK with:
 ```sh
 gunzip -c <report>.json.gz | node --input-type=module -e \
   'let s=""; for await (const c of process.stdin) s+=c; const r=JSON.parse(s); if(!r.project) throw new Error("No project attached"); console.log(JSON.stringify(r.project,null,2));' \
-  > recovered.bluek.json
+  > recovered.bluek
 ```
 
 Outages trigger exponential retries from one minute up to one hour. Pending

@@ -12,22 +12,23 @@ Python is needed. It can also be distributed on its own.
 Features
 --------
 Create projects, open templates, edit/format/check/run Kotlin, use BluePlay,
-import JSON or BlueJ projects, export JSON and export standalone HTML programs.
+open BlueK project files or BlueJ projects, save BlueK project files and export
+standalone HTML programs.
 BlueJ ZIP export is available.
 
 Accounts and publishing require online BlueK and are hidden offline. No new
-project content links are generated. Open online BlueK and import a local JSON
-file to publish a short-lived public copy without custom images or sounds.
+project content links are generated. Open online BlueK and import a local BlueK
+project file to publish a short-lived public copy without custom images or sounds.
 Existing full content links remain readable during a transition with no agreed
 end date. A local HTML player's BlueK button opens the online home page;
-download/import its JSON to edit it.
+download/import its BlueK project file to edit it.
 
 Save your projects
 ------------------
 Browser autosave depends on the browser and the location of BlueK.html.
 Moving the file, clearing browser data or private browsing can remove access
 to drafts. Use Save > Download BlueK project file for backups or submissions.
-Reopen the .bluek.json file through Open.
+Reopen the .bluek file through Open.
 
 Before relying on offline use
 -----------------------------

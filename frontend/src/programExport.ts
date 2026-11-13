@@ -2,7 +2,7 @@ import { parseProject, type SavedProject } from "./projectFormat";
 
 /**
  * A runnable export: one saved project plus the `main()` the player starts.
- * The project part is exactly the `.bluek.json` payload, so the player can hand
+ * The project part is exactly the `.bluek` payload, so the player can hand
  * it back to BlueK as a file or link unchanged.
  *
  * Which files declare a supported `main` is only known after compiling;

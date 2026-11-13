@@ -106,7 +106,7 @@ assert.throws(() => createExportedProgram({ ...project, library: { id: 'blueplay
   { autoRun: false, showControls: false }), /Run button/);
 
 assert.equal(exportFileName('  Mein <Spiel>  ', '.html'), 'Mein -Spiel-.html');
-assert.equal(exportFileName('', '.bluek.json'), 'bluek-project.bluek.json');
+assert.equal(exportFileName('', '.bluek'), 'bluek-project.bluek');
 assert.equal(exportFileName(undefined, '.html'), 'bluek-project.html');
 
 console.log('Program export smoke passed.');

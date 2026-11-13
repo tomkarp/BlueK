@@ -338,7 +338,7 @@ test("GUI-156 saving an unnamed project requires a non-empty project name", asyn
     page.waitForEvent("download"),
     downloadChoice.click(),
   ]);
-  expect(download.suggestedFilename()).toBe("Named project.bluek.json");
+  expect(download.suggestedFilename()).toBe("Named project.bluek");
   await expect(page.getByLabel("Project name")).toHaveValue("Named project");
 });
 
@@ -502,7 +502,7 @@ test("NAV-05 account overview includes project management and supports project a
     row.getByRole("button", { name: "Download “Inheritance exercises” as JSON", exact: true }).click(),
   ]);
   expect(await jsonDownload.suggestedFilename()).toBe(
-    "Inheritance exercises.bluek.json",
+    "Inheritance exercises.bluek",
   );
   const [zipDownload] = await Promise.all([
     page.waitForEvent("download"),
@@ -518,8 +518,8 @@ test("NAV-05 account overview includes project management and supports project a
   const zipChunks: Buffer[] = [];
   for await (const chunk of zipStream) zipChunks.push(Buffer.from(chunk));
   expect(Object.keys(unzipSync(Buffer.concat(zipChunks))).sort()).toEqual([
-    "Hello World.bluek.json",
-    "Inheritance exercises.bluek.json",
+    "Hello World.bluek",
+    "Inheritance exercises.bluek",
   ]);
   page.once("dialog", (dialog) => dialog.accept());
   await row.getByRole("button", { name: "Open “Inheritance exercises”", exact: true }).click();

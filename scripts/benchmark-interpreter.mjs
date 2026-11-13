@@ -106,7 +106,7 @@ const evaluate = benchmark => async () => {
 };
 
 // Compile time of the Space Invaders template (parser and semantic analysis).
-const project = JSON.parse(await readFile('tests/fixtures/project-examples/space-invaders.bluek.json', 'utf8'));
+const project = JSON.parse(await readFile('tests/fixtures/project-examples/space-invaders.bluek', 'utf8'));
 const compile = async () => {
   const session = api.bluekCreateKotliteSession();
   session.configureBluePlay(true, 'benchmark-compile');

@@ -2357,3 +2357,127 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
   compared old/new artwork at 90px and 125px font sizes with device scale 1.
   Chromium/WebKit/export checks passed (3/3), rebuilt offline passed (1/1), and
   typecheck, player/offline/hosted builds passed. User visual acceptance pending.
+
+### Desktop project files — 2026-11-12
+
+- `.bluek` is now the standard project extension across web, offline, player,
+  examples and templates. Legacy `.bluek.json` and `.json` files remain
+  importable. Tauri is configured to associate `.bluek` files and provides
+  native open/save dialogs plus local read/write commands. Account and cloud UI
+  is disabled in Tauri, matching the offline IDE. BluePlay project templates
+  are embedded in the desktop build to avoid relying on WebView-relative URLs.
+  User-facing format labels describe BlueK project files rather than JSON.
+- `npm run typecheck` passed with zero errors and warnings. The macOS arm64
+  `.app` and DMG bundles built successfully (about 21 MB and 46 MB). The app
+  initially crashed because of an invalid, unused dialog-plugin configuration.
+  Removing it fixed startup; the rebuilt `/Applications/BlueK.app` process was
+  confirmed running. After the initial app report that BluePlay templates did
+  not open, the template payloads were embedded and the rebuilt app was
+  relaunched. Template selection itself still needs user confirmation. Its
+  current code signature is ad hoc; no Apple Developer signing or notarization
+  credentials were configured.
+- The local Vite app responds at `http://127.0.0.1:5173/` (HTTP 200); the local
+  API is listening on `127.0.0.1:8787`. Windows packaging is prepared but has
+  not been built here. Manual double-click/open/save behavior and GUI visual
+  acceptance and `.bluek` file-association behavior remain pending; Windows
+  behavior remains unverified.
+- Close-with-changes follow-up: Tauri now intercepts window close and app exit
+  (including Cmd-Q) and offers Save and close, Close without saving, or Continue
+  working, using the same project fingerprint as the browser editions.
+  Online/offline browser builds
+  retain their native `beforeunload` prompt, which cannot offer custom buttons.
+  `npm run typecheck` passed (zero errors/warnings), and the Mac app was rebuilt
+  and relaunched. Manual close/save/discard interaction and visual acceptance
+  remain pending.
+- Formatter follow-up: the Tauri CSP now allows same-origin asset fetches in
+  `connect-src` and `unsafe-eval`, required by the Kotlin formatter's local
+  WASM loader. `npm run typecheck` passed (zero errors/warnings); the Mac app
+  rebuilt and relaunched. Formatting in the app still needs manual confirmation.
+- Cmd-Q follow-up: native macOS Quit arrives with an exit code too, so code
+  presence cannot identify an approved exit. The app now permits exit only
+  after the user confirms in BlueK, and the macOS menu binds the shortcut
+  explicitly as `Cmd+Q`. A failed unprivileged copy left the installed app on
+  an older binary; the current `/Applications/BlueK.app` was then replaced with
+  the rebuilt app and its executable hash matched the build output. Manual
+  Cmd-Q/save/discard interaction remains pending.
+- Unnamed-project save follow-up: normal project-file save, save-and-close,
+  BlueJ/HTML export and account save now share a localized BlueK name dialog
+  before continuing. Save-and-close still requires a name inline in its
+  confirmation. Blank names show the localized validation message. Typecheck
+  passed with zero errors/warnings; the rebuilt Mac app was installed and its
+  executable hash matched the build output. Manual save-dialog interaction
+  remains pending.
+- Recovery is now one automatic copy per active tab, without a notice, list or
+  draft-deletion UI. Reload keeps the tab ID and saves its unsaved state during
+  `pagehide`, so two tabs can reload independently. When no tab-specific copy is
+  available, a fresh tab restores the newest orphan only if there is no live
+  owner; older copies are pruned when Web Locks are available. Typecheck passed
+  with zero errors/warnings. The arm64 Mac app built and was
+  installed to `/Applications/BlueK.app`; the installed executable hash matches
+  the build. Build output included non-blocking Rust debug-strip and bundle-size
+  warnings. Recovery GUI cases were updated but not run; interactive browser
+  confirmation remains pending.
+- Tauri project destination follow-up: opening a `.bluek` file or choosing a
+  new-project template in a non-empty window now offers replace here, open in a
+  new window, or cancel. Empty windows proceed without the prompt. New windows
+  load the requested file or open the New Project dialog; OS file-open events
+  target the focused window. `npm run typecheck` passed with zero
+  errors/warnings, and the arm64 Mac app built and was installed with a matching
+  executable hash. GUI interaction was not run; replace/new-window behavior
+  still needs manual confirmation.
+- Multi-window follow-up: native file-open and app-quit events are emitted to
+  the selected window label instead of all webviews. This prevents each open
+  window from showing a destination prompt for one file. The explanatory line
+  in the choice dialog now only warns that replacing discards unsaved changes.
+  Typecheck passed with zero errors/warnings; the arm64 Mac app rebuilt and was
+  installed with a matching executable hash. Manual two-window confirmation is
+  still pending.
+- File-open and shortcut follow-up: each frontend listener now also checks its
+  own window label. A macOS file-open event arriving before the initial window
+  is registered is kept for that window to consume at startup. Cmd-W now has an
+  explicit menu accelerator that requests closure of only the focused window;
+  the existing per-window unsaved-changes prompt still handles modified work.
+  Typecheck passed with zero errors/warnings; the arm64 app built, installed and
+  its executable hash matched. Cold-start file open, two-window routing and
+  Cmd-W remain unverified manually.
+- Cmd-W follow-up: added a Tauri-only capture-phase keyboard handler that asks
+  the current native window to close, so focused editors cannot swallow the
+  shortcut. The native close-request hook still decides whether to close or
+  show the unsaved-changes prompt. Typecheck passed and the Mac app was rebuilt,
+  installed and hash-matched. Manual Cmd-W behavior remains pending.
+
+- Desktop lifecycle review (2026-11-12): found the actual close blocker: the
+  Tauri SDK calls `destroy` after an accepted close, but that permission was
+  absent. Added it and removed the extra frontend Cmd-W handler. New windows
+  consume the selected template directly and bypass unrelated draft recovery.
+  File opening and Dock reopening also create a window after the last one was
+  closed. Added a real-SDK helper check covering clean/blocked/approved closure,
+  permissions, recipient filtering and template transfer; passed. Typecheck
+  passed with zero errors/warnings. Native accessibility inspection was blocked
+  by macOS error -10827, so native button/key acceptance is not claimed.
+- Desktop workflow verification (2026-11-12): the English/German New Project
+  browser checks passed (2/2). The new real-Svelte workflow check passed (1/1)
+  with Tauri IPC substituted: destination cancel returns to the selection, one
+  new window receives the chosen BluePlay example, its startup loads Dog
+  directly with no second selection/destination dialog, and the original
+  window remains unchanged. The initial browser run failed with sandbox EPERM;
+  automatic approval rejected the first elevated rerun under the earlier test
+  restriction. After explicit user authorization the focused tests passed.
+  The Mac build and installation completed; installed executable hash matched.
+  Native red-button/Cmd-W interaction remains unverified.
+
+- Native document-open crash (2026-11-12): reproduced the user's SIGABRT with
+  Launch Services and captured `Failed to setup app: a webview with label main
+  already exists`. `Opened`/`Reopen` can precede setup; the fallback window
+  creation collided with the configured main window. Added a native Ready
+  gate: early paths are queued, then delivered after setup or consumed by
+  startup IPC. Two corrected cold launches via macOS `open -a` successfully
+  queued, consumed and read the supplied BluePlay project files without this
+  crash. The 3/3 real-Svelte desktop workflow cases passed with native IPC
+  substituted, including startup file loading and non-recipient exclusion.
+  Real-SDK lifecycle helper and typecheck passed. Mac build and installation
+  completed; native screen contents were not visually accepted by the agent.
+- Native warm-open verification for the corrected build also passed: a second
+  Launch Services file-open request completed with the same BlueK process ID
+  before and after. Installed executable hash matches the final app bundle.
+  The diagnostic test instance was then replaced by a normal app launch.

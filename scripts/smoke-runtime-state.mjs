@@ -293,9 +293,9 @@ assert.ok(convertedCard.methods.some(method => method.name === 'main'));
 assert.notEqual((await projectClient.execute({ op: 'main', fileName: 'Hauptprogramm.kt' })).kind, 'error');
 assert.equal(projectOutputs.splice(0).join(''), 'converted\n');
 for (const [template, file] of [
-  ['kotlin-example', 'tests/fixtures/project-examples/kotlin-example.bluek.json'],
-  ['blueplay-empty', 'frontend/public/examples/blueplay-empty.bluek.json'],
-  ['blueplay', 'frontend/public/examples/blueplay.bluek.json'],
+  ['kotlin-example', 'tests/fixtures/project-examples/kotlin-example.bluek'],
+  ['blueplay-empty', 'frontend/public/examples/blueplay-empty.bluek'],
+  ['blueplay', 'frontend/public/examples/blueplay.bluek'],
 ]) {
   const payload = JSON.parse(await readFile(file, 'utf8'));
   const builtinFiles = new Set(['World.kt', 'Actor.kt', 'Image.kt', 'BluePlayFunctions.kt', 'BluePlayHelpers.kt']);
@@ -305,7 +305,7 @@ for (const [template, file] of [
   const result = await projectClient.compile(projectFiles.map(entry => ({ ...entry, id: entry.fileName })), 5, payload.library);
   assert.deepEqual(result.diagnostics, [], `${template} must still compile through the project loader`);
 }
-const nativePayload = JSON.parse(await readFile('frontend/public/examples/blueplay.bluek.json', 'utf8'));
+const nativePayload = JSON.parse(await readFile('frontend/public/examples/blueplay.bluek', 'utf8'));
 const builtinFiles = new Set(['World.kt', 'Actor.kt', 'Image.kt', 'BluePlayFunctions.kt', 'BluePlayHelpers.kt']);
 const nativeProjectFiles = nativePayload.files
   .filter(entry => !builtinFiles.has(entry.fileName))

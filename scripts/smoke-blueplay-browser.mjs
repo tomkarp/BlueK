@@ -11,7 +11,7 @@ const standardImages = [...(await readFile(new URL('../frontend/src/standardImag
   .matchAll(/path: "images\/([^"]+)"/g)].map(match => match[1]);
 if (!standardImages.includes('dog.png') || !standardImages.includes('duck.png')) throw new Error('The standard graphics manifest is missing BluePlay names.');
 const standardManifest = standardImages.map(name => `images/${name}\0\0\0`).join('\n');
-const staticProject = JSON.parse(await readFile(new URL('../frontend/public/examples/blueplay.bluek.json', import.meta.url), 'utf8'));
+const staticProject = JSON.parse(await readFile(new URL('../frontend/public/examples/blueplay.bluek', import.meta.url), 'utf8'));
 if (staticProject.resources?.length) throw new Error('The bundled BluePlay example should use standard images without project resources.');
 const dogSource = staticProject.files.find(file => file.fileName === 'Dog.kt')?.source;
 if (!dogSource?.includes('Image("dog.png")') || !staticProject.files.find(file => file.fileName === 'MyWorld.kt')?.source.includes('Dog()'))

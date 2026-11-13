@@ -31,7 +31,7 @@ const formatterGzipBase64 = gzipSync(brotliDecompressSync(await readFile(
   path.join(repository, 'node_modules/@scalar/kotlin-fmt/kotlin_fmt.wasm.br'),
 )), { level: 9 }).toString('base64');
 const projectTemplates = Object.fromEntries(await Promise.all([
-  'blueplay-empty.bluek.json', 'blueplay.bluek.json',
+  'blueplay-empty.bluek', 'blueplay.bluek',
 ].map(async file => [file, JSON.parse(await readFile(path.join(repository, 'frontend/public/examples', file), 'utf8'))])));
 const assetsId = '\0bluek-offline-assets';
 const wasmId = '\0bluek-offline-unused-wasm-url';
@@ -40,6 +40,7 @@ const offline = {
   enforce: 'pre',
   resolveId(id, importer) {
     if (id === 'virtual:bluek-player-worker') return '\0' + id;
+    if (id === 'virtual:bluek-project-templates') return '\0' + id;
     if (id === '@scalar/kotlin-fmt/wasm?url') return wasmId;
     if (importer && id.startsWith('.')) {
       const resolved = path.resolve(path.dirname(importer), id).replace(/\.ts$/, '');
@@ -50,6 +51,7 @@ const offline = {
   },
   load(id) {
     if (id === '\0virtual:bluek-player-worker') return `export default ${JSON.stringify(worker)};`;
+    if (id === '\0virtual:bluek-project-templates') return 'export default null;';
     if (id === assetsId) return `export default ${JSON.stringify({ playerTemplate, formatterGzipBase64, projectTemplates })};`;
     if (id === wasmId) return 'export default "";';
   },

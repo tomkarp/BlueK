@@ -4,12 +4,6 @@ export const DRAFT_PREFIX = "bluek.project-draft.v1.";
 export const TAB_DRAFT_KEY = "bluek.tab-draft.v1";
 const LEGACY_KEY = "bluek.current-project.v1";
 
-export type ProjectDraftSummary = {
-  id: string;
-  name: string;
-  updatedAt: number;
-  fileCount: number;
-};
 type ProjectDraft = { id: string; updatedAt: number; project: SavedProject };
 
 /**
@@ -18,7 +12,7 @@ type ProjectDraft = { id: string; updatedAt: number; project: SavedProject };
  * five million per site.
  */
 export type DraftSaveFailure =
-  | { reason: "quota"; projectChars: number; otherProjects: number; otherChars: number }
+  | { reason: "quota"; projectChars: number }
   | { reason: "blocked" }
   | { reason: "unknown"; detail: string };
 
@@ -37,7 +31,6 @@ export class ProjectDraftStorage {
   private lastSaved = "";
   private releaseLock: (() => void) | undefined;
   private lockCompletion: Promise<unknown> = Promise.resolve();
-  sessionAvailable = true;
 
   get activeId(): string {
     return this.id;
@@ -58,8 +51,8 @@ export class ProjectDraftStorage {
     };
   }
 
-  list(): ProjectDraftSummary[] {
-    const result: ProjectDraftSummary[] = [];
+  private entries(): ProjectDraft[] {
+    const result: ProjectDraft[] = [];
     try {
       const storage = this.host.local();
       for (let i = 0; i < storage.length; i++) {
@@ -67,39 +60,51 @@ export class ProjectDraftStorage {
         if (!key?.startsWith(DRAFT_PREFIX)) continue;
         try {
           const draft = this.read(key.slice(DRAFT_PREFIX.length));
-          if (draft)
-            result.push({
-              id: draft.id,
-              name: draft.project.projectName || "Untitled project",
-              updatedAt: draft.updatedAt,
-              fileCount: draft.project.files.length,
-            });
+          if (draft && this.hasProjectData(draft.project)) result.push(draft);
         } catch {
-          /* One corrupt draft must not hide the others. */
+          /* One corrupt recovery copy must not hide the others. */
         }
       }
     } catch {
       /* Storage is optional. */
     }
-    return result.sort(
-      (a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id),
+    return result.sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
+  }
+
+  private hasProjectData(project: SavedProject): boolean {
+    return Boolean(
+      project.files.length ||
+        project.resources?.length ||
+        project.readme?.trim() ||
+        project.projectName?.trim() ||
+        project.library,
     );
   }
 
-  delete(id: string): void {
-    this.host.local().removeItem(DRAFT_PREFIX + id);
-    // Keep lastSaved: displaying/closing an unchanged open project must not
-    // recreate a deleted copy. A subsequent edit can autosave it again.
+  private setSessionId(id: string): void {
+    try {
+      this.host.session().setItem(TAB_DRAFT_KEY, id);
+    } catch {
+      /* Local storage can still recover the latest copy after a crash. */
+    }
   }
 
-  deleteAll(): void {
+  private async discardOtherCopies(keepId: string): Promise<void> {
     const storage = this.host.local();
     const keys: string[] = [];
     for (let i = 0; i < storage.length; i++) {
       const key = storage.key(i);
-      if (key?.startsWith(DRAFT_PREFIX) || key === LEGACY_KEY) keys.push(key);
+      if (key?.startsWith(DRAFT_PREFIX) && key !== DRAFT_PREFIX + keepId)
+        keys.push(key);
     }
-    for (const key of keys) storage.removeItem(key);
+    for (const key of keys) {
+      const id = key.slice(DRAFT_PREFIX.length);
+      if (this.host.locks()) {
+        if (!(await this.acquire(id))) continue;
+        storage.removeItem(key);
+        this.release();
+      }
+    }
   }
 
   migrateLegacy(): void {
@@ -145,19 +150,14 @@ export class ProjectDraftStorage {
     await this.lockCompletion;
     this.lastSaved = "";
     // Duplicated tabs inherit sessionStorage. A live document owns its draft
-    // exclusively; a second document forks. Without Web Locks, fork on restore
-    // as well so independent tabs can never write to the same stored project.
+    // exclusively; a second document forks. Reuse the tab ID without Web Locks
+    // so a reload still finds this tab's recovery copy.
     this.id = id;
-    if (!(await this.acquire(id))) {
+    if (this.host.locks() && !(await this.acquire(id))) {
       this.id = this.host.newId();
       await this.acquire(this.id);
     }
-    try {
-      this.host.session().setItem(TAB_DRAFT_KEY, this.id);
-      this.sessionAvailable = true;
-    } catch {
-      this.sessionAvailable = false;
-    }
+    this.setSessionId(this.id);
   }
 
   async start(): Promise<void> {
@@ -185,11 +185,44 @@ export class ProjectDraftStorage {
   }
 
   async restore(): Promise<SavedProject | null> {
+    let tabId: string | null = null;
     try {
-      const id = this.host.session().getItem(TAB_DRAFT_KEY);
-      if (id) return await this.open(id);
+      tabId = this.host.session().getItem(TAB_DRAFT_KEY);
     } catch {
-      /* Missing or invalid draft: start normally. */
+      /* Session storage is optional. */
+    }
+    if (tabId) {
+      try {
+        return await this.open(tabId);
+      } catch {
+        /* Missing or invalid active-tab copy: try crash recovery below. */
+      }
+    }
+
+    const candidates = this.entries();
+    if (candidates.length) {
+      const locks = this.host.locks();
+      let anotherTabIsActive = false;
+      if (locks) {
+        for (const candidate of candidates) {
+          if (await this.acquire(candidate.id)) this.release();
+          else anotherTabIsActive = true;
+        }
+      }
+
+      // A new tab should not silently take over a live tab's project. When
+      // Web Locks are unavailable, the most recent copy wins by design.
+      if (!anotherTabIsActive) {
+        const latest = candidates[0];
+        if (locks) await this.discardOtherCopies(latest.id);
+        const locked = locks ? await this.acquire(latest.id) : false;
+        if (!locks || locked) {
+          this.id = latest.id;
+          this.setSessionId(this.id);
+          this.lastSaved = JSON.stringify(parseProject(latest.project));
+          return latest.project;
+        }
+      }
     }
     await this.start();
     return null;
@@ -208,19 +241,7 @@ export class ProjectDraftStorage {
   failure(error: unknown, project: SavedProject): DraftSaveFailure {
     const name = error instanceof Error || error instanceof DOMException ? error.name : "";
     if (QUOTA_ERRORS.includes(name)) {
-      let otherProjects = 0, otherChars = 0;
-      try {
-        const storage = this.host.local();
-        for (let i = 0; i < storage.length; i++) {
-          const key = storage.key(i);
-          if (!key?.startsWith(DRAFT_PREFIX) || key === DRAFT_PREFIX + this.id) continue;
-          otherProjects += 1;
-          otherChars += key.length + (storage.getItem(key)?.length ?? 0);
-        }
-      } catch {
-        /* Only the project size is known then. */
-      }
-      return { reason: "quota", projectChars: JSON.stringify(project).length, otherProjects, otherChars };
+      return { reason: "quota", projectChars: JSON.stringify(project).length };
     }
     if (name === "SecurityError") return { reason: "blocked" };
     const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
@@ -232,23 +253,30 @@ export class ProjectDraftStorage {
     // Parsing returns a stable field order, shared with read()/open(). The
     // workspace's export field order must not turn a reload into an edit.
     const source = JSON.stringify(parseProject(project));
-    if (source === this.lastSaved) return;
     const storage = this.host.local();
-    // Simply opening an empty IDE does not create a Recent work entry.
-    if (
-      !project.files.length &&
-      !project.resources?.length &&
-      !project.readme &&
-      !project.projectName &&
-      !project.library &&
-      !storage.getItem(DRAFT_PREFIX + this.id)
-    )
+    if (!this.hasProjectData(project)) {
+      this.clearActive();
       return;
+    }
+    if (source === this.lastSaved && storage.getItem(DRAFT_PREFIX + this.id)) return;
     storage.setItem(
       DRAFT_PREFIX + this.id,
       JSON.stringify({ id: this.id, updatedAt: this.host.now(), project }),
     );
     this.lastSaved = source;
+    this.setSessionId(this.id);
+  }
+
+  clearActive(): void {
+    if (!this.id) return;
+    this.host.local().removeItem(DRAFT_PREFIX + this.id);
+    this.lastSaved = "";
+    try {
+      if (this.host.session().getItem(TAB_DRAFT_KEY) === this.id)
+        this.host.session().removeItem(TAB_DRAFT_KEY);
+    } catch {
+      /* Recovery storage is optional. */
+    }
   }
 
   release(): void {

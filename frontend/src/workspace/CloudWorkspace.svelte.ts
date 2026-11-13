@@ -42,7 +42,7 @@ interface CloudHost {
       payload: unknown,
       message?: string,
     ) => Promise<boolean | void>;
-    ensureProjectName: () => boolean;
+    ensureProjectName: () => Promise<boolean>;
     readonly documentVersion: number;
     exportProject: () => void;
   };
@@ -205,7 +205,7 @@ export class CloudWorkspace {
     });
   save = async () => {
     const project = this.host.project();
-    if (!project.ensureProjectName()) return false;
+    if (!(await project.ensureProjectName())) return false;
     return this.run(async () => {
       const payload = project.projectPayload();
       checkServerProject(payload);
@@ -382,7 +382,7 @@ export class CloudWorkspace {
       checkServerProject(result.project);
       const name = safeFilename(result.project.projectName || "BlueK-Projekt");
       downloadFile(
-        `${name}.bluek.json`,
+        `${name}.bluek`,
         JSON.stringify(result.project, null, 2),
         "application/json",
       );
@@ -399,10 +399,10 @@ export class CloudWorkspace {
         );
         checkServerProject(result.project);
         const base = safeFilename(item.name || "BlueK-Projekt");
-        let filename = `${base}.bluek.json`;
+        let filename = `${base}.bluek`;
         let suffix = 2;
         while (usedNames.has(filename.toLocaleLowerCase())) {
-          filename = `${base} (${suffix++}).bluek.json`;
+          filename = `${base} (${suffix++}).bluek`;
         }
         usedNames.add(filename.toLocaleLowerCase());
         files[filename] = strToU8(JSON.stringify(result.project, null, 2));

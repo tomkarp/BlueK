@@ -15,6 +15,7 @@
   import CallDialogs from "./components/CallDialogs.svelte";
   import MainSelectionDialog from "./components/MainSelectionDialog.svelte";
   import NewProjectDialog from "./components/NewProjectDialog.svelte";
+  import ProjectDestinationDialog from "./components/ProjectDestinationDialog.svelte";
   import ReadmeDialog from "./components/ReadmeDialog.svelte";
   import BluePlayApiDialog from "./components/BluePlayApiDialog.svelte";
   import NewClassDialog from "./components/NewClassDialog.svelte";
@@ -40,6 +41,7 @@
   import { BluePlayWorkspace } from "./workspace/BluePlayWorkspace.svelte";
   import { TerminalWorkspace } from "./workspace/TerminalWorkspace.svelte";
   import { onMount, untrack } from "svelte";
+  import { containClicks, focusOnMount } from "./uiActions";
   import { ProjectSourceAnalysis } from "./projectSourceAnalysis";
   import { CloudWorkspace } from "./workspace/CloudWorkspace.svelte";
   import CloudDialog from "./components/CloudDialog.svelte";
@@ -118,16 +120,12 @@
   const offlineBuild = import.meta.env.VITE_BLUEK_OFFLINE === "1";
   const OFFLINE_DOWNLOAD = `${import.meta.env.BASE_URL}downloads/BlueK-offline.zip`;
 
-  // The reason a draft is not stored, translated at display time; a closed
+  // The reason recovery data is not stored, translated at display time; a closed
   // warning stays closed until the reason changes.
   const storageWarning = $derived.by(() => {
     const warning = project.autosaveWarning;
     if (!warning || warning.reason === project.autosaveWarningDismissed)
       return "";
-    if (warning.reason === "session")
-      return t(
-        "ui.transfer.automaticProjectRecoveryIsUnavailableUseSaveExport",
-      );
     if (warning.reason === "blocked")
       return t("ui.workspace.draftStorageBlocked");
     if (warning.reason === "unknown")
@@ -139,11 +137,7 @@
     // A nonempty size never reads as zero.
     const size = (chars: number) =>
       megabytes.format(chars ? Math.max(0.1, chars / 1024 / 1024) : 0);
-    return t("ui.workspace.draftStorageFull", [
-      size(warning.projectChars),
-      warning.otherProjects,
-      size(warning.otherChars),
-    ]);
+    return t("ui.workspace.draftStorageFull", [size(warning.projectChars)]);
   });
 
   // Each controller owns its UI state; runtime data has one client and one snapshot.
@@ -360,6 +354,8 @@
       return () => {
         project.toolbarDialog = null;
       };
+    if (project.projectDestinationDialogOpen)
+      return () => project.chooseProjectDestination("cancel");
     if (project.newProjectOpen)
       return () => {
         project.newProjectOpen = false;
@@ -397,7 +393,7 @@
     if (mod && (event.key.toLowerCase() === "s" || event.code === "KeyS")) {
       event.preventDefault();
       event.stopPropagation();
-      if (project.files.length) project.toolbarDialog = "save";
+      if (project.files.length) void project.saveShortcut();
       return;
     }
     if (
@@ -732,7 +728,7 @@
     >
       {language.message(project.shareNotice)}
     </div>{/if}
-  {#if project.handoffPending || project.linkProblem || project.blueJExportNotice || project.savedProjectsNotice || storageWarning}
+  {#if project.handoffPending || project.linkProblem || project.blueJExportNotice || storageWarning}
     <div class="workspace-notices">
       {#if project.handoffPending}
         <div class="project-recovery-notice" role="status" aria-live="polite">
@@ -768,22 +764,14 @@
           >
         </div>
       {/if}
-      {#if project.savedProjectsNotice || storageWarning}
+      {#if storageWarning}
         <div class="project-recovery-notice" role="status" aria-live="polite">
-          <span>{storageWarning || t("ui.workspace.savedProjectsNotice")}</span>
-          {#if storageWarning}
-            <button
-              aria-label={t("ui.workspace.dismissStorageWarning")}
-              title={t("ui.workspace.dismiss")}
-              onclick={project.dismissAutosaveWarning}>×</button
-            >
-          {:else}
-            <button
-              aria-label={t("ui.workspace.dismissSavedProjectsNotice")}
-              title={t("ui.workspace.dismiss")}
-              onclick={() => (project.savedProjectsNotice = false)}>×</button
-            >
-          {/if}
+          <span>{storageWarning}</span>
+          <button
+            aria-label={t("ui.workspace.dismissStorageWarning")}
+            title={t("ui.workspace.dismiss")}
+            onclick={project.dismissAutosaveWarning}>×</button
+          >
         </div>
       {/if}
     </div>
@@ -906,6 +894,10 @@
     bind:projectInfo={project.projectInfo}
     chooseTemplate={project.chooseTemplate}
   />
+  <ProjectDestinationDialog
+    open={project.projectDestinationDialogOpen}
+    choose={project.chooseProjectDestination}
+  />
   <ReadmeDialog
     readmeOpen={project.readmeOpen}
     bind:readmeHelp={project.readmeHelp}
@@ -958,10 +950,6 @@
   <ProjectTransferDialogs
     {cloud}
     showNotice={project.showExportNotice}
-    recentProjects={project.recentProjects}
-    openRecentProject={project.openRecentProject}
-    deleteRecentProject={project.deleteRecentProject}
-    deleteAllRecentProjects={project.deleteAllRecentProjects}
     bind:toolbarDialog={project.toolbarDialog}
     bind:shareLinkDialog={project.shareLinkDialog}
     bind:shareCodeInput={project.shareCodeInput}
@@ -1045,4 +1033,93 @@
     clearHistory={session.clearCodepadHistory}
   />
   <FeedbackDialog {feedback} />
+  {#if project.closePromptOpen}
+    <div class="modal topmost-modal" role="presentation">
+      <div
+        class="dialog close-project-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="close-project-title"
+        use:containClicks
+      >
+        <h3 id="close-project-title">{t("ui.common.unsavedChangesTitle")}</h3>
+        <p>{t("ui.common.unsavedChangesBeforeClose")}</p>
+        {#if !project.projectName.trim()}
+          <label>
+            {t("ui.toolbar.projectName")}
+            <input
+              bind:value={project.projectName}
+              required
+              maxlength="120"
+              use:focusOnMount
+              aria-invalid={project.closeProjectNameRequired && !project.projectName.trim()}
+              aria-describedby={project.closeProjectNameRequired ? "close-project-name-error" : undefined}
+            />
+          </label>
+          {#if project.closeProjectNameRequired && !project.projectName.trim()}
+            <p id="close-project-name-error" class="dialog-error" role="alert">
+              {t("ui.transfer.projectNameRequired")}
+            </p>
+          {/if}
+        {/if}
+        <div class="dialog-actions">
+          <button
+            disabled={project.closePromptBusy}
+            onclick={project.closeDesktopWithoutSaving}
+          >{t("ui.common.closeWithoutSaving")}</button>
+          <button
+            disabled={project.closePromptBusy}
+            onclick={project.cancelDesktopClose}
+            use:focusOnMount
+          >{t("ui.common.continueWorking")}</button>
+          <button
+            disabled={project.closePromptBusy}
+            onclick={project.saveAndCloseDesktop}
+          >{t("ui.common.saveAndClose")}</button>
+        </div>
+      </div>
+    </div>
+  {/if}
+  {#if project.projectNamePromptOpen}
+    <div class="modal topmost-modal" role="presentation">
+      <div
+        class="dialog close-project-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="project-name-title"
+        use:containClicks
+      >
+        <form
+          onsubmit={(event) => {
+            event.preventDefault();
+            project.confirmProjectName();
+          }}
+        >
+          <h3 id="project-name-title">{t("ui.toolbar.projectName")}</h3>
+          <p>{t("ui.transfer.whatShouldYourProjectBeCalled")}</p>
+          <label>
+            {t("ui.toolbar.projectName")}
+            <input
+              bind:value={project.projectNameDraft}
+              maxlength="120"
+              use:focusOnMount
+              aria-invalid={project.projectNamePromptRequired && !project.projectNameDraft.trim()}
+              aria-describedby={project.projectNamePromptRequired ? "project-name-error" : undefined}
+            />
+          </label>
+          {#if project.projectNamePromptRequired && !project.projectNameDraft.trim()}
+            <p id="project-name-error" class="dialog-error" role="alert">
+              {t("ui.transfer.projectNameRequired")}
+            </p>
+          {/if}
+          <div class="dialog-actions">
+            <button type="button" onclick={project.cancelProjectNamePrompt}
+              >{t("ui.common.cancel")}</button
+            >
+            <button type="submit">{t("ui.common.saveExport")}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {/if}
 </div>

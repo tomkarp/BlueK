@@ -4,14 +4,22 @@ BlueK is a browser-based Kotlin learning environment inspired by BlueJ.
 Create objects, call their methods and explore their state without writing
 an entire application first. Student code runs locally in your browser.
 
-**[Open BlueK](https://bluek.online)** · **[Try the beta](https://beta.bluek.online)**
+**[Open BlueK](https://bluek.online)**
+
+## Ways to use BlueK
+
+- **Online (recommended):** use [bluek.online](https://bluek.online) in your browser.
+- **Offline HTML:** use BlueK's download button to get the ZIP, then extract it and open `BlueK.html` in a recent browser. No installation is needed. See the [offline guide](docs/user-guide.md#offline-use).
+- **Desktop app:** download BlueK for [macOS or Windows](https://github.com/tomkarp/BlueK/releases). Desktop apps open `.bluek` project files directly. Windows installers are unsigned and may show a security warning.
+
+The offline and desktop editions are for local work; account and cloud features are available online. See the [desktop app notes](docs/desktop-app.md).
 
 ## What you can do
 
 - Work with class diagrams, a Kotlin editor, an object bench and inspectors.
 - Evaluate expressions in the codepad and run programs with terminal input/output.
 - Build games with the included BluePlay library and project templates.
-- Save projects as JSON, import/export BlueJ projects, optionally store private
+- Save BlueK project files, import/export BlueJ projects, optionally store private
   projects in an account, and publish seven-day links without custom media.
 - Export a program as a standalone HTML page or use BlueK offline.
 - Save and reload an interactive object state, record tests and run a reduced
@@ -30,7 +38,7 @@ empty project or a template. Create a class, compile it and right-click its
 card to create an object. Right-click the object to call a method, or
 inspect it with a double-click.
 
-Projects autosave in the browser. Use **Save / Export → Export Project JSON**
+Projects autosave in the browser. Use **Save / Export → Save BlueK project file**
 for a backup or submission; browser storage is not a reliable backup.
 
 ## Documentation

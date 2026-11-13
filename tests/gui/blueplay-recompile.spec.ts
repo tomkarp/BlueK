@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-const project = JSON.parse(readFileSync(new URL('../fixtures/blueplay-recompile.bluek.json', import.meta.url), 'utf8')) as {
+const project = JSON.parse(readFileSync(new URL('../fixtures/blueplay-recompile.bluek', import.meta.url), 'utf8')) as {
   files: { fileName: string; kind: string; source: string }[];
 };
 

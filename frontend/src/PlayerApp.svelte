@@ -273,7 +273,7 @@
     });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = exportFileName(model.projectName, ".bluek.json");
+    link.download = exportFileName(model.projectName, ".bluek");
     document.body.append(link);
     link.click();
     link.remove();

@@ -78,29 +78,24 @@ Reset or Compile.
 Each tab has an independent automatic recovery draft. Reloading restores that
 tab's draft. Edits update that one entry; they do not create a version history.
 Different tabs do not overwrite each other's work. Duplicated tabs get
-independent drafts when the browser supports Web Locks; the fallback may create
-an additional draft on restoration.
+independent drafts when the browser supports Web Locks. If the browser has no
+Web Locks, a tab still reuses its own draft after reload.
 
-A fresh start shows a dismissible notice when other recoverable drafts exist.
-The active tab restores itself automatically. **Open → Restore** shows drafts
-from other tabs or earlier sessions, with the three newest shown first. It can
-reopen source, resources, README, card positions and the default state class.
-The object bench itself is restored only through [Load state](testing.md#saved-state).
-Loading another project into a non-empty tab asks before replacing the open
-project and its browser autosave.
+Recovery is automatic; there is no draft list to manage. If the browser or app
+starts without a tab-specific draft, BlueK restores the newest leftover copy
+when no other tab is using one. Older abandoned copies are removed. The restored
+project includes source, resources, README, card positions and the default state
+class. The object bench itself is restored only through
+[Load state](testing.md#saved-state). Loading another project into a non-empty
+tab asks before replacing the open project and its recovery copy.
 
-Use the trash icon beside a recovery draft, or **Delete all**, to remove browser
-copies after confirmation. This keeps settings and does not close open projects.
-An unchanged open project does not recreate its deleted copy; editing it does.
-
-Drafts have no BlueK expiry date. Browser cleanup, private browsing, storage
-limits and browser policies can remove them. Browser session restoration also
-determines which tabs return after reopening the browser. Export JSON for work
-you need to retain.
+Recovery copies are cleared after an explicit project save. Browser cleanup,
+private browsing, storage limits and browser policies can remove them. Export a
+BlueK project file for work you need to retain.
 
 ## Import, export and links
 
-**Open** accepts `.bluek.json` files and BlueJ projects as ZIPs or
+**Open** accepts `.bluek` files and BlueJ projects as ZIPs or
 folders. Historical BluePlay library source files are replaced by the built-in
 library when applicable; Kotlin files, card positions, images and sounds are
 imported. If a ZIP or folder contains several projects, choose one from the
@@ -112,11 +107,11 @@ The left-hand editing/run/test controls and the terminal/window layout are uncha
 The view buttons remain in the upper-right toolbar; a separator distinguishes
 **Sign in / Account** from these display controls.
 
-**Open** groups browser drafts, **In my account**, **From computer** and shared
-project codes in one dialog. Expand **In my account** to load or delete private
+**Open** loads a project **From computer** or from a shared project code. When
+online, it also offers **In my account** for loading or deleting private
 projects. Only that explicit action contacts the optional account service.
 
-**Save** offers **Download BlueK project file** (portable `.bluek.json`) and
+**Save** offers **Save BlueK project file** (portable `.bluek`) and
 **Save in account** (private server storage). Under **Other formats**, choose
 **Export BlueJ Project (.zip)** or **Runnable webpage …**. The webpage step
 shows player options and the **Export as HTML** action. **Back** returns to
@@ -143,8 +138,8 @@ or 30 days from a signed-in account. Only built-in
 BluePlay media are allowed; supplied images and sounds are rejected by name
 without modifying the original. Anyone with a link can open it. Publishers
 cannot withdraw it; the operator can block it. Visits do not extend its lifetime.
-Server uploads are limited to 1 MiB of UTF-8 project JSON including embedded
-media/Base64 overhead. Local JSON and HTML files have no such server limit.
+Server uploads are limited to 1 MiB of project data including embedded media.
+Local BlueK project files and HTML files have no such server limit.
 HTML exports embed the runtime and run without a server or network.
 
 **Sign in / Account** offers optional pseudonymous registration without
@@ -159,8 +154,8 @@ project lists in Open and Save let you rename projects; Open → In my account
 also lets you load or delete them. Lists load when you select the account
 source. Other accounts cannot access private contents.
 Publishing always creates an independent copy; editing/deleting a private
-original does not change it. Keep your own downloaded JSON backups: server
-storage can fail or lose data and promises no retention period. Accounts and
+original does not change it. Keep your own downloaded BlueK project file
+backups: server storage can fail or lose data and promises no retention period. Accounts and
 private projects may be deleted after twelve months without signed-in use.
 Public visits do not count as account use.
 
@@ -195,7 +190,7 @@ project in BlueK instead.
 
 Project links share **Open README** and **Load state** options. Load state
 requires a default test class and automatically restores its state on opening
-the link. Both options can be selected together. Regular JSON imports and
+the link. Both options can be selected together. Regular project file imports and
 autosave restoration do not automatically load state.
 
 Both runnable export actions use one shared **For links and HTML** options
@@ -204,9 +199,9 @@ Program links and HTML exports share independent **Show project name**,
 **Allow source download** and **Include “Open in BlueK”** options. Hiding the
 name removes the page heading and uses a generic browser-tab title; the saved
 project name is preserved. The player has no running/paused status label. The download is the complete editable
-`.bluek.json` project. The developer link of a published program opens the same stored copy with its
+`.bluek` project. The developer link of a published program opens the same stored copy with its
 original expiry. A local HTML player opens the BlueK home page: download its
-JSON and import it there. Without
+BlueK project file and import it there. Without
 **Include “Open in BlueK”**, a short program code also cannot be opened as a
 project through `?p=…` or **Open**. These options do not provide
 source confidentiality: the interpreter needs the source, which remains part of
@@ -235,9 +230,10 @@ are embedded. Short links require the online service and are hidden offline.
 Full project and program links point to the online BlueK site; opening them needs internet.
 
 The offline version has not yet been widely tested in practice. Test your own
-projects and browser before relying on it. Browser autosave may depend on the
-location of BlueK.html; moving the file can make previous drafts unavailable.
-Use JSON export for submissions and backups.
+projects and browser before relying on it. Local recovery may depend on the
+location of BlueK.html; moving the file can make previous recovery copies
+unavailable.
+Use BlueK project files for submissions and backups.
 
 Use **Report a problem…** in the sidebar or from a compiler/codepad error to
 tell the developer about a bug or missing Kotlin support.
