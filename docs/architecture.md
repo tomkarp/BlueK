@@ -472,11 +472,11 @@ in the stored envelope. `entry.ts` loads only the selected IDE or player.
 standalone HTML. Hosted links use a module worker; HTML uses the embedded Blob
 worker. Neither player path initializes browser drafts.
 
-`shareRoutes.ts` also reads legacy `/bluek/`, `/run/`, `/load/` paths below the
-configured prefix (and former `/BlueK/` prefix at the production root).
-`legacyContentLinks.ts` centrally gates read-only compatibility for existing
-`#bluek`/`#run` payloads, with no agreed shutdown date. `linkNavigation.ts` owns
-same-document hash reloads. Save and Share are separate viewport-bounded dialogs
+`shareRoutes.ts` reads current server-code routes (`?p=`, `?run=`, `/bluek/`
+and `/run/`) below the configured prefix (and former `/BlueK/` prefix at the
+production root). Full `#bluek`/`#run` payload links and `/load/` are disabled.
+The inf-schule one-shot handoff is an independent trusted import path. Save and
+Share are separate viewport-bounded dialogs
 with fixed dimensions, scrolling content and a persistent footer. Save offers
 private storage and file formats; Share offers public editor/player copies.
 `ProgramExportOptions` presents the same bound options for published programs

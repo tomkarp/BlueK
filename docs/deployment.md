@@ -107,9 +107,10 @@ verification steps are in [desktop app signing](desktop-app.md#signing-and-relea
    [GitHub custom-domain instructions](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site).
 8. Remove the old `bluek.online` static vhost from Caddy after propagation. Keep
    API compatibility on old alias domains only where needed for downloaded old
-   clients. Domain fragments survive browser redirects; legacy `/bluek/`,
-   `/run/`, `/load/` and former `/BlueK/` paths use the Pages 404 app fallback.
-   New query links require no rewrite and return the ordinary root document.
+   clients. Current `/bluek/`, `/run/` and former `/BlueK/` code paths use the
+   Pages 404 app fallback; `/load/` is retired. Query links require no rewrite
+   and return the ordinary root document. Full project data in URL fragments
+   is not supported.
 9. For a new cutover, verify production and beta independently: account registration/login/logout/password
    change, own/other private projects, publication/player, operator block,
    technical feedback, existing links. Then block the API origin in browser

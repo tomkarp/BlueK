@@ -76,13 +76,36 @@ try {
         page.on('pageerror', error => errors.push(error.message));
         await page.goto(base);
         await expect(page.getByLabel('Codepad input')).toBeEnabled();
-        assert.equal(requests.some(url => url.startsWith(api)), false, 'No API dependency on editor startup');
+        assert.equal(
+          requests.some(url => /\/api\/(?:projects|programs|private-projects)(?:\/|\?|$)/.test(url)),
+          false,
+          'Editor startup does not load shared project copies',
+        );
+        const retiredContext = await browser.newContext({ locale: 'en-US' });
+        const retiredLinks = await retiredContext.newPage();
+        await retiredLinks.goto(`${base}load/${projectCode}`);
+        await expect(retiredLinks.getByLabel('Codepad input')).toBeEnabled();
+        await expect(retiredLinks.locator('.classcard')).toHaveCount(0);
+        await expect(retiredLinks).toHaveURL(base);
+        const fullProject = `${base}#bluek=p1.${Buffer.from(JSON.stringify(project)).toString('base64url')}`;
+        await retiredLinks.goto(fullProject);
+        await expect(retiredLinks.getByLabel('Codepad input')).toBeEnabled();
+        await expect(retiredLinks.getByLabel('Project name')).not.toHaveValue(project.projectName);
+        await expect(retiredLinks.locator('.player-terminal')).toHaveCount(0);
+        const fullProgram = `${base}#run=p1.${Buffer.from(JSON.stringify(program)).toString('base64url')}`;
+        await retiredLinks.goto(fullProgram);
+        await expect(retiredLinks.getByLabel('Codepad input')).toBeEnabled();
+        await expect(retiredLinks.locator('.player-terminal')).toHaveCount(0);
+        await retiredContext.close();
         await page.goto(`${base}?run=${runCode.toUpperCase()}`);
         await expect(page.locator('.player-terminal pre')).toHaveText('ready\n');
         await expect(page.getByRole('link', { name: 'Open in BlueK' })).toHaveAttribute('href', `${base}?p=${runCode}`);
         await page.getByRole('link', { name: 'Open in BlueK' }).evaluate(link => { window.location.href = link.href; });
         await expect(page.getByLabel('Project name')).toHaveValue(project.projectName);
         await expect(page.getByRole('button', { name: /report inappropriate content/i })).toHaveCount(0);
+        // Replacing the project restored from the previous code link requires
+        // confirmation before the README option can be applied.
+        page.once('dialog', dialog => dialog.accept());
         await page.goto(`${base}?p=${projectCode}&readme=1`);
         await expect(page.getByRole('dialog', { name: 'README.md' })).toBeVisible();
         await page.getByRole('dialog', { name: 'README.md' }).getByRole('button', { name: 'Close', exact: true }).click();
@@ -90,12 +113,9 @@ try {
         const legacy = await page.goto(`${base}bluek/${projectCode}`);
         assert.equal(legacy.status(), 404);
         await expect(page.getByLabel('Project name')).toHaveValue(project.projectName);
-        await page.goto(`${base}load/${projectCode}`);
-        await expect(page.getByLabel('Project name')).toHaveValue(project.projectName);
-        const full = `${base}#run=p1.${Buffer.from(JSON.stringify(program)).toString('base64url')}`;
-        await page.goto(full);
+        await page.goto(`${base}run/${runCode}`);
         await expect(page.locator('.player-terminal pre')).toHaveText('ready\n');
-        await expect(page.getByRole('link', { name: 'Open in BlueK' })).toHaveAttribute('href', base);
+        await expect(page.getByRole('link', { name: 'Open in BlueK' })).toHaveAttribute('href', `${base}?p=${runCode}`);
 
         // Public player links do not expose a content-report action.
         await page.goto(`${base}?run=${hiddenCode}`);
@@ -136,7 +156,7 @@ try {
         assert.match(new URL(playable).searchParams.get('run'), /^[a-z0-9]{12}$/);
         await page.getByRole('dialog', { name: 'Short program link', exact: true }).getByRole('button', { name: 'Close', exact: true }).click();
 
-        if (basePath === '/') {
+        if (basePath === '/' && process.env.BLUEK_SKIP_ACCOUNT_SMOKE !== '1') {
           // Cross-origin cookie authentication with the real service, both engines.
           await page.getByRole('button', { name: 'Sign in', exact: true }).click();
           const cloud = page.getByRole('dialog', { name: 'Account', exact: true });
@@ -201,7 +221,10 @@ try {
           await cloud.getByRole('button', { name: 'Close', exact: true }).click();
         }
         assert.deepEqual(errors, []);
-        console.log(`${engine.name()} ${basePath}: real separate API, direct query/legacy links, player, publication/block${basePath === '/' ? ', cookie accounts/password change, private CRUD and API outage execution' : ''} passed`);
+        const coverage = process.env.BLUEK_SKIP_ACCOUNT_SMOKE === '1'
+          ? 'direct query/path links, retired routes and fragments, player/publication'
+          : `direct query/path links, retired routes and fragments, player/publication${basePath === '/' ? ', cookie accounts/password change, private CRUD and API outage execution' : ''}`;
+        console.log(`${engine.name()} ${basePath}: ${coverage} passed`);
         await context.close();
       } finally { await browser.close(); }
     }

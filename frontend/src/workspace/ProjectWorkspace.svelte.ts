@@ -1712,8 +1712,7 @@ export class ProjectWorkspace {
       return null;
     };
     const openLinkedProject = async (): Promise<LinkProblem | null> => {
-      // Legacy /load/ cleanup is tracked in https://github.com/tomkarp/BlueK/issues/26.
-      if (route && route.kind !== "run")
+      if (route?.kind === "bluek")
         return openShared(
           () => loadEditableProjectFromServer(route.code),
           "Could not load the shared BlueK project.",

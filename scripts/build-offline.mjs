@@ -59,6 +59,7 @@ const offline = {
   config() {
     return { define: {
       'import.meta.env.VITE_BLUEK_OFFLINE': JSON.stringify('1'),
+      'import.meta.env.VITE_BLUEK_TEST_LEGACY_CONTENT_LINKS': JSON.stringify(process.env.VITE_BLUEK_TEST_LEGACY_CONTENT_LINKS || '0'),
       'import.meta.env.BASE_URL': JSON.stringify('./'),
     } };
   },

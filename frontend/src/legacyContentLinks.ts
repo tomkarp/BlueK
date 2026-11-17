@@ -1,8 +1,8 @@
-/** Read-only compatibility window, explicitly accepted by the operator.
- * No shutdown date has been agreed. A later release can disable this one gate
- * for both IDE and player; no production UI may encode new content links.
+/** Old content-link decoding is enabled only for the browser test fixtures.
+ * Production and ordinary development builds do not accept these links.
  */
-export const acceptLegacyContentLinks = true;
+export const acceptLegacyContentLinks =
+  import.meta.env.VITE_BLUEK_TEST_LEGACY_CONTENT_LINKS === "1";
 export function legacyContent(
   params: URLSearchParams,
   kind: "bluek" | "run",

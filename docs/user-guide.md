@@ -178,9 +178,10 @@ typing ambiguities. When opening a project, spaces and hyphens are ignored, and
 you can paste the full link instead of extracting its code. The length keeps
 public links difficult to guess; public reads currently have no per-code
 request limit. These links open directly on static hosting and contain no
-project data. Existing word codes and full `#bluek=…`/`#run=…` content links
-remain readable for a transition with no agreed end date. New full content links
-cannot be generated. Main selection/options remain in the stored runnable copy.
+project data. Project contents are opened from a local `.bluek` file, a
+server-stored project/program code, or the inf-schule transfer. Full project
+data in `#bluek=…` or `#run=…` URL fragments is no longer accepted. Main
+selection/options remain in the stored runnable copy.
 
 An expired or unknown short link shows an explanation instead of a program or
 an empty project; ask the person who shared it for a new link. Opening a link

@@ -1,9 +1,11 @@
+import { acceptLegacyContentLinks } from "./legacyContentLinks";
+
 /**
- * Opening a project or program link on the same page changes only the hash.
- * Reload so the page starts the matching UI and its normal link import; the
- * IDE stores its draft on pagehide. A player reloads on every hash change.
+ * Browser tests use old hash links as project fixtures. Production builds do
+ * not reload or import content from URL fragments.
  */
 export function reloadOnLinkNavigation(playing = false): void {
+  if (!acceptLegacyContentLinks) return;
   window.addEventListener("hashchange", () => {
     const params = new URLSearchParams(window.location.hash.slice(1));
     if (playing || params.has("run") || params.has("bluek"))

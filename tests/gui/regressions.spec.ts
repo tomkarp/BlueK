@@ -2285,7 +2285,7 @@ test("GUI-35 short project links can be saved and loaded", async ({ page }) => {
   );
 });
 
-test("GUI-43 loading a saved project clears the load URL", async ({ page }) => {
+test("GUI-43 the retired load path does not open a project", async ({ page }) => {
   const payload = {
     format: "bluek-project",
     version: 1,
@@ -2306,7 +2306,8 @@ test("GUI-43 loading a saved project clears the load URL", async ({ page }) => {
   });
   await page.goto("/load/green-lamp-river");
   await expect(page.getByLabel("Codepad input")).toBeEnabled();
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL("http://127.0.0.1:5194/");
+  await expect(page.locator(".classcard")).toHaveCount(0);
   await page.getByRole("button", { name: "New", exact: true }).click();
   page.once("dialog", (dialog) => dialog.accept());
   await page
@@ -2314,28 +2315,6 @@ test("GUI-43 loading a saved project clears the load URL", async ({ page }) => {
     .getByRole("button", { name: /^BluePlay Template/ })
     .click();
   await expect(page.locator(".classcard").first()).toBeVisible();
-});
-
-test("GUI-50 loading a full project link clears the link URL", async ({
-  page,
-}) => {
-  const payload = {
-    format: "bluek-project",
-    version: 1,
-    files: [
-      {
-        fileName: "Vollstaendig.kt",
-        kind: "class",
-        source: "class Vollstaendig {}",
-      },
-    ],
-  };
-  const link =
-    "/#bluek=p1." + Buffer.from(JSON.stringify(payload)).toString("base64url");
-  await page.goto(link);
-  await expect(page.getByLabel("Codepad input")).toBeEnabled();
-  await expect(page.locator(".classcard")).toContainText("Vollstaendig");
-  await expect(page).toHaveURL(/\/$/);
 });
 
 test("GUI-44 Open loads a shared project from three words", async ({

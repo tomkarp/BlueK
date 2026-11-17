@@ -1,6 +1,30 @@
-import { legacyContent } from "./legacyContentLinks";
-import { shareRoute } from "./shareRoutes";
+import {
+  acceptLegacyContentLinks,
+  legacyContent,
+} from "./legacyContentLinks";
+import { retiredLoadPathBase, shareRoute } from "./shareRoutes";
 import { reloadOnLinkNavigation } from "./linkNavigation";
+
+const retiredBase = retiredLoadPathBase(
+  import.meta.env.BASE_URL,
+  window.location.href,
+);
+if (retiredBase) {
+  window.history.replaceState(
+    window.history.state,
+    "",
+    `${retiredBase}${window.location.search}${window.location.hash}`,
+  );
+}
+if (!acceptLegacyContentLinks) {
+  const fragments = new URLSearchParams(window.location.hash.slice(1));
+  if (fragments.has("bluek") || fragments.has("run"))
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${window.location.pathname}${window.location.search}`,
+    );
+}
 
 const isProgramLink = () =>
   !new URLSearchParams(window.location.search).has("import") &&

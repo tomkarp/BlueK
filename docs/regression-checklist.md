@@ -293,9 +293,9 @@ below. No universal performance guarantee is implied.
 | GUI-40 | Settings/New File modal ordering and functions-file option | Recorded browser pass |
 | GUI-41 | Project-transfer dialogs above ordinary windows | Recorded browser pass |
 | GUI-42 | Escape without Vim; Vim Escape and Shift+Escape behavior | Recorded browser pass |
-| GUI-43 | Remove short-link path after import; later templates work | Recorded browser pass |
+| GUI-43 | Retired `/load/` code path does not load a project; later templates still work | Chromium passed, 2026-11-17 |
 | GUI-44 | Open loads a shared project code, including legacy three-word codes | Chromium passed, 2026-10-22 |
-| GUI-50 | Remove full-project hash after import | Recorded browser pass |
+| GUI-50 | Full-content `#bluek`/`#run` links are ignored in production builds | Chromium/WebKit production smoke passed at root and `/BlueK/`, 2026-11-17 |
 | GUI-45 | Reload own draft; fresh tab does not select another draft | Recorded browser pass |
 | GUI-46 | Method-result label/value/actions do not overlap | Build passed; dedicated GUI/visual check pending |
 | GUI-47 | Parameterless calls and activity state | Recorded browser pass |
@@ -448,7 +448,7 @@ below. No universal performance guarantee is implied.
 | EXP-15 | BluePlay autostart/buttons/speed combinations, required Run button, reset and HTML options | Six valid combinations and IDE/HTML flow passed in Chromium, 2026-10-10; agent inspected desktop/mobile screenshots; user acceptance pending |
 | EXP-16 | Optional project heading/tab title for full/short links and HTML; no status label or empty header | Format/server checks and Chromium browser cases passed, 2026-10-10; agent inspected mobile options; user acceptance pending |
 | EXP-17 | Stable Share window across project/program options, persistent Cancel and shared program settings with Save → HTML | Seven Chromium cases passed, 2026-10-22; agent inspected desktop/mobile; user acceptance pending |
-| EXP-18 | New ?p/?run query links, read-only legacy fragments/paths, player/IDE navigation, deployment prefixes and /load | Separate-origin real API plus static root/prefix builds passed in Chromium/WebKit, 2026-10-22; Pages deployment completed 2026-10-25 |
+| EXP-18 | Server-code query/path links, player/IDE navigation and deployment prefixes; full-content fragments and `/load/` disabled | Separate-origin real API plus static root/prefix builds passed in Chromium/WebKit, 2026-10-22; Pages deployment completed 2026-10-25; 2026-11-17 routing smoke passed in Chromium/WebKit at root and `/BlueK/`; account UI flow was skipped |
 | EXP-19 | Translated distinct expired/unknown/operator-blocked/developer-disabled link failures; malformed/legacy links; project code opened as player; capitalized codes | Chromium UI and separate-origin Chromium/WebKit routing passed, 2026-10-22; production TLS and deployment completed; no separate live operator-block acceptance recorded |
 | EXP-20 | A short program code opens its project under /bluek/ and in code import with one request; disabled “Open in BlueK” refuses both (403) | Share-server smoke, real-service routing (Chromium/WebKit), GUI-138 and agent end-to-end passed, 2026-10-11; production deployment completed 2026-10-25 |
 | EXP-21 | BlueJ ZIP export: one folder with Kotlin files (test classes omitted), README.TXT and package.bluej with the displayed card positions; BluePlay adds the JVM library from assets/bluej-blueplay and every standard image/sound, project files win; re-import keeps unchanged standard media as standard resources | `test:bluej-export` passed (2026-10-18); all four bundled examples compiled with kotlinc 2.2.21 after export (`check-bluej-export-kotlinc.mjs`). Not yet opened or run in BlueJ itself. |
@@ -567,7 +567,7 @@ below. No universal performance guarantee is implied.
 
 | GUI-137 | Private bug/Kotlin-support report dialog, diagnostic context, explicit project opt-in, JSON preview, durable private delivery and receipt; footer offers Cancel/Send without a report download | Local dialog/preview and initial published main/beta dialog visually inspected (2026-10-10); final wording/information notice approved for publication, final typecheck: zero errors/warnings. Hosted/offline builds completed. No automated tests added/run on that date. Private repo/labels/watch and protected restricted token installed; main/beta/local feedback configuration available. Original delivery evidence retained; refreshed snapshots, complete project attachments and receipt wording verified by controller/Chromium tests (2026-10-12), see the dated record below. |
 
-| GUI-138 | A failed IDE link (expired, blocked, undecodable or BluePlay example) keeps the tab draft, shows a dismissible translated notice and cleans the URL; same-page `#bluek`/`#run` links reload through one handler, also offline | Chromium GUI case and offline Chromium/WebKit agent check passed, 2026-10-11; German light/dark notice inspected; user acceptance pending |
+| GUI-138 | A failed IDE code link (expired, blocked, undecodable or BluePlay example) keeps the tab draft and shows a dismissible translated notice; legacy hash fixtures reload only in browser-test builds | Chromium GUI case and offline Chromium/WebKit agent check passed, 2026-10-11; German light/dark notice inspected; production hash links disabled 2026-11-17, verification pending |
 | GUI-139 | Optional terminal auto-clear before interactive calls, Codepad and Start main; default off, personal persistence, code tip, cancellation/validation, fresh output/input/errors, inspector/BluePlay exclusions and offline use | All eight new behavior cases passed in Chromium and WebKit; offline language/settings case passed, 2026-10-12; German desktop/mobile screenshots inspected by agent; user acceptance pending |
 | GUI-140 | Terminal auto-clear controls and the one-line code tip share a labeled group (one row on wider screens, vertical on mobile) with concise German labels; terminal output/input font size is adjustable and persisted | Typecheck/i18n and Chromium settings/defaults case passed, 2026-10-12; desktop/mobile group screenshots inspected by agent; terminal font persistence not exercised; user acceptance pending |
 | GUI-141 | Confirm source-file deletion with filename in English/German; Cancel preserves files, test attachments/default, editor and runtime; accept deletes class, test or main file | Six Chromium deletion cases, ten GUI-130 cases, workspace controller tests, i18n, typecheck (zero errors/warnings), hosted build and six offline Chromium/WebKit cases passed (2026-10-12). Initial browser tests used an incorrect editor label; the next run blocked on the still-open context menu after Cancel and was stopped, then the corrected six-case rerun passed. User visual acceptance pending. |
@@ -1341,13 +1341,11 @@ passed (666 messages). The user confirmed the local Vim fix works on 2026-10-10.
 
 ### Unified share-link addresses — 2026-10-11
 
-EXP-18: permanent project links retain `#bluek=<payload>`. Runnable exports use
-`#run=<program>`, with main and all execution options in the envelope. New short
-links use `/bluek/<code>` and `/run/<code>` below the configured deployment base.
-`/bluek/` can open the project part of a runnable export; manual code import can
-also retrieve it. The transitional `/load/` cleanup is tracked in
-[issue #26](https://github.com/tomkarp/BlueK/issues/26), which records the removal
-date.
+EXP-18 at the time used `?p=<code>` and `?run=<code>`; path forms use
+`/bluek/<code>` and `/run/<code>` below the configured deployment base.
+`/bluek/` can open the project part of a runnable code; manual code import can
+also retrieve it. Historical fragment and `/load/` coverage below records
+behavior before the retirement recorded on 2026-11-17.
 
 - Passed: typecheck (zero errors/warnings), hosted/player/offline builds,
   program-export helpers, workspace controllers, static/Svelte architecture.
@@ -1681,9 +1679,9 @@ changes were published and tested on the live inf-schule pages (user confirmed,
 2026-10-26; browser/device and detailed manual outcomes not supplied). The
 automated handoff suites remain the separate Chromium 14/14 and WebKit 14/14
 results recorded above. No load/capacity measurement is recorded. Inappropriate
-content reporting remains out of scope at the user's request. Retirement of
-legacy full-content links is tracked by the user as a separate issue, with no
-shutdown date assumed here.
+content reporting remains out of scope at the user's request. The handoff uses
+its independent one-shot import protocol and remains supported after the
+full-content link retirement recorded below.
 
 ### New, Open, Save and Share navigation — 2026-10-22
 
@@ -2605,3 +2603,17 @@ HTML export; the former blanket JSON footer action is now the main Save choice.
   Launch Services file-open request completed with the same BlueK process ID
   before and after. Installed executable hash matches the final app bundle.
   The diagnostic test instance was then replaced by a normal app launch.
+
+### Retire full-content links and `/load/` — 2026-11-17
+
+Production and ordinary development builds no longer load project/program
+payloads from `#bluek=` or `#run=` and do not recognize `/load/<code>`. Current
+server-code links, local `.bluek` files and the inf-schule handoff remain
+supported. Browser project fixtures retain a test-only hash decoder, enabled
+only by Playwright server/offline fixture configuration. Typecheck passed with
+zero diagnostics, and GUI-43 passed in Chromium. Production routing passed in
+Chromium and WebKit for root and `/BlueK/` builds, including current query/path
+links and retired `/load/`/fragment links. The smoke had to accept the project
+replacement prompt before checking `?readme=1`; without that, Playwright had
+cancelled the replacement and the README option correctly did not run. The
+independent account UI section was skipped. Desktop app build was not needed.

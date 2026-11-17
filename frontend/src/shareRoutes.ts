@@ -1,8 +1,23 @@
 export type ShareRoute = {
-  kind: "bluek" | "run" | "load";
+  kind: "bluek" | "run";
   code: string;
   basePath: string;
 };
+
+/** Return the app base for a retired load path, without treating it as a code route. */
+export function retiredLoadPathBase(
+  basePath: string,
+  pageUrl: string,
+): string | null {
+  const page = new URL(pageUrl);
+  const base = new URL(basePath, page).pathname;
+  if (!page.pathname.startsWith(base)) return null;
+  return /^(?:BlueK\/)?load\/[^/]+\/?$/.test(
+    page.pathname.slice(base.length),
+  )
+    ? base
+    : null;
+}
 
 /** Recognize share paths below the configured app base, including /BlueK/. */
 export function shareRoute(
@@ -19,7 +34,7 @@ export function shareRoute(
   };
   const match = page.pathname
     .slice(base.length)
-    .match(/^(?:BlueK\/)?(bluek|run|load)\/([^/]+)\/?$/);
+    .match(/^(?:BlueK\/)?(bluek|run)\/([^/]+)\/?$/);
   // Codes are lowercase words; a capitalized link still opens, as in code import.
   return match
     ? {

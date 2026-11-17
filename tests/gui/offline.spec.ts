@@ -11,7 +11,10 @@ let target: string | undefined;
 test.beforeAll(async () => {
   if (html) return;
   target = await mkdtemp(path.join(tmpdir(), 'bluek-file-gui-'));
-  const result = spawnSync('node', ['scripts/build-offline.mjs', '--out', target, '--no-zip'], { encoding: 'utf8' });
+  const result = spawnSync('node', ['scripts/build-offline.mjs', '--out', target, '--no-zip'], {
+    encoding: 'utf8',
+    env: { ...process.env, VITE_BLUEK_TEST_LEGACY_CONTENT_LINKS: '1' },
+  });
   expect(result.status, result.stderr).toBe(0);
   html = path.join(target, 'BlueK-offline/BlueK.html');
 });

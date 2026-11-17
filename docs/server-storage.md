@@ -23,15 +23,13 @@ The stored program envelope preserves the selected main and player options.
 to `allowBlueK`. From a local HTML export it opens the home page; download/import
 JSON to transfer the project. It never constructs a content URL.
 
-Existing `#bluek=p1.…`, `#bluek=d1.…`, `#run=p1.…` and `#run=d1.…` links remain
-readable during an explicitly accepted transition. They cannot be centrally
-moderated and may contain custom media. **No shutdown date has been agreed.**
-`legacyContentLinks.ts` is the common compatibility gate for IDE and player.
-When the operator ends the transition, disable that gate, remove its decode
-paths/fixtures, and publish a migration notice. No UI or export encoder remains.
-Existing `/bluek/<words>`, `/run/<words>` and `/load/<words>` paths remain readable;
-Pages uses `404.html` for these legacy paths. A legacy path may have HTTP 404 at
-the document level even though its browser application opens successfully.
+Full project data in `#bluek=…` and `#run=…` URL fragments is no longer
+accepted. Share links identify server-stored projects or programs; local
+`.bluek` files and the inf-schule handoff remain supported. The `/load/<code>`
+path is retired. Current `?p=<code>`, `?run=<code>`, `/bluek/<code>` and
+`/run/<code>` links continue to open their stored copies. Static hosting may
+serve its app fallback with HTTP 404 for path links even though the browser
+application opens them successfully.
 
 ## Accounts and sessions
 
