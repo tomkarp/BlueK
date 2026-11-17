@@ -115,11 +115,25 @@ with private projects, sessions and owned public copies.
 
 ## Storage and publication
 
+Runnable publications deliver the complete Kotlin project to the player's
+browser through `/api/programs/<code>`. `allowDownload` and `allowBlueK` control
+the visible player actions; disabling both does not conceal source from browser
+developer tools. The separate project endpoint rejects opening a program with
+`allowBlueK: false`, but the program response still includes source for execution.
+
 `/api/private-projects` provides authenticated list/create; `/<uuid>` provides
 owner-only get/update/delete and name-only rename. Updates and renames require
 `If-Match` with the previous revision, returning 409 for competing changes.
 Renaming updates both the account-list name and the embedded project name. The
 UI offers saving a new copy instead of overwriting a competing project update.
+For an attached account project, Save offers **Overwrite in account** and
+**Save a new copy**. The latter asks for a name and creates a new private project
+from the current local work. Only a confirmed successful save changes the local
+name and account association; subsequent saves update that copy. Cancelling or
+a failed request preserves the original name and association.
+The named-copy choice is also available without an account association, including
+after a browser reload or file import. A project name alone never identifies an
+account item to overwrite.
 Server responses do not overwrite local edits made during a pending load. A
 failed save is an error and recommends a JSON backup.
 

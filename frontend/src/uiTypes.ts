@@ -10,6 +10,7 @@ export type HistoryEntry = {
   code: string;
   result?: string;
   error?: string;
+  sourceError?: boolean;
   objectResult?: boolean;
   objectId?: string;
   className?: string;

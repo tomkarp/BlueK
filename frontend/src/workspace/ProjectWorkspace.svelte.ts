@@ -193,6 +193,7 @@ export class ProjectWorkspace {
   private projectNamePromptResolver: ((confirmed: boolean) => void) | null = null;
   private projectNamePromptPromise: Promise<boolean> | null = null;
   private confirmedDesktopClose = false;
+  private desktopBuild = false;
   /** Why the opened link could not be loaded; cleared when a project loads. */
   linkProblem: { message: string; expired: boolean } | null = $state(null);
   handoffPending = $state(false);
@@ -523,7 +524,9 @@ export class ProjectWorkspace {
     payload: ReturnType<ProjectWorkspace["projectPayload"]>,
     hasUnsavedChanges: boolean,
   ) => {
-    if (!hasUnsavedChanges) {
+    // Browser reloads need the current project even after importing or saving it.
+    // Desktop recovery only retains work that still needs a native save.
+    if (this.desktopBuild && !hasUnsavedChanges) {
       try {
         this.drafts.clearActive();
       } catch {
@@ -1621,6 +1624,7 @@ export class ProjectWorkspace {
   endCardDrag = this.diagram.endCardDrag;
   initialize = async (): Promise<void> => {
     const desktop = await import("../desktopFiles");
+    this.desktopBuild = desktop.isDesktopBuild();
     let startupDesktopPath: string | null = null;
     let startupTemplate: string | null = null;
     if (desktop.isDesktopBuild()) {

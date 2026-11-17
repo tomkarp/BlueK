@@ -91,7 +91,14 @@ async function options(page: Page) {
     dialog.getByText("For this program link:", { exact: true }),
   ).toBeVisible();
   await expect(
-    dialog.getByText(/These settings apply to the program link\./),
+    dialog
+      .getByText(
+        "Source code remains accessible in the browser with either option.",
+        {
+          exact: true,
+        },
+      )
+      .first(),
   ).toBeVisible();
   return dialog;
 }
@@ -109,12 +116,10 @@ async function htmlOptions(page: Page) {
   await dialog.getByRole("button", { name: /^Runnable webpage/ }).click();
   const options = dialog.locator(".program-export-options");
   await expect(options).toBeVisible();
-  await expect(
-    dialog.getByText(/For .*HTML:/),
-  ).toHaveCount(0);
-  await expect(
-    dialog.getByText(/These settings apply to .*link/),
-  ).toHaveCount(0);
+  await expect(dialog.getByText(/For .*HTML:/)).toHaveCount(0);
+  await expect(dialog.getByText(/These settings apply to .*link/)).toHaveCount(
+    0,
+  );
   expect(
     await options.evaluate((element) => {
       const exportChoice = element.parentElement?.querySelector(
@@ -122,8 +127,8 @@ async function htmlOptions(page: Page) {
       );
       return Boolean(
         exportChoice &&
-          element.compareDocumentPosition(exportChoice) &
-            Node.DOCUMENT_POSITION_FOLLOWING,
+        element.compareDocumentPosition(exportChoice) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
       );
     }),
   ).toBe(true);
@@ -187,9 +192,7 @@ test("EXP-13 published program link starts chosen main without the IDE, supports
   await expect(terminal).toHaveText("Name?\nAda\nHello, Ada\n");
   const [download] = await Promise.all([
     player.waitForEvent("download"),
-    player
-      .getByRole("button", { name: "Download project (.bluek)" })
-      .click(),
+    player.getByRole("button", { name: "Download project (.bluek)" }).click(),
   ]);
   expect(download.suggestedFilename()).toBe("Shared program.bluek");
   const developer = await context.newPage();
@@ -689,6 +692,23 @@ for (const locale of ["en", "de"])
         exact: true,
       });
       await expect(common.getByRole("checkbox")).toHaveCount(3);
+      // The source warning belongs to the download option only.
+      const sourceOptions = common.locator(".program-source-options");
+      await expect(sourceOptions.getByRole("checkbox")).toHaveCount(2);
+      const downloadOption = sourceOptions.locator(
+        ".program-source-download-option",
+      );
+      await expect(downloadOption.getByRole("checkbox")).toHaveCount(1);
+      const note = downloadOption.locator(".program-source-note");
+      await expect(note).toHaveCount(1);
+      await expect(note).toBeVisible();
+      expect((await note.boundingBox())!.height).toBeLessThanOrEqual(20);
+      await expect(note).toContainText(
+        locale === "de" ? "Entwicklertools" : "developer tools",
+      );
+      await expect(
+        sourceOptions.locator(".program-source-controls .program-source-note"),
+      ).toHaveCount(0);
       await expect(
         dialog.locator(".program-export-choices > button"),
       ).toHaveCount(1);

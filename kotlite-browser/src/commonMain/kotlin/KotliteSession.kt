@@ -11,6 +11,13 @@ import com.sunnychung.lib.multiplatform.kotlite.model.ClassDeclarationNode
 import com.sunnychung.lib.multiplatform.kotlite.error.EvaluateRuntimeException
 import com.sunnychung.lib.multiplatform.kotlite.error.InterpreterStateException
 import com.sunnychung.lib.multiplatform.kotlite.error.SemanticException
+import com.sunnychung.lib.multiplatform.kotlite.error.DuplicatePropertyException
+import com.sunnychung.lib.multiplatform.kotlite.error.DuplicateIdentifierException
+import com.sunnychung.lib.multiplatform.kotlite.error.TypeMismatchException
+import com.sunnychung.lib.multiplatform.kotlite.error.ArgumentTypeMismatchException
+import com.sunnychung.lib.multiplatform.kotlite.error.UnexpectedTokenException
+import com.sunnychung.lib.multiplatform.kotlite.error.ExpectTokenMismatchException
+import com.sunnychung.lib.multiplatform.kotlite.error.DefiniteSourceException
 import com.sunnychung.lib.multiplatform.kotlite.error.controlflow.NormalControlFlowException
 import com.sunnychung.lib.multiplatform.kotlite.model.ClassInstance
 import com.sunnychung.lib.multiplatform.kotlite.model.StandardExceptionValue
@@ -2000,8 +2007,15 @@ class KotliteSession {
     private val Throwable.isFatal: Boolean
         get() = this is InterpreterStateException || this is NormalControlFlowException
 
-    private fun error(error: Throwable, phase: String = "analysis", fatal: Boolean = false): String =
-        errorMessage(errorText(error), phase, fatal)
+    private fun error(error: Throwable, phase: String = "analysis", fatal: Boolean = false): String {
+        // Unknown names and parse failures may still indicate a compatibility gap.
+        // Classify only faults whose typed cause establishes a source error.
+        val sourceError = error is DefiniteSourceException || error is DuplicatePropertyException || error is DuplicateIdentifierException ||
+            error is TypeMismatchException || error is ArgumentTypeMismatchException || error is EvaluateRuntimeException ||
+            (error is UnexpectedTokenException && error.missingOperand) ||
+            (error is ExpectTokenMismatchException && error.missingToken)
+        return errorMessage(errorText(error), phase, fatal).removeSuffix("}") + ",\"sourceError\":$sourceError}"
+    }
 
     private fun errorText(error: Throwable): String {
         // A Kotlin exception thrown by student code is reported by its own class

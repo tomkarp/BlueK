@@ -165,7 +165,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
     }
 
     fun eat(tokenType: TokenType): Token {
-        if (currentToken.type != tokenType) throw ExpectTokenMismatchException("$tokenType", currentToken.position)
+        if (currentToken.type != tokenType) throw ExpectTokenMismatchException("$tokenType", currentToken.position, missingToken = currentToken.type == TokenType.EOF)
         log.v { "ate $tokenType: ${currentToken.value}" }
         val t = currentToken
         if (t.type != TokenType.EOF) {
@@ -175,7 +175,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
     }
 
     fun eat(tokenType: TokenType, value: Any): Token {
-        if (currentToken.type != tokenType || currentToken.value != value) throw ExpectTokenMismatchException("$tokenType `$value`", currentToken.position)
+        if (currentToken.type != tokenType || currentToken.value != value) throw ExpectTokenMismatchException("$tokenType `$value`", currentToken.position, missingToken = currentToken.type == TokenType.EOF)
         log.v { "ate $tokenType $value" }
         val t = currentToken
         currentToken = readToken()
@@ -315,6 +315,8 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
 
     fun parenthesizedExpression(): ASTNode {
         eat(TokenType.Operator, "(")
+        repeatedNL()
+        requireOperand()
         val node = expression()
         eat(TokenType.Operator, ")")
         return node
@@ -359,6 +361,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
                 label = curr
             }
         } while (curr != null)
+        if (nodes.isNotEmpty()) requireOperand()
         val expr = postfixUnaryExpression(label = label)
         if (nodes.isNotEmpty()) {
             nodes.last().node = expr
@@ -1273,12 +1276,22 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
      * disjunction:
      *     conjunction {{NL} '||' {NL} conjunction}
      */
+    /** A known operator followed by a terminator cannot be a Kotlin compatibility gap. */
+    private fun requireOperand() {
+        if (currentToken.type == TokenType.EOF || currentToken.type == TokenType.Semicolon ||
+            currentToken.`is`(TokenType.Operator, ")") || currentToken.`is`(TokenType.Symbol, "]") ||
+            currentToken.`is`(TokenType.Symbol, "}") || currentToken.`is`(TokenType.Symbol, ",")) {
+            throw UnexpectedTokenException(currentToken, missingOperand = true)
+        }
+    }
+
     fun disjunction(): ASTNode {
         var n = conjunction()
         while (isCurrentTokenExcludingNL(TokenType.Operator, "||")) {
             repeatedNL()
             val t = eat(TokenType.Operator, "||")
             repeatedNL()
+            requireOperand()
             val n2 = conjunction()
             n = BinaryOpNode(position = t.position, node1 = n, node2 = n2, operator = "||")
         }
@@ -1295,6 +1308,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
             repeatedNL()
             val t = eat(TokenType.Operator, "&&")
             repeatedNL()
+            requireOperand()
             val n2 = equality()
             n = BinaryOpNode(position = t.position, node1 = n, node2 = n2, operator = "&&")
         }
@@ -1310,6 +1324,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
         while (currentToken.type == TokenType.Operator && currentToken.value in setOf("!=", "!==", "==", "===")) {
             val t = eat(TokenType.Operator)
             repeatedNL()
+            requireOperand()
             val n2 = comparison()
             n = BinaryOpNode(position = t.position, node1 = n, node2 = n2, operator = t.value as String)
         }
@@ -1326,6 +1341,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
         while (currentToken.type == TokenType.Operator && currentToken.value in setOf("<", ">", "<=", ">=")) {
             val t = eat(TokenType.Operator)
             repeatedNL()
+            requireOperand()
             val n2 = infixOperation()
             n = BinaryOpNode(position = t.position, node1 = n, node2 = n2, operator = t.value as String)
         }
@@ -1383,6 +1399,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
             repeatedNL()
             val t = eat(TokenType.Operator, "?:")
             repeatedNL()
+            requireOperand()
             val n2 = infixFunctionCall()
             n = ElvisOpNode(position = t.position, primaryNode = n, fallbackNode = n2)
         }
@@ -1414,6 +1431,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
         while (currentToken.type == TokenType.Operator && currentToken.value in setOf("..", "..<")) {
             val t = eat(TokenType.Operator)
             repeatedNL()
+            requireOperand()
             val n2 = additiveExpression()
             n = BinaryOpNode(position = t.position, node1 = n, node2 = n2, operator = t.value as String)
         }
@@ -1432,6 +1450,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
             val t = currentToken
             eat(TokenType.Operator)
             repeatedNL()
+            requireOperand()
             node = BinaryOpNode(t.position, node, multiplicativeExpression(), t.value.toString())
         }
         return node
@@ -1451,6 +1470,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
             val t = currentToken
             eat(TokenType.Operator)
             repeatedNL()
+            requireOperand()
             node = BinaryOpNode(t.position, node, asExpression(), t.value.toString())
         }
         return node
@@ -1931,6 +1951,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
             eat(TokenType.Symbol, "=")
             // `val symbol =` with the value on the next line, as formatters write long values (RT-70)
             repeatedNL()
+            requireOperand()
             val start = currentToken.position.index
             expression().also { initialValueSourceRange = start until currentToken.position.index }
         } else {
@@ -2148,6 +2169,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
         val defaultValue = if (currentToken.type == TokenType.Symbol && currentToken.value == "=") {
             eat(TokenType.Symbol, "=")
             repeatedNL()
+            requireOperand()
             expression()
         } else null
         return FunctionValueParameterNode(position = t.position, name = name, declaredType = type, defaultValue = defaultValue, modifiers = modifiers)
@@ -2163,6 +2185,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
         if (currentToken.type == TokenType.Symbol && currentToken.value == "=") {
             eat(TokenType.Symbol, "=")
             repeatedNL()
+            requireOperand()
             return BlockNode(listOf(expression()), position, ScopeType.Function, FunctionBodyFormat.Expression)
         } else {
             return block(ScopeType.Function)
@@ -3016,6 +3039,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
             }
         }.value as String
         repeatedNL()
+        requireOperand()
         val expr = expression()
         return AssignmentNode(subject = subject, operator = operator, value = expr)
     }
@@ -3138,6 +3162,7 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
         repeatedNL()
         eat(TokenType.Symbol, "=")
         repeatedNL()
+        requireOperand()
         val value = expression()
         val hidden = destructuringName(t.position)
         return DestructuringDeclarationNode(
@@ -3239,7 +3264,10 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
         val tokenPos = tokenIndex
         return try {
             assignment()
-        } catch (_: ParseException) {
+        } catch (error: ParseException) {
+            // A missing operand after a recognized assignment/prefix operator
+            // cannot be repaired by retrying the same input as an expression.
+            if (error is UnexpectedTokenException && error.missingOperand) throw error
             resetTokenToIndex(tokenPos)
             expression()
         }
@@ -3254,6 +3282,8 @@ open class Parser(protected val lexer: Lexer, private val nestedClasses: Map<Str
         val result = mutableListOf<ASTNode>()
         var isLastTokenSemi = false
         while (!isCurrentToken(type = TokenType.Symbol, value = "}")) {
+            if (currentToken.type == TokenType.EOF)
+                throw ExpectTokenMismatchException("Symbol `}`", currentToken.position, missingToken = true)
             if (result.isNotEmpty()) {
                 if (!isLastTokenSemi) {
                     throw UnexpectedTokenException(currentToken)

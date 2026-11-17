@@ -123,11 +123,15 @@ test("GUI-129 leaving BlueK warns only when project changes have not been explic
     page.waitForEvent("download"),
     page
       .getByRole("dialog", { name: "Save", exact: true })
-      .getByRole("button", { name: /^Download BlueK project file/ })
+      .getByRole("button", { name: /^Save BlueK project file/ })
       .click(),
   ]);
   expect(download.suggestedFilename()).toBe("Unsaved change.bluek");
   expect(await dispatchBeforeUnload()).toBe(false);
+  await expect.poll(() => saved(page).then((p) => p?.projectName)).toBe("Unsaved change");
+  await page.reload();
+  await expect(page.getByLabel("Project name")).toHaveValue("Unsaved change");
+  await expect(page.getByRole("button", { name: "Hund", exact: true })).toBeVisible();
 });
 
 test("GUI-121 an opener-copied session forks the live draft; reopening a link starts fresh", async ({
@@ -264,11 +268,12 @@ test("GUI-124 project replacement updates the same tab draft and an empty projec
     .getByRole("button", { name: /^Empty Project/ })
     .click();
   await expect(page.locator(".classcard")).toHaveCount(0);
-  expect(await draftId(page)).toBe(originalId);
+  expect(await page.evaluate((id) => localStorage.getItem("bluek.project-draft.v1." + id), originalId)).toBeNull();
   await page.getByLabel("Project name").fill("New blank project");
   await expect
     .poll(() => saved(page).then((p) => p?.projectName))
     .toBe("New blank project");
+  expect(await draftId(page)).toBe(originalId);
   expect(await saved(page)).not.toHaveProperty("defaultTestClass");
   await page.getByRole("button", { name: "Open", exact: true }).click();
   const open = page.getByRole("dialog", { name: "Open", exact: true });
@@ -296,7 +301,7 @@ test("GUI-125 unavailable storage reports the limitation and leaves editing and 
   await expect(
     page
       .getByRole("dialog", { name: "Save", exact: true })
-      .getByRole("button", { name: "Download BlueK project file" }),
+      .getByRole("button", { name: /^Save BlueK project file/ }),
   ).toBeEnabled();
   await page.keyboard.press("Escape");
 
@@ -321,18 +326,17 @@ test("GUI-125 blocked storage and other storage errors name their reason", async
   await page.goto(link(project("Blocked")));
   const notice = page.locator(".project-recovery-notice");
   await expect(notice).toContainText(
-    "this browser does not allow the page to store data, for example in private browsing",
+    "this browser or app does not allow local storage",
   );
 
-  await page.addInitScript(() => {
+  await page.evaluate(() => {
     Storage.prototype.setItem = () => {
       throw new TypeError("Disk unavailable");
     };
   });
-  page.once("dialog", (dialog) => dialog.accept());
-  await page.goto(link(project("Failing")));
+  await page.getByLabel("Project name").fill("Failing");
   await expect(notice).toContainText(
-    "Your changes could not be saved in this browser (TypeError: Disk unavailable).",
+    "The recovery copy could not be saved (TypeError: Disk unavailable).",
   );
 });
 

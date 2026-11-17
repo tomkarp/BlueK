@@ -13,6 +13,129 @@ test-results/. Full Kotlin conformance is not implied by any passing suite.
 Latest storage/account/publication verification: [2026-10-25 results](#publication-lifetime-by-authentication--2026-10-25).
 Latest project navigation verification: [2026-10-22 results](#new-open-save-and-share-navigation--2026-10-22).
 
+### Feedback issue 37 — 2026-11-17
+
+- CLOUD-10/11 and GUI-165: the six new German/English cases in
+  `tests/gui/issue-37.spec.ts` passed in Chromium and WebKit (6/6 each).
+  They cover singular sign-in password visibility, plural registration wording,
+  named account copies, cancellation/failure preservation, updating the new
+  copy with its revision, definite-source-error feedback suppression, retained
+  reporting context for unknown calls, and the main()/execution-view wording.
+- `build:kotlite`, `typecheck` (zero errors/warnings), `test:i18n`,
+  `test:svelte-runes`, `test:codepad-flow`, `test:argument-diagnostics` and
+  `smoke-kotlite-browser.mjs` passed. Interpreter/helper checks include duplicate
+  parameters, rejected duplicate bindings retaining their original value and
+  unsupported syntax retaining feedback. Svelte MCP review found no remaining
+  issues in the changed components/controller.
+- The broader Chromium selection passed 15/19. The English CLOUD-10
+  registration case failed once, then both languages passed in isolation;
+  English also passed on unchanged HEAD. GUI-130 reload/recovery, the GUI-130/139
+  offline language case and NAV-05 account download failed identically on
+  unchanged HEAD in a separate temporary checkout: the first two lose their
+  project after reload (disabled Compile/Save); NAV-05 times out waiting for a
+  download. They were repaired in the follow-up below. This is not a full
+  regression pass.
+- Agent inspected the German copy form with a simulated save failure. Human
+  visual acceptance remains pending. No feedback report was sent.
+
+### Browser reload and regression-test repairs — 2026-11-17
+
+- Browser recovery now retains imported and explicitly saved projects, so
+  reloading the hosted or offline IDE keeps the open project. The desktop's
+  modified-work recovery policy remains separate. Lock probing/cleanup waits
+  for release to finish before attempting another acquisition.
+- The Chromium selection passed 18/19; after correcting NAV-05's refresh wait,
+  its isolated rerun passed (1/1), giving passing results for all 19 cases.
+  This covers the three previously failing cases,
+  independent/copied tabs, fresh-tab recovery, legacy migration, empty projects,
+  storage errors, native unload-warning state, reload after project download
+  and a full Chromium restart. NAV-05 now finds the current BlueK-file download
+  label and waits for account refresh before measuring the rename row.
+- WebKit passed 24/24: the 18 affected hosted/offline/draft/navigation cases
+  plus all six German/English issue-37 cases. The full process-restart fixture
+  uses Chromium and was verified in the Chromium selection only.
+- `test:project-drafts`, `test:desktop-lifecycle` and `typecheck` (zero errors
+  and warnings) passed. The draft helper had referenced removed list/delete
+  APIs; it now exercises the current recovery/ownership contract. Its initial
+  cleanup failure exposed incomplete lock-release sequencing, now corrected.
+- Initial browser repair runs exposed additional stale download labels,
+  storage-warning wording, empty-draft assumptions and the account-refresh
+  timing race; those checks were corrected without removing their behavior
+  assertions. User confirmation is pending.
+
+### Issue 37 follow-up: source access and definite errors — 2026-11-17
+
+- GUI-165 now exercises missing operands/initializers/closing tokens, `val`
+  reassignment and missing returns in addition to typed mismatches and student
+  exceptions. `test:codepad-flow` covers the wider parser/analyzer categories
+  and verifies that unsupported syntax (including unsigned literals) retains
+  feedback. Its initial failures exposed lost assignment classification during
+  parser fallback and a missing closing-block classification; both are fixed.
+- CLOUD-10 uses singular password visibility for both sign-in and registration;
+  password-change wording was subsequently made singular as well. CLOUD-11 displays
+  overwrite and new-copy actions in the same two-line choice-button style.
+  EXP-17 explains that source remains accessible through browser developer
+  tools even with the player action buttons disabled.
+- Chromium passed 15/15 (German/English account cases, GUI-165 and EXP-17 at
+  desktop/mobile widths and shared-link/HTML options); WebKit passed 8/8 account
+  and GUI-165 cases. `build:kotlite`, `typecheck` (zero errors/warnings), i18n,
+  codepad flow and program export passed. The export test confirms hidden
+  buttons do not remove project sources. The first export-test attempt was
+  blocked by the sandbox's browser-launch restriction; the approved rerun passed.
+- Kotlin control-flow (71 cases plus project-format boundary) and flow-state
+  (120 cases) regressions passed with the rebuilt bundle. Svelte MCP reviews
+  found no issues in the changed account components. Human visual acceptance
+  of the new wording and button remains pending. The agent inspected the German
+  ready-state overwrite/copy choices; the preview rerun passed (1/1).
+
+### Issue 37 dialog polish — 2026-11-17
+
+- The Open source tabs distribute their current buttons equally across the
+  full row. The account-copy name input uses a contained, rounded focus border
+  rather than a clipped native outline. The source-access note accompanies the
+  download/Open-in-BlueK options and reuses the
+  existing warning triangle and its styling. Password visibility uses singular
+  wording in sign-in, registration and password-change dialogs in both locales.
+- Chromium passed 17/17 affected account, feedback, program-option and Open
+  cases. WebKit passed 8/8 account/feedback cases and 6/6 German/English program
+  layout cases at 1440/800/390 px. Typecheck (zero errors and
+  warnings), i18n and Svelte MCP reviews passed. A separate WebKit visual check
+  measured the three German Open tabs at equal widths (subpixel rounding only)
+  and confirmed autofocus plus the complete copy-name border. Human visual
+  acceptance remains pending.
+
+### Issue 37 persistent choices and inline warnings — 2026-11-17
+
+- CLOUD-11 also offers a named copy without an account association. Browser
+  reload retains the project name but drops this association; the GUI test now
+  reloads a saved project and saves another named copy, checking the POST and
+  resulting local name. Account identity is never inferred from a name.
+- EXP-17 places permanent warning text and the existing warning triangle inline
+  beside each of the download/Open-in-BlueK options. No hover, focus or click is
+  required. BluePlay uses a normal fieldset with a separate flex container for
+  its controls, avoiding WebKit's interrupted legend border.
+- Chromium and WebKit each passed 11/11 affected CLOUD-11, GUI-165 and EXP-17
+  cases (both locales, program layout at 1440/800/390 px). Typecheck found zero
+  errors or warnings; i18n, Runes and Svelte MCP reviews passed. Agent visual
+  inspection confirmed inline warnings and the complete BluePlay border in
+  Chromium and WebKit. Added inline-position assertions passed in all six layout
+  cases in each browser. Human acceptance remains pending.
+
+### Issue 37 single shared source warning — 2026-11-17
+
+- Follow-up: the shared note uses a shorter sentence referring to both options
+  and a subtle vertical separator. Six Chromium layout cases passed at
+  1440/800/390 px in both languages; i18n passed. Agent inspected desktop and
+  mobile screenshots; user visual acceptance remains pending.
+- EXP-17 now shows one permanent warning beside the two stacked source-access
+  options together, including on narrow screens. GUI-165 checks that the text
+  appears exactly once. Initial desktop geometry checks failed in four cases
+  because an older grid rule forced the note onto a separate row; that rule is
+  overridden for this layout.
+- Final Chromium and WebKit runs each passed 8/8 affected GUI-165 and EXP-17
+  cases in German/English at 1440/800/390 px. Typecheck and Svelte MCP review
+  passed. Agent inspected desktop/mobile screenshots; human acceptance pending.
+
 ### Project examples — 2026-11-11
 
 - GUI-01 now covers the empty project, BluePlay template and small BluePlay
@@ -189,8 +312,8 @@ below. No universal performance guarantee is implied.
 | CLOUD-04 | Malformed successful API receipt does not claim a private save succeeded | Chromium passed, 2026-10-22 |
 | CLOUD-05 | Private account save requires a non-empty project name | Chromium passed, 2026-10-23 |
 | CLOUD-09 | Change username with the current password; normalize case, reject taken names, preserve account ID/session/projects | Chromium and temporary-SQLite API checks passed, 2026-10-23 |
-| CLOUD-10 | Account creation and password change require matching passwords; password visibility is a separate eye button outside the inputs; registration requires separate unique-password/security and account-loss acknowledgments; registration-only username hints show unmet criteria; active account mode is clear | Chromium passed in German and English, 2026-10-23; visual acceptance pending |
-| CLOUD-11 | Account save action shows the current project name and whether it will be saved or overwritten; success closes the dialog and shows a transient notice | Chromium passed, 2026-10-23 |
+| CLOUD-10 | Account creation and password change require matching passwords; password visibility is a separate eye button outside the inputs, singular in sign-in, registration and password-change dialogs; registration requires separate unique-password/security and account-loss acknowledgments; registration-only username hints show unmet criteria; active account mode is clear | Chromium passed in German and English, 2026-10-23; singular sign-in and registration wording passed in Chromium/WebKit, 2026-11-17; visual acceptance pending |
+| CLOUD-11 | Account save shows the project name and save/overwrite action; a named new copy is available with or without an account association and becomes the active save target; cancellation/failure preserves the original; success closes the dialog and shows a transient notice | Chromium passed, 2026-10-23; named-copy flow including reload passed in Chromium/WebKit in German/English, 2026-11-17 |
 | CLOUD-12 | Delete an account with current-password confirmation; remove its private projects and sessions while existing public copies remain until expiry | Temporary-SQLite API and German/English Chromium checks passed, 2026-10-23 |
 | GUI-156 | Local save options require a non-empty name for an unnamed project | Chromium passed, including blank-name rejection and JSON download, 2026-10-23 |
 | GUI-157 | Half-maximized editor fills the class-diagram canvas with matching frame styling, follows its vertical splitter, temporarily tabs every open editor and stays above other workspace layers; leaving restores the prior individual/grouped layout. Split-view arrows hide the opposite pane, single-pane arrows restore the split, and bench status/actions follow visibility and narrow widths | Built-in-browser German interaction and screenshot review passed, 2026-10-25: exact canvas bounds, tab switching, grouped/individual restoration, close/ungroup/full-maximize paths, splitters, mirrored single-pane views and narrow status actions. Four focused cases pass in Chromium and WebKit; user visual acceptance pending. |
@@ -199,6 +322,7 @@ below. No universal performance guarantee is implied.
 | GUI-160 | Editor focus and Vim mode survive the first key after Cmd/Ctrl+K compilation | Chromium passed; first run exposed focus loss, fixed and rerun passed (2026-11-01); visual acceptance pending |
 | GUI-161 | Method-result Inspect/Get actions preserve the result dialog; the inspector stays accessible above it and keeps the colon without a synthetic name | Chromium English/German passed (2026-11-01); visual acceptance pending |
 | GUI-164 | Cmd+Period on macOS and Ctrl+Space elsewhere open Kotlin suggestions at the caret. Member and constructor contexts use the current source, with prefix filtering, inherited BluePlay members, overloads, parameter insertion and unresolved feedback. Unqualified suggestions include accessible class members and inherited members, or top-level functions and properties from the current file, with an empty or partial prefix. Rows show signatures without `: Unit` or category labels. Inherited members show their origin as a light-gray inline detail. Escape dismisses the list first. Long lists scroll to the last entry. | 2026-11-10: Kotlite build and typecheck passed. Chromium passed the new implicit completion case with empty and partial prefixes, inherited members, a private property, method insertion and top-level properties and functions. The eight existing completion cases passed in the earlier run. The initial new test failed because another file contained an unresolved name; it passed after its fixture was corrected. User confirmation of the new behavior is pending. 2026-11-06: Chromium passed both platform bindings, signatures, inherited BluePlay details, current edits, Escape, insertion, scrolling, constructors and overloads. The user confirmed the floating-list behavior in Safari. |
+| GUI-165 | Codepad omits report shortcuts for interpreter-confirmed source errors; possible Kotlin gaps retain the shortcut and input/error context | Bundle/helper checks and German/English Chromium/WebKit cases passed, 2026-11-17 |
 | NAV-01 | Four project actions, separated account/view controls, grouped Save choices, separate Share and stable sidebar in English/German; Restore is the rightmost Open tab | Chromium passed at desktop and 390 px Save width; agent inspected German screenshots, 2026-10-22; human acceptance pending |
 | NAV-02 | Sign-in from Save returns without uploading; explicit save/update remains in Save and account settings remain separate | Chromium passed, 2026-10-22 |
 | NAV-03 | Open lists account projects for opening only; project management in Account owns rename/delete; canceling sign-in retains the selected source | Chromium passed, 2026-10-23 |
@@ -422,9 +546,9 @@ below. No universal performance guarantee is implied.
 | GUI-117 | init replacement warning and state-load error behavior | Recorded targeted Chromium pass; user visual acceptance pending |
 | GUI-118 | Full links optionally load default state with README | Recorded targeted Chromium pass; user visual acceptance pending |
 | GUI-119 | Short-link state flags, absent defaults and load errors | Recorded targeted Chromium pass; user visual acceptance pending |
-| GUI-120 | Independent tab drafts and stable timestamp on unchanged reload | 9/9 draft cases passed; included in final affected 18/18 run (2026-10-07); manual acceptance pending |
+| GUI-120 | Independent tab drafts and stable timestamp on unchanged reload | Chromium passed, 2026-11-17; manual acceptance pending |
 | GUI-121 | Copied tab ownership and explicit hash-link reimport | 9/9 draft cases passed; included in final affected 18/18 run (2026-10-07); manual acceptance pending |
-| GUI-122 | Fresh-start saved-work notice and complete recent-project restore | 9/9 draft cases passed; included in final affected 18/18 run (2026-10-07); manual acceptance pending |
+| GUI-122 | A fresh tab restores only the newest abandoned copy, removes older abandoned copies with Web Locks, and shows no recovery list or notice | Helper and Chromium checks passed, 2026-11-17; manual acceptance pending |
 | GUI-123 | Legacy migration, corrupt entries and explicit-link startup | 9/9 draft cases passed; included in final affected 18/18 run (2026-10-07); manual acceptance pending |
 | GUI-124 | Same draft on project/template changes; clear absent defaults | 9/9 draft cases passed; included in final affected 18/18 run (2026-10-07); manual acceptance pending |
 | GUI-125 | Storage failure reporting and unchanged-save fingerprinting; the warning names its reason (full storage with project/other sizes, blocked storage, other error text) and can be closed until the reason changes | 9/9 draft cases passed (2026-10-07); reasons and closing added, 2/2 GUI-125 cases passed (2026-10-09); live German check inspected; manual acceptance pending |

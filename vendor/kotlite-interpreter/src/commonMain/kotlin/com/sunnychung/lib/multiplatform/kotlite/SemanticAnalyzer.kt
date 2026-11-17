@@ -10,6 +10,8 @@ import com.sunnychung.lib.multiplatform.kotlite.error.ArgumentTypeMismatchExcept
 import com.sunnychung.lib.multiplatform.kotlite.error.UnresolvedReferenceException
 import com.sunnychung.lib.multiplatform.kotlite.error.IdentifierClassifier
 import com.sunnychung.lib.multiplatform.kotlite.error.SemanticException
+import com.sunnychung.lib.multiplatform.kotlite.error.DefiniteSourceException
+import com.sunnychung.lib.multiplatform.kotlite.error.DuplicatePropertyException
 import com.sunnychung.lib.multiplatform.kotlite.error.TypeMismatchException
 import com.sunnychung.lib.multiplatform.kotlite.extension.emptyToNull
 import com.sunnychung.lib.multiplatform.kotlite.extension.isValidIntegerLiteralAssignToByte
@@ -945,7 +947,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         if (key != null && key in localValInitialization) {
             if (key !in mutableInitializationKeys && (localValInitialization[key] != ValInitialization.Unassigned ||
                 key in classInitializationKeys && !isInInitializer(key))) {
-                throw SemanticException(accessNode.position, "val `$name` cannot be reassigned")
+                throw DefiniteSourceException(accessNode.position, "val `$name` cannot be reassigned")
             }
             if (key in mutableInitializationKeys) return scope.scopeLevel
             // A captured val or a val declared outside a loop can be assigned
@@ -961,7 +963,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             return scope.scopeLevel
         }
         if (!propertyType.isMutable && scope.hasAssignedInThisScope(name)) {
-            throw SemanticException(accessNode.position, "val `$name` cannot be reassigned")
+            throw DefiniteSourceException(accessNode.position, "val `$name` cannot be reassigned")
         }
         scope.assign(name, SemanticDummyRuntimeValue(propertyType.type))
 
@@ -1657,7 +1659,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             if (PropertyModifier.const in modifiers) checkConstProperty(this, isClassProperty)
         }
         if (currentScope.hasProperty(name = name, isThisScopeOnly = true)) {
-            throw SemanticException(position, "Property `$name` has already been declared")
+            throw DuplicatePropertyException(position, name)
         }
         if (!isClassProperty && accessors != null) {
             throw SemanticException(position, "Only class member properties can define custom accessors")
@@ -1725,7 +1727,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         if (!isClassProperty && currentScope !== symbolTable) throw SemanticException(position, "Modifier 'const' is not applicable to local variables")
         if (property.isMutable) throw SemanticException(position, "Modifier 'const' is not applicable to 'var'")
         if (property.accessors != null) throw SemanticException(position, "Const 'val' should not have a getter")
-        val initialValue = property.initialValue ?: throw SemanticException(position, "Const 'val' must be initialized")
+        val initialValue = property.initialValue ?: throw DefiniteSourceException(position, "Const 'val' must be initialized")
         val type = property.declaredType ?: initialValue.type()
         if (type.isNullable || type.name !in setOf("Int", "Long", "Double", "Float", "Byte", "Char", "Boolean", "String")) {
             throw SemanticException(position, "Const 'val' has type '${type.descriptiveName()}'. Only primitives and String are allowed")
@@ -1816,7 +1818,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         val (l, transformedName) = checkPropertyReadAccessAndGetScopeLevelAndTransformedName(this, variableName)
         if (!isAssignmentTarget && transformedName in localValInitialization &&
             (transformedName !in classInitializationKeys || isInInitializer(transformedName)) && localValInitialization[transformedName] != ValInitialization.Assigned) {
-            throw SemanticException(position, "Variable `$variableName` must be initialized")
+            throw DefiniteSourceException(position, "Variable `$variableName` must be initialized")
         }
         noteSelfCallingAccessor(position, variableName, isWrite = false, scopeLevel = l)
         if (l == symbolTable.scopeLevel) {
@@ -2139,7 +2141,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     // no implicit result: every normal path must leave via return.
                     if ((subjectType !is UnitType || subjectType.isNullable) &&
                         com.sunnychung.lib.multiplatform.kotlite.util.ReturnFlow.canCompleteNormally(body)) {
-                        throw SemanticException(body.endPosition, "missing return statement.")
+                        throw DefiniteSourceException(body.endPosition, "missing return statement.")
                     }
                 } else if (subjectType !is UnitType && valueType !is NothingType && !subjectType.isAssignableFrom(valueType)) {
                     throw TypeMismatchException(position, subjectType.descriptiveName, valueType.descriptiveName)
@@ -3230,7 +3232,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         }
         defaultValue?.visit(modifier = modifier)
         if (currentScope.hasProperty(name = name, isThisScopeOnly = true)) {
-            throw SemanticException(position, "Property `$name` has already been declared")
+            throw DuplicatePropertyException(position, name)
         }
         if (defaultValue != null) {
             val valueType = defaultValue.type().toDataType()
@@ -3303,7 +3305,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                 throw SemanticException(position, "Non-local return is only allowed through inline lambda parameters (not noinline/crossinline)")
             }
             false
-        } ?: throw SemanticException(position, "`return` statement should be within a function")
+        } ?: throw DefiniteSourceException(position, "`return` statement should be within a function")
         returnToAddress = target.node.returnTargetId
         isNonLocal = target !== callableContexts.last()
         if (target !== callableContexts.last() && symbolRecorders.isNotEmpty()) {
@@ -3346,7 +3348,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         val backEdges = state.continues + listOfNotNull(bodyEnd.takeUnless { neverCompletes(body) })
         val writes = valWriteEvents.drop(state.writeStart).filter { it.first in state.before }
         writes.firstOrNull { (key, _) -> key !in mutableInitializationKeys && repeats && backEdges.any { it[key] != ValInitialization.Unassigned } }?.let { (key, position) ->
-            throw SemanticException(position, "val `${key.substringBefore('/')}` cannot be reassigned in a loop")
+            throw DefiniteSourceException(position, "val `${key.substringBefore('/')}` cannot be reassigned in a loop")
         }
         val exits = state.breaks + (if (maySkip) listOf(state.before) else emptyList()) + (if (mayExit) backEdges else emptyList())
         mergeValInitialization(state.before, exits)
@@ -3381,6 +3383,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
         var s: SymbolTable = currentScope
         while (!s.scopeType.isLoop()) {
             if (s.scopeType in setOf(ScopeType.Script, ScopeType.Function) || s.parentScope == null) {
+                if (loopLabels.isEmpty()) throw DefiniteSourceException(statement.position, "`break` statement should be within a loop")
                 throw SemanticException(statement.position, "`break` statement should be within a loop")
             }
             s = s.parentScope!!
@@ -3468,7 +3471,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
     fun NavigationNode.visit(modifier: Modifier = Modifier(), lookupType: IdentifierClassifier = IdentifierClassifier.Property, isCheckWriteAccess: Boolean = false): DataType {
         if (lookupType == IdentifierClassifier.Property) {
             qualifiedLibraryName()?.takeIf(executionEnvironment::isQualifiedProperty)?.let { name ->
-                if (isCheckWriteAccess) throw SemanticException(position, "val `$name` cannot be reassigned")
+                if (isCheckWriteAccess) throw DefiniteSourceException(position, "val `$name` cannot be reassigned")
                 val reference = VariableReferenceNode(position, name)
                 reference.visit(modifier)
                 qualifiedProperty = reference
@@ -3563,10 +3566,10 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                     }
                     if (isCheckWriteAccess && !property.isMutable &&
                         (!initializesThis || localValInitialization[key] != ValInitialization.Unassigned)) {
-                        throw SemanticException(position, "val `$memberName` cannot be reassigned")
+                        throw DefiniteSourceException(position, "val `$memberName` cannot be reassigned")
                     }
                     if (!isCheckWriteAccess && initializesThis && localValInitialization[key] != ValInitialization.Assigned) {
-                        throw SemanticException(position, "Property `$memberName` must be initialized")
+                        throw DefiniteSourceException(position, "Property `$memberName` must be initialized")
                     }
                     memberType = NavigationNode.MemberType.Direct
                     return subjectType
@@ -3579,7 +3582,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
                         throw SemanticException(position, "Protected property `$memberName` cannot be accessed here")
                     }
                     if (isCheckWriteAccess && clazz.findMemberProperty(memberName)?.isMutable == false) {
-                        throw SemanticException(position, "val `$memberName` cannot be reassigned")
+                        throw DefiniteSourceException(position, "val `$memberName` cannot be reassigned")
                     }
                     if (isCheckWriteAccess) {
                         if (accessor.setterIsPrivate && !canAccessPrivateMembersOf(clazz.findMemberPropertyOwnerName(memberName))) {
@@ -4101,7 +4104,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             if (declarations.none { it is ClassInstanceInitializerNode }) {
                 declarations.filterIsInstance<PropertyDeclarationNode>()
                     .firstOrNull { it.initialValue == null && it.accessors?.getter == null && PropertyModifier.abstract !in it.modifiers && PropertyModifier.lateinit !in it.modifiers }
-                    ?.let { throw SemanticException(it.position, "Property `${it.name}` must be initialized") }
+                    ?.let { throw DefiniteSourceException(it.position, "Property `${it.name}` must be initialized") }
             }
             val earlierClassKeys = classInitializationKeys.toSet()
             var constructorContinues = true
@@ -4136,7 +4139,7 @@ open class SemanticAnalyzer(val rootNode: ASTNode, val executionEnvironment: Exe
             declarations.filterIsInstance<PropertyDeclarationNode>().filter { it.transformedRefName in classInitializationKeys && it.transformedRefName !in earlierClassKeys }.forEach { property ->
                 val key = property.transformedRefName!!
                 if (constructorContinues && localValInitialization[key] != ValInitialization.Assigned) {
-                    throw SemanticException(property.position, "Property `${property.name}` must be initialized on every continuing constructor path")
+                    throw DefiniteSourceException(property.position, "Property `${property.name}` must be initialized on every continuing constructor path")
                 }
                 // Member bodies are analyzed independently of constructor execution.
                 currentScope.assign(property.name, SemanticDummyRuntimeValue(currentScope.getPropertyType(property.name).first.type))

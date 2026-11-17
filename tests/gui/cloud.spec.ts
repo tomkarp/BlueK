@@ -611,7 +611,7 @@ for (const locale of ["en", "de"])
     await registerConfirmation.fill("a-different-bluek-password");
     const revealPasswords = account.locator(".cloud-password-toggle");
     await expect(revealPasswords).toHaveAccessibleName(
-      de ? "Passwörter anzeigen" : "Show passwords",
+      de ? "Passwort anzeigen" : "Show password",
     );
     await revealPasswords.click();
     await expect(revealPasswords).toHaveAttribute("aria-pressed", "true");
@@ -702,12 +702,12 @@ for (const locale of ["en", "de"])
       .fill("a-different-bluek-password");
     await changePassword
       .getByRole("button", {
-        name: de ? "Passwörter anzeigen" : "Show passwords",
+        name: de ? "Passwort anzeigen" : "Show password",
       })
       .click();
     await expect(
       changePassword.getByRole("button", {
-        name: de ? "Passwörter verbergen" : "Hide passwords",
+        name: de ? "Passwort verbergen" : "Hide password",
       }),
     ).toHaveAttribute("aria-pressed", "true");
     await expect(changePassword.locator('input[type="text"]')).toHaveCount(3);

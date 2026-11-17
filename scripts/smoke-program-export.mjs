@@ -97,6 +97,8 @@ assert.equal(blueKUrlForExport('http://[::1]:8765', '/'), PUBLIC_BLUEK_URL);
 assert.equal(parseExportedProgram(program).allowDownload, undefined, 'Old HTML exports retain their actions');
 const restricted = createExportedProgram(project, 'App.kt', PUBLIC_BLUEK_URL, { allowDownload: false, allowBlueK: false, showProjectName: false, autoRun: true, showControls: false, showSpeed: false });
 assert.equal(parseEmbeddedProgram(programScriptText(restricted)).allowDownload, false);
+assert.deepEqual(parseEmbeddedProgram(programScriptText(restricted)).project.files, program.project.files,
+  'Hidden download and BlueK buttons do not remove the source needed by the player');
 assert.equal(parseEmbeddedProgram(programScriptText(restricted)).showControls, false);
 assert.equal(parseEmbeddedProgram(programScriptText(restricted)).showProjectName, false);
 assert.equal(parseExportedProgram(program).showProjectName, undefined, 'Older exports continue showing the project name');

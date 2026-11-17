@@ -6,6 +6,25 @@ dialog. Reports go to the private
 [`tomkarp/BlueK-Feedback`](https://github.com/tomkarp/BlueK-Feedback) repository,
 independently of the public source repository.
 
+Codepad error shortcuts appear only when the cause might involve missing Kotlin
+support or an interpreter fault. Typed parser/analyzer causes mark the following
+as definite source errors, which show their diagnostic without a report shortcut:
+
+- Missing operands after recognized arithmetic, comparison, Boolean, range,
+  Elvis, prefix and assignment operators; missing initializer/default/body
+  expressions; required closing tokens at end of input in recognized constructs.
+- Duplicate declarations, reassignment of `val`, required but missing
+  initialization, missing block-function returns and `return` outside a function.
+  `break`/`continue` with no enclosing loop are also definite errors; unsupported
+  jumps across lambda boundaries remain eligible for feedback.
+- Resolved type mismatches and exceptions explicitly thrown by student code.
+
+Unknown names, unresolved inference, unsupported syntax and interpreter/transport
+faults retain the shortcut. Classification is conservative: unclassified parse
+failures can still represent a Kotlin gap. The frontend does not classify Kotlin
+source or diagnostic text. The sidebar and Help reporting actions remain
+available for any suspected bug.
+
 The header's information button reveals a storage notice on hover, keyboard
 focus or click. It describes included data, project opt-in, the BlueK server,
 the private GitHub repository, access and retention. The introduction remains

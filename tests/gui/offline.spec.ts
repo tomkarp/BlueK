@@ -173,6 +173,7 @@ test('GUI-130 GUI-139 offline language, terminal settings and German manual work
   await page.getByRole('button', {name: 'Schließen', exact: true}).click();
   await page.reload();
   await expect(page.getByRole('button', {name: 'Kompilieren', exact: true})).toBeVisible();
+  await expect(page.getByLabel('Projektname', {exact: true})).toHaveValue('Lokal');
   await page.getByRole('button', {name: 'Einstellungen', exact: true}).click();
   await expect(page.getByLabel('Codepad-Aufrufen', {exact: true})).toBeChecked();
   await page.getByRole('button', {name: 'Schließen', exact: true}).click();

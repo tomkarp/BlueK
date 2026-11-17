@@ -149,7 +149,7 @@
           ),
         )}
       >
-        {#each history as entry}
+        {#each history as entry (entry)}
           <div
             class="codepad-entry"
             role="group"
@@ -197,12 +197,12 @@
               </button>
             {:else if entry.error}<div class="codepad-error">
                 {entry.error}
-                <button
-                  class="feedback-inline-button"
-                  onclick={() =>
-                    openFeedback({ error: entry.error, code: entry.code })}
-                  >{t("ui.feedback.title")}</button
-                >
+                {#if !entry.sourceError}<button
+                    class="feedback-inline-button"
+                    onclick={() =>
+                      openFeedback({ error: entry.error, code: entry.code })}
+                    >{t("ui.feedback.title")}</button
+                  >{/if}
               </div>
             {:else if entry.result}<div class="codepad-result">
                 <span class="codepad-value-icon" aria-hidden="true"></span><span

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { useLanguage } from "../i18n/Language.svelte";
   import type { CloudWorkspace } from "../workspace/CloudWorkspace.svelte";
+  import { focusOnMount } from "../uiActions";
   const language = useLanguage();
   const t = $derived($language.t);
   let {
@@ -18,6 +19,8 @@
     onManage?: () => void;
     exportProject: () => void;
   } = $props();
+  let savingCopy = $state(false);
+  let copyName = $state("");
 </script>
 
 <div class="cloud-project-panel">
@@ -44,18 +47,64 @@
         </svg>
         <span>{t("ui.cloud.storageAdvice")}</span>
       </div>
-      <div class="project-choice-list cloud-save-choices">
-        <button
-          class="file-export-choice cloud-save-choice"
-          disabled={cloud.busy}
-          onclick={async () => {
-            if (await cloud.save()) onSaved();
+      {#if !savingCopy}<div class="project-choice-list cloud-save-choices">
+          <button
+            class="file-export-choice cloud-save-choice"
+            disabled={cloud.busy}
+            onclick={async () => {
+              if (await cloud.save()) onSaved();
+            }}
+            ><strong>{cloud.currentProjectName}</strong><span
+              >{t(cloud.attached ? "ui.cloud.update" : "ui.cloud.save")}</span
+            ></button
+          >
+          <button
+            class="file-export-choice cloud-save-copy-choice"
+            aria-labelledby="cloud-save-copy-label"
+            aria-describedby="cloud-save-copy-description"
+            disabled={cloud.busy}
+            onclick={() => (savingCopy = true)}
+          >
+            <strong id="cloud-save-copy-label">{t("ui.cloud.saveCopy")}</strong>
+            <span id="cloud-save-copy-description"
+              >{t("ui.cloud.saveCopyDescription")}</span
+            >
+          </button>
+        </div>
+      {:else}
+        <form
+          onsubmit={async (event) => {
+            event.preventDefault();
+            if (await cloud.saveCopy(copyName)) onSaved();
           }}
-          ><strong>{cloud.currentProjectName}</strong><span
-            >{t(cloud.attached ? "ui.cloud.update" : "ui.cloud.save")}</span
-          ></button
         >
-      </div>
+          <label
+            >{t("ui.cloud.copyName")}
+            <input
+              class="copy-name-input"
+              type="text"
+              bind:value={copyName}
+              use:focusOnMount
+              required
+              maxlength="120"
+              disabled={cloud.busy}
+            />
+          </label>
+          <div class="dialog-actions">
+            <button
+              type="button"
+              disabled={cloud.busy}
+              onclick={() => {
+                savingCopy = false;
+                copyName = "";
+              }}>{t("ui.common.cancel")}</button
+            >
+            <button type="submit" disabled={cloud.busy || !copyName.trim()}>
+              {t("ui.cloud.saveCopy")}
+            </button>
+          </div>
+        </form>
+      {/if}
     {:else}
       {#if !cloud.projects.length && !cloud.busy && !cloud.error}<p>
           {t("ui.cloud.noProjects")}
@@ -99,6 +148,18 @@
 </div>
 
 <style>
+  .cloud-project-panel .copy-name-input {
+    appearance: none;
+    color: var(--action-text);
+    background: var(--action-bg);
+    border: 1px solid var(--action-border);
+    border-radius: 4px;
+  }
+  .cloud-project-panel .copy-name-input:focus {
+    border-color: var(--action-focus);
+    outline: none;
+    box-shadow: inset 0 0 0 1px var(--action-focus);
+  }
   .cloud-project-panel {
     display: flex;
     flex: 1;

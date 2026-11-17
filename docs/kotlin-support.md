@@ -68,7 +68,8 @@ package-qualified library expressions and package declarations are not supported
 - List/Map/Set, ranges, arrays, loop labels, `break`/`continue`, and statement
   `when` without `else`; exhaustive enum/Boolean `when` expressions.
 - Numeric exponents, hex/binary literals, digit separators, `.5`, and Int/Long
-  bit operations. `Float` is represented as `Double`.
+  bit operations. `Float` is represented as `Double`. Parenthesized expressions
+  can start on the line after the opening `(`.
 
 ## Remaining language limitations
 

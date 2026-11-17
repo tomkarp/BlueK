@@ -324,7 +324,7 @@ export class ExecutionWorkspace {
       this.history = [
         ...this.history,
         response.kind === "error"
-          ? { code, error: codepadError(response) }
+          ? { code, error: codepadError(response), sourceError: response.sourceError }
           : response.kind === "object" || Boolean(response.objectId)
             ? {
                 code,

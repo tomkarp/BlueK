@@ -206,7 +206,7 @@
                     <circle cx="12" cy="12" r="3" />
                     {#if showPasswords}<path d="m3 3 18 18" />{/if}
                   </svg>
-                  {t(showPasswords ? "ui.cloud.hidePasswords" : "ui.cloud.showPasswords")}
+                  {t(showPasswords ? "ui.cloud.hidePassword" : "ui.cloud.showPassword")}
                 </button>
                 <div class="dialog-actions">
                   <button type="button" disabled={cloud.busy} onclick={() => {
@@ -432,7 +432,7 @@
               <circle cx="12" cy="12" r="3" />
               {#if showPasswords}<path d="m3 3 18 18" />{/if}
             </svg>
-            {t(showPasswords ? "ui.cloud.hidePasswords" : "ui.cloud.showPasswords")}
+            {t(showPasswords ? "ui.cloud.hidePassword" : "ui.cloud.showPassword")}
           </button>
           {#if register}<label class="cloud-ack">
               <input type="checkbox" bind:checked={acknowledgedUniquePassword} required />

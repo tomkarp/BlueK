@@ -103,6 +103,7 @@ export class ProjectDraftStorage {
         if (!(await this.acquire(id))) continue;
         storage.removeItem(key);
         this.release();
+        await this.lockCompletion;
       }
     }
   }
@@ -205,8 +206,10 @@ export class ProjectDraftStorage {
       let anotherTabIsActive = false;
       if (locks) {
         for (const candidate of candidates) {
-          if (await this.acquire(candidate.id)) this.release();
-          else anotherTabIsActive = true;
+          if (await this.acquire(candidate.id)) {
+            this.release();
+            await this.lockCompletion;
+          } else anotherTabIsActive = true;
         }
       }
 

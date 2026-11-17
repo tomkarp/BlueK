@@ -499,7 +499,7 @@ test("NAV-05 account overview includes project management and supports project a
   ).toBeVisible();
   const [jsonDownload] = await Promise.all([
     page.waitForEvent("download"),
-    row.getByRole("button", { name: "Download “Inheritance exercises” as JSON", exact: true }).click(),
+    row.getByRole("button", { name: "Download “Inheritance exercises” as a BlueK project file", exact: true }).click(),
   ]);
   expect(await jsonDownload.suggestedFilename()).toBe(
     "Inheritance exercises.bluek",
@@ -526,6 +526,8 @@ test("NAV-05 account overview includes project management and supports project a
   await expect(account).toBeHidden();
   await expect(page.getByLabel("Project name")).toHaveValue("Inheritance exercises");
   await page.getByRole("button", { name: "Account", exact: true }).click();
+  await expect(account).toHaveAttribute("aria-busy", "false");
+  await expect(row).toBeVisible();
   const rowHeight = (await row.boundingBox())!.height;
   await row
     .getByRole("button", { name: "Rename “Inheritance exercises”" })

@@ -29,3 +29,64 @@ snapshot = { generationId: 'g2', phase: 'uncompiled' };
 resolve(response);
 assert.equal((await pending).kind, 'stale', 'A replaced generation cannot update codepad history');
 console.log('Codepad flow passed: compile-on-demand, no duplicate compile, typed compile errors, and stale generation discard.');
+
+// Error classification comes from the checked-in interpreter, not UI text matching.
+const { readFile } = await import('node:fs/promises');
+const { runInThisContext } = await import('node:vm');
+runInThisContext(await readFile(new URL('../frontend/public/kotlite/bluek-kotlite-browser.js', import.meta.url), 'utf8'));
+const session = globalThis['bluek-kotlite-browser'].bluekCreateKotliteSession();
+const evaluate = source => JSON.parse(session.evaluate('<codepad classification>', source));
+assert.notEqual(evaluate('var k = 1').kind, 'error');
+for (const source of [
+  '5 -',
+  '5 +',
+  '5 *',
+  '5 /',
+  '5 %',
+  'true &&',
+  'false ||',
+  '5 ==',
+  '5 >',
+  '1..',
+  'null ?:',
+  '!',
+  '(5 -)',
+  'listOf(5 -)',
+  'fun missingOperand() { 5 - }',
+  'val absent =',
+  'k =',
+  'k +=',
+  'println(5',
+  'fun unfinished() {',
+  'fun emptyBody() =',
+  'fun defaultMissing(n: Int =)',
+  'val fixed = 1; fixed = 2',
+  'fun uninitialized(): Int { val value: Int; return value }',
+  'fun noReturn(): Int { println(1) }',
+  'return 1',
+  'break',
+  'continue',
+  'var k = 2',
+  'fun duplicate(a: Int, a: Int) = a',
+  'val number: Int = "text"',
+  'fun takesInt(n: Int) = n; takesInt("text")',
+  'throw IllegalArgumentException("student")',
+]) {
+  const result = evaluate(source);
+  assert.equal(result.kind, 'error', source);
+  assert.equal(result.sourceError, true, source);
+}
+for (const source of [
+  'missingKotlinFeature()',
+  'typealias Name = String',
+  'object : Any() {}',
+  '5 - object : Any() {}',
+  '5 + 1u',
+]) {
+  const result = evaluate(source);
+  assert.equal(result.kind, 'error', source);
+  assert.equal(result.sourceError, false, 'Possible gaps retain feedback: ' + source);
+}
+assert.equal(evaluate('k').display, '1', 'A rejected duplicate keeps the original binding');
+assert.equal(evaluate('(\n5)').display, '5', 'A line break after an opening parenthesis still allows an operand');
+console.log('Codepad diagnostics passed: incomplete expressions/tokens, duplicate bindings, val writes, initialization, returns, loop scope, resolved type mismatches and student exceptions are source errors; unresolved calls and unsupported syntax retain feedback.');

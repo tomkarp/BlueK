@@ -132,6 +132,12 @@ back/forward-cache return preserve the same tab ID and recovery copy; when Web
 Locks are unavailable, retaining that ID still ensures ordinary reload recovery.
 Legacy single-project autosave is migrated.
 
+Browser drafts retain the current project after an import, file download or
+account save as well, so reloading always restores the open project. The
+explicit-save fingerprint controls the unsaved-changes prompt independently.
+Desktop recovery only retains modified work; a clean desktop save or confirmed
+close removes its recovery copy.
+
 There is no recovery list or notice. A tab restores its own copy automatically.
 When a tab has no ID, BlueK restores the newest leftover copy only if no other
 tab owns a draft; with Web Locks it removes older abandoned copies. Without Web

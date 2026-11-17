@@ -47,7 +47,8 @@ test("GUI-130 browser language sets default; explicit choice persists, source an
   await page.reload();
   await expect(
     page.getByRole("button", { name: "Compile", exact: true }),
-  ).toBeVisible();
+  ).toBeEnabled();
+  await expect(page.getByLabel("Project name")).toHaveValue(payload.projectName);
   const input = page.getByLabel("Codepad input", { exact: true });
   await page.getByRole("button", { name: "Compile", exact: true }).click();
   await page.getByRole("button", { name: "Load state", exact: true }).click();

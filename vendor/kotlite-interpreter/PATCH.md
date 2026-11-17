@@ -1358,3 +1358,33 @@ without invoking property accessors or student code. The browser binding uses
 project AST declarations to select file-level globals and publishes them
 separately from current-frame locals, preserving both values when a local
 shadows a global. Receiver lookup, call depth and execution scopes are unchanged.
+
+## 2026-11-17: typed duplicate-property diagnostics (Feedback #37)
+
+The analyzer's two duplicate-property checks now throw
+`DuplicatePropertyException`, a `SemanticException` subclass with unchanged
+message and position. BlueK uses the typed cause to identify definite source
+errors in runtime results, so the Codepad can omit an irrelevant report shortcut
+without matching Kotlin diagnostic text in the frontend. Existing typed duplicate
+identifier and type mismatch errors and student-thrown exceptions receive the
+same classification; unresolved names, parse failures and interpreter faults
+remain eligible for feedback.
+
+## 2026-11-17: definite syntax and source-rule errors (Feedback #37 follow-up)
+
+`UnexpectedTokenException.missingOperand` records a known operator or expression
+slot followed by an end/delimiter token. It covers arithmetic, comparison,
+Boolean, range, Elvis, prefix and assignment operators, initializers, parameter
+defaults and expression bodies. A confirmed missing operand survives the
+assignment/expression fallback. `ExpectTokenMismatchException.missingToken`
+marks required tokens absent at EOF, including a missing function-block closing
+brace. Other parse failures remain unclassified so unsupported Kotlin syntax
+continues to offer feedback.
+
+`DefiniteSourceException` keeps SemanticException's message/position while
+identifying `val` reassignment, required initialization, missing returns and
+`return` outside a function. Loop-scope errors are definite only when there is
+no enclosing loop; unsupported non-local jumps retain feedback. The browser
+session exposes these typed causes as `sourceError`, never by frontend text
+matching. Parenthesized expressions also consume line breaks after `(` before
+checking for an operand. The stdlib surface is unchanged.

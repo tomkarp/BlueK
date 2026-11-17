@@ -203,14 +203,24 @@ export class CloudWorkspace {
       this.binding = null;
       this.notice = this.text("ui.cloud.accountDeleted");
     });
-  save = async () => {
+  save = () => this.saveProject();
+  saveCopy = (name: string) => this.saveProject(name.trim());
+  private saveProject = async (copyName?: string) => {
     const project = this.host.project();
-    if (!(await project.ensureProjectName())) return false;
+    if (copyName === undefined && !(await project.ensureProjectName()))
+      return false;
     return this.run(async () => {
-      const payload = project.projectPayload();
+      if (copyName !== undefined && (!copyName || copyName.length > 120))
+        throw new ApiError("private-name");
+      const originalName = project.projectName;
+      const payload = {
+        ...project.projectPayload(),
+        ...(copyName !== undefined ? { projectName: copyName } : {}),
+      };
       checkServerProject(payload);
       const documentVersion = project.documentVersion;
-      const binding = this.attached ? this.binding : null;
+      const binding =
+        copyName === undefined && this.attached ? this.binding : null;
       const result = await apiRequest<{ id: string; revision: number }>(
         `/api/private-projects${binding ? `/${binding.id}` : ""}`,
         {
@@ -226,8 +236,11 @@ export class CloudWorkspace {
         result.revision < 1
       )
         throw new ApiError("network");
-      if (documentVersion === project.documentVersion)
+      if (documentVersion === project.documentVersion) {
         this.binding = { ...result, documentVersion };
+        if (copyName !== undefined && project.projectName === originalName)
+          project.setProjectName(copyName);
+      }
       // A list outage after a confirmed save must not turn that save into a failure.
       try {
         await this.list();

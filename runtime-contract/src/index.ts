@@ -95,6 +95,8 @@ export interface RuntimeValue {
   fields?: InspectedField[];
   phase?: 'request' | 'analysis' | 'runtime' | 'transport';
   fatal?: boolean;
+  /** The interpreter identified an unambiguous source error, rather than a possible Kotlin compatibility gap. */
+  sourceError?: boolean;
   output?: string;
   stage?: BluePlayStage;
   effects?: RuntimeEffect[];
