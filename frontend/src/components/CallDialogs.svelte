@@ -264,7 +264,6 @@
               requestObjectOnBench({
                 objectId: resultDialog!.objectId!,
                 className: resultDialog!.className || "Object",
-                name: resultDialog!.className || "Object",
                 kind: "object",
               });
             }}>{t("ui.objects.get")}</button

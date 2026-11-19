@@ -3663,12 +3663,33 @@ test("GUI-68 the editor has a Vim mode that stays off until it is switched on", 
 test("GUI-159 returned objects suggest lowercase unique instance names", async ({
   page,
 }) => {
-  await project(page, "class Karte {}");
-  await evaluate(page, "Karte()");
-  await page.locator(".codepad-object-result").last().click();
+  const payload = {
+    format: "bluek-project",
+    version: 1,
+    files: [
+      { fileName: "Karte.kt", kind: "class", source: "class Karte {}" },
+      {
+        fileName: "Endlosstapel.kt",
+        kind: "class",
+        source: "class Endlosstapel { fun zieheKarte(): Karte = Karte() }",
+      },
+    ],
+  };
+  await page.goto(
+    "/#bluek=p1." + Buffer.from(JSON.stringify(payload)).toString("base64url"),
+  );
+  await expect(page.getByLabel("Codepad input")).toBeEnabled();
+  const stack = await evaluate(page, "Endlosstapel()");
+  await stack.getByRole("button").click();
+  await page.getByRole("button", { name: "OK", exact: true }).click();
+  await page.locator(".bench .object").dispatchEvent("contextmenu", { button: 2 });
+  await page.getByRole("button", { name: "zieheKarte(): Karte", exact: true }).click();
+  const result = page.locator(".result-dialog");
+  await result.getByRole("button", { name: "Get", exact: true }).click();
   const name = page.locator(".topmost-modal .create-object-dialog input");
   await expect(name).toHaveValue("karte1");
-  await page.locator(".topmost-modal .create-object-dialog button").last().click();
+  await page.getByRole("button", { name: "OK", exact: true }).click();
+  await result.getByRole("button", { name: "Close", exact: true }).click();
 
   await evaluate(page, "Karte()");
   await page.locator(".codepad-object-result").last().click();

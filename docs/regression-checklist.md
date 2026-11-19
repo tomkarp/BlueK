@@ -13,6 +13,15 @@ test-results/. Full Kotlin conformance is not implied by any passing suite.
 Latest storage/account/publication verification: [2026-10-25 results](#publication-lifetime-by-authentication--2026-10-25).
 Latest project navigation verification: [2026-10-22 results](#new-open-save-and-share-navigation--2026-10-22).
 
+### Method-result object names — 2026-11-19
+
+- The method-result Get action uses the numbered object-bench suggestion.
+  GUI-159 covers `zieheKarte()` suggesting `karte1`, followed by a Codepad
+  result suggesting `karte2`. The first browser run failed because the test
+  fixture put both classes in one file. With separate files, Chromium passed
+  GUI-02, GUI-142, GUI-159 and GUI-161 (6/6). The sandbox initially blocked
+  the local test server. `typecheck` passed with zero errors or warnings.
+
 ### Feedback issue 37 — 2026-11-17
 
 - CLOUD-10/11 and GUI-165: the six new German/English cases in
