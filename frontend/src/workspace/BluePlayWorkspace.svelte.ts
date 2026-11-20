@@ -98,6 +98,8 @@ export class BluePlayWorkspace {
     });
   };
   stageKey = (event: KeyboardEvent, pressed: boolean) => {
+    // Leave application shortcuts available, including the native macOS menu.
+    if (pressed && (event.metaKey || event.ctrlKey || event.altKey)) return;
     const key = stageKeyName(event.key);
     const wasPressed = this.stageKeysDown.has(key);
     // A debugger breakpoint pauses the simulation, so stageRunning becomes
@@ -106,7 +108,7 @@ export class BluePlayWorkspace {
     if (!pressed && !wasPressed) return;
     // Suppress every repeat: WebKit can send default text input back to the
     // previous contenteditable selection even while the canvas has focus.
-    event.preventDefault();
+    if (!event.metaKey && !event.ctrlKey && !event.altKey) event.preventDefault();
     if (wasPressed === pressed) return;
     if (pressed) this.stageKeysDown.add(key);
     else this.stageKeysDown.delete(key);

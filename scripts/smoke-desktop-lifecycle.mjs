@@ -59,3 +59,32 @@ for (const template of ['empty', 'empty-blueplay', 'blueplay']) {
     'The chosen template is transferred to the new window');
 }
 console.log('Desktop lifecycle: SDK close/permissions, discard, targeted delivery and template transfer passed.');
+
+const feedbackBundle = await rolldown({
+  input: 'frontend/src/feedbackApi.ts',
+  transform: { define: { 'import.meta.env.VITE_BLUEK_API_URL': '""' } },
+});
+const feedbackOutput = await feedbackBundle.generate({ format: 'esm' });
+await feedbackBundle.close();
+const { feedbackAvailable, sendFeedback } = await import('data:text/javascript;base64,' +
+  Buffer.from(feedbackOutput.output[0].code).toString('base64'));
+for (const [location, apiOrigin] of [
+  ['tauri://localhost', 'https://api.bluek.online'],
+  ['http://tauri.localhost', 'https://api.bluek.online'],
+  ['http://localhost:5173', 'http://localhost:5173'],
+]) {
+  window.location = new URL(location);
+  const requests = [];
+  globalThis.fetch = async (url, options) => {
+    requests.push(url);
+    if (options.method === 'POST') {
+      const report = JSON.parse(options.body);
+      return Response.json({ reference: report.id, queued: false, issueNumber: 12 });
+    }
+    return Response.json({ available: true });
+  };
+  assert.equal(await feedbackAvailable(), true);
+  assert.equal((await sendFeedback({ id: 'test' })).issueNumber, 12);
+  assert.deepEqual(requests, [`${apiOrigin}/api/feedback/config`, `${apiOrigin}/api/feedback`]);
+}
+console.log('Desktop feedback: availability and submission use the correct API origin.');

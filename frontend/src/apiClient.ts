@@ -11,13 +11,13 @@ export class ApiError extends Error {
   }
 }
 export function apiUrl(path: string): string {
-  const local = ["localhost", "127.0.0.1", "[::1]"].includes(
-    window.location.hostname,
-  );
+  const { protocol, hostname, origin } = window.location;
+  const local = (protocol === "http:" || protocol === "https:") &&
+    ["localhost", "127.0.0.1", "[::1]"].includes(hostname);
   return new URL(
     path,
     import.meta.env.VITE_BLUEK_API_URL ||
-      (local ? window.location.origin : "https://api.bluek.online"),
+      (local ? origin : "https://api.bluek.online"),
   ).href;
 }
 export async function apiRequest<T>(

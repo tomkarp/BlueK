@@ -125,7 +125,7 @@ errors never return credentials or GitHub response bodies.
 | BLUEK_FEEDBACK_REPOSITORY | `tomkarp/BlueK-Feedback`, private with Issues enabled |
 | BLUEK_FEEDBACK_TOKEN_FILE | Preferred protected token file outside source/deployment directories |
 | BLUEK_FEEDBACK_TOKEN | Alternative environment token for local development |
-| BLUEK_FEEDBACK_ORIGINS | Comma-separated allowed origins; set explicitly for each service: production `https://bluek.online`, beta `https://beta.bluek.online` |
+| BLUEK_FEEDBACK_ORIGINS | Comma-separated allowed origins. See [deployment](deployment.md) for the production list including packaged Desktop clients and the beta web origin. |
 
 Production and beta have separate SQLite feedback queues. Both use the same
 token file and private `tomkarp/BlueK-Feedback` repository, so reports from

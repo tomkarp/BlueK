@@ -20,6 +20,21 @@ async function loadBluePlay(page: Page) {
   return stage;
 }
 
+test('GUI-166 BluePlay leaves Cmd+Q available while the world has focus', async ({ page }) => {
+  const stage = await loadBluePlay(page);
+  const canvas = stage.locator('.game-stage');
+  await canvas.focus();
+  const dispatch = (key: string, metaKey: boolean) => canvas.evaluate((element, args) =>
+    element.dispatchEvent(new KeyboardEvent('keydown', {
+      ...args, bubbles: true, cancelable: true,
+    })), { key, metaKey });
+  expect(await dispatch('q', true)).toBe(true);
+  expect(await dispatch('ArrowLeft', false)).toBe(false);
+  await stage.getByRole('button', { name: 'Run BluePlay world' }).click();
+  await expect(stage).toHaveAttribute('data-simulation', 'running');
+  expect(await dispatch('q', true)).toBe(true);
+});
+
 async function loadSpaceInvaders(
   page: Page,
   openDefenderEditor = false,

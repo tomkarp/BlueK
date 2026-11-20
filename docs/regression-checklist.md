@@ -13,6 +13,26 @@ test-results/. Full Kotlin conformance is not implied by any passing suite.
 Latest storage/account/publication verification: [2026-10-25 results](#publication-lifetime-by-authentication--2026-10-25).
 Latest project navigation verification: [2026-10-22 results](#new-open-save-and-share-navigation--2026-10-22).
 
+### Desktop feedback issues 42 and 43 — 2026-11-20
+
+- GUI-166 passed in Chromium and WebKit. A focused BluePlay world leaves
+  Cmd+Q uncancelled before and during simulation and still consumes a plain
+  game key. The native macOS quit action still needs desktop verification.
+- `test:desktop-lifecycle` passed. Mocked feedback config and submission calls
+  used the public API for both packaged Tauri URLs and the proxy for HTTP
+  localhost. A local feedback-service check passed for desktop CORS preflight
+  and config requests, including rejection of an unrelated origin. Live desktop
+  delivery awaits the production allowlist update and end-to-end verification.
+- The packaged macOS app reported unavailable feedback before submission and a
+  connection error after submission. Read-only production probes returned 403
+  for both the config request and POST preflight with `tauri://localhost` or
+  `http://tauri.localhost`. The web origin and `null` received 200 and 204.
+- `typecheck` passed with zero errors and warnings. The wider browser selection
+  passed 8/8 in Chromium and 7/8 in WebKit. The WebKit pasted-image Backspace
+  test retained the image. Firefox could not start because it could not find
+  its profile directory. The workspace helper was blocked by an unresolved
+  Vite virtual module. No live feedback report was sent.
+
 ### Method-result object names — 2026-11-19
 
 - The method-result Get action uses the numbered object-bench suggestion.

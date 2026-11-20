@@ -167,8 +167,13 @@ BLUEK_API_ORIGINS=https://bluek.online
 BLUEK_COOKIE_SECURE=1
 BLUEK_COOKIE_SAMESITE=Lax
 BLUEK_FEEDBACK_TOKEN_FILE=/etc/bluek/feedback-token
-BLUEK_FEEDBACK_ORIGINS=https://bluek.online
+BLUEK_FEEDBACK_ORIGINS=https://bluek.online,tauri://localhost,http://tauri.localhost,null
 ```
+
+Update `BLUEK_FEEDBACK_ORIGINS` in existing production deployments and restart
+the service for packaged Desktop feedback. The list includes `null` for WebViews
+that serialize the custom-scheme origin as opaque. Apply it to anonymous feedback
+only.
 
 Example systemd unit `/etc/systemd/system/bluek-share.service`:
 
