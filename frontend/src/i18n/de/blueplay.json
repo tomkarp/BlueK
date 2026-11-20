@@ -15,7 +15,7 @@
     "getObjects": "Alle Akteure vom Typ T.",
     "getObjectsAt": "Alle Akteure in der Zelle (x, y).",
     "setBackground": "Setzt den Hintergrund aus einer Bilddatei oder RGB-Farbe.",
-    "showText": "Text bei (x, y); ein leerer String entfernt ihn.",
+    "showText": "Zeigt oder ersetzt Text in der Zelle (x, y). Die Schriftgröße wird in Pixeln der Spielfläche angegeben (mindestens 1). Ein leerer String entfernt den Text.",
     "summary": "Ein Zellraster mit Akteuren und Hintergrund."
   },
   "Actor": {

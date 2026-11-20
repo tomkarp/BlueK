@@ -47,9 +47,13 @@ nativeEval('step()', 'public step');
 if (JSON.parse(nativeSession.takeStage()).stage.objects[0]?.x !== 102) throw new Error('Public step() did not dispatch the actor callback.');
 nativeEval('class CallbackWorld : World(40,30,1) { var acts = 0; override fun act() { acts += 1 } }; val callbacks = CallbackWorld(); callbacks.show(); step()', 'world override');
 if (nativeEval('callbacks.acts', 'world act result').display !== '1') throw new Error('Public step() ignored World.act().');
-nativeEval('callbacks.showText("hello",2,3); callbacks.showText("replaced",2,3); callbacks.setBackground(12,34,56); setSpeed(101)', 'text, color and speed');
+nativeEval('callbacks.showText("hello",2,3); callbacks.showText("replaced",2,3, size = 28); callbacks.showText("default",4,5); callbacks.setBackground(12,34,56); setSpeed(101)', 'text, color and speed');
 const decorated = JSON.parse(nativeSession.takeStage()).stage;
-if (decorated.texts.length !== 1 || decorated.texts[0].text !== 'replaced' || decorated.background.operations[0] !== 'fill|rgb(12,34,56)' || decorated.speed !== 100) throw new Error('World decorations or speed bridge failed.');
+assert.deepEqual(decorated.texts, [
+  { x: 2, y: 3, text: 'replaced', fontSize: 28 },
+  { x: 4, y: 5, text: 'default', fontSize: 14 },
+]);
+if (decorated.background.operations[0] !== 'fill|rgb(12,34,56)' || decorated.speed !== 100) throw new Error('World decorations or speed bridge failed.');
 
 // playSound() resolves the project resource like BluePlay (given path, then sounds/),
 // emits a sound effect independent of the shown world, and fails loudly for a missing file.
@@ -69,8 +73,11 @@ const missingSound = soundEval('playSound("stpe.wav")');
 if (missingSound.kind !== 'error' || !missingSound.display.includes("Sound file not found: stpe.wav (expected e.g. in the folder 'sounds/'). Available: music.mp3, step.wav."))
   throw new Error(`A missing sound did not fail like BluePlay: ${missingSound.display}`);
 if (JSON.parse(soundSession.takeEffects()).length) throw new Error('A missing sound produced an effect.');
-nativeEval('callbacks.showText("",2,3)', 'remove text');
-if (JSON.parse(nativeSession.takeStage()).stage.texts.length) throw new Error('An empty string did not remove world text.');
+nativeEval('callbacks.showText("",2,3); callbacks.showText("small",6,7,0)', 'remove text and clamp size');
+assert.deepEqual(JSON.parse(nativeSession.takeStage()).stage.texts, [
+  { x: 4, y: 5, text: 'default', fontSize: 14 },
+  { x: 6, y: 7, text: 'small', fontSize: 1 },
+]);
 nativeEval('val moving = Actor(); moving.x = 10; moving.y = 10; moving.rotation = 45; moving.move(10)', 'diagonal movement');
 if (nativeEval('moving.x == 17 && moving.y == 17', 'diagonal movement result').display !== 'true') throw new Error('Movement at arbitrary headings failed.');
 nativeEval('moving.rotation = 450; moving.turn(-540)', 'normalize rotation');

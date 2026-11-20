@@ -659,6 +659,20 @@ below. No universal performance guarantee is implied.
 
 ## Recorded verification
 
+### BluePlay world text size — 2026-11-20
+
+Chromium passed the canvas check for default 14 px and named `size = 32`
+with a two-pixel cell size, and GUI-58 confirmed the default in World API help.
+The initial sandbox run could not bind the local test server (EPERM).
+The Kotlin runtime smoke passed default size, replacement, removal and the
+1 px minimum. The stage helper, BlueJ export, Kotlin/JVM compilation of the
+exported library sources, localization, argument diagnostics and typecheck
+passed. The API smoke initially referenced the absent `Dog.kt` and passed
+after switching to the pinned `Figure.kt` fixture. The user confirmed local
+testing on 2026-11-20. The broader runtime-state smoke stops at an existing
+file-classification assertion: the baseline bundle also returns
+`classNameFrom`, which that assertion does not expect.
+
 ### BluePlay input after background-editor focus — 2026-10-22
 
 Reproduced the original focus transfer without clicks or explicit refocusing

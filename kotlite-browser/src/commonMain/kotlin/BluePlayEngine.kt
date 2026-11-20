@@ -56,6 +56,7 @@ internal class BluePlayEngine(private val playSound: (String) -> Unit = {}) {
         val textX = part.field("textX")
         val textY = part.field("textY")
         val textValues = part.field("textValues")
+        val textSizes = part.field("textSizes")
         var act = actCall(instance); private set
         /** Keyed by [identity], in insertion order: the order of act(), painting and allObjects(). */
         val actors = LinkedHashMap<ClassInstance, ActorEntry>()
@@ -712,8 +713,10 @@ internal class BluePlayEngine(private val playSound: (String) -> Unit = {}) {
         images.append(']')
         objects.append(']')
         val textX = world.textX.list(); val textY = world.textY.list(); val textValues = world.textValues.list()
+        val textSizes = world.textSizes.list()
         val texts = textValues.indices.joinToString(",", "[", "]") { index ->
-            "{\"x\":${(textX.getOrNull(index) as? IntValue)?.value ?: 0},\"y\":${(textY.getOrNull(index) as? IntValue)?.value ?: 0},\"text\":\"${escapeJson((textValues[index] as? StringValue)?.value ?: "")}\"}"
+            val fontSize = (textSizes[index] as IntValue).value
+            "{\"fontSize\":$fontSize,\"x\":${(textX.getOrNull(index) as? IntValue)?.value ?: 0},\"y\":${(textY.getOrNull(index) as? IntValue)?.value ?: 0},\"text\":\"${escapeJson((textValues[index] as? StringValue)?.value ?: "")}\"}"
         }
         val backgroundInstance = world.background.read(null) as? ClassInstance
         val background = backgroundInstance?.let { instance ->

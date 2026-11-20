@@ -16,6 +16,10 @@ the published teaching contract and starts each actor with its own editable
 placeholder image. This differs from the reference implementation's nullable
 field while preserving its visible default placeholder.
 
+Since 2026-11-20, `World.showText` accepts an optional `size: Int = 14` in
+world pixels in both BlueK and the BlueJ export. Three-argument calls remain
+valid in Kotlin.
+
 ## Reproduced defects and corrections
 
 The original audit tested BlueK `21bc5cc`, bundle SHA-256

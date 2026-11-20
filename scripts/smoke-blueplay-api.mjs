@@ -21,12 +21,12 @@ const session = await create();
 const evaluate = source => ok(JSON.parse(session.evaluate('<BluePlay API>', source)), source);
 
 // Public signatures independently transcribed from the pinned BlueJ fixture,
-// not from BlueK's adapter or its UI metadata.
+// with BlueK's optional size extension for World.showText.
 const expected = {
   World: {
     constructors: ['width:Int,height:Int,cellSize:Int'],
     properties: ['val width:Int', 'val height:Int', 'val cellSize:Int', 'var background:Image', 'val numberOfObjects:Int', 'val isClicked:Boolean'],
-    methods: ['show():Unit', 'act():Unit', 'addObject(actor:Actor,x:Int,y:Int):Unit', 'removeObject(actor:Actor):Unit', 'allObjects():List<Actor>', 'getObjects<T : Actor>():List<T>', 'getObjectsAt(x:Int,y:Int):List<Actor>', 'setBackground(fileName:String):Unit', 'setBackground(r:Int,g:Int,b:Int):Unit', 'showText(text:String,x:Int,y:Int):Unit'],
+    methods: ['show():Unit', 'act():Unit', 'addObject(actor:Actor,x:Int,y:Int):Unit', 'removeObject(actor:Actor):Unit', 'allObjects():List<Actor>', 'getObjects<T : Actor>():List<T>', 'getObjectsAt(x:Int,y:Int):List<Actor>', 'setBackground(fileName:String):Unit', 'setBackground(r:Int,g:Int,b:Int):Unit', 'showText(text:String,x:Int,y:Int,size:Int):Unit'],
   },
   Actor: {
     constructors: [''],
@@ -41,6 +41,9 @@ const expected = {
 const params = parameters => parameters.map(p => `${p.name}:${p.type.displayName}`).join(',');
 const method = m => `${m.name}${m.typeParameters?.length ? '<' + m.typeParameters.join(',') + '>' : ''}(${params(m.parameters)}):${m.returnType.displayName}`;
 const manifest = JSON.parse(session.manifest());
+const size = manifest.classes.find(c => c.name === 'World').methods.find(m => m.name === 'showText').parameters[3];
+assert.equal(size.hasDefault, true);
+assert.equal(size.defaultInt, 14);
 for (const klass of manifest.classes) {
   const original = expected[klass.name];
   assert(original, `Unexpected public library class ${klass.name}`);
@@ -56,6 +59,10 @@ assert.deepEqual(generated, manifest, 'UI metadata must match the actual interpr
 const bundled = await rolldown({ input: 'frontend/src/bluePlayApi.ts' });
 const { output } = await bundled.generate({ format: 'esm' }); await bundled.close();
 const { bluePlayApiDocs } = await import('data:text/javascript;base64,' + Buffer.from(output[0].code).toString('base64'));
+assert.equal(
+  bluePlayApiDocs['World.kt'].sections.flatMap(section => section.members).find(member => member.signature.startsWith('fun showText(')).signature,
+  'fun showText(text: String, x: Int, y: Int, size: Int = 14)',
+);
 for (const [file, doc] of Object.entries(bluePlayApiDocs)) {
   assert(doc.sections.every(section => section.members.every(member => member.description && member.signature)), `Missing explanation in ${file}`);
   const referenceCount = file === 'BluePlayFunctions.kt' ? 7 : (() => {const c = expected[file.replace('.kt', '')]; return c.constructors.length + c.properties.length + c.methods.length;})();
@@ -117,7 +124,7 @@ const otherWorld = 'val otherWorld = World(50,50,1); otherWorld.addObject(b, 5, 
 assert.equal(evaluate('w.numberOfObjects == 0 && b.world === otherWorld').display, 'true');
 
 // Original student files are immutable fixtures from the BlueJ version, not BlueK examples.
-const files = ['Dog.kt', 'MyWorld.kt', 'Main.kt'];
+const files = ['Figure.kt', 'MyWorld.kt', 'Main.kt'];
 const original = await create(files, await Promise.all(files.map(file => readFile(new URL(`../tests/fixtures/blueplay-reference/${file}`, import.meta.url), 'utf8'))));
 ok(await complete((input, done) => original.startBluePlayMain(null, input, done)), 'original main');
 assert.deepEqual(JSON.parse(original.takeStage()).stage.objects.map(a => [a.x, a.y]), [[100, 200]]);

@@ -149,7 +149,12 @@ world.show()
 | `allObjects(): List<Actor>` | Returns a copy of the list of all actor objects in the world. |
 | `setBackground(fileName: String)` | Loads an image as the background and scales it to the world size. |
 | `setBackground(r: Int, g: Int, b: Int)` | Fills the background with a color (r, g, b each 0..255). |
-| `showText(text: String, x: Int, y: Int)` | Shows text at cell (x, y). `""` removes the text there again. |
+| `showText(text: String, x: Int, y: Int, size: Int = 14)` | Shows or replaces text at cell (x, y). The font size `size` is in world pixels, with a minimum of 1. `""` removes the text at that cell. |
+
+```kotlin
+showText("Score: 12", 10, 20)
+showText("Game over", 10, 50, size = 32)
+```
 
 ## Actor
 

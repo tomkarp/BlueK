@@ -20,6 +20,38 @@ async function loadBluePlay(page: Page) {
   return stage;
 }
 
+test('BluePlay showText draws its default and explicit sizes on the canvas', async ({ page }) => {
+  await page.addInitScript(() => {
+    const fonts: Record<string, string> = {};
+    Object.assign(window, { worldTextFonts: fonts });
+    const fillText = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (text, x, y, maxWidth) {
+      fonts[text] = this.font;
+      fillText.call(this, text, x, y, maxWidth);
+    };
+  });
+  const payload = {
+    format: 'bluek-project', version: 1, library: { id: 'blueplay', version: 1 },
+    files: [{
+      fileName: 'Main.kt', kind: 'functions',
+      source: `fun main() {
+          val world = World(240, 120, 2)
+          world.showText("Default label", 10, 10)
+          world.showText("Large label", 10, 35, size = 32)
+          world.show()
+      }`,
+    }],
+  };
+  await page.goto('/#bluek=p1.' + Buffer.from(JSON.stringify(payload)).toString('base64url'));
+  const input = page.getByLabel('Codepad input');
+  await input.fill('main()');
+  await input.press('Enter');
+  await expect(page.getByRole('dialog', { name: 'BluePlay – World' })).toBeVisible();
+  await expect.poll(() => page.evaluate(() =>
+    (window as Window & { worldTextFonts?: Record<string, string> }).worldTextFonts,
+  )).toMatchObject({ 'Default label': '14px Arial', 'Large label': '32px Arial' });
+});
+
 test('GUI-166 BluePlay leaves Cmd+Q available while the world has focus', async ({ page }) => {
   const stage = await loadBluePlay(page);
   const canvas = stage.locator('.game-stage');
@@ -183,6 +215,7 @@ test('GUI-58 BluePlay library cards are normal movable cards with per-file API d
   const api = page.getByRole('dialog', { name: 'World API' });
   await expect(api).toBeVisible();
   await expect(api).toContainText('World(width: Int, height: Int, cellSize: Int)');
+  await expect(api).toContainText('showText(text: String, x: Int, y: Int, size: Int = 14)');
   await api.getByRole('button', { name: 'Close' }).click();
 
   await page.locator('.classcard[aria-label="Actor"]').click({ button: 'right' });

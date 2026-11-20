@@ -75,17 +75,16 @@ internal fun setWorldOf(actor: Actor, world: World?) {
 // Text layer per world (managed by World.showText). Kept here (not as a field in
 // World) so that World has no internal members that would show up in the BlueJ menus.
 @JvmSynthetic
-internal fun setTextOf(world: World, x: Int, y: Int, text: String) {
+internal fun setTextOf(world: World, x: Int, y: Int, text: String, fontSize: Int) {
     synchronized(simLock) {
         val map = worldTexts.getOrPut(world) { LinkedHashMap() }
-        if (text.isEmpty()) map.remove(Pair(x, y)) else map[Pair(x, y)] = text
+        if (text.isEmpty()) map.remove(Pair(x, y)) else map[Pair(x, y)] = WorldText(x, y, text, fontSize)
     }
     repaintWorld()
 }
 
-@JvmSynthetic
-internal fun textsOf(world: World): List<Triple<Int, Int, String>> = synchronized(simLock) {
-    worldTexts[world]?.map { Triple(it.key.first, it.key.second, it.value) } ?: emptyList()
+private fun textsOf(world: World): List<WorldText> = synchronized(simLock) {
+    worldTexts[world]?.values?.toList() ?: emptyList()
 }
 
 @JvmSynthetic
@@ -187,9 +186,10 @@ internal fun isWorldClicked(): Boolean {
 private val actorWorlds = WeakHashMap<Actor, World>()
 
 // texts shown on top of each world (see World.showText); weak keys like actorWorlds
-private val worldTexts = WeakHashMap<World, LinkedHashMap<Pair<Int, Int>, String>>()
+private data class WorldText(val x: Int, val y: Int, val text: String, val fontSize: Int)
+private val worldTexts = WeakHashMap<World, LinkedHashMap<Pair<Int, Int>, WorldText>>()
 
-private val textFont = Font("SansSerif", Font.BOLD, 16)
+private val textFont = Font("SansSerif", Font.BOLD, 14)
 
 // loaded sound files (format + raw samples); a fresh Clip per play allows overlapping sounds
 private val soundCache = ConcurrentHashMap<String, Pair<AudioFormat, ByteArray>>()
@@ -274,9 +274,9 @@ private val canvas = object : JPanel() {
         }
         // text layer (showText) on top of everything: white with a black outline,
         // left-aligned at the cell position, readable on any background
-        g2.font = textFont
-        val fm = g2.fontMetrics
-        for ((tx, ty, text) in textsOf(w)) {
+        for ((tx, ty, text, fontSize) in textsOf(w)) {
+            g2.font = textFont.deriveFont(fontSize.toFloat())
+            val fm = g2.fontMetrics
             val px = (tx * cs).toInt()
             val py = (ty * cs + cs / 2.0 + (fm.ascent - fm.descent) / 2.0).toInt()
             g2.color = Color.BLACK

@@ -15,7 +15,7 @@ const descriptions: Record<string, Record<string, string>> = {
     show: 'Displays this world and pauses the simulation.', act: 'Override to define what happens on each step.',
     addObject: 'Places an actor at (x, y); moves it from its previous world.', removeObject: 'Removes an actor.',
     allObjects: 'A copy of the list of all actors.', getObjects: 'All actors of type T.', getObjectsAt: 'All actors in cell (x, y).',
-    setBackground: 'Sets the background from an image file or RGB color.', showText: 'Text at (x, y); an empty string removes it.',
+    setBackground: 'Sets the background from an image file or RGB color.', showText: 'Shows or replaces text at cell (x, y). Font size is in world pixels (minimum 1). An empty string removes the text.',
   },
   Actor: {
     create: 'Creates an actor without a world.', world: 'Containing world; throws if the actor has no world.', image: 'Appearance; starts with a generated placeholder image.',
@@ -46,7 +46,7 @@ const order: Record<string, string[]> = {
 };
 function typeName(type: TypeRef): string { return type.displayName; }
 function parameters(parameters: CallableMeta['parameters']): string {
-  return parameters.map(parameter => `${parameter.name}: ${typeName(parameter.type)}`).join(', ');
+  return parameters.map(parameter => `${parameter.name}: ${typeName(parameter.type)}${parameter.hasDefault ? ` = ${parameter.defaultInt ?? "…"}` : ""}`).join(', ');
 }
 function methodSignature(method: CallableMeta): string {
   const generic = method.typeParameters?.length ? `<${method.typeParameters.join(', ')}>` : '';

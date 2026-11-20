@@ -76,11 +76,12 @@ open class World(val width: Int, val height: Int, val cellSize: Int) {
 
     /**
      * Shows text at cell (x, y), on top of everything else.
+     * Font size is in world pixels, with a minimum of 1.
      * New text replaces text shown at the same position before; "" removes it.
      * Text shown at other positions stays visible - so showing text at a moving
      * position leaves the old text behind unless it is removed there with "".
      */
-    fun showText(text: String, x: Int, y: Int) {
-        setTextOf(this, x, y, text)
+    fun showText(text: String, x: Int, y: Int, size: Int = 14) {
+        setTextOf(this, x, y, text, size.coerceAtLeast(1))
     }
 }
