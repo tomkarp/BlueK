@@ -242,12 +242,12 @@ export class StageRenderer {
       }
     });
     context.save();
-    context.font = `${Math.max(12, value.cellSize || 16)}px Arial`;
     context.textBaseline = "middle";
     context.fillStyle = "#fff";
     context.strokeStyle = "#000";
     context.lineWidth = 3;
     (value.texts || []).forEach((text) => {
+      context.font = `${text.fontSize ?? 14}px Arial`;
       const x = Number(text.x || 0) * (value.cellSize || 1);
       const y = Number(text.y || 0) * (value.cellSize || 1);
       context.strokeText(String(text.text || ""), x, y);

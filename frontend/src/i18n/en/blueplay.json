@@ -15,7 +15,7 @@
     "getObjects": "All actors of type T.",
     "getObjectsAt": "All actors in cell (x, y).",
     "setBackground": "Sets the background from an image file or RGB color.",
-    "showText": "Text at (x, y); an empty string removes it.",
+    "showText": "Shows or replaces text at cell (x, y). Font size is in world pixels (minimum 1). An empty string removes the text.",
     "summary": "A grid of cells containing actors and a background."
   },
   "Actor": {

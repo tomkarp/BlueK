@@ -1454,8 +1454,10 @@ class KotliteSession {
     /** The hidden constructor property of an inner class for its outer object (RT-92). */
     private fun com.sunnychung.lib.multiplatform.kotlite.model.ClassParameterNode.isOuterObject() = parameter.name.startsWith("this/")
 
-    private fun parameterJson(parameter: com.sunnychung.lib.multiplatform.kotlite.model.FunctionValueParameterNode): String =
-        "{\"name\":\"${escape(parameter.name)}\",\"type\":${jsonType(parameter.type)},\"hasDefault\":${parameter.defaultValue != null}}"
+    private fun parameterJson(parameter: com.sunnychung.lib.multiplatform.kotlite.model.FunctionValueParameterNode): String {
+        val defaultInt = (parameter.defaultValue as? IntegerNode)?.let { ",\"defaultInt\":${it.value}" }.orEmpty()
+        return "{\"name\":\"${escape(parameter.name)}\",\"type\":${jsonType(parameter.type)},\"hasDefault\":${parameter.defaultValue != null}$defaultInt}"
+    }
 
     private fun jsonProperty(owner: String, name: String, type: TypeNode, mutable: Boolean, visibility: String, getter: Boolean, setter: Boolean, setterPrivate: Boolean): String =
         "{\"id\":\"${escape(owner)}.${escape(name)}\",\"name\":\"${escape(name)}\",\"type\":${jsonType(type)},\"mutable\":$mutable,\"visibility\":\"$visibility\",\"getter\":$getter,\"setter\":$setter,\"setterPrivate\":$setterPrivate}"

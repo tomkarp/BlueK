@@ -87,6 +87,7 @@ object BluePlayLibrary {
             private val textX = mutableListOf<Int>()
             private val textY = mutableListOf<Int>()
             private val textValues = mutableListOf<String>()
+            private val textSizes = mutableListOf<Int>()
             var background: Image = Image(width * cellSize, height * cellSize).also { it.setColor(255, 255, 255); it.fill() }
 
             fun show() { bluekShowWorld(this) }
@@ -102,18 +103,22 @@ object BluePlayLibrary {
             fun setBackground(r: Int, g: Int, b: Int) {
                 background = Image(width * cellSize, height * cellSize).also { it.setColor(r, g, b); it.fill() }
             }
-            fun showText(text: String, x: Int, y: Int) {
+            fun showText(text: String, x: Int, y: Int, size: Int = 14) {
+                val pixelSize = size.coerceAtLeast(1)
                 var index = 0
                 while (index < textValues.size) {
                     if (textX[index] == x && textY[index] == y) {
                         if (text.isEmpty()) {
-                            textX.removeAt(index); textY.removeAt(index); textValues.removeAt(index)
-                        } else textValues[index] = text
+                            textX.removeAt(index); textY.removeAt(index); textValues.removeAt(index); textSizes.removeAt(index)
+                        } else {
+                            textValues[index] = text
+                            textSizes[index] = pixelSize
+                        }
                         return
                     }
                     index += 1
                 }
-                if (!text.isEmpty()) { textX.add(x); textY.add(y); textValues.add(text) }
+                if (!text.isEmpty()) { textX.add(x); textY.add(y); textValues.add(text); textSizes.add(pixelSize) }
             }
         }
 
