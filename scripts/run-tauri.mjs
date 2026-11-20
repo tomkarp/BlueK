@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
+import { updateEndpoint } from './desktop-update-feed.mjs';
 
 const env = { ...process.env };
 const rustupCandidates = [
@@ -15,9 +16,21 @@ for (const rustup of rustupCandidates) {
   break;
 }
 
+const args = process.argv.slice(2);
+if (args[0] === 'build' && env.BLUEK_UPDATER_PUBLIC_KEY) {
+  args.push('--config', JSON.stringify({
+    bundle: { createUpdaterArtifacts: true },
+    plugins: { updater: {
+      pubkey: env.BLUEK_UPDATER_PUBLIC_KEY.trim(),
+      endpoints: [updateEndpoint],
+      requireSignedVersion: true,
+    } },
+  }));
+}
+
 const result = spawnSync(process.execPath, [
   'node_modules/@tauri-apps/cli/tauri.js',
-  ...process.argv.slice(2),
+  ...args,
 ], { stdio: 'inherit', env });
 if (result.error) throw result.error;
 process.exit(result.status ?? 1);

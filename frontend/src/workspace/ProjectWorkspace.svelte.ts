@@ -201,6 +201,7 @@ export class ProjectWorkspace {
   private stopDesktopFileListener: (() => void) | null = null;
   private stopDesktopCloseListener: (() => void) | null = null;
   private stopDesktopExitListener: (() => void) | null = null;
+  private stopDesktopUpdateListener: (() => void) | null = null;
   private desktopFileEventsReady = false;
   private pendingDesktopFiles: string[] = [];
   private desktopProjectsOpening = new Set<string>();
@@ -432,6 +433,7 @@ export class ProjectWorkspace {
     this.closePromptOpen = false;
     this.closeRequestKind = "window";
     this.closeProjectNameRequired = false;
+    void import("../desktopFiles").then((desktop) => desktop.cancelDesktopUpdateClose()).catch(() => undefined);
   };
   private requestDesktopExit = async () => {
     this.closeRequestKind = "application";
@@ -1654,6 +1656,15 @@ export class ProjectWorkspace {
       this.stopDesktopExitListener = await desktop.listenForDesktopExitRequest(
         () => void this.requestDesktopExit(),
       );
+      this.stopDesktopUpdateListener = await desktop.listenForDesktopUpdateRequest(() => {
+        void desktop.checkDesktopUpdate({
+          title: this.text("ui.desktopUpdate.title"),
+          unavailable: this.text("ui.desktopUpdate.unavailable"),
+          current: this.text("ui.desktopUpdate.current"),
+          confirm: this.text("ui.desktopUpdate.confirm"),
+          failed: this.text("ui.desktopUpdate.failed"),
+        }).catch(() => window.alert(this.text("ui.desktopUpdate.failed")));
+      });
       this.stopDesktopFileListener = await desktop.listenForDesktopProject((path) => {
         void desktop.takeStartupDesktopProject();
         this.receiveDesktopProject(path);
@@ -1870,6 +1881,8 @@ export class ProjectWorkspace {
       this.stopDesktopCloseListener = null;
       this.stopDesktopExitListener?.();
       this.stopDesktopExitListener = null;
+      this.stopDesktopUpdateListener?.();
+      this.stopDesktopUpdateListener = null;
       if (!pagehideHandled) this.saveAutosave();
       this.drafts.release();
       window.clearInterval(timer);

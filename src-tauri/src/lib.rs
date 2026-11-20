@@ -11,6 +11,9 @@ use std::{
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager, WebviewWindow};
 
+mod desktop_update;
+use desktop_update::DesktopUpdate;
+
 const MAX_PROJECT_BYTES: u64 = 64 * 1024 * 1024;
 
 fn trace_desktop(message: &str) {
@@ -178,6 +181,7 @@ pub fn run() {
                             true,
                             &[
                                 &PredefinedMenuItem::about(app, None, None)?,
+                                &MenuItem::with_id(app, "bluek-check-update", "Check for Updates…", true, None::<&str>)?,
                                 &PredefinedMenuItem::separator(app)?,
                                 &PredefinedMenuItem::services(app, None)?,
                                 &PredefinedMenuItem::separator(app)?,
@@ -240,15 +244,30 @@ pub fn run() {
             }
             #[cfg(not(target_os = "macos"))]
             {
-                Menu::default(app)
+                let menu = Menu::default(app)?;
+                menu.append(&Submenu::with_items(app, "BlueK", true, &[
+                    &MenuItem::with_id(app, "bluek-check-update", "Check for Updates…", true, None::<&str>)?,
+                ])?)?;
+                Ok(menu)
             }
         })
         .on_menu_event(|app, event| {
-            if event.id() == "bluek-close-window" {
+            if event.id() == "bluek-check-update" {
+                if let Some(window) = focused_window(app) {
+                    let _ = app.emit_to(
+                        tauri::EventTarget::window(window.label()),
+                        "bluek://check-update",
+                        (),
+                    );
+                }
+            } else if event.id() == "bluek-close-window" {
                 if let Some(window) = focused_window(app) {
                     let _ = window.close();
                 }
             } else if event.id() == "bluek-quit" {
+                if app.state::<DesktopUpdate>().closing() {
+                    return;
+                }
                 if let Some(window) = focused_window(app) {
                     let _ = app.emit_to(
                         tauri::EventTarget::window(window.label()),
@@ -267,6 +286,7 @@ pub fn run() {
         )))
         .manage(ExitRequestState::default())
         .manage(DesktopReady::default())
+        .manage(DesktopUpdate::default())
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             if let Some(path) = incoming_project(&args) {
                 dispatch_project(app, path);
@@ -278,12 +298,15 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             read_project,
             write_project,
             take_startup_project,
             authorize_window_close_exit,
-            exit_application
+            exit_application,
+            desktop_update::check_desktop_update,
+            desktop_update::cancel_desktop_update_close
         ])
         .build(tauri::generate_context!())
         .expect("error while building BlueK");
@@ -303,8 +326,16 @@ pub fn run() {
                 );
             }
         }
-        tauri::RunEvent::ExitRequested { api, .. } => {
+        tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } => {
+            handle.state::<DesktopUpdate>().window_closed(&label);
+        }
+        tauri::RunEvent::ExitRequested { api, code, .. } => {
             let state = handle.state::<ExitRequestState>();
+            if handle.state::<DesktopUpdate>().closing() && code != Some(tauri::RESTART_EXIT_CODE) {
+                state.allow_window_close.store(false, Ordering::SeqCst);
+                api.prevent_exit();
+                return;
+            }
             if state.allow_app_exit.swap(false, Ordering::SeqCst)
                 || state.allow_window_close.swap(false, Ordering::SeqCst)
             {

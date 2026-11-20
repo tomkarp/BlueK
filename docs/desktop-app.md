@@ -141,6 +141,39 @@ and identity secrets, then verify a release build. The app-specific password
 can be rotated independently. Windows release builds require no signing
 secrets.
 
+### In-app updates
+
+In an updater-enabled release, choose **BlueK → Check for Updates…**. If you
+accept an update, BlueK downloads and verifies the package, then closes its
+project windows using the usual save prompts. Cancelling any prompt stops the
+installation. Users of earlier releases install the first updater-enabled
+release manually.
+
+Before tagging the first updater-enabled release, generate a password-protected
+Tauri update signing key outside the repository. Keep an encrypted backup of
+the private key and password. The update key is separate from macOS Developer
+ID signing and notarization.
+
+```sh
+node scripts/run-tauri.mjs signer generate --write-keys /path/to/secure-storage/bluek-updater.key
+```
+
+Configure these GitHub Actions values on the BlueK repository:
+
+| Kind | Name | Value |
+| --- | --- | --- |
+| Variable | `BLUEK_UPDATER_PUBLIC_KEY` | Contents of the generated `.pub` file |
+| Secret | `TAURI_SIGNING_PRIVATE_KEY` | Contents of the generated private key file |
+| Secret | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Password used to protect the private key |
+
+The tagged workflow publishes three installer assets on each stable release.
+A separate GitHub prerelease, `bluek-desktop-updates`, hosts `latest.json` and
+versioned macOS update archives. The manifest points to the MSI and NSIS
+installers on the stable release and contains the signatures for each platform.
+BlueK verifies that
+the signature covers the announced version as well as the package. Local and
+manual builds without the updater key use the existing installer build path.
+
 ### Release a new version
 
 1. Set the new app version in `src-tauri/tauri.conf.json` and commit the

@@ -13,6 +13,22 @@ test-results/. Full Kotlin conformance is not implied by any passing suite.
 Latest storage/account/publication verification: [2026-10-25 results](#publication-lifetime-by-authentication--2026-10-25).
 Latest project navigation verification: [2026-10-22 results](#new-open-save-and-share-navigation--2026-10-22).
 
+### In-app desktop updates — 2026-11-20
+
+- DESK-01: The BlueK menu starts an update check in the focused window.
+  Confirming an update downloads and verifies it before project windows close.
+  Each window uses the existing save prompt, and cancelling a prompt stops
+  installation. `test:desktop-lifecycle` passed for the menu listener,
+  update and cancellation calls, and platform-specific manifest generation.
+- The macOS `cargo check`, Svelte typecheck and localization checks passed.
+  A local macOS debug build with a disposable key generated the updater
+  archive and signature. The signature's trusted comment contained the app
+  version. The release workflow YAML parsed successfully.
+- Native installation, the multi-window save and cancellation flow, and the
+  Windows MSI and NSIS upgrades still need end-to-end verification. No public
+  release was started. The production updater signing values are absent from
+  GitHub Actions.
+
 ### Desktop feedback issues 42 and 43 — 2026-11-20
 
 - GUI-166 passed in Chromium and WebKit. A focused BluePlay world leaves

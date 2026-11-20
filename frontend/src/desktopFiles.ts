@@ -121,3 +121,21 @@ export async function listenForDesktopExitRequest(
 export function exitDesktopApplication(): Promise<void> {
   return invoke("exit_application");
 }
+
+export function listenForDesktopUpdateRequest(callback: () => void): Promise<() => void> {
+  return getCurrentWindow().listen("bluek://check-update", callback);
+}
+
+export function checkDesktopUpdate(messages: {
+  title: string;
+  unavailable: string;
+  current: string;
+  confirm: string;
+  failed: string;
+}): Promise<void> {
+  return invoke("check_desktop_update", { messages });
+}
+
+export function cancelDesktopUpdateClose(): Promise<void> {
+  return invoke("cancel_desktop_update_close");
+}

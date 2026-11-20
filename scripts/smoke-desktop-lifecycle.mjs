@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { rolldown } from 'rolldown';
 
 // Exercise the real Tauri SDK, including onCloseRequested's internal destroy
@@ -88,3 +91,45 @@ for (const [location, apiOrigin] of [
   assert.deepEqual(requests, [`${apiOrigin}/api/feedback/config`, `${apiOrigin}/api/feedback`]);
 }
 console.log('Desktop feedback: availability and submission use the correct API origin.');
+
+let updateRequested = false;
+await desktop.listenForDesktopUpdateRequest(() => { updateRequested = true; });
+const updateListener = listeners.find(item => item.event === 'bluek://check-update');
+assert.deepEqual(updateListener.target, { kind: 'Window', label: 'main' });
+callbacks.get(updateListener.handler)({ payload: null });
+assert.equal(updateRequested, true);
+const messages = { title: 'Update', unavailable: '', current: '', confirm: 'Install {0}?', failed: '' };
+await desktop.checkDesktopUpdate(messages);
+assert.deepEqual(calls.at(-1), { command: 'check_desktop_update', args: { messages } });
+await desktop.cancelDesktopUpdateClose();
+assert.equal(calls.at(-1).command, 'cancel_desktop_update_close');
+
+const artifacts = await mkdtemp(join(tmpdir(), 'bluek-update-'));
+try {
+  const { version } = JSON.parse(await readFile('src-tauri/tauri.conf.json', 'utf8'));
+  const assets = [
+    ['darwin-aarch64', `BlueK_${version}_macOS_AppleSilicon.app.tar.gz`],
+    ['windows-x86_64-msi', `msi/BlueK_${version}_Windows_x64.msi`],
+    ['windows-x86_64-nsis', `nsis/BlueK_${version}_Windows_x64_Setup.exe`],
+  ];
+  await Promise.all(['nsis', 'msi'].map(dir => mkdir(join(artifacts, dir))));
+  const signature = platform => Buffer.from(`trusted comment: ${platform}\tversion:${version}`).toString('base64');
+  for (const [platform, file] of assets) {
+    await writeFile(join(artifacts, file), 'package');
+    await writeFile(join(artifacts, `${file}.sig`), `${signature(platform)}\n`);
+  }
+  const manifestPath = join(artifacts, 'latest.json');
+  execFileSync(process.execPath, ['scripts/build-desktop-update-manifest.mjs',
+    join(artifacts, assets[0][1]), artifacts, manifestPath]);
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  assert.equal(manifest.version, version);
+  for (const [platform, file] of assets) {
+    assert.deepEqual(manifest.platforms[platform], {
+      url: `https://github.com/tomkarp/BlueK/releases/download/${platform === 'darwin-aarch64' ? 'bluek-desktop-updates' : `bluek-v${version}`}/${file.split('/').at(-1)}`,
+      signature: signature(platform),
+    });
+  }
+} finally {
+  await rm(artifacts, { recursive: true, force: true });
+}
+console.log('Desktop updates: targeted menu event, update IPC and platform manifest passed.');

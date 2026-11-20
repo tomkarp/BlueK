@@ -1,4 +1,11 @@
 {
+  "desktopUpdate": {
+    "title": "BlueK Update",
+    "unavailable": "This build does not support in-app updates.",
+    "current": "BlueK is up to date.",
+    "confirm": "BlueK {0} is available. Download and install it? BlueK will close its project windows and ask what to do with unsaved changes before installing.",
+    "failed": "BlueK could not complete the update. Try again later."
+  },
   "handoff": {
     "waiting": "Waiting for the project from inf-schule…",
     "loaded": "Project from inf-schule opened.",

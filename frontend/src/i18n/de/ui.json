@@ -1,4 +1,11 @@
 {
+  "desktopUpdate": {
+    "title": "BlueK-Update",
+    "unavailable": "Diese Version unterstützt keine Updates aus der App.",
+    "current": "BlueK ist auf dem neuesten Stand.",
+    "confirm": "BlueK {0} ist verfügbar. Möchtest du das Update herunterladen und installieren? BlueK schließt vor der Installation die Projektfenster und fragt bei ungespeicherten Änderungen nach.",
+    "failed": "BlueK konnte das Update nicht abschließen. Versuche es später erneut."
+  },
   "handoff": {
     "waiting": "Warte auf das Projekt von inf-schule …",
     "loaded": "Projekt von inf-schule geöffnet.",
