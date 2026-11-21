@@ -188,8 +188,8 @@ footer{flex:0 0 108px}
 .inspector .inspect-window{pointer-events:auto}
 .inspector .inspect-window h2{cursor:grab;user-select:none}
 .inspector .inspect-window h2:active{cursor:grabbing}
-.cards{touch-action:none;min-height:100%;margin:0;display:block;position:relative}
-.classcard{cursor:grab;width:210px;position:absolute}
+.cards{min-height:100%;margin:0;display:block;position:relative}
+.classcard{touch-action:none;cursor:grab;width:210px;position:absolute}
 .classcard.uncompiled{background-image:none}
 .classcard .card-body{border-radius:0 0 10px 10px;flex:auto;min-height:0}
 .classcard.uncompiled .card-body{background:repeating-linear-gradient(135deg,#f5c889 0 13px,#858585 13px 17px,#f5c889 17px 30px)}

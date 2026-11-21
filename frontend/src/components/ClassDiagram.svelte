@@ -21,11 +21,9 @@
     uncompiled: boolean;
     selectCard: (file: ProjectFile, index: number) => void;
     beginCardDrag: (
-      event: MouseEvent | PointerEvent,
+      event: PointerEvent,
       file: ProjectFile,
     ) => void;
-    moveCard: (event: MouseEvent | PointerEvent, file: ProjectFile) => void;
-    endCardDrag: () => void;
     openEditor: (file?: ProjectFile) => void;
     openMenu: (
       event: MouseEvent,
@@ -52,8 +50,6 @@
     uncompiled,
     selectCard,
     beginCardDrag,
-    moveCard,
-    endCardDrag,
     openEditor,
     openMenu,
     isBluePlayLibraryFile,
@@ -142,12 +138,9 @@
         class:inheritance-selected={inheritanceSelection === file.id}
         class="classcard"
         style={`left:${position.x}px;top:${position.y}px;z-index:${displayCardLayers[index]};--card-left:${position.x}px;--card-top:${position.y}px`}
-        onmousedown={(event) => {
+        onpointerdown={(event) => {
           if (!inheritanceMode) beginCardDrag(event, file);
         }}
-        onpointermove={(event) => moveCard(event, file)}
-        onpointerup={endCardDrag}
-        onpointercancel={endCardDrag}
         onclick={() => selectCard(file, index)}
         ondblclick={() => {
           if (inheritanceMode) return;

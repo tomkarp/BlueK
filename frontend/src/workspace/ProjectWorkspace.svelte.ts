@@ -1620,8 +1620,6 @@ export class ProjectWorkspace {
     },
   });
   beginCardDrag = this.diagram.beginCardDrag;
-  moveCard = this.diagram.moveCard;
-  endCardDrag = this.diagram.endCardDrag;
   initialize = async (): Promise<void> => {
     const desktop = await import("../desktopFiles");
     this.desktopBuild = desktop.isDesktopBuild();

@@ -14,12 +14,8 @@ export function createDiagramInteraction(host: DiagramInteractionHost) {
   let pointer: { x: number; y: number } | null = null;
   let autoScrollFrame = 0;
   const cardGridSize = 20;
-  function beginCardDrag(event: MouseEvent | PointerEvent, file: ProjectFile) {
-    if (
-      file.testTarget ||
-      event.button !== 0 ||
-      ("pointerType" in event && event.pointerType === "touch")
-    )
+  function beginCardDrag(event: PointerEvent, file: ProjectFile) {
+    if (file.testTarget || event.button !== 0 || !event.isPrimary || cardDrag)
       return;
     const canvas = (event.currentTarget as HTMLElement).closest(".canvas");
     if (!canvas) return;
@@ -35,21 +31,25 @@ export function createDiagramInteraction(host: DiagramInteractionHost) {
       dx: event.clientX - bounds.left + canvas.scrollLeft - position.x,
       dy: event.clientY - bounds.top + canvas.scrollTop - position.y,
     };
-    const move = (next: MouseEvent | PointerEvent) => moveCard(next, file);
+    const move = (next: PointerEvent) => {
+      if (next.pointerId === event.pointerId) moveCard(next, file);
+    };
+    const finish = (next: PointerEvent) => {
+      if (next.pointerId === event.pointerId) stop();
+    };
     const stop = () => {
       window.removeEventListener("pointermove", move);
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("pointerup", stop);
-      window.removeEventListener("pointercancel", stop);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+      window.removeEventListener("blur", stop);
       endCardDrag();
     };
     window.addEventListener("pointermove", move);
-    window.addEventListener("mousemove", move);
-    window.addEventListener("pointerup", stop);
-    window.addEventListener("pointercancel", stop);
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
+    window.addEventListener("blur", stop);
   }
-  function moveCard(event: MouseEvent | PointerEvent, file: ProjectFile) {
-    if (!cardDrag || cardDrag.id !== file.id) return;
+  function moveCard(event: PointerEvent, file: ProjectFile) {
     pointer = { x: event.clientX, y: event.clientY };
     placeCard(file.id);
     if (autoScrollFrame === 0)
@@ -125,7 +125,7 @@ export function createDiagramInteraction(host: DiagramInteractionHost) {
     if (autoScrollFrame !== 0) cancelAnimationFrame(autoScrollFrame);
     autoScrollFrame = 0;
   }
-  return { beginCardDrag, moveCard, endCardDrag };
+  return { beginCardDrag };
 }
 
 export function measureInheritanceEdges(

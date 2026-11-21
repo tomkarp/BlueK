@@ -3965,6 +3965,50 @@ test("GUI-75 class cards snap to a shared invisible grid while dragging", async 
   expect(alignedPosition.y - firstPosition.y).toBe(160);
 });
 
+test.describe("touch class diagram", () => {
+  test.use({
+    hasTouch: true,
+    isMobile: true,
+    viewport: { width: 390, height: 844 },
+  });
+
+  test("GUI-75 a finger drags a class card on a phone viewport", async ({
+    page,
+    context,
+    browserName,
+  }) => {
+    test.skip(browserName !== "chromium", "Touch drag injection uses Chromium CDP.");
+    await project(page, "class Hund {}");
+    const card = page.locator(".classcard").first();
+    await expect(card).toBeVisible();
+    const start = await card.evaluate((element) => ({
+      left: parseFloat(element.style.left),
+      top: parseFloat(element.style.top),
+    }));
+    const box = (await card.boundingBox())!;
+    // The narrow diagram clips the right side of the card.
+    const x = box.x + 15;
+    const y = box.y + box.height / 2;
+    const session = await context.newCDPSession(page);
+
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x, y }],
+    });
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: x + 40, y: y + 40 }],
+    });
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+
+    await expect(card).toHaveCSS("left", `${start.left + 40}px`);
+    await expect(card).toHaveCSS("top", `${start.top + 40}px`);
+  });
+});
+
 test("GUI-102 class cards can be dragged beyond the visible diagram, which then scrolls", async ({
   page,
 }) => {
