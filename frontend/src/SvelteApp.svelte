@@ -618,8 +618,6 @@
           uncompiled={session.runtime.phase === "uncompiled"}
           selectCard={project.selectCard}
           beginCardDrag={project.beginCardDrag}
-          moveCard={project.moveCard}
-          endCardDrag={project.endCardDrag}
           openEditor={editor.openEditor}
           openMenu={objects.openMenu}
           isBluePlayLibraryFile={project.isBluePlayLibraryFile}

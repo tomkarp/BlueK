@@ -13,6 +13,15 @@ test-results/. Full Kotlin conformance is not implied by any passing suite.
 Latest storage/account/publication verification: [2026-10-25 results](#publication-lifetime-by-authentication--2026-10-25).
 Latest project navigation verification: [2026-10-22 results](#new-open-save-and-share-navigation--2026-10-22).
 
+### Class card touch dragging — 2026-11-21
+
+- GUI-75 passed with emulated touch on a phone-sized Chromium viewport.
+  The first test attempt started on the clipped side of the card and passed
+  after the gesture was moved onto the visible portion.
+- GUI-75 and GUI-102 passed with mouse input in Chromium and WebKit.
+  Firefox failed to launch because it could not find its temporary profile.
+- Svelte typecheck passed. Touch on physical iPhones and iPads remains unverified.
+
 ### In-app desktop updates — 2026-11-20
 
 - DESK-01: The BlueK menu starts an update check in the focused window.
