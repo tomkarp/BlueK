@@ -22,6 +22,11 @@ Latest project navigation verification: [2026-10-22 results](#new-open-save-and-
 
 ### Project printing — 2026-11-25
 
+- GUI-167 passed in Chromium and WebKit with README selection. It covers
+  README-first defaults, exclusion, drag reordering, and the resulting print order.
+  After grouping by file kind, both browsers passed with an alphabetically earlier
+  top-level functions file following the class files.
+
 - GUI-167 passed in Chromium and WebKit after adding the print shortcut. It
   opens the preview from a focused Kotlin editor and closes it with Escape.
 

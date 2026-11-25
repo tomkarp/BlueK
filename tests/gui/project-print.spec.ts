@@ -8,9 +8,9 @@ test("GUI-167 prints the current project files in the chosen order", async ({ pa
     library: { id: "blueplay", version: 1 },
     readme: "# Instructions\n\nUse **your own code**.",
     files: [
+      { fileName: "AFunctions.kt", source: "fun hello() = \"hello\"" },
       { fileName: "Student.kt", source: "class Student" },
       { fileName: "StudentTest.kt", source: "class StudentTest", testTarget: "Student.kt", isTestClass: true },
-      { fileName: "Tools.kt", source: "fun hello() = \"hello\"" },
     ],
     resources: [
       { path: "images/dot.png", data: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aRk8AAAAASUVORK5CYII=" },
@@ -22,7 +22,7 @@ test("GUI-167 prints the current project files in the chosen order", async ({ pa
     window.print = () => document.body.dataset.printRequested = "true";
   });
   await page.goto("/#bluek=p1." + Buffer.from(JSON.stringify(project)).toString("base64url"));
-  await page.getByRole("button", { name: "Tools", exact: true }).dblclick();
+  await page.getByRole("button", { name: "AFunctions", exact: true }).dblclick();
   const editor = page.locator(".editor-dialog .cm-content");
   await editor.click();
   const mod = await page.evaluate(() => /Mac/.test(navigator.platform) ? "Meta" : "Control");
@@ -35,7 +35,7 @@ test("GUI-167 prints the current project files in the chosen order", async ({ pa
   const paper = preview.locator(".project-print-paper");
   const headings = paper.locator(".print-source h2");
   const rows = preview.locator(".print-file-list li");
-  await expect(headings).toHaveText(["Student.kt", "StudentTest.kt", "Tools.kt"]);
+  await expect(headings).toHaveText(["Student.kt", "StudentTest.kt", "AFunctions.kt"]);
   await expect(paper.locator(".cm-md-h1")).toHaveText("Instructions");
   await expect(paper.locator(".cm-md-strong")).toHaveText("your own code");
   await expect(paper.locator(".tok-keyword").last()).toHaveText("fun");
@@ -45,13 +45,23 @@ test("GUI-167 prints the current project files in the chosen order", async ({ pa
 
   const fileRow = (name: string) =>
     rows.filter({ has: page.getByRole("checkbox", { name, exact: true }) });
-  await fileRow("Tools.kt").locator(".drag-handle").dragTo(fileRow("Student.kt"));
-  await expect(headings).toHaveText(["Tools.kt", "Student.kt", "StudentTest.kt"]);
+  const documentHeadings = paper.locator(".print-readme h2, .print-source h2");
+  const readme = preview.getByRole("checkbox", { name: "README.md", exact: true });
+  await expect(readme).toBeChecked();
+  await expect(documentHeadings).toHaveText(["README.md", "Student.kt", "StudentTest.kt", "AFunctions.kt"]);
+  await readme.uncheck();
+  await expect(paper.locator(".print-readme")).toHaveCount(0);
+  await readme.check();
+  await fileRow("README.md").locator(".drag-handle").dragTo(fileRow("AFunctions.kt"));
+  await expect(documentHeadings).toHaveText(["Student.kt", "StudentTest.kt", "AFunctions.kt", "README.md"]);
+
+  await fileRow("AFunctions.kt").locator(".drag-handle").dragTo(fileRow("Student.kt"));
+  await expect(headings).toHaveText(["AFunctions.kt", "Student.kt", "StudentTest.kt"]);
   await preview.getByRole("checkbox", { name: "Student.kt", exact: true }).uncheck();
-  await expect(headings).toHaveText(["Tools.kt", "StudentTest.kt"]);
+  await expect(headings).toHaveText(["AFunctions.kt", "StudentTest.kt"]);
   await preview.getByRole("checkbox", { name: "Student.kt", exact: true }).check();
   await preview.getByRole("button", { name: "Move StudentTest.kt up" }).click();
-  await expect(headings).toHaveText(["Tools.kt", "StudentTest.kt", "Student.kt"]);
+  await expect(headings).toHaveText(["AFunctions.kt", "StudentTest.kt", "Student.kt"]);
   const lineNumbers = preview.getByRole("checkbox", { name: "Line numbers" });
   await expect(lineNumbers).toBeChecked();
   await expect(paper.locator(".line-number")).toHaveText(["1", "1", "1"]);
@@ -67,8 +77,9 @@ test("GUI-167 prints the current project files in the chosen order", async ({ pa
   await page.emulateMedia({ media: "print" });
   await expect(preview.locator(".print-settings")).toBeHidden();
   await expect(page.getByRole("button", { name: "Save", exact: true })).toBeHidden();
-  await expect(headings).toHaveText(["Tools.kt", "StudentTest.kt", "Student.kt"]);
+  await expect(headings).toHaveText(["AFunctions.kt", "StudentTest.kt", "Student.kt"]);
   await expect(headings.last()).toBeVisible();
+  await expect(documentHeadings).toHaveText(["AFunctions.kt", "StudentTest.kt", "Student.kt", "README.md"]);
   await expect(paper.locator(".line-number")).toHaveCount(0);
   if (browserName === "chromium") {
     const pdf = await page.pdf({ preferCSSPageSize: true });
