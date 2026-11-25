@@ -168,7 +168,12 @@ fn dispatch_project(app: &tauri::AppHandle, path: String) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let app = tauri::Builder::default()
+    let context = tauri::generate_context!();
+    let mut builder = tauri::Builder::default();
+    if context.config().plugins.0.contains_key("updater") {
+        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    }
+    let app = builder
         .menu(|app| {
             #[cfg(target_os = "macos")]
             {
@@ -298,7 +303,6 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             read_project,
             write_project,
@@ -308,7 +312,7 @@ pub fn run() {
             desktop_update::check_desktop_update,
             desktop_update::cancel_desktop_update_close
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building BlueK");
     app.run(|handle, event| match event {
         tauri::RunEvent::Ready => {
