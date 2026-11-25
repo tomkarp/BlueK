@@ -52,6 +52,8 @@
   let selectedBlueJRoot = $state("");
   interface Props {
     cloud: CloudWorkspace;
+    canPrint: boolean;
+    openPrint: () => void;
     showNotice: (text: string) => void;
     toolbarDialog: "open" | "save" | "share" | null;
     shareLinkDialog: ShareLinkDialog | null;
@@ -92,6 +94,8 @@
 
   let {
     cloud,
+    canPrint,
+    openPrint,
     showNotice,
     toolbarDialog = $bindable(),
     shareLinkDialog = $bindable(),
@@ -317,6 +321,10 @@
             </div>
             <h4>{t("ui.transfer.otherFormats")}</h4>
             <div class="project-choice-list">
+              <button class="file-export-choice" disabled={!canPrint} onclick={openPrint}>
+                <strong>{t("ui.print.open")}</strong>
+                <span>{t("ui.print.description")}</span>
+              </button>
               <button
                 class="file-export-choice"
                 disabled={!files.length}

@@ -13,6 +13,25 @@ test-results/. Full Kotlin conformance is not implied by any passing suite.
 Latest storage/account/publication verification: [2026-10-25 results](#publication-lifetime-by-authentication--2026-10-25).
 Latest project navigation verification: [2026-10-22 results](#new-open-save-and-share-navigation--2026-10-22).
 
+### Local macOS launch — 2026-11-25
+
+- The initial local build crashed at startup because the updater plugin had
+  no configuration. Registration now requires an updater configuration.
+- Rebuilt with `npm run desktop:mac-app` and verified that the new bundle
+  launched and its process stayed running. The desktop lifecycle smoke test passed.
+
+### Project printing — 2026-11-25
+
+- GUI-167 passed in Chromium and WebKit. It covers unsaved source, formatted
+  README, Kotlin highlighting, media, selection, drag and arrow ordering,
+  and print styles. After the diagram option was removed, both browsers passed
+  the updated check for toggling line numbers in the preview and hiding them
+  in print. Chromium also generated a PDF.
+- The first browser run failed on a test locator. Firefox could not launch
+  its temporary profile on either attempt. Typecheck, locale parity, Svelte
+  Runes and the frontend build passed. Native desktop and physical printing
+  remain unverified.
+
 ### Class card touch dragging — 2026-11-21
 
 - GUI-75 passed with emulated touch on a phone-sized Chromium viewport.

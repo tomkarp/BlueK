@@ -117,6 +117,15 @@ projects. Only that explicit action contacts the optional account service.
 shows player options and the **Export as HTML** action. **Back** returns to
 the format choices. The save dialog does not publish public links.
 
+**Print project …** under **Other formats** opens a preview of the current
+project, including unsaved edits. Select the Kotlin files to include and drag
+them into order, or use the up/down buttons. The preview includes test files
+and excludes the built-in BluePlay library. It shows a formatted README, code
+with syntax highlighting, thumbnails of project images, and the names of
+project audio files. Clear **Line numbers** to hide them. **Print / Save as
+PDF** opens the system or browser print dialog. File selection, order, and
+line numbering apply to the current preview.
+
 **Share** creates an immutable public copy that expires after seven days when
 published anonymously or 30 days from a signed-in account. **Edit project**
 creates a link to an editable BlueK copy. Its README and saved-state opening

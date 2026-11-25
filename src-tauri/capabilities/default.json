@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "BlueK desktop project dialogs",
   "windows": ["*"],
-  "permissions": ["core:default", "core:window:allow-close", "core:window:allow-destroy", "core:webview:allow-create-webview-window", "dialog:allow-open", "dialog:allow-save"]
+  "permissions": ["core:default", "core:window:allow-close", "core:window:allow-destroy", "core:webview:allow-create-webview-window", "core:webview:allow-print", "dialog:allow-open", "dialog:allow-save"]
 }

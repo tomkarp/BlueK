@@ -334,6 +334,19 @@
     "internetConnectionRequired": "(Internetverbindung erforderlich).",
     "downloadZIP": "HTML-Version als ZIP herunterladen"
   },
+  "print": {
+    "open": "Projekt drucken …",
+    "description": "Das Projekt zum Drucken oder Speichern als PDF ansehen.",
+    "title": "Druckvorschau",
+    "print": "Drucken / als PDF speichern",
+    "files": "Projektdateien",
+    "reorderHelp": "Ziehe die Dateien in die gewünschte Reihenfolge oder verwende die Pfeiltasten. Entferne ein Häkchen, um die Datei wegzulassen.",
+    "moveUp": "{0} nach oben verschieben",
+    "moveDown": "{0} nach unten verschieben",
+    "empty": "Es sind keine Inhalte zum Drucken ausgewählt.",
+    "error": "Der Druckdialog konnte nicht geöffnet werden.",
+    "lineNumbers": "Zeilennummern"
+  },
   "transfer": {
     "globalProjectDropTip": "Tipp: Dieses Fenster musst du zum Importieren nicht extra öffnen. Zieh die Projektdatei einfach irgendwo auf die BlueK-Oberfläche.",
     "projectFileFormats": "BlueK-Projektdatei oder BlueJ-Projekt",
