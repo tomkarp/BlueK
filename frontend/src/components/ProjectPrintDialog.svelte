@@ -18,10 +18,38 @@
   }
 
   let { files, name, readme, images, sounds, close }: Props = $props();
-  const { t } = useLanguage();
-  let order = $state(
-    untrack(() => files.map((file) => ({ id: file.id, included: true }))),
+  const language = useLanguage();
+  const { t } = language;
+  const readmeId = "README.md";
+  let entries = $state(
+    untrack(() =>
+      [
+        ...(readme.trim() ? [readmeId] : []),
+        ...files.map((file) => file.id),
+      ].map((id) => ({ id, included: true })),
+    ),
   );
+  let manuallyOrdered = $state(false);
+  const order = $derived.by(() => {
+    if (manuallyOrdered) return entries;
+    const collator = new Intl.Collator(language.locale, {
+      sensitivity: "base",
+    });
+    const ranks = { class: 0, functions: 1, unknown: 2 };
+    const sortedIds = [...files]
+      .sort(
+        (a, b) =>
+          ranks[a.kind] - ranks[b.kind] ||
+          collator.compare(a.fileName, b.fileName),
+      )
+      .map((file) => file.id);
+    const positions = new Map(
+      [readmeId, ...sortedIds].map((id, index) => [id, index]),
+    );
+    return [...entries].sort(
+      (a, b) => positions.get(a.id)! - positions.get(b.id)!,
+    );
+  });
   let dragged = $state<string>();
   let target = $state<string>();
   let showLineNumbers = $state(true);
@@ -42,22 +70,22 @@
     order
       .filter((item) => item.included)
       .flatMap((item) => {
-        const file = fileContents.get(item.id);
-        return file ? [{ ...file, id: item.id }] : [];
+        if (item.id === readmeId) return readme.trim() ? [item.id] : [];
+        return fileContents.has(item.id) ? [item.id] : [];
       }),
   );
   let hasContent = $derived(
-    included.length > 0 ||
-      Boolean(readme.trim()) ||
-      images.length > 0 ||
-      sounds.length > 0,
+    included.length > 0 || images.length > 0 || sounds.length > 0,
   );
 
   function move(id: string, to: number) {
     const from = order.findIndex((item) => item.id === id);
     if (from < 0 || from === to || to < 0 || to >= order.length) return;
-    const [item] = order.splice(from, 1);
-    order.splice(to, 0, item);
+    const next = [...order];
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item);
+    entries = next;
+    manuallyOrdered = true;
   }
 
   function startDrag(event: DragEvent, id: string) {
@@ -127,8 +155,11 @@
           <p>{t("ui.print.reorderHelp")}</p>
           <ol class="print-file-list">
             {#each order as item, index (item.id)}
-              {@const file = fileContents.get(item.id)}
-              {#if file}
+              {@const fileName =
+                item.id === readmeId
+                  ? readmeId
+                  : fileContents.get(item.id)?.name}
+              {#if fileName}
                 <li
                   draggable="true"
                   class={{
@@ -144,15 +175,15 @@
                     ><input
                       type="checkbox"
                       bind:checked={item.included}
-                    />{file.name}</label
+                    />{fileName}</label
                   >
                   <button
-                    aria-label={t("ui.print.moveUp", [file.name])}
+                    aria-label={t("ui.print.moveUp", [fileName])}
                     disabled={index === 0}
                     onclick={() => move(item.id, index - 1)}>↑</button
                   >
                   <button
-                    aria-label={t("ui.print.moveDown", [file.name])}
+                    aria-label={t("ui.print.moveDown", [fileName])}
                     disabled={index === order.length - 1}
                     onclick={() => move(item.id, index + 1)}>↓</button
                   >
@@ -169,38 +200,40 @@
       <div class="print-paper-scroll">
         <article class="project-print-paper">
           <h1>{name.trim() || t("ui.common.untitledProject")}</h1>
-          {#if readme.trim()}
-            <section class="print-readme">
-              <h2>README.md</h2>
-              {#each readmeLines as line, index (index)}
-                {#if !line.hidden}
-                  <div class={line.className}>
-                    {#each line.spans as span, index (index)}<span
-                        class={span.className}>{span.text}</span
-                      >{/each}
-                  </div>
-                {/if}
-              {/each}
-            </section>
-          {/if}
-          {#each included as file (file.id)}
-            <section class="print-source">
-              <h2>{file.name}</h2>
-              {#each file.lines as line, index (index)}
-                <div class="code-line">
-                  {#if showLineNumbers}
-                    <span class="line-number" aria-hidden="true"
-                      >{index + 1}</span
-                    >
+          {#each included as id (id)}
+            {@const file = fileContents.get(id)}
+            {#if id === readmeId}
+              <section class="print-readme">
+                <h2>{readmeId}</h2>
+                {#each readmeLines as line, index (index)}
+                  {#if !line.hidden}
+                    <div class={line.className}>
+                      {#each line.spans as span, index (index)}<span
+                          class={span.className}>{span.text}</span
+                        >{/each}
+                    </div>
                   {/if}
-                  <code
-                    >{#each line as span, index (index)}<span
-                        class={span.className}>{span.text}</span
-                      >{/each}</code
-                  >
-                </div>
-              {/each}
-            </section>
+                {/each}
+              </section>
+            {:else if file}
+              <section class="print-source">
+                <h2>{file.name}</h2>
+                {#each file.lines as line, index (index)}
+                  <div class="code-line">
+                    {#if showLineNumbers}
+                      <span class="line-number" aria-hidden="true"
+                        >{index + 1}</span
+                      >
+                    {/if}
+                    <code
+                      >{#each line as span, index (index)}<span
+                          class={span.className}>{span.text}</span
+                        >{/each}</code
+                    >
+                  </div>
+                {/each}
+              </section>
+            {/if}
           {/each}
           {#if images.length}
             <section>
