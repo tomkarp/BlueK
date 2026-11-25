@@ -20,6 +20,7 @@
   import BluePlayApiDialog from "./components/BluePlayApiDialog.svelte";
   import NewClassDialog from "./components/NewClassDialog.svelte";
   import ObjectContextMenu from "./components/ObjectContextMenu.svelte";
+  import ProjectPrintDialog from "./components/ProjectPrintDialog.svelte";
   import ProjectTransferDialogs from "./components/ProjectTransferDialogs.svelte";
   import MediaDialogs from "./components/MediaDialogs.svelte";
   import SettingsDialogs from "./components/SettingsDialogs.svelte";
@@ -251,7 +252,15 @@
       window.removeEventListener("keydown", captureShortcut, true);
     };
   });
+  let printOpen = $state(false);
+
+  function closePrint() {
+    printOpen = false;
+    project.toolbarDialog = "save";
+  }
+
   function escapeWindowAction(): (() => void) | null {
+    if (printOpen) return closePrint;
     if (project.blueJImportChoice)
       return () => {
         project.blueJImportChoice = null;
@@ -388,6 +397,7 @@
     return null;
   }
   function handleWindowKeydown(event: KeyboardEvent) {
+    if (printOpen && event.key !== "Escape") return;
     const mod =
       (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey;
     if (mod && (event.key.toLowerCase() === "s" || event.code === "KeyS")) {
@@ -438,6 +448,7 @@
   }
 
   function handleWindowKeydownCapture(event: KeyboardEvent) {
+    if (printOpen) return;
     const mod =
       (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey;
     if (mod && (event.key.toLowerCase() === "k" || event.code === "KeyK")) {
@@ -481,7 +492,7 @@
   function handleProjectFileDrop(event: DragEvent) {
     if (isProjectDropZone(event) || !isExternalFileDrag(event)) return;
     event.preventDefault();
-    if (project.canOpenProjectDrop(event)) void project.openProjectDrop(event);
+    if (!printOpen && project.canOpenProjectDrop(event)) void project.openProjectDrop(event);
   }
 </script>
 
@@ -945,7 +956,22 @@
     }}
     downloadUrl={OFFLINE_DOWNLOAD}
   />
+  {#if printOpen}
+    <ProjectPrintDialog
+      files={project.files}
+      name={project.projectName}
+      readme={project.readme}
+      images={project.imageResources}
+      sounds={project.soundResources}
+      close={closePrint}
+    />
+  {/if}
   <ProjectTransferDialogs
+    openPrint={() => {
+      project.toolbarDialog = null;
+      printOpen = true;
+    }}
+    canPrint={Boolean(project.files.length || project.readme.trim() || project.resources.length)}
     {cloud}
     showNotice={project.showExportNotice}
     bind:toolbarDialog={project.toolbarDialog}

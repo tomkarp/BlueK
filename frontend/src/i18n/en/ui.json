@@ -341,6 +341,19 @@
     "internetConnectionRequired": "(internet connection required).",
     "downloadZIP": "Download HTML version as ZIP"
   },
+  "print": {
+    "open": "Print project …",
+    "description": "Preview the project for printing or saving as PDF.",
+    "title": "Print preview",
+    "print": "Print / Save as PDF",
+    "files": "Project files",
+    "reorderHelp": "Drag files to reorder them, or use the arrow buttons. Clear a checkbox to leave a file out.",
+    "moveUp": "Move {0} up",
+    "moveDown": "Move {0} down",
+    "empty": "There is no content selected for printing.",
+    "error": "The print dialog could not be opened.",
+    "lineNumbers": "Line numbers"
+  },
   "transfer": {
     "globalProjectDropTip": "Tip: You don't need to open this window to import a project. Just drop the project file anywhere on the BlueK workspace.",
     "projectFileFormats": "BlueK project file or BlueJ project",
