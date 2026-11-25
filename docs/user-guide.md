@@ -118,7 +118,9 @@ shows player options and the **Export as HTML** action. **Back** returns to
 the format choices. The save dialog does not publish public links.
 
 **Print project …** under **Other formats** opens a preview of the current
-project, including unsaved edits. Select the Kotlin files to include and drag
+project, including unsaved edits. **Cmd+P** on macOS or **Ctrl+P** on Windows
+and Linux also opens the preview when the browser passes the shortcut to BlueK.
+Select the Kotlin files to include and drag
 them into order, or use the up/down buttons. The preview includes test files
 and excludes the built-in BluePlay library. It shows a formatted README, code
 with syntax highlighting, thumbnails of project images, and the names of

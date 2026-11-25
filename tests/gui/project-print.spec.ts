@@ -78,4 +78,12 @@ test("GUI-167 prints the current project files in the chosen order", async ({ pa
   await page.keyboard.press("Escape");
   await expect(preview).toBeHidden();
   await expect(page.getByRole("button", { name: /Print project/ })).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await editor.click();
+  await page.keyboard.press(mod + "+p");
+  await expect(preview).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(preview).toBeHidden();
+  await expect(page.getByRole("button", { name: /Print project/ })).toBeHidden();
 });

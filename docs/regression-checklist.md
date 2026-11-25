@@ -22,6 +22,9 @@ Latest project navigation verification: [2026-10-22 results](#new-open-save-and-
 
 ### Project printing — 2026-11-25
 
+- GUI-167 passed in Chromium and WebKit after adding the print shortcut. It
+  opens the preview from a focused Kotlin editor and closes it with Escape.
+
 - GUI-167 passed in Chromium and WebKit. It covers unsaved source, formatted
   README, Kotlin highlighting, media, selection, drag and arrow ordering,
   and print styles. After the diagram option was removed, both browsers passed
