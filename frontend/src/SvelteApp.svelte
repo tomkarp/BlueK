@@ -253,10 +253,18 @@
     };
   });
   let printOpen = $state(false);
+  let printReturnDialog: typeof project.toolbarDialog = null;
+  const canPrint = $derived(Boolean(project.files.length || project.readme.trim() || project.resources.length));
+
+  function openPrint() {
+    printReturnDialog = project.toolbarDialog;
+    project.toolbarDialog = null;
+    printOpen = true;
+  }
 
   function closePrint() {
     printOpen = false;
-    project.toolbarDialog = "save";
+    project.toolbarDialog = printReturnDialog;
   }
 
   function escapeWindowAction(): (() => void) | null {
@@ -448,9 +456,17 @@
   }
 
   function handleWindowKeydownCapture(event: KeyboardEvent) {
-    if (printOpen) return;
     const mod =
       (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey;
+    if (mod && (event.key.toLowerCase() === "p" || event.code === "KeyP") && canPrint) {
+      if (!printOpen || event.repeat) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!event.repeat) openPrint();
+      }
+      return;
+    }
+    if (printOpen) return;
     if (mod && (event.key.toLowerCase() === "k" || event.code === "KeyK")) {
       // Catch compile before CodeMirror/Vim sees the modifier key sequence.
       event.preventDefault();
@@ -967,11 +983,8 @@
     />
   {/if}
   <ProjectTransferDialogs
-    openPrint={() => {
-      project.toolbarDialog = null;
-      printOpen = true;
-    }}
-    canPrint={Boolean(project.files.length || project.readme.trim() || project.resources.length)}
+    {openPrint}
+    {canPrint}
     {cloud}
     showNotice={project.showExportNotice}
     bind:toolbarDialog={project.toolbarDialog}
