@@ -25,7 +25,8 @@ program output and compiler/runtime errors keep their original text.
 BluePlay example.
 Each Kotlin file contains either one class, interface or enum, or top-level
 functions and properties. Inheritance appears as arrows in the diagram.
-A project can also have a name and a README note.
+A project can also have a name and a README note. Open the README card in the
+class diagram to edit it, even before adding any Kotlin files.
 
 Use **Delete** in a file card's context menu to remove it. BlueK asks for
 confirmation with the filename, including class, test and functions files.

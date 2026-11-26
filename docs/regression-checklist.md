@@ -330,7 +330,7 @@ below. No universal performance guarantee is implied.
 
 | ID | Behavior | Recorded evidence / remaining acceptance |
 | --- | --- | --- |
-| GUI-01 | Empty project, BluePlay template and small BluePlay example, without section headings | Updated tests; browser verification pending |
+| GUI-01 | Empty project, BluePlay template and small BluePlay example, without section headings. A newly created empty project shows the README card. | Empty-project case passed in Chromium and WebKit, 2026-11-26. |
 | GUI-02 | Parameterless creation still asks for an object name | Recorded automated pass |
 | GUI-03 | Inspector computed property values | Recorded browser pass; user confirmation recorded |
 | GUI-04 | Inspector getter refresh after property/codepad changes | Recorded browser pass |
@@ -460,7 +460,7 @@ below. No universal performance guarantee is implied.
 | GUI-63 | Offline instructions/warning and in-app problem report before ZIP download | GUI-63 Chromium passed (2026-10-08); updated from the removed GitHub link to the private report dialog, Chromium passed 1/1 (2026-10-11) with the feedback service mocked and no report sent; dark colors not separately inspected |
 | GUI-64 | Compiler diagnostics open the relevant editor/source location; show the English diagnosis without internal semantic exception class names | Chromium editor cases passed in English/German (2026-10-11); type errors also checked in German UI, HTML export and standalone player; runtime evidence below; user visual acceptance pending |
 | GUI-65 | Compact diagnostics and dismiss/retry behavior | Recorded browser pass |
-| GUI-66 | README sheet visibility and editor/preview | Recorded browser pass; `smoke-project-format` |
+| GUI-66 | README card is available in an empty project. Markdown can be edited, saved in a project without Kotlin files, and reopened from that file. | Chromium and WebKit passed, 2026-11-26. `test:project-format` passed. Native desktop UI not manually exercised. |
 | GUI-67 | Optional README opening from full and short links | Recorded browser pass |
 | GUI-68 | Vim toggle, settings and keyboard editing; insert mode survives source updates after `i`/`cc` | Recorded browser pass; Chromium/WebKit EN/DE regression |
 | GUI-69 | Bundled standard images and resource precedence | Recorded browser pass; `smoke-blueplay-browser` |

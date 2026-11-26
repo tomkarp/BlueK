@@ -633,11 +633,6 @@
           inheritanceSelection={project.inheritanceSelection}
           showInheritance={project.showInheritance}
           inheritanceEdges={project.inheritanceEdges}
-          hasReadme={Boolean(
-            project.files.length ||
-            project.resources.length ||
-            project.readme.trim(),
-          )}
           readme={project.readme}
           displayFiles={project.displayFiles}
           displayCardPositions={project.displayCardPositions}

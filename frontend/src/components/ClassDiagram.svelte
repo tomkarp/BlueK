@@ -13,7 +13,6 @@
     inheritanceSelection: string;
     showInheritance: boolean;
     inheritanceEdges: InheritanceEdge[];
-    hasReadme: boolean;
     readme: string;
     displayFiles: ProjectFile[];
     displayCardPositions: CardPosition[];
@@ -42,7 +41,6 @@
     inheritanceSelection,
     showInheritance,
     inheritanceEdges,
-    hasReadme,
     readme,
     displayFiles,
     displayCardPositions,
@@ -96,33 +94,31 @@
     {/each}
   {/if}
   <div class="cards">
-    <!-- Like BlueJ's README note, but quieter: show it when the project
-                 has files, resources or a written description. -->
-    {#if hasReadme}<div
-        role="button"
-        tabindex="0"
-        class:written={Boolean(readme.trim())}
-        class="readme-card"
-        aria-label="README.md"
-        title={t("ui.diagram.rEADMEMdDescribeThisProject")}
-        onclick={openReadme}
-        onkeydown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            openReadme();
-          }
-        }}
+    <div
+      role="button"
+      tabindex="0"
+      class:written={Boolean(readme.trim())}
+      class="readme-card"
+      aria-label="README.md"
+      title={t("ui.diagram.rEADMEMdDescribeThisProject")}
+      onclick={openReadme}
+      onkeydown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openReadme();
+        }
+      }}
+    >
+      <svg viewBox="0 0 24 30" aria-hidden="true"
+        ><path class="readme-sheet" d="M1.5 1.5h13l8 8v19h-21z" /><path
+          class="readme-fold"
+          d="M14.5 1.5l8 8h-8z"
+        /><path
+          class="readme-text"
+          d="M5.5 13h13M5.5 16.5h13M5.5 20h13M5.5 23.5h8"
+        /></svg
       >
-        <svg viewBox="0 0 24 30" aria-hidden="true"
-          ><path class="readme-sheet" d="M1.5 1.5h13l8 8v19h-21z" /><path
-            class="readme-fold"
-            d="M14.5 1.5l8 8h-8z"
-          /><path
-            class="readme-text"
-            d="M5.5 13h13M5.5 16.5h13M5.5 20h13M5.5 23.5h8"
-          /></svg
-        >
-      </div>{/if}
+    </div>
     {#each displayFiles as file, index (file.id)}
       {@const position = displayCardPositions[index]}
       <div

@@ -2677,9 +2677,7 @@ for (const name of ["Empty Project"]) {
       .click();
     await expect(replaceDialog).toBeHidden();
     await expect(page.locator(".classcard")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "README.md" })).toHaveCount(
-      0,
-    );
+    await expect(page.getByRole("button", { name: "README.md" })).toBeVisible();
   });
 }
 
@@ -3503,12 +3501,12 @@ test("GUI-65 a syntax error reads compactly and the formatter marks its line too
   await expect(editor.locator(".cm-bluek-error-line")).toHaveCount(0);
 });
 
-test("GUI-66 the README note sits in the corner, formats Markdown while typing and is saved only when written", async ({
+test("GUI-66 a project without Kotlin files can edit and save its Markdown README", async ({
   page,
+  context,
 }) => {
-  await project(page, "class Hund");
+  await project(page);
   const note = page.getByRole("button", { name: "README.md" });
-  // Like BlueJ, every project has the note — an empty description shows one too.
   await expect(note).toBeVisible();
   const stored = () =>
     page.evaluate(
@@ -3520,9 +3518,6 @@ test("GUI-66 the README note sits in the corner, formats Markdown while typing a
           ) || "{}",
         ).project || {},
     );
-  await expect
-    .poll(() => stored().then((saved) => "files" in saved))
-    .toBe(true);
   expect(await stored()).not.toHaveProperty("readme");
 
   await note.click();
@@ -3574,8 +3569,30 @@ test("GUI-66 the README note sits in the corner, formats Markdown while typing a
   await expect
     .poll(() => stored().then((saved) => saved.readme))
     .toContain("# Hunde");
-  await note.click();
-  await expect(editor.locator(".cm-md-h1")).toHaveText("Hunde");
+  await page.getByLabel("Project name").fill("Hunde");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: /^Save BlueK project file/ }).click(),
+  ]);
+  const contents = await readFile(await download.path());
+  expect(JSON.parse(contents.toString())).toMatchObject({
+    projectName: "Hunde",
+    files: [],
+    readme: expect.stringContaining("# Hunde"),
+  });
+
+  const reopened = await context.newPage();
+  await project(reopened);
+  await reopened.getByRole("button", { name: "Open", exact: true }).click();
+  await reopened.getByLabel("Choose project file").setInputFiles({
+    name: download.suggestedFilename(),
+    mimeType: "application/json",
+    buffer: contents,
+  });
+  await expect(reopened.getByLabel("Project name")).toHaveValue("Hunde");
+  await reopened.getByRole("button", { name: "README.md" }).press("Enter");
+  await expect(reopened.getByRole("dialog", { name: "README.md" }).locator(".cm-md-h1")).toHaveText("Hunde");
 });
 
 test("GUI-67 a link can open the README, and the export dialog attaches that to it", async ({
