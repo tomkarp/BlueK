@@ -303,7 +303,6 @@
             <div class="project-choice-list">
               <button
                 class="file-export-choice"
-                disabled={!files.length}
                 onclick={async () => {
                   if (!(await ensureProjectName())) return;
                   await exportProject();

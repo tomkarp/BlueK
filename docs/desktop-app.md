@@ -16,6 +16,10 @@ npm ci
 npm run desktop:dev
 ```
 
+`desktop:dev` starts the frontend in the same local-only feature mode as
+the packaged app. For a separately started Vite server used by Tauri, set
+`VITE_BLUEK_OFFLINE=1` and `VITE_BLUEK_DESKTOP=1` before starting Vite.
+
 Build a local `.app` and DMG with `npm run desktop:mac`. Local builds are
 unsigned unless a Developer ID identity and Apple notarization credentials are
 configured. The Windows target is prepared with `npm run desktop:windows` and

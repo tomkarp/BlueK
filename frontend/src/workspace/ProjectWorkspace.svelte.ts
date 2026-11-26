@@ -1341,6 +1341,7 @@ export class ProjectWorkspace {
     return true;
   };
   importProject = async (event: Event) => {
+    const input = event.currentTarget as HTMLInputElement;
     if ((await import("../desktopFiles")).isDesktopBuild()) {
       try {
         const opened = await (await import("../desktopFiles")).chooseDesktopProject();
@@ -1352,7 +1353,6 @@ export class ProjectWorkspace {
       }
       return;
     }
-    const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
     input.value = "";
     if (!file) return;
@@ -1428,7 +1428,7 @@ export class ProjectWorkspace {
       this.toolbarDialog = "save";
       return;
     }
-    if (this.files.length) await this.exportProject();
+    await this.exportProject();
   };
   openProjectEntries = async (entries: ImportEntry[], name: string) => {
     try {

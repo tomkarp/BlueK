@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { mockPublications } from "./publicationFixtures";
 import { test, expect, type Page } from "@playwright/test";
 
@@ -2212,14 +2213,14 @@ test("GUI-22 top actions are grouped, ordered and switch to icon-only mode toget
     .locator("#open-source-computer")
     .click();
   await expect(openDialog.locator(".project-dropzone")).toContainText(
-    "BlueK JSON or BlueJ project",
+    "BlueK project file or BlueJ project",
   );
   await expect(openDialog.locator(".project-dropzone")).toContainText(
-    "Accepted: .json, BlueJ projects as .zip or as a folder (folders by drag and drop)",
+    "Accepted: BlueK project files, BlueJ projects as .zip or as a folder (folders by drag and drop)",
   );
   await expect(openDialog.getByLabel("Choose project file")).toHaveAttribute(
     "accept",
-    ".json,.bluek,application/json,.zip,application/zip",
+    ".bluek,.json,application/json,.zip,application/zip",
   );
   await expect(openDialog.getByLabel("Choose project directory")).toHaveCount(
     0,
@@ -2228,7 +2229,7 @@ test("GUI-22 top actions are grouped, ordered and switch to icon-only mode toget
   await actions.nth(2).click();
   const saveDialog = page.getByRole("dialog", { name: "Save", exact: true });
   await expect(
-    saveDialog.getByRole("button", { name: /Download BlueK project file/ }),
+    saveDialog.getByRole("button", { name: /Save BlueK project file/ }),
   ).toBeEnabled();
   await expect(
     saveDialog.getByRole("button", { name: /Full Project Link/ }),
@@ -2244,9 +2245,48 @@ test("GUI-22 top actions are grouped, ordered and switch to icon-only mode toget
     await expect(action.locator("span:not(.toolbar-action-icon)")).toBeHidden();
 });
 
-test("GUI-23 Save is disabled for an empty project", async ({ page }) => {
+test("GUI-23 saving an unnamed empty project asks for a name", async ({ page }) => {
   await project(page);
-  await expect(page.locator(".toolbar-main-action").nth(2)).toBeDisabled();
+  const name = page.locator(".toolbar").getByLabel("Project name");
+  const saveDialog = page.getByRole("dialog", { name: "Save", exact: true });
+  const saveFile = saveDialog.getByRole("button", { name: /^Save BlueK project file/ });
+  const nameDialog = page.getByRole("dialog", { name: "Project name", exact: true });
+  const nameInput = nameDialog.getByLabel("Project name");
+  const confirmName = nameDialog.getByRole("button", { name: "Save", exact: true });
+
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await saveFile.click();
+  await expect(nameDialog).toBeVisible();
+  await nameInput.fill("   ");
+  await confirmName.click();
+  await expect(nameDialog.getByRole("alert")).toHaveText("Enter a project name before saving.");
+  await nameDialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(name).toHaveValue("");
+  await saveDialog.getByRole("button", { name: "Cancel" }).click();
+
+  await page.keyboard.press("ControlOrMeta+s");
+  await saveFile.click();
+  await nameInput.fill("Aufgabe 1");
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    confirmName.click(),
+  ]);
+  expect(download.suggestedFilename()).toBe("Aufgabe 1.bluek");
+  const path = await download.path();
+  expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject({
+    projectName: "Aufgabe 1",
+    files: [],
+  });
+
+  await name.fill("");
+  await page.getByRole("button", { name: "Open", exact: true }).click();
+  await page.getByLabel("Choose project file").setInputFiles({
+    name: download.suggestedFilename(),
+    mimeType: "application/json",
+    buffer: await readFile(path),
+  });
+  await expect(name).toHaveValue("Aufgabe 1");
+  await expect(page.getByRole("button", { name: "Compile", exact: true })).toBeDisabled();
 });
 
 test("GUI-35 short project links can be saved and loaded", async ({ page }) => {

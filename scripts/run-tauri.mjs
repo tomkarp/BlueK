@@ -17,6 +17,10 @@ for (const rustup of rustupCandidates) {
 }
 
 const args = process.argv.slice(2);
+if (args[0] === 'dev') {
+  env.VITE_BLUEK_OFFLINE = '1';
+  env.VITE_BLUEK_DESKTOP = '1';
+}
 if (args[0] === 'build' && env.BLUEK_UPDATER_PUBLIC_KEY) {
   args.push('--config', JSON.stringify({
     bundle: { createUpdaterArtifacts: true },

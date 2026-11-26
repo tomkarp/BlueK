@@ -354,7 +354,7 @@ below. No universal performance guarantee is implied.
 | GUI-20 | Single-line result truncation with full-value tooltip | Recorded browser pass |
 | GUI-21 | Shared object aliases and inspector reference names | Recorded browser pass |
 | GUI-22 | New/Open/Save/Share project actions; Open accepts JSON and BlueJ ZIP/folder; Save includes BlueJ export | Chromium passed, 2026-10-22 |
-| GUI-23 | Save disabled for an empty project | Chromium passed, 2026-10-22 |
+| GUI-23 | Saving an unnamed project with no source files prompts for a name from the Save dialog and keyboard shortcut. The prompt rejects whitespace, supports cancellation, and saves a project file that reopens with its name and no source files. | Chromium and WebKit passed, 2026-11-26. Native desktop save dialog not manually exercised. |
 | RT-01 | Identity, setters/getters, main/reset/input and stale replies | Existing runtime-state integration coverage; no new run claimed |
 | GUI-24 | Invalid project statements prevent initializer/codepad effects | Recorded browser pass |
 | GUI-25 | No automatic completion; four-space manual indentation | Recorded browser pass |

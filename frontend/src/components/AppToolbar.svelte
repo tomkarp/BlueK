@@ -79,7 +79,6 @@
   <button
     class="toolbar-main-action"
     onclick={() => (toolbarDialog = "save")}
-    disabled={!files.length}
     aria-label={t("ui.common.saveExport")}
     title={t("ui.common.saveExport")}
   >

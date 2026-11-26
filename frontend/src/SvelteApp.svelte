@@ -411,7 +411,7 @@
     if (mod && (event.key.toLowerCase() === "s" || event.code === "KeyS")) {
       event.preventDefault();
       event.stopPropagation();
-      if (project.files.length) void project.saveShortcut();
+      void project.saveShortcut();
       return;
     }
     if (
